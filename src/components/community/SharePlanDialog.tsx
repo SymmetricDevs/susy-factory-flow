@@ -313,7 +313,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
                   Game version:{" "}
                   <span className="text-fg-subtle">
                     {datasetVersion?.gtnhVersion
-                      ? `GTNH ${datasetVersion.gtnhVersion}`
+                      ? `SUSY ${datasetVersion.gtnhVersion}`
                       : "unknown"}
                   </span>
                 </span>

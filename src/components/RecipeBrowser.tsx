@@ -52,10 +52,222 @@ export {
 
 const RECIPE_QUERY_LIMIT = 120;
 
-/** Whether the filter block under the search box is folded away. */
-/** The machine chips' multi-select: which maps' recipes the search shows. */
-const MAP_SELECTION_STORAGE_KEY = "gtnh-factory-flow.machine-map-selection.v1";
+/**
+ * The recipe book's size rules.
+ *
+ * A recipe is drawn on a fixed NEI canvas, so a card cannot be squeezed: it is
+ * either given the width it needs or it gets cut off, which is what used to
+ * happen. Every number below is therefore derived from what one card needs.
+ */
+// The NEI canvas most recipes are drawn on. Wider ones exist, and like the row
+// height, one decision is made for the whole grid rather than per card.
+const NEI_CANVAS_WIDTH = 170;
+// The add button sits in the panel's own top corner, so a card is no wider
+// than the recipe it draws.
+const CARD_ADD_GUTTER = 0;
+const CARD_GAP = 12;
+// The time and circuit strip along the foot of the panel.
+const CARD_CHROME_HEIGHT = 38;
+const NEI_CANVAS_HEIGHT_DEFAULT = 82;
+const NEI_CANVAS_HEIGHT_NATIVE = 120;
+const RECIPE_CARD_MAX_COLUMNS = 3;
 
+const BOARD_SIDEBAR_LEFT = 306;
+const BOARD_SIDEBAR_RIGHT = 330;
+const CATEGORY_RAIL_WIDTH = 290;
+// One column of cards next to the category rail.
+const RECIPE_BOOK_MIN_WIDTH = 640;
+const RECIPE_BOOK_MAX_WIDTH = 1400;
+const RECIPE_BOOK_MAX_HEIGHT = 860;
+// Two columns of cards next to the rail: the size worth stepping around the
+// board's sidebars for.
+const RECIPE_BOOK_COMFORTABLE_WIDTH = 1080;
+// The rail keeps its column only while the recipes still get two of theirs.
+// Held any lower it would win the argument for space and leave a single card
+// stranded in a wide empty column.
+const RECIPE_BOOK_RAIL_NEEDS =
+  CATEGORY_RAIL_WIDTH + (NEI_CANVAS_WIDTH * 2 + CARD_ADD_GUTTER) * 2 + CARD_GAP + 24;
+const RECIPE_BOOK_SHEET_BELOW = 700;
+const ZERO_OFFSET = { x: 0, y: 0 };
+
+interface MeasuredCard {
+  /** Which list this was measured from, so a new list starts over. */
+  key: string;
+  /** One recipe's drawn width, unscaled. */
+  unit: number;
+  /** The tallest card drawn so far, in px at the scale it was drawn. */
+  row: number;
+}
+
+/** Everything between the book's edge and the cards: rail, padding, borders. */
+function recipeBookChrome(showRail: boolean) {
+  return (showRail ? CATEGORY_RAIL_WIDTH : 0) + 24 + 4;
+}
+
+/**
+ * The width the book actually needs, which is not the width it can have.
+ *
+ * Taking every spare pixel made the window wider without fitting another card
+ * in it, and the difference went to margins either side of the cards. So the
+ * columns are chosen from the room available, and then the book is pulled back
+ * in to exactly hold them.
+ */
+function fitRecipeBookWidth(available: number, showRail: boolean, unitWidth: number) {
+  const chrome = recipeBookChrome(showRail);
+  const { columns, scale } = chooseRecipeGrid(available - chrome, unitWidth);
+  const cards = columns * unitWidth * scale + CARD_GAP * (columns - 1);
+  return Math.min(available, chrome + cards);
+}
+
+interface RecipeBookViewport {
+  /** Filling the screen rather than floating over the board. */
+  sheet: boolean;
+  /** The category rail is a column of its own, not a dropdown. */
+  showRail: boolean;
+  dodgesSidebars: boolean;
+  width: number;
+  height: number;
+  /** Measured, not assumed: these columns can be collapsed. */
+  sidebars: { left: number; right: number };
+}
+
+/**
+ * How many cards fit across, and how big to draw each one.
+ *
+ * Readability wins over density: the scale never drops below 2 while a single
+ * column can still hold it, so a narrow book shows one large readable recipe
+ * rather than two clipped ones.
+ */
+function chooseRecipeGrid(
+  width: number,
+  unitWidth: number = NEI_CANVAS_WIDTH,
+): { columns: number; scale: number } {
+  const cardAtScaleTwo = unitWidth * 2 + CARD_ADD_GUTTER;
+  const columnWidth = (columns: number) => (width - CARD_GAP * (columns - 1)) / columns;
+
+  let columns = 1;
+  for (let candidate = RECIPE_CARD_MAX_COLUMNS; candidate >= 2; candidate -= 1) {
+    if (columnWidth(candidate) >= cardAtScaleTwo) {
+      columns = candidate;
+      break;
+    }
+  }
+
+  const column = columnWidth(columns);
+  if (column < cardAtScaleTwo) {
+    // A phone. One recipe, drawn to fill the width it has rather than sitting
+    // small in the middle of it: a recipe is a grid of 18px slots, and at scale 1
+    // on a 390px screen it was a postage stamp with two thirds of the drawer
+    // empty beside it. Quantised to quarter steps, because the art is pixels and
+    // a whole-pixel-ish scale keeps slot borders from smearing.
+    const filling = Math.floor(((width - CARD_ADD_GUTTER) / unitWidth) * 4) / 4;
+    return { columns: 1, scale: Math.max(1, Math.min(3, filling)) };
+  }
+
+  // A column with room to spare draws the recipe larger rather than leaving it
+  // small in the middle of an empty card.
+  return { columns, scale: Math.min(3, Math.floor(column / unitWidth)) };
+}
+
+function recipeRowHeight(scale: number, native: boolean) {
+  const canvas = native ? NEI_CANVAS_HEIGHT_NATIVE : NEI_CANVAS_HEIGHT_DEFAULT;
+  return canvas * scale + CARD_CHROME_HEIGHT;
+}
+const RESOURCE_DEFAULT_PAGE_SIZE = 6;
+const RESOURCE_ROW_HEIGHT = 40;
+const RESOURCE_ROW_GAP = 2;
+const RESOURCE_GRID_CELL = 56;
+const RESOURCE_GRID_GAP = 4;
+/**
+ * How the art sits in a grid cell.
+ *
+ * A rendered sprite carries a wide transparent margin: measured across the
+ * dataset's textures, the art itself covers a median of 44% of its PNG and as
+ * little as 19% on the small piles. Drawn honestly that reads as a stamp
+ * floating in a box. So the icon fills the cell, draws well past its own edges,
+ * and the cell crops the margin away - big art, same cell.
+ *
+ * 1.4 puts the median sprite slightly over the cell edge, which is the point of
+ * it. The handful of sprites that fill 59% of their PNG do lose their corners
+ * here; that is the trade, and much past this even ordinary items start to clip.
+ */
+const RESOURCE_GRID_ART = "!h-full !w-full scale-[1.4]";
+const RESOURCE_PAGER_HEIGHT = 40;
+/** One mouse notch is 100 on most platforms, so one notch is one page. */
+const RESOURCE_WHEEL_PAGE_DELTA = 80;
+const RESOURCE_VIEW_STORAGE_KEY = "susy-factory-flow.resource-view.v1";
+/** Whether the filter block under the search box is folded away. */
+const RESOURCE_FILTERS_STORAGE_KEY = "susy-factory-flow.resource-filters.v1";
+
+type ResourceSortMode = "relevance" | "name" | "mod" | "recipes";
+type ResourceViewMode = "list" | "grid";
+
+/**
+ * The one question the list is answering.
+ *
+ * Six answers, one at a time, because that is how they are actually used: nobody
+ * asks for the fluids a bee makes, they ask for what bees make. Splitting the
+ * six across a kind row and a source row made it look like they combined, and
+ * the combinations were either the same list or nothing.
+ *
+ * "Board" is answered from the project rather than the server: the cards are
+ * already in memory, and nothing the dataset knows could answer it anyway.
+ */
+type ResourceFilterMode = "all" | "item" | "fluid" | "board" | "plants" | "bees";
+
+const RESOURCE_FILTER_CHOICES: Array<{
+  mode: ResourceFilterMode;
+  label: string;
+  title: string;
+}> = [
+  { mode: "all", label: "All", title: "Everything" },
+  { mode: "item", label: "Items", title: "Items" },
+  { mode: "fluid", label: "Fluids", title: "Fluids" },
+  { mode: "board", label: "Placed", title: "On this board" },
+  { mode: "plants", label: "Plants", title: "Grown" },
+  { mode: "bees", label: "Bees", title: "From bees" },
+];
+
+/** The dataset query only knows kinds and sources; this splits the choice up. */
+function resourceFilterKind(filter: ResourceFilterMode): "item" | "fluid" | undefined {
+  return filter === "item" || filter === "fluid" ? filter : undefined;
+}
+
+function resourceFilterSource(filter: ResourceFilterMode): "plants" | "bees" | undefined {
+  return filter === "plants" || filter === "bees" ? filter : undefined;
+}
+
+/**
+ * What a cell with no room for words says when you hover it.
+ *
+ * The same two lines a list row prints - the name, then where it came from and
+ * how many recipes touch it - followed by whatever the dataset itself has to say
+ * about the thing. First line white, the rest blue, like every other tooltip in
+ * the app.
+ */
+function resourceTooltipLines(resource: IndexedResource): string[] {
+  const subtitle = [
+    getResourceModLabel(resource),
+    resource.recipeCount > 0 ? `${resource.recipeCount} recipes` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const name = resourceLabel(resource);
+  return [
+    name,
+    subtitle,
+    ...(resource.tooltip ?? []).filter((line) => line.trim() && line !== name),
+  ].filter(Boolean);
+}
+
+/** Mod is the id prefix ("gregtech:..."); bare fluid ids group as "fluids". */
+function getResourceModLabel(resource: { id: string; kind: string }): string {
+  const colon = resource.id.indexOf(":");
+  if (colon > 0) {
+    return resource.id.slice(0, colon);
+  }
+  return resource.kind === "fluid" ? "fluids" : "other";
+}
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 const RECIPE_SEARCH_DEBOUNCE_MS = 200;
 

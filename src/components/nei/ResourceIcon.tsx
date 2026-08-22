@@ -400,7 +400,7 @@ function PowerIconGlyph({ iconPixelSize }: { iconPixelSize?: number }) {
  * art-pixel helpers, slot constants) keep their relative relationships while
  * everything reads a quarter smaller.
  */
-const TEXTURE_SCALE = 0.75;
+const TEXTURE_SCALE = 0.5;
 
 function textureSize(iconPixelSize?: number): number | undefined {
   return iconPixelSize === undefined

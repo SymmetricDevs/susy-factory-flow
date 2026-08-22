@@ -17,8 +17,6 @@
 /.gh-artifacts-*/
 *.tar
 /public/datasets/susy/
-/.opencode
-/temp
 
 # next.js
 /.next/
@@ -54,3 +52,4 @@ public/highs.js
 
 # susy-factory-flow working area (never committed)
 /temp/
+/temp

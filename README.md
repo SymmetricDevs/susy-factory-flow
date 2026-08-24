@@ -100,7 +100,9 @@ bash tools/dataset-pipeline/scripts/susy/run-susy-export.sh
 ```
 
 ```bash
-powershell -ExecutionPolicy Bypass -File tools\dataset-pipeline\scripts\susy\run-all.ps1
+powershell -ExecutionPolicy Bypass -File tools\dataset-pipeline\susy-hei-oracle\build-jar.ps1 
+$env:SUSY_LAUNCH_COMMAND = '"PrismLauncher" -l "InstanceId"'
+powershell -ExecutionPolicy Bypass -File tools\dataset-pipeline\scripts\susy\run-susy-export.ps1
 ```
 
 ## Public Repository Notes

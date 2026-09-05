@@ -2757,40 +2757,33 @@ function PortRail({
  */
 function FreePortRow({ port }: { port: RailPort }) {
   return (
-    <MinecraftTooltip
-      label={port.displayName}
-      content={() => (
-        <span className="block max-w-[220px] text-[12px] leading-4 text-[var(--mc-ink-muted)]">
-          Free in the game. Nothing has to supply it, so there is nothing to wire here.
-        </span>
-      )}
+    <div
+      className="flow-port relative flex h-[40px] w-full flex-none items-center gap-1 px-0.5 py-0 opacity-60"
+      data-free-input="true"
     >
-      <div
-        className="flow-port relative flex h-[40px] w-full flex-none items-center gap-1 px-0.5 py-0 opacity-60"
-        data-free-input="true"
-      >
-        <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden grayscale">
-          {port.resource ? (
-            <ResourceIcon
-              resource={{ ...port.resource, amount: 1, chance: undefined }}
-              bare
-              tooltip={false}
-              showAmount={false}
-              showConsumedState={false}
-              className="!h-7 !w-7 origin-center scale-150"
-            />
-          ) : null}
+      <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden grayscale">
+        {port.resource ? (
+          <ResourceIcon
+            resource={{ ...port.resource, amount: 1, chance: undefined }}
+            bare
+            tooltip={false}
+            showAmount={false}
+            showConsumedState={false}
+            className="!h-7 !w-7 origin-center scale-150"
+          />
+        ) : null}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
+        <span className="block truncate text-[11px] font-bold leading-[13px] text-[var(--mc-ink-muted)]">
+          {port.displayName}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
-          <span className="block truncate text-[11px] font-bold leading-[13px] text-[var(--mc-ink-muted)]">
-            {port.displayName}
-          </span>
-          <span className="block truncate text-[10px] font-bold uppercase leading-[13px] tracking-[0.5px] text-[var(--mc-ink-muted)]/70">
-            free
-          </span>
+        {/* Same dress as a port's rate line, so the word sits where the
+            number would and reads as its stand-in. */}
+        <span className="block truncate text-[10px] leading-[12px] tabular-nums text-[var(--mc-ink-muted)] opacity-80">
+          free
         </span>
-      </div>
-    </MinecraftTooltip>
+      </span>
+    </div>
   );
 }
 

@@ -7,7 +7,7 @@ import type {
   ResourceKind,
   ThroughputResult,
 } from "@/lib/model/types";
-import { isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
+import { isFreeRecipeInput, isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
 import { findDeathSpirals, type DeathSpiral } from "./death-spiral";
 import { findClogLocks, type ClogLock } from "./clog-lock";
 import { findBareSlots } from "./bare-slots";
@@ -1575,6 +1575,12 @@ export interface RailPort {
    * rate; every other unit ignores it.
    */
   energyPerUnit?: number;
+  /**
+   * Free in the game (free-input.ts): drawn so the player knows to set it
+   * down, but nothing to wire, nothing to supply, no rate and no bar. Every
+   * figure above is zero and no handle is rendered for it.
+   */
+  free?: boolean;
 }
 
 export function buildRailPorts(
@@ -1844,6 +1850,39 @@ export function buildRailPorts(
           resource.displayName,
           0,
         );
+      }
+    }
+
+    // Free-in-the-game inputs never reach the solver's flows and pushPort
+    // skips them as non-consumed, so they are added last as inert rows:
+    // the item and its name, every figure zero, no handle to wire.
+    if (isInput) {
+      for (const resource of resources) {
+        const key = makeResourceKey(resource.kind, resource.id);
+        if (!isFreeRecipeInput(resource) || seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        ports.push({
+          side,
+          key,
+          kind: resource.kind,
+          resourceId: resource.id,
+          displayName: resource.displayName ?? resource.id,
+          handleId: makeResourceHandleId(side, { kind: resource.kind, id: resource.id }),
+          resource,
+          connected: false,
+          unsupplied: false,
+          boundaryFree: true,
+          currentPerSecond: 0,
+          nameplatePerSecond: 0,
+          wantedPerSecond: 0,
+          couldPerSecond: 0,
+          fillFraction: 0,
+          tone: "calm",
+          showNameplate: false,
+          free: true,
+        });
       }
     }
 

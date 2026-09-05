@@ -4818,7 +4818,7 @@ function buildCompatibleEdgesForStorage(
 
     effectiveRecipe.inputs.forEach((input, inputIndex) => {
       if (
-        input.consumed === false ||
+        !isRecipeInputConsumed(input) ||
         !resourceMatchesInput(sourceStorageResource(storage), input)
       ) {
         return;

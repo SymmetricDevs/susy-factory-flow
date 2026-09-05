@@ -68,6 +68,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.57.0",
+    date: "2026-09-05",
+    headline: "Free inputs stay off the wires",
+    notes: [
+      "The Rock Breaker's \"IT'S FREE! Place Lava on Side\" slot is drawn greyed on the card and needs no wire, drawer or rate.",
+    ],
+  },
+  {
     version: "2.56.3",
     date: "2026-09-05",
     headline: "Switching units no longer freezes a big board",

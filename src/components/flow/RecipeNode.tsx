@@ -695,7 +695,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       : isCustomRatePlaceholder
         ? CUSTOM_RATE_UNIVERSAL_HANDLE_IDS
         : [
-            ...rails.inputs.map((port) => port.handleId),
+            // A free-in-the-game slot renders no handle: there is nothing
+            // to wire, so it must not be listed as a handle to await.
+            ...rails.inputs.filter((port) => !port.free).map((port) => port.handleId),
             ...rails.outputs.map((port) => port.handleId),
           ],
   );
@@ -2197,7 +2199,9 @@ function GlanceIoRow({ port }: { port: RailPort }) {
             portReadsEnergy(port) ? ENERGY_READING_TEXT : "text-[var(--mc-ink-muted)]",
           ].join(" ")}
         >
-          {portReadsEnergy(port) ? (
+          {port.free ? (
+            "free"
+          ) : portReadsEnergy(port) ? (
             <EnergyReading euPerUnit={port.energyPerUnit!} kind={port.kind} unitSize={10} />
           ) : (
             formatPortRate(port, port.currentPerSecond)
@@ -2733,13 +2737,60 @@ function PortRail({
       ].join(" ")}
     >
       {ports.map((port) =>
-        isInput ? (
+        port.free ? (
+          <FreePortRow key={port.key} port={port} />
+        ) : isInput ? (
           <PortChip key={port.key} nodeId={nodeId} port={port} pending={pending} />
         ) : (
           <OutputSocketRow key={port.key} nodeId={nodeId} port={port} pending={pending} />
         ),
       )}
     </div>
+  );
+}
+
+/**
+ * An input the game gives away (free-input.ts): the item and its name in
+ * the same 40px footprint as a port row, greyed, with "free" where the rate
+ * would go. No handle, no bar, no browse: there is nothing to wire and
+ * nothing to look up, only something to set down next to the machine.
+ */
+function FreePortRow({ port }: { port: RailPort }) {
+  return (
+    <MinecraftTooltip
+      label={port.displayName}
+      content={() => (
+        <span className="block max-w-[220px] text-[12px] leading-4 text-[var(--mc-ink-muted)]">
+          Free in the game. Nothing has to supply it, so there is nothing to wire here.
+        </span>
+      )}
+    >
+      <div
+        className="flow-port relative flex h-[40px] w-full flex-none items-center gap-1 px-0.5 py-0 opacity-60"
+        data-free-input="true"
+      >
+        <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden grayscale">
+          {port.resource ? (
+            <ResourceIcon
+              resource={{ ...port.resource, amount: 1, chance: undefined }}
+              bare
+              tooltip={false}
+              showAmount={false}
+              showConsumedState={false}
+              className="!h-7 !w-7 origin-center scale-150"
+            />
+          ) : null}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
+          <span className="block truncate text-[11px] font-bold leading-[13px] text-[var(--mc-ink-muted)]">
+            {port.displayName}
+          </span>
+          <span className="block truncate text-[10px] font-bold uppercase leading-[13px] tracking-[0.5px] text-[var(--mc-ink-muted)]/70">
+            free
+          </span>
+        </span>
+      </div>
+    </MinecraftTooltip>
   );
 }
 

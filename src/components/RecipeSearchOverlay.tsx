@@ -26,7 +26,9 @@ import {
   GT_VOLTAGE_TIERS,
   formatRate,
   getRecipeMachineHandlers,
+  isFreeRecipeInput,
   isOreDictionaryResource,
+  isRecipeInputConsumed,
 } from "@/lib/model";
 import type { MachineTier, ResourceAmount } from "@/lib/model/types";
 import { getVoltageTierIndex } from "@/lib/model/tiers";
@@ -1926,7 +1928,7 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
     let divisor = 0;
     const amounts = [
       ...inputChips
-        .filter((chip) => chip.raw.consumed !== false)
+        .filter((chip) => isRecipeInputConsumed(chip.raw))
         .map((chip) => chip.resource.amount),
       ...outputChips.map((output) => output.amount),
     ];
@@ -2052,7 +2054,9 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
                 key={`in-${index}`}
                 resource={chip.resource}
                 amountText={
-                  chip.raw.consumed === false
+                  isFreeRecipeInput(chip.raw)
+                    ? { text: "FREE" }
+                    : chip.raw.consumed === false
                     ? { text: "NC" }
                     : rateView === "eu"
                       ? formatChipEnergy(chip.resource, "input", eut, durationTicks)

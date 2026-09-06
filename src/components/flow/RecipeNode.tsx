@@ -863,7 +863,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         ? undefined
         : { energyHatchType: undefined }),
     });
-    setCompareOpen(false);
+    // Silent: the switch itself sounds (the board's adjust tap), and a
+    // close sound on top of it read as a double.
+    setCompareOpenState(false);
     setPreviewHandlerId(undefined);
   };
 

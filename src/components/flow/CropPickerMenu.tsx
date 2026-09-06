@@ -22,8 +22,8 @@ export function cropDisplayName(recipeName: string): string {
  * Searchable crop list for crop source nodes. Picking a crop swaps the node's
  * recipe to that crop's Crop Farm entry.
  */
-/** The search box plus the capped crop grid, for placing the panel before it exists. */
-const MENU_ESTIMATED_HEIGHT = 470;
+/** Below this much room above the card the list goes under the bar instead. */
+const MENU_MIN_HEIGHT = 220;
 
 export function CropPickerMenu({
   nodeId,
@@ -135,7 +135,7 @@ export function CropPickerMenu({
   // As wide as the card's window and ABOVE it when there is room, the way
   // the machine menu sits: over the canvas, not over the card's own knobs.
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number }>();
+  const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight?: number }>();
   useEffect(() => {
     const parent = anchorRef.current?.parentElement;
     const card = anchorRef.current?.closest("[data-node-glance-root]");
@@ -144,10 +144,12 @@ export function CropPickerMenu({
       const cardRect = card?.getBoundingClientRect() ?? rect;
       const width = Math.max(360, Math.round(cardRect.width));
       const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
-      const above = Math.round(cardRect.top) - 4 - MENU_ESTIMATED_HEIGHT >= 8;
+      // UP, always, unless the card is jammed against the top of the window:
+      // the list takes whatever room there is above and scrolls inside it.
+      const roomAbove = Math.round(cardRect.top) - 12;
       setAnchorAt(
-        above
-          ? { left, width, bottom: window.innerHeight - Math.round(cardRect.top) + 4 }
+        roomAbove >= MENU_MIN_HEIGHT
+          ? { left, width, bottom: window.innerHeight - Math.round(cardRect.top) + 4, maxHeight: roomAbove }
           : { left, width, top: Math.min(rect.bottom + 2, window.innerHeight - 120) },
       );
     }
@@ -169,11 +171,11 @@ export function CropPickerMenu({
   const menu = anchorAt ? (
     <div
       ref={rootRef}
-      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, bottom: anchorAt.bottom, width: anchorAt.width }}
+      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, bottom: anchorAt.bottom, width: anchorAt.width, maxHeight: anchorAt.maxHeight }}
       // "nowheel" stops React Flow from zooming the canvas when scrolling the
       // list: its native wheel handler runs before React's synthetic one, so
       // stopPropagation alone is not enough.
-      className="nodrag nowheel z-[300] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className="nodrag nowheel z-[300] flex flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
@@ -199,7 +201,7 @@ export function CropPickerMenu({
       ) : error ? (
         <div className="px-2 py-3 text-[12px] font-bold text-[var(--mc-bad)]">{error}</div>
       ) : (
-        <div className="grid max-h-[420px] grid-cols-5 overflow-y-auto">
+        <div className="grid min-h-0 max-h-[420px] grid-cols-5 overflow-y-auto">
           {filtered.map((crop, index) => {
             const tierOf = (entry: RecipeSummary) =>
               (entry.metadata as { cropsNh?: { tier?: number } } | undefined)?.cropsNh?.tier;

@@ -301,7 +301,6 @@ import { describeDeathSpiral, findDeathSpirals } from "./death-spiral";
 import { describeClogLock, findClogLocks } from "./clog-lock";
 import { findUnwiredNodeIds } from "./node-verdict";
 import { useBoardPulseSync } from "./animation-phase";
-import { getDockTabsRight, getDockTopInset } from "./dock-insets";
 import {
   isWiringConnection,
   onWiringConnectionChange,
@@ -1168,11 +1167,6 @@ function resolveGridRouteEndpoints(
     return [];
   }
   const snap = (value: number) => Math.round(value / BOARD_GRID) * BOARD_GRID;
-  // The machine tab zone: routed as card (the rect includes it, so wires
-  // keep their clearance over the tabs) but not a real edge. Top docks stay
-  // on the routed box and extend their drawn stub down through the zone to
-  // the window's true edge; side docks simply start below it.
-  const topInset = snap(getDockTopInset(nodeId));
 
   // A machine wired into itself always uses fixed ports, whatever the anchor
   // toggle says. In free mode both ends of that wire offer the same card's
@@ -1207,11 +1201,11 @@ function resolveGridRouteEndpoints(
       ];
     }
     const fixedCenterX = snap((rect.left + rect.right) / 2);
-    const fixedCenterY = snap((rect.top + topInset + rect.bottom) / 2);
+    const fixedCenterY = snap((rect.top + rect.bottom) / 2);
     return [
       { x: rect.left, y: fixedCenterY, side: "left" },
       { x: rect.right, y: fixedCenterY, side: "right" },
-      { x: fixedCenterX, y: rect.top, side: "top", stubDepth: topInset || undefined },
+      { x: fixedCenterX, y: rect.top, side: "top" },
       { x: fixedCenterX, y: rect.bottom, side: "bottom" },
     ];
   }
@@ -1230,21 +1224,13 @@ function resolveGridRouteEndpoints(
   const cornerKeepOut = 2 * BOARD_GRID;
   // The window's true top: side docks exist only below it, and the corner
   // keep-out measures from IT — the window's corner, not the phantom box's.
-  const dockTop = top + topInset;
-  // A top-dock stub descends straight through the zone at its own x. Left of
-  // this line the tab art sits, and a stub there would draw the wire (and
-  // its marching dashes) across a tab — those docks simply do not exist.
-  // Half a cell of margin keeps a fat stub's edge off the last tab too.
-  const tabsKeepOut =
-    topInset > 0 ? rect.left + getDockTabsRight(nodeId) + BOARD_GRID / 2 : -Infinity;
+  const dockTop = top;
   const centerX = (left + right) / 2;
   const centerY = (dockTop + bottom) / 2;
   const candidates: GridEndpoint[] = [];
   for (let x = left + cornerKeepOut; x <= right - cornerKeepOut; x += step) {
     const penalty = Math.abs(x - centerX) * DOCK_CENTER_BIAS;
-    if (x > tabsKeepOut) {
-      candidates.push({ x, y: top, side: "top", penalty, stubDepth: topInset || undefined });
-    }
+    candidates.push({ x, y: top, side: "top", penalty });
     candidates.push({ x, y: bottom, side: "bottom", penalty });
   }
   for (let y = dockTop + cornerKeepOut; y <= bottom - cornerKeepOut; y += step) {
@@ -1259,9 +1245,7 @@ function resolveGridRouteEndpoints(
       { x: right, y: snap(centerY), side: "right" },
       { x: snap(centerX), y: bottom, side: "bottom" },
     );
-    if (snap(centerX) > tabsKeepOut) {
-      candidates.push({ x: snap(centerX), y: top, side: "top", stubDepth: topInset || undefined });
-    }
+    candidates.push({ x: snap(centerX), y: top, side: "top" });
   }
   return candidates;
 }
@@ -4788,8 +4772,7 @@ export function FactoryFlow() {
         occlusionRects: [
           ...(lineThicknessMode
             ? (publishedBoardBounds ?? []).map(({ id, bounds }) => {
-                const dockInset = getDockTopInset(id);
-                return dockInset > 0 ? { ...bounds, top: bounds.top + dockInset } : bounds;
+                return bounds;
               })
             : []),
           // Board chrome hides the wires under it in every mode, so the
@@ -8235,13 +8218,7 @@ const EdgePulseCanvas = memo(function EdgePulseCanvas({
             if (dragging && activelyDraggedNodeIds.has(entry.id)) {
               continue;
             }
-            // The tab zone at a card's top is transparent canvas and the wire
-            // stub visibly crosses it — the dashes must ride the stub all the
-            // way to the window's edge, so only the WINDOW occludes.
-            const dockInset = getDockTopInset(entry.id);
-            occlusionBase.push(
-              dockInset > 0 ? { ...entry.bounds, top: entry.bounds.top + dockInset } : entry.bounds,
-            );
+            occlusionBase.push(entry.bounds);
           }
         }
       }
@@ -8276,7 +8253,7 @@ const EdgePulseCanvas = memo(function EdgePulseCanvas({
               occlusionBounds.push(...boardChromeOccluders(rect));
               continue;
             }
-            occlusionBounds.push({ ...rect, top: rect.top + getDockTopInset(draggedId) });
+            occlusionBounds.push(rect);
           }
         }
       }

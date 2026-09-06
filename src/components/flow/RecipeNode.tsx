@@ -131,9 +131,7 @@ import {
 import { BOARD_GRID, CONFIG_PANEL_ROW_HEIGHT, RECIPE_NODE_WIDTH } from "@/lib/board-grid";
 import { CropPickerMenu } from "./CropPickerMenu";
 import {
-  MachineCompareTable,
-  MachineIconTab,
-  MachineTabStrip,
+  MachineMenu,
   machineArtPixels,
 } from "./MachinePicker";
 import { NodeGlanceText, glanceTileStyle } from "./NodeGlance";
@@ -146,7 +144,6 @@ import {
 } from "@/components/browse-menu";
 import { isEchoOfTouch } from "@/lib/pointer-kind";
 import { useMachineHandlerIcons, type MachineHandlerIcon } from "./machine-icons";
-import { publishDockTopInset } from "./dock-insets";
 import { useRenderedHandles } from "./use-rendered-handles";
 import { MinecraftSelect } from "./MinecraftSelect";
 import { PowerConfigPanel } from "./PowerConfigPanel";
@@ -884,44 +881,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     : !isCropFarmNode && !isCustomRateNode
       ? machineIcons.get(selectedMachineHandler.id)
       : undefined;
-  // Presentation mode's tab zone: the selected machine's icon, big, and
-  // nothing else.
-  const machineTabIcon = calmMode ? machineGlanceIcon : undefined;
-  // The tab zone's height IS the dock inset: wires must not dock on the
-  // zone's phantom top edge (dock-insets.ts). Observed rather than derived,
-  // because the picker strip wraps and its row count is a layout fact.
-  const tabZoneRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const element = tabZoneRef.current;
-    const publish = () => {
-      const zoneHeight = element?.offsetHeight ?? 0;
-      if (!element || zoneHeight === 0) {
-        publishDockTopInset(projectNode.id, 0);
-        return;
-      }
-      // How far right the tab ART reaches: the widest in-flow child across
-      // every row (the baseline strip is absolute and spans the whole zone,
-      // so it is skipped). Top docks refuse to land left of this line — a
-      // stub there would draw straight across a tab.
-      let tabsRight = 0;
-      const zone = element.firstElementChild;
-      for (const child of zone?.children ?? []) {
-        const box = child as HTMLElement;
-        if (getComputedStyle(box).position === "absolute") {
-          continue;
-        }
-        tabsRight = Math.max(tabsRight, box.offsetLeft + box.offsetWidth);
-      }
-      publishDockTopInset(projectNode.id, zoneHeight, tabsRight);
-    };
-    publish();
-    if (!element || typeof ResizeObserver === "undefined") {
-      return;
-    }
-    const observer = new ResizeObserver(publish);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [projectNode.id]);
   const previewHandler = hasMachinePicker
     ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
     : selectedMachineHandler;
@@ -986,29 +945,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         ...(paintCursor ? { cursor: paintCursor } : undefined),
       }}
     >
-      {/* The tab zone: rows of whole cells ABOVE the window, over bare
-          canvas — tabs, not a toolbar band inside the card. It is part of
-          the shell's box, so the router keeps wires out of the space the
-          tabs claim; its measured height is published as the dock inset so
-          wires never DOCK on its phantom edge (see dock-insets.ts). Normal
-          mode gets the picker strip; presentation mode gets the selected
-          machine's icon, big, and nothing to click. */}
-      <div ref={tabZoneRef}>
-        {!calmMode && hasMachinePicker ? (
-          <MachineTabStrip
-            handlers={machineHandlers}
-            selectedId={selectedMachineHandler.id}
-            previewId={previewHandlerId}
-            iconsById={machineIcons}
-            onHover={setPreviewHandlerId}
-            onSelect={updateMachineHandler}
-            onToggleCompare={() => setCompareOpen((open) => !open)}
-            isCompareOpen={isCompareOpen}
-          />
-        ) : machineTabIcon ? (
-          <MachineIconTab icon={machineTabIcon} label={selectedMachineHandler.label} />
-        ) : null}
-      </div>
+      {/* No tab zone any more: the machine is chosen from the name bar's
+          chevron (MachineMenu), so the card starts at its painted window. */}
       {/* The window: the painted card. The 2px frame is an INSET shadow, not
           a border — a real border sits outside the content box and would push
           every row 2px off the grid; painted inside, the window's box and its
@@ -1368,7 +1306,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           ) : null}
           <div className="relative min-w-0">
             <MinecraftTooltip
-              content={() =>
+              // The bar's hover yields while its machine menu is open: the
+              // list is what the pointer is there for.
+              content={isCompareOpen ? undefined : () =>
                 isCropFarmPlaceholder ? (
                   "Click to pick a crop"
                 ) : isCustomRateNode ? (
@@ -1418,11 +1358,34 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   // the picker chevron floats on the right without shifting it.
                   isCropFarmNode
                     ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
-                    : "px-2",
+                    : hasMachinePicker && !calmMode
+                      ? "relative pl-6 pr-2"
+                      : "px-2",
                 ].join(" ")}
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
                 title={isCropFarmNode ? "Pick a crop" : undefined}
               >
+                {hasMachinePicker && !calmMode ? (
+                  // The machine switch: a chevron at the bar's left opens the
+                  // list of every machine that runs this recipe (MachineMenu).
+                  <button
+                    type="button"
+                    data-machine-menu-toggle
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setCompareOpen((open) => !open);
+                    }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    aria-label="Choose machine"
+                    aria-haspopup="listbox"
+                    aria-expanded={isCompareOpen}
+                    className="nodrag absolute left-0 top-0 flex h-full w-5 items-center justify-center hover:bg-white/10"
+                  >
+                    <ChevronDown
+                      className={["h-3 w-3 transition-transform", isCompareOpen ? "rotate-180" : ""].join(" ")}
+                    />
+                  </button>
+                ) : null}
                 <span className="mx-auto min-w-0 truncate">
                   {isCropFarmPlaceholder
                     ? "Pick a crop..."
@@ -1446,8 +1409,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               />
             ) : null}
             {hasMachinePicker && isCompareOpen && !calmMode ? (
-              <MachineCompareTable
+              <MachineMenu
                 recipe={recipe}
+                node={projectNode}
                 handlers={machineHandlers}
                 selectedId={selectedMachineHandler.id}
                 iconsById={machineIcons}

@@ -834,14 +834,6 @@ textarea {
   opacity: 0;
 }
 
-/* The machine tab zone protrudes ABOVE the recipe card's window, outside its
-   glance root, so the rule above cannot reach it — hide it here. Zoomed out
-   the tabs are a few pixels of noise over the glance figure. */
-.factory-flow-board[data-detail-level="glance"] .machine-tab-zone {
-  visibility: hidden;
-  opacity: 0;
-}
-
 .factory-flow-board[data-detail-level="glance"] [data-node-detail="glance"] {
   opacity: 1;
   visibility: visible;
@@ -876,8 +868,7 @@ textarea {
 }
 
 .factory-flow-board--value-motion [data-node-glance-root] > *:not([data-node-detail="glance"]),
-.factory-flow-board--value-motion [data-node-glance-root] > [data-tooltip-root] > *,
-.factory-flow-board--value-motion .machine-tab-zone {
+.factory-flow-board--value-motion [data-node-glance-root] > [data-tooltip-root] > * {
   transition: opacity 560ms ease, visibility 0s;
 }
 
@@ -911,8 +902,7 @@ textarea {
 .factory-flow-board--value-motion[data-detail-level="glance"]
   [data-node-glance-root]
   > [data-tooltip-root]
-  > *,
-.factory-flow-board--value-motion[data-detail-level="glance"] .machine-tab-zone {
+  > * {
   transition: opacity 560ms ease, visibility 0s 560ms;
 }
 
@@ -1103,49 +1093,6 @@ textarea {
 .minecraft-pixel-art * {
   image-rendering: crisp-edges;
   image-rendering: pixelated;
-}
-
-/*
- * The item tiles' playing-card hover. The tile's pointermove handler writes
- * the cursor's position into these vars directly on the element (no React
- * involved), and the tile tilts a few degrees toward the cursor while a soft
- * gleam follows it. Subtle on purpose: the tilt caps at ~5deg and the gleam
- * is a faint white radial, not a shine sweep.
- */
-/*
- * ONE transform, on the tile: the art and the name grow together at the same
- * rate and can never step on each other, and since the tile paints no box of
- * its own, what the eye sees growing is just the item and its name.
- */
-.resource-tile {
-  position: relative;
-  transform: perspective(340px) rotateX(var(--tile-rx, 0deg)) rotateY(var(--tile-ry, 0deg));
-  transition: transform 140ms ease-out;
-}
-.resource-tile:hover {
-  transform: perspective(340px) rotateX(var(--tile-rx, 0deg)) rotateY(var(--tile-ry, 0deg))
-    scale(1.45);
-  /* The grown tile spills over its neighbours; it goes over, not under. */
-  z-index: 10;
-}
-/*
- * The shimmer is filters, not an overlay: sprites are mostly transparent, and
- * a painted gradient lit up the empty pixels too. brightness() and
- * drop-shadow() both respect the alpha channel, so the white glow hugs the
- * item's actual silhouette.
- */
-.resource-tile-art {
-  transition: filter 140ms ease-out;
-}
-.resource-tile:hover .resource-tile-art {
-  filter: brightness(1.22) drop-shadow(0 0 4px rgba(255, 255, 255, 0.35))
-    drop-shadow(0 5px 8px rgba(0, 0, 0, 0.6));
-}
-.resource-tile-name {
-  transition: color 140ms ease-out;
-}
-.resource-tile:hover .resource-tile-name {
-  color: #e5e5e5;
 }
 
 /*

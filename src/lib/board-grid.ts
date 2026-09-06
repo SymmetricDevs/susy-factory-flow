@@ -68,7 +68,7 @@ export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 34; // 176
 /** One port row. Two cells, so a rail of any length stays on the grid. */
 export const PORT_ROW_HEIGHT = cells(2); // 40
 
-/** The title row, and one row of the machine tab strip. */
+/** The title row. */
 export const HEAD_ROW_HEIGHT = cells(2); // 40
 
 /** The stat footer. */

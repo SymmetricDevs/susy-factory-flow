@@ -7315,7 +7315,7 @@ const MODE_KEYS: Array<{
   {
     mode: "build",
     label: "Build mode",
-    title: "Plan a setup the way you would build it in game: place machines, set their counts, wire them up. The board shows what flows.",
+    title: "Set machine counts and connect inputs and outputs. Calculates production rates for the connected machines.",
     Icon: Blocks,
     ink: "text-[#f5b642]",
     dim: "text-[#b48a3b]",
@@ -7324,7 +7324,7 @@ const MODE_KEYS: Array<{
   {
     mode: "solve",
     label: "Solve mode",
-    title: "Place recipes, wire them, and type how much of something you want. The board works out how many of each machine that takes, down to the decimal.",
+    title: "Connect machines and set target production rates. Calculates the machine counts required to meet those targets.",
     Icon: Sigma,
     // Violet, not the cyan it had: cyan and pool's blue read as one colour.
     ink: "text-[#c78bff]",
@@ -7334,7 +7334,7 @@ const MODE_KEYS: Array<{
   {
     mode: "pool",
     label: "Pool mode",
-    title: "Like solve, without the wires: everything pushes to and pulls from one shared pool, the way earlier GTNH planners worked. Type what you want, the board does the rest.",
+    title: "Select recipes and set target production rates. Calculates machine counts using shared resource pools instead of wires. Inputs with no producer are imported automatically.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
     dim: "text-[#5273b8]",

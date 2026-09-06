@@ -252,7 +252,18 @@ export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
 function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
-  const [isCompareOpen, setCompareOpen] = useState(false);
+  const [isCompareOpen, setCompareOpenState] = useState(false);
+  // The machine menu's open and close SOUND, the search's leaf lifted and
+  // laid down; a switch made from the list closes it with the same sound.
+  const setCompareOpen = (next: boolean | ((open: boolean) => boolean)) => {
+    setCompareOpenState((open) => {
+      const value = typeof next === "function" ? next(open) : next;
+      if (value !== open) {
+        playBoardSound(value ? "pageOpen" : "pageClose");
+      }
+      return value;
+    });
+  };
   const [previewHandlerId, setPreviewHandlerId] = useState<string>();
   // Hovering a config option shows the node as if it were picked. Same shape
   // as the machine-tab preview: display-only, never written to the project.
@@ -261,9 +272,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     key: string;
   }>();
   const [isCropMenuOpen, setCropMenuOpen] = useState(false);
-  // A power card's picture window, hidden or shown from the header button.
+  // The card's picture window, hidden or shown from the header button.
   // The choice is this browser's, per card, never the plan's.
-  const [powerArtHidden, setPowerArtHidden] = useState(() =>
+  const [pictureHidden, setPictureHidden] = useState(() =>
     readPowerArtCollapsed(projectNode.id),
   );
   // The hatch-count chip mid-edit: the typed digits, or undefined at rest.
@@ -589,7 +600,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const powerArt =
     (powerInfo ? getPowerStructureArt(powerInfo.sourceId) : undefined) ?? cropStructureArt;
   const powerMachineIcon = powerInfo ? getPowerMachineIcon(powerInfo.sourceId) : undefined;
-  const hasPowerPicture = Boolean(powerArt || powerMachineIcon?.iconPath);
+
   // A generator's EU rides the output rail as its first row (a real port,
   // kind "power"); machines that only DRAW keep the figure in the footer.
   const hasOutputSide = rails.outputs.length > 0;
@@ -894,6 +905,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const previewHandler = hasMachinePicker
     ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
     : selectedMachineHandler;
+  // EVERY machine wears its picture (Jack, 2026-09-06), not only the
+  // generators: a multiblock's render where the workbook has one, the
+  // machine item's own art otherwise, hidden from the header button. The
+  // art follows the menu's hover, so previewing a machine shows it too.
+  const previewMachineIcon = machineIcons.get(previewHandler.id);
+  const hasPowerPicture = Boolean(
+    powerArt ||
+      powerMachineIcon?.iconPath ||
+      (!isCropFarmNode && !isCustomRateNode && previewMachineIcon?.iconPath),
+  );
   // The outlines the card is wearing, innermost first. They STACK rather than
   // override: each ring starts where the one inside it stopped. Selection is
   // innermost, which is also the ring painted on top — clicking a card has to
@@ -1295,19 +1316,19 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    setPowerArtHidden((hidden) => {
+                    setPictureHidden((hidden) => {
                       writePowerArtCollapsed(projectNode.id, !hidden);
                       return !hidden;
                     });
                   }}
                   className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
-                  title={powerArtHidden ? "Show the machine picture" : "Hide the machine picture"}
-                  aria-label={powerArtHidden ? "Show the machine picture" : "Hide the machine picture"}
-                  aria-pressed={!powerArtHidden}
+                  title={pictureHidden ? "Show the machine picture" : "Hide the machine picture"}
+                  aria-label={pictureHidden ? "Show the machine picture" : "Hide the machine picture"}
+                  aria-pressed={!pictureHidden}
                 >
                   <ImageIcon
                     aria-hidden
-                    className={powerArtHidden ? "h-3.5 w-3.5 opacity-40" : "h-3.5 w-3.5"}
+                    className={pictureHidden ? "h-3.5 w-3.5 opacity-40" : "h-3.5 w-3.5"}
                   />
                 </button>
               ) : null}
@@ -1600,11 +1621,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         </div>
         {/* The picture window sits under the title bar, over the ports:
             the multiblock render (or the machine item), full card width. */}
-        {!calmMode && hasPowerPicture && !powerArtHidden ? (
+        {!calmMode && hasPowerPicture && !pictureHidden ? (
           <PowerStructureWindow
             art={powerArt}
-            icon={powerMachineIcon}
-            tint={cropStructureArt ? "#4f8c33" : undefined}
+            icon={powerMachineIcon ?? previewMachineIcon}
+            tint={cropStructureArt ? "#4f8c33" : powerInfo ? undefined : "#8a8f99"}
           />
         ) : null}
         {/* The card body. No paint of its own: the window behind it is
@@ -2670,8 +2691,8 @@ function PowerStructureWindow({
   tint = "#d99a2b",
 }: {
   art?: string;
-  icon?: PowerMachineIcon;
-  /** The sector's colour behind the render: power amber, crop green. */
+  icon?: { id: string; displayName?: string; iconPath?: string; dominantColor?: string };
+  /** The colour behind the render: power amber, crop green, machine grey. */
   tint?: string;
 }) {
   if (!art && !icon?.iconPath) {
@@ -2696,7 +2717,7 @@ function PowerStructureWindow({
             kind: "item",
             id: icon!.id,
             amount: 1,
-            displayName: icon!.displayName,
+            displayName: icon!.displayName ?? icon!.id,
             iconPath: icon!.iconPath,
             dominantColor: icon!.dominantColor,
           }}

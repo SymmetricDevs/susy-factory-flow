@@ -21,10 +21,11 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
   const openPowerMenu = useFactoryStore((state) => state.openPowerMenu);
   const addCustomRateNode = useFactoryStore((state) => state.addCustomRateNode);
   const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
-  // The filter chips' exact dress (height, font, ground, border, hover), so
-  // the row reads as one more row of the column's chips.
+  // The columns' own hide keys' dress (the right column's "Hide" key): no
+  // ground of their own, the column's border, cyan on hover - keys that act,
+  // a step apart from the filter chips under them, which only narrow.
   const key =
-    "flex h-6 min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-200";
+    "flex h-7 min-w-0 flex-1 items-center justify-center gap-1 truncate rounded border border-neutral-700 px-1.5 text-[11px] font-medium text-neutral-300 hover:border-cyan-600 hover:text-cyan-400";
   return (
     <div className="mx-2 mt-2 flex shrink-0 gap-1">
       {leading}

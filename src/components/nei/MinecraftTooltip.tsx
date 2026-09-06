@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { isTouchPointer } from "@/lib/pointer-kind";
+import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
 /**
  * Marks an element that turns the wheel into its own state change rather than
@@ -239,7 +240,7 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip="true"
-                className="pointer-events-none fixed z-[9999] max-w-[640px] border-2 border-[#2a005f] bg-[#100010] px-3 py-2.5 text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)]"
+                className={`${TOOLTIP_PANEL_CLASS} max-w-[640px] px-3 py-2.5`}
                 style={{ left: position.x, top: position.y }}
               >
                 {typeof content === "function" ? content() : content}
@@ -255,13 +256,13 @@ export function MinecraftTooltip({
                 // of its own. Asking for max-content makes the panel state its
                 // real width; the pointer clamp above reads that width back and
                 // walks it inside the edge.
-                className="pointer-events-none fixed z-[9999] w-max max-w-[420px] border-2 border-[#2a005f] bg-[#100010] px-2 py-1 font-mono text-[16px] leading-[19px] text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)] [text-shadow:2px_2px_0_#3f3f3f]"
+                className={`${TOOLTIP_PANEL_CLASS} w-max max-w-[420px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
                 style={{ left: position.x, top: position.y }}
               >
                 {lines.map((line, index) => (
                   <div
                     key={`${line}-${index}`}
-                    className={index === 0 ? "text-white" : "text-[#aaaaff]"}
+                    className={index === 0 ? "text-fg" : "text-fg-subtle"}
                   >
                     {line}
                   </div>

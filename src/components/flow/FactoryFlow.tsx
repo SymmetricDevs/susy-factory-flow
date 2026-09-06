@@ -26,6 +26,7 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
+import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import {
   Activity,
   AlignJustify,
@@ -7304,7 +7305,9 @@ type BoardMode = "build" | "solve" | "pool";
 const MODE_KEYS: Array<{
   mode: BoardMode;
   label: string;
-  title: string;
+  setup: string;
+  result: string;
+  note?: string;
   Icon: LucideIcon;
   ink: string;
   /** The ink while NOT engaged: the same colour, a deeper shade - never a fade. */
@@ -7315,7 +7318,8 @@ const MODE_KEYS: Array<{
   {
     mode: "build",
     label: "Build mode",
-    title: "Set machine counts and connect inputs and outputs. Calculates production rates for the connected machines.",
+    setup: "Set machine counts and connect inputs and outputs.",
+    result: "Production rates for the connected machines.",
     Icon: Blocks,
     ink: "text-[#f5b642]",
     dim: "text-[#b48a3b]",
@@ -7324,7 +7328,8 @@ const MODE_KEYS: Array<{
   {
     mode: "solve",
     label: "Solve mode",
-    title: "Connect machines and set target production rates. Calculates the machine counts required to meet those targets.",
+    setup: "Connect machines and set target production rates.",
+    result: "Machine counts required to meet those targets.",
     Icon: Sigma,
     // Violet, not the cyan it had: cyan and pool's blue read as one colour.
     ink: "text-[#c78bff]",
@@ -7334,7 +7339,9 @@ const MODE_KEYS: Array<{
   {
     mode: "pool",
     label: "Pool mode",
-    title: "Select recipes and set target production rates. Calculates machine counts using shared resource pools instead of wires. Inputs with no producer are imported automatically.",
+    setup: "Select recipes and set target production rates.",
+    result: "Machine counts using shared resource pools. No wires required; inputs with no producer are imported automatically.",
+    note: "Use this mode for simple production planning, similar to traditional GTNH planners.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
     dim: "text-[#5273b8]",
@@ -7444,29 +7451,44 @@ const ModeKeys = memo(function ModeKeys() {
         dragX === undefined ? "" : "cursor-grabbing",
       ].join(" ")}
     >
-      {MODE_KEYS.map(({ mode: key, label, title, Icon, ink, dim }, at) => (
-        <button
+      {MODE_KEYS.map(({ mode: key, label, setup, result, note, Icon, ink, dim }, at) => (
+        <MinecraftTooltip
           key={key}
-          type="button"
-          role="radio"
-          aria-checked={mode === key}
-          onClick={() => pick(key)}
-          title={title}
-          aria-label={label}
-          className={[
-            "flex h-full items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-colors duration-200",
-            TOOL_FACE_OFF,
-            at > 0 ? "border-l-2 border-[var(--mc-15)]" : "",
-            // Each key in its own colour always: a deeper shade at rest, the
-            // full colour when engaged. The face never fades - a faded key
-            // read as one you could not press.
-            shown === at ? ink : `${dim} hover:brightness-125`,
-          ].join(" ")}
-          style={{ width: MODE_STEP }}
+          content={
+            <div className="w-[300px] max-w-[calc(100vw-44px)] space-y-2.5 text-sm leading-5 text-fg-subtle">
+              <div className={`font-semibold ${ink}`}>{label}</div>
+              <p>
+                <strong className="font-semibold text-fg">Setup:</strong> {setup}
+              </p>
+              <p>
+                <strong className="font-semibold text-fg">Calculates:</strong> {result}
+              </p>
+              {note && <p className="border-t border-line pt-2.5 text-fg-muted">{note}</p>}
+            </div>
+          }
         >
-          <Icon className="h-4 w-4" />
-          {label.replace(" mode", "").toUpperCase()}
-        </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={mode === key}
+            onClick={() => pick(key)}
+            aria-label={label}
+            aria-description={`${setup} Calculates ${result.charAt(0).toLowerCase()}${result.slice(1)}${note ? ` ${note}` : ""}`}
+            className={[
+              "flex h-full items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-colors duration-200",
+              TOOL_FACE_OFF,
+              at > 0 ? "border-l-2 border-[var(--mc-15)]" : "",
+              // Each key in its own colour always: a deeper shade at rest, the
+              // full colour when engaged. The face never fades - a faded key
+              // read as one you could not press.
+              shown === at ? ink : `${dim} hover:brightness-125`,
+            ].join(" ")}
+            style={{ width: MODE_STEP }}
+          >
+            <Icon className="h-4 w-4" />
+            {label.replace(" mode", "").toUpperCase()}
+          </button>
+        </MinecraftTooltip>
       ))}
       {/* The glass: a faint pane of the engaged mode's colour, a hair
           brighter along its top edge, and nothing else. It slides. */}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isTouchPointer } from "@/lib/pointer-kind";
+import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
 /**
  * Every browser `title` attribute in the app, rendered as the planner's own
@@ -135,11 +136,11 @@ export function GlobalTitleTooltip() {
     <div
       ref={panelRef}
       data-minecraft-tooltip="true"
-      className="pointer-events-none fixed z-[9999] max-w-[340px] border-2 border-[#2a005f] bg-[#100010] px-2 py-1 font-mono text-[16px] leading-[19px] text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)] [text-shadow:2px_2px_0_#3f3f3f]"
+      className={`${TOOLTIP_PANEL_CLASS} max-w-[340px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
       style={{ left: tip.x, top: tip.y }}
     >
       {tip.lines.map((line, index) => (
-        <div key={`${line}-${index}`} className={index === 0 ? "text-white" : "text-[#aaaaff]"}>
+        <div key={`${line}-${index}`} className={index === 0 ? "text-fg" : "text-fg-subtle"}>
           {line}
         </div>
       ))}

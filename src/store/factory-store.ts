@@ -1871,8 +1871,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   addStorageForConnection: (resource, nodeId, side, position, handleId) => {
     set((state) => {
       // Pool mode feeds every input itself: a source drawer would do nothing,
-      // so a drop in the void off an input makes nothing. (The input handles
-      // refuse the drag too; this is the belt to that brace.)
+      // so a drop in the void off an input makes nothing. The drag itself
+      // still runs, and its ghost says why the release will not.
       if (state.project.poolMode && side === "input") {
         return state;
       }

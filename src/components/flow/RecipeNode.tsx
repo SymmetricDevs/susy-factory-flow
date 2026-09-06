@@ -3082,6 +3082,11 @@ export function OutputSocketRow({
   // SOLVE and POOL cover every asker by construction: the coupling's
   // percent is always 100, so the socket stays blank.
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
+  if (solveMode) {
+    // No socket at all: the chip takes the whole rail, wires dock on it and
+    // drag from it the way an input's do.
+    return <PortChip nodeId={nodeId} port={port} pending={pending} />;
+  }
   return (
     <div
       className="relative flex items-stretch"
@@ -3583,7 +3588,13 @@ export function PortChip({
              the number, which is the thing a viewer actually reads. Muted ink
              a step below the name, so the pair still reads name-first. */
           <span
-            className={`block truncate text-[13px] font-bold leading-[15px] tabular-nums ${rateInk}`}
+            className={[
+              "block truncate tabular-nums",
+              // The calm VIEW is a presentation and wants the number big and
+              // bold; solve and pool are working modes and want it plain.
+              calmView ? "text-[13px] font-bold leading-[15px]" : "text-[12px] font-medium leading-[14px]",
+              rateInk,
+            ].join(" ")}
           >
             {rateText}
           </span>

@@ -14,7 +14,6 @@ import {
   ChevronDown,
   Copy,
   Cpu,
-  Image as ImageIcon,
   Minus,
   Pencil,
   Plus,
@@ -272,11 +271,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     key: string;
   }>();
   const [isCropMenuOpen, setCropMenuOpen] = useState(false);
-  // The card's picture window, hidden or shown from the header button.
-  // The choice is this browser's, per card, never the plan's.
-  const [pictureHidden, setPictureHidden] = useState(() =>
-    readPowerArtCollapsed(projectNode.id),
-  );
   // The hatch-count chip mid-edit: the typed digits, or undefined at rest.
   // The dropdowns the chips used to open are GONE (Jack, 2026-08-31): the
   // supply chip types and wheels, the tier chip clicks and wheels, and
@@ -907,8 +901,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     : selectedMachineHandler;
   // EVERY machine wears its picture (Jack, 2026-09-06), not only the
   // generators: a multiblock's render where the workbook has one, the
-  // machine item's own art otherwise, hidden from the header button. The
-  // art follows the menu's hover, so previewing a machine shows it too.
+  // machine item's own art otherwise. It cannot be hidden (Jack,
+  // 2026-09-06). The art follows the menu's hover, so previewing a
+  // machine shows it too.
   const previewMachineIcon = machineIcons.get(previewHandler.id);
   const hasPowerPicture = Boolean(
     powerArt ||
@@ -1252,9 +1247,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 ? []
                 : isCropFarmPlaceholder || isCustomRateNode
                   ? ["24px", "24px"]
-                  : hasPowerPicture
-                    ? ["24px", "24px", "24px", "24px"]
-                    : ["24px", "24px", "24px"]),
+                  : ["24px", "24px", "24px"]),
               "minmax(0,1fr)",
               // The tier chip, with its hatch sister fused on the left when
               // the machine is a multiblock that takes energy hatches. The
@@ -1307,29 +1300,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   aria-label="Refactor node"
                 >
                   <RefreshCw aria-hidden className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-              {hasPowerPicture ? (
-                // The picture window's switch lives with the card chrome:
-                // hidden, the window renders nothing at all.
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setPictureHidden((hidden) => {
-                      writePowerArtCollapsed(projectNode.id, !hidden);
-                      return !hidden;
-                    });
-                  }}
-                  className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
-                  title={pictureHidden ? "Show the machine picture" : "Hide the machine picture"}
-                  aria-label={pictureHidden ? "Show the machine picture" : "Hide the machine picture"}
-                  aria-pressed={!pictureHidden}
-                >
-                  <ImageIcon
-                    aria-hidden
-                    className={pictureHidden ? "h-3.5 w-3.5 opacity-40" : "h-3.5 w-3.5"}
-                  />
                 </button>
               ) : null}
             </>
@@ -1621,7 +1591,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         </div>
         {/* The picture window sits under the title bar, over the ports:
             the multiblock render (or the machine item), full card width. */}
-        {!calmMode && hasPowerPicture && !pictureHidden ? (
+        {!calmMode && hasPowerPicture ? (
           <PowerStructureWindow
             art={powerArt}
             icon={powerMachineIcon ?? previewMachineIcon}
@@ -2647,42 +2617,12 @@ function NoFlowRow({ label, side }: { label: string; side: "input" | "output" })
   );
 }
 
-const POWER_ART_COLLAPSED_KEY = "gtnh-factory-flow.power-art-collapsed.v1";
-
-function readPowerArtCollapsed(nodeId: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const raw = window.localStorage.getItem(POWER_ART_COLLAPSED_KEY);
-    return raw ? (JSON.parse(raw) as string[]).includes(nodeId) : false;
-  } catch {
-    return false;
-  }
-}
-
-function writePowerArtCollapsed(nodeId: string, collapsed: boolean) {
-  if (typeof window === "undefined") return;
-  try {
-    const raw = window.localStorage.getItem(POWER_ART_COLLAPSED_KEY);
-    const ids = new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
-    if (collapsed) {
-      ids.add(nodeId);
-    } else {
-      ids.delete(nodeId);
-    }
-    // The list only ever grows by cards someone deliberately folded; cap it
-    // so a long-lived browser profile never accumulates unbounded ids.
-    window.localStorage.setItem(POWER_ART_COLLAPSED_KEY, JSON.stringify([...ids].slice(-200)));
-  } catch {
-    // Storage unavailable: the toggle still holds for this session.
-  }
-}
-
 /**
  * The picture window: the workbook's own multiblock render (a singleblock
  * shows its machine item), spanning the card between the title bar and the
  * ports, on a recessed ground from the card's own palette with a whisper
  * of the power amber - there to help you see the thing you are planning.
- * The header's picture button hides it entirely; hidden, nothing renders.
+ * It is always shown: there is no hide button (Jack, 2026-09-06).
  * Height plus the breathing room below stays a whole number of grid cells.
  */
 function PowerStructureWindow({

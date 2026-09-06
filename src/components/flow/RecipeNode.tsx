@@ -146,7 +146,7 @@ import { isEchoOfTouch } from "@/lib/pointer-kind";
 import { machineIconAtTier, useMachineHandlerIconEntries, useMachineHandlerIcons, useRecipeMapIcons, type MachineHandlerIcon } from "./machine-icons";
 import { useRenderedHandles } from "./use-rendered-handles";
 import { MinecraftSelect } from "./MinecraftSelect";
-import { LadderTile, SETTING_TILE_HEIGHT_PX } from "./SettingTile";
+import { FactTile, LadderTile, SETTING_TILE_HEIGHT_PX } from "./SettingTile";
 import { PowerConfigPanel } from "./PowerConfigPanel";
 import { getPowerSource } from "@/lib/power/registry";
 import { getPowerStructureArt } from "@/lib/power/structure-art";
@@ -791,17 +791,45 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       tiers: getTreeGrowthSimulatorSlotTiers(control),
     })),
     ...beeFrameControls,
-    ...statsMachineConfigControls,
+    // The parallel controls are FACTS of the structure, not choices: they
+    // never get a tile. The count they produce rides the Parallel fact tile.
+    ...statsMachineConfigControls.filter(
+      (control) => control.id !== "machineParallel" && control.id !== "voltageParallel",
+    ),
   ];
-  // The parallel count is a FACT of the chosen casing, not a setting: it
-  // never sits among the tiles (docs/config-tiles-prd.md). The footer's
-  // Parallel stat or its slim line under the footer carries it.
+  // The parallel count is a FACT of the chosen casing, not a setting, so it
+  // is a read-only tile AFTER the settings in the same grid (Jack,
+  // 2026-09-06): one setting and one fact fill one row, not two bands.
+  // The count the card actually runs at: the curated table's (a Volcanus
+  // runs 8 whatever the scraped control says), else the config's.
+  const effectiveParallels =
+    powerReport?.parallels ?? steamReport?.parallels ?? machineParallelMultiplier;
+  const configFacts =
+    !isCustomRateNode && (powerReport !== undefined || steamReport !== undefined) && effectiveParallels > 1
+      ? [
+          {
+            id: "parallel",
+            caption: "Parallel",
+            value: `×${formatMachineParallelMultiplier(effectiveParallels)}`,
+            help: () => (
+              <RecipeTooltip
+                view={{
+                  title: "Parallel operations",
+                  rows: [{ label: "Operations at once", value: formatMachineParallelMultiplier(effectiveParallels) }],
+                  reason: "Set by the machine and its configuration.",
+                }}
+              />
+            ),
+          },
+        ]
+      : [];
   const machineConfigPanel =
-    visibleMachineConfigControls.length > 0 ? (
+    visibleMachineConfigControls.length > 0 || configFacts.length > 0 ? (
       <MachineConfigControlPanel
         recipe={recipe}
         node={projectNode}
         controls={visibleMachineConfigControls}
+        facts={configFacts}
         onSelect={(controlId, nextTier) => {
           setPreviewConfigTier(undefined);
           if (controlId === "heatingCoil") {
@@ -1770,17 +1798,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   </div>
                 ) : (
                   <>
-                    {parallelChipLifts ? (
-                      // No config panel to ride in: the lifted parallel chip
-                      // gets its own slim line, packed right, not a full row
-                      // of tiles. See parallelChipLifts.
-                      <div className="mb-1 flex min-w-0 justify-end">
-                        <Stat
-                          label="Parallel"
-                          value={`×${formatMachineParallelMultiplier(machineParallelMultiplier)}`}
-                        />
-                      </div>
-                    ) : null}
                     <div
                       className={[
                         "grid min-w-0 items-center gap-1",
@@ -3961,20 +3978,23 @@ function MachineConfigControlPanel({
   recipe,
   node,
   controls,
+  facts = [],
   onSelect,
 }: {
   recipe: Recipe;
   node: FactoryNode;
   controls: MachineConfigTierControl[];
+  /** Read-only tiles after the settings, in the same grid. */
+  facts?: Array<{ id: string; caption: string; value: string; help?: ReactNode | (() => ReactNode) }>;
   onSelect: (controlId: string, nextTier: string) => void;
 }) {
-  if (controls.length === 0) {
+  if (controls.length === 0 && facts.length === 0) {
     return null;
   }
   // Two tiles per row on the card's width, the crop card's grammar
-  // (SettingTile): caption over a stepped well, faces only where every rung
-  // has one, the full list on right click. No dropdowns, no grey band.
-  const rows = Math.ceil(controls.length / 2);
+  // (SettingTile): settings first, facts after, one grid. Faces only where
+  // every rung has one; short ladders step, long ones drop down.
+  const rows = Math.ceil((controls.length + facts.length) / 2);
   return (
     <GridBlock className="nodrag" minCells={(rows * SETTING_TILE_HEIGHT_PX) / BOARD_GRID}>
       <div className="grid grid-cols-2 gap-1">
@@ -3985,6 +4005,9 @@ function MachineConfigControlPanel({
             onSelect={(key) => onSelect(control.id, key)}
             help={() => <RecipeTooltip view={buildConfigTooltip(recipe, node, control)} />}
           />
+        ))}
+        {facts.map((fact) => (
+          <FactTile key={fact.id} caption={fact.caption} value={fact.value} help={fact.help} />
         ))}
       </div>
     </GridBlock>

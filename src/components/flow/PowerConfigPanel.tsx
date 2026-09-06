@@ -9,7 +9,7 @@ import type {
 } from "@/lib/power/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { RecipeTooltip } from "./RecipeTooltip";
-import { SettingListMenu, SettingSelectTile, SettingTile, STEPPER_MAX_RUNGS } from "./SettingTile";
+import { FactTile, SettingListMenu, SettingSelectTile, SettingTile, STEPPER_MAX_RUNGS } from "./SettingTile";
 
 /**
  * The knobs on a power card: the source definition's settings on the same
@@ -92,16 +92,12 @@ export function PowerConfigPanel({
             />
           );
         })}
+        {/* The model's readings (efficiency, optimal flow, lifespans) as fact
+            tiles after the settings, in the same grid. */}
+        {stats.map((line) => (
+          <FactTile key={line.label} caption={line.label} value={line.value} />
+        ))}
       </div>
-      {stats.length > 0 ? (
-        <div className="mt-1.5 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
-          {stats.map((line) => (
-            <span key={line.label} className="whitespace-nowrap text-[10px] text-[var(--mc-ink-muted)]">
-              {line.label}: <span className="text-[var(--mc-ink)]">{line.value}</span>
-            </span>
-          ))}
-        </div>
-      ) : null}
       {warnings?.map((warning) => (
         <p key={warning} className="mt-1 text-[11px] leading-tight text-amber-300">
           {warning}

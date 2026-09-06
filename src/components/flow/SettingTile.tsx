@@ -395,6 +395,36 @@ export function SettingSelectTile({
   return help ? <MinecraftTooltip content={help}>{tile}</MinecraftTooltip> : tile;
 }
 
+/**
+ * A FACT in the settings grid: a caption over a recessed value with no
+ * controls - the parallel count a casing gives, a generator's efficiency.
+ * Facts sit after the settings in the same grid so a card with one setting
+ * and one fact fills one row instead of two bands.
+ */
+export function FactTile({
+  caption,
+  value,
+  help,
+}: {
+  caption: string;
+  value: string;
+  help?: ReactNode | (() => ReactNode);
+}) {
+  const tile = (
+    <div className={SETTING_TILE_CLASS}>
+      <div className={SETTING_TILE_CAPTION_CLASS}>
+        <span className="min-w-0 truncate">{caption}</span>
+      </div>
+      <div className="flex min-w-0 items-center">
+        <span className={[SETTING_TILE_WELL_CLASS, "w-full flex-none px-1 tabular-nums"].join(" ")} title={value}>
+          <span className="min-w-0 truncate">{value}</span>
+        </span>
+      </div>
+    </div>
+  );
+  return help ? <MinecraftTooltip content={help}>{tile}</MinecraftTooltip> : tile;
+}
+
 /** A tile over a ladder of tier options: the shape most machine settings take. */
 export function LadderTile({
   control,

@@ -74,6 +74,22 @@ describe("buildMachineHandlerTemplates", () => {
     expect(templates[1].kind).toBe("multiblock");
   });
 
+  it("keeps every tiered variant's own item, in tier order, on the folded family", () => {
+    const templates = buildMachineHandlerTemplates("Fluid Extractor", [
+      catalyst("Advanced Fluid Extractor II (HV)", { sourceClass: SINGLE_CLASS }),
+      catalyst("Basic Fluid Extractor (LV)", { sourceClass: SINGLE_CLASS }),
+      catalyst("Advanced Fluid Extractor (MV)", { sourceClass: SINGLE_CLASS }),
+      catalyst("Large Fluid Extractor", { sourceClass: GTPP_MULTI_CLASS }),
+    ]);
+    const family = templates.find((template) => template.label === "Fluid Extractor");
+    expect(family.catalystResource.displayName).toBe("Basic Fluid Extractor (LV)");
+    expect(family.tierIcons.map((entry) => entry.tier)).toEqual(["LV", "MV", "HV"]);
+    expect(family.tierIcons[2].resource.displayName).toBe("Advanced Fluid Extractor II (HV)");
+    // A one-variant family carries no list: its face already is the variant.
+    expect(templates.find((template) => template.label === "Large Fluid Extractor").tierIcons).toBeUndefined();
+    expect("tierVariants" in family).toBe(false);
+  });
+
   it("reads GT++ style speed, EU usage, and parallel stats from the tooltip", () => {
     const templates = buildMachineHandlerTemplates("Blast Furnace", [
       catalyst("Electric Blast Furnace", { sourceClass: MULTI_CLASS }),

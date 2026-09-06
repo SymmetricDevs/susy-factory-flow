@@ -143,7 +143,7 @@ import {
   type BrowseMode as PortBrowseMode,
 } from "@/components/browse-menu";
 import { isEchoOfTouch } from "@/lib/pointer-kind";
-import { useMachineHandlerIcons, type MachineHandlerIcon } from "./machine-icons";
+import { machineIconAtTier, useMachineHandlerIconEntries, useMachineHandlerIcons, useRecipeMapIcons, type MachineHandlerIcon } from "./machine-icons";
 import { useRenderedHandles } from "./use-rendered-handles";
 import { MinecraftSelect } from "./MinecraftSelect";
 import { PowerConfigPanel } from "./PowerConfigPanel";
@@ -881,6 +881,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     }
   };
   const machineIcons = useMachineHandlerIcons();
+  const machineIconEntries = useMachineHandlerIconEntries();
+  const recipeMapIcons = useRecipeMapIcons();
   // The machine's own art, when the dataset ships it. Crop farms and custom
   // rate nodes have no machine to show.
   const machineGlanceIcon = powerInfo
@@ -904,7 +906,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // machine item's own art otherwise. It cannot be hidden (Jack,
   // 2026-09-06). The art follows the menu's hover, so previewing a
   // machine shows it too.
-  const previewMachineIcon = machineIcons.get(previewHandler.id);
+  // The tier's own block for a tiered singleblock family, the family face
+  // otherwise, and the MAP's machine for a one-family map whose placeholder
+  // handler no family icon is keyed by (the Chemical Plant).
+  const previewMachineIcon =
+    machineIconAtTier(machineIconEntries.get(previewHandler.id), projectNode.overclockTier) ??
+    recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType);
   const hasPowerPicture = Boolean(
     powerArt ||
       powerMachineIcon?.iconPath ||

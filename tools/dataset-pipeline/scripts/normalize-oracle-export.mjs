@@ -60,13 +60,33 @@ const recipeMapIcons = new Map();
 // catalysts so normalizeSmelting can reattach the machines to those recipes.
 let furnaceCatalysts = [];
 // Machine handler families -> the item that represents them (the family's
-// lowest-tier catalyst). Shipped dataset-wide so the app can draw machine
-// tabs without guessing items from names. First registration wins.
+// lowest-tier catalyst), plus every tiered variant's own item where the
+// family has more than one, so a card can wear the machine of its tier.
+// Shipped dataset-wide so the app never guesses items from names. The face
+// is first registration wins; the tier list is merged across every map the
+// family appears in.
 const machineHandlerIcons = new Map();
+const machineHandlerTierIcons = new Map();
+const VOLTAGE_TIER_ORDER = ["ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UXV", "OpV", "MAX"];
 
 function registerMachineHandlerIcons(templates) {
   for (const template of templates ?? []) {
-    if (!template.catalystResource || machineHandlerIcons.has(template.id)) {
+    if (!template.catalystResource) {
+      continue;
+    }
+    for (const variant of template.tierIcons ?? []) {
+      const tierResource = resourceAmount(variant.resource);
+      if (!tierResource?.iconPath) {
+        continue;
+      }
+      const tiers = machineHandlerTierIcons.get(template.id) ?? new Map();
+      if (!tiers.has(variant.tier)) {
+        addResource(tierResource);
+        tiers.set(variant.tier, tierResource);
+      }
+      machineHandlerTierIcons.set(template.id, tiers);
+    }
+    if (machineHandlerIcons.has(template.id)) {
       continue;
     }
     const resource = resourceAmount(template.catalystResource);
@@ -120,7 +140,20 @@ const dataset = {
     .map(([recipeMap, resource]) => ({ recipeMap, resource: compactRecipeResource(resource) }))
     .sort((left, right) => left.recipeMap.localeCompare(right.recipeMap)),
   machineHandlerIcons: [...machineHandlerIcons.entries()]
-    .map(([familyId, resource]) => ({ familyId, resource: compactRecipeResource(resource) }))
+    .map(([familyId, resource]) => {
+      const tiers = machineHandlerTierIcons.get(familyId);
+      return {
+        familyId,
+        resource: compactRecipeResource(resource),
+        ...(tiers && tiers.size > 1
+          ? {
+              tiers: [...tiers.entries()]
+                .sort((left, right) => VOLTAGE_TIER_ORDER.indexOf(left[0]) - VOLTAGE_TIER_ORDER.indexOf(right[0]))
+                .map(([tier, tierResource]) => ({ tier, resource: compactRecipeResource(tierResource) })),
+            }
+          : {}),
+      };
+    })
     .sort((left, right) => left.familyId.localeCompare(right.familyId)),
   generatedAt,
 };

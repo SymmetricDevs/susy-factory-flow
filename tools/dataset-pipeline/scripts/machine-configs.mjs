@@ -288,6 +288,12 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
         // Furnace, not Epic Atom Stimulator IV).
         existing.catalystResource = catalyst.resource;
       }
+      // Every tiered variant keeps its own art: the card wears the machine
+      // of the tier it is set to (an LV and an HV Chemical Reactor are
+      // different blocks). First variant seen for a tier wins.
+      if (!multiblock && minimumTier !== undefined && !existing.tierVariants.has(minimumTier)) {
+        existing.tierVariants.set(minimumTier, catalyst.resource);
+      }
       continue;
     }
 
@@ -301,6 +307,9 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
       kind: multiblock || hasWikiStats ? "multiblock" : "single",
       minimumTier,
       catalystResource: catalyst.resource,
+      tierVariants: new Map(
+        !multiblock && minimumTier !== undefined ? [[minimumTier, catalyst.resource]] : [],
+      ),
       ...stats,
     });
   }
@@ -308,6 +317,17 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
   const templates = [...families.values()];
   if (templates.length === 0) {
     return [];
+  }
+  for (const template of templates) {
+    // Tier order, as a plain list; a family with one variant carries none
+    // (its face already is that variant).
+    const variants = [...template.tierVariants.entries()]
+      .sort((left, right) => voltageTierIndex(left[0]) - voltageTierIndex(right[0]))
+      .map(([tier, resource]) => ({ tier, resource }));
+    delete template.tierVariants;
+    if (variants.length > 1) {
+      template.tierIcons = variants;
+    }
   }
 
   const primaryKey = normalizeLabel(machineType);

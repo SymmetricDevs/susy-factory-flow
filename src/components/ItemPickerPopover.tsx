@@ -107,19 +107,21 @@ export function ItemPickerPopover({
     <div
       ref={rootRef}
       style={placement === "below" ? { transform: `translateX(calc(-50% + ${shift}px))` } : undefined}
+      // The items column's own dress (RecipeBrowser's search box and rows):
+      // flat dark panel, 4px corners, neutral ink - not the canvas bevel.
       className={[
-        "absolute z-20 w-full max-w-[calc(100vw-16px)] border-2 border-[var(--mc-15)] bg-[var(--mc-61)] p-2 shadow-[6px_6px_0_rgba(0,0,0,0.45)] sm:w-[640px] sm:max-w-[640px]",
+        "absolute z-20 w-full max-w-[calc(100vw-16px)] rounded-[6px] border border-neutral-700 bg-[#1b1e23] p-2 shadow-[0_8px_24px_rgba(0,0,0,0.5)] sm:w-[360px] sm:max-w-[360px]",
         placement === "above" ? "bottom-full left-1/2 mb-2 -translate-x-1/2" : "left-1/2 top-full mt-2",
       ].join(" ")}
     >
-      <label className="flex h-9 items-center gap-2 border-2 border-[var(--mc-33)] bg-[#17191d] px-2 text-sm text-neutral-100 shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]">
+      <label className="flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] focus-within:border-cyan-600">
         <Search className="h-4 w-4 shrink-0 text-neutral-500" />
         <input
           ref={inputRef}
           value={pickerQuery}
           onChange={(event) => setPickerQuery(event.target.value)}
           placeholder={role === "takes" ? "Add an input..." : "Add an output..."}
-          className="min-w-0 flex-1 bg-transparent text-neutral-100 outline-none placeholder:text-neutral-500"
+          className="min-w-0 flex-1 bg-transparent text-neutral-200 outline-none placeholder:text-neutral-500"
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.stopPropagation();
@@ -131,20 +133,20 @@ export function ItemPickerPopover({
           }}
         />
       </label>
-      <div className="recipe-search-scroll mt-2 grid max-h-[460px] grid-cols-1 gap-1 overflow-y-auto compact:max-h-[max(140px,calc(100vh-320px))] sm:grid-cols-2">
+      <div className="recipe-search-scroll mt-2 flex max-h-[420px] flex-col gap-px overflow-y-auto compact:max-h-[max(140px,calc(100vh-320px))]">
         {loading && displayResults.length === 0 ? (
-          <div className="p-2 text-sm text-[var(--mc-ink-muted)]">Searching...</div>
+          <div className="px-2 py-2 text-sm text-neutral-500">Searching...</div>
         ) : displayResults.length === 0 ? (
-          <div className="p-2 text-sm text-[var(--mc-ink-muted)]">No matching items.</div>
+          <div className="px-2 py-2 text-sm text-neutral-500">No matching items.</div>
         ) : (
           displayResults.map((entry) => (
             <button
               key={`${entry.kind}:${entry.id}`}
               type="button"
               onClick={() => onPick(entry, role)}
-              className="flex w-full items-center gap-2 border-2 border-transparent bg-[var(--mc-47)] px-1.5 py-1 text-left hover:bg-[var(--mc-61)]"
+              className="flex h-9 w-full shrink-0 items-center gap-2 rounded-[4px] px-2 text-left text-neutral-200 hover:bg-[#2a2d33]"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden">
                 {entry.id === POWER_EU_CLAUSE_ID ? (
                   <Zap className="h-4 w-4 fill-current text-amber-300" aria-hidden />
                 ) : (
@@ -155,13 +157,11 @@ export function ItemPickerPopover({
                     showAmount={false}
                     tooltip={false}
                     className="!h-full !w-full"
-                    iconPixelSize={machineArtPixels(32)}
+                    iconPixelSize={machineArtPixels(24)}
                   />
                 )}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-[var(--mc-ink)]">
-                {entry.displayName ?? entry.id}
-              </span>
+              <span className="min-w-0 flex-1 truncate text-sm">{entry.displayName ?? entry.id}</span>
             </button>
           ))
         )}

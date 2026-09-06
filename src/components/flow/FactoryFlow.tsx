@@ -7514,36 +7514,38 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
         aria-hidden={!on}
         className={[
           "overflow-hidden transition-[width] duration-500 ease-out",
-          on ? "w-[36px]" : "pointer-events-none w-0",
+          on ? "w-[52px]" : "pointer-events-none w-0",
         ].join(" ")}
       >
         <div
           className={[
-            "flex w-[36px] items-center pl-1 transition-transform duration-500 ease-out",
-            on ? "translate-x-0" : "-translate-x-[36px]",
+            "flex w-[52px] items-center pl-2 transition-transform duration-500 ease-out",
+            on ? "translate-x-0" : "-translate-x-[52px]",
           ].join(" ")}
         >
-          <button
-            type="button"
-            onClick={() => setPicking((was) => !was)}
-            aria-pressed={picking}
-            tabIndex={on ? 0 : -1}
-            className={[
-              "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
-              picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
-            ].join(" ")}
-            title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
-            aria-label="Add a product drawer"
-          >
-            <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
-          </button>
+          <ToolTray>
+            <button
+              type="button"
+              onClick={() => setPicking((was) => !was)}
+              aria-pressed={picking}
+              tabIndex={on ? 0 : -1}
+              className={[
+                "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
+                picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
+              ].join(" ")}
+              title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
+              aria-label="Add a product drawer"
+            >
+              <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
+            </button>
+            </ToolTray>
         </div>
       </div>
       {picking ? (
         // Outside the clip, centred under the key that opened it.
         <div
           className="absolute top-full z-30 mt-1 -translate-x-1/2"
-          style={{ left: 20 }}
+          style={{ left: 24 }}
         >
           <ItemPickerPopover
             role="makes"
@@ -9295,10 +9297,16 @@ const PaintToolbar = memo(function PaintToolbar({
     >
       <ToolTray helpAnchor="rules">
         <ModeKeys />
-        {/* Pool mode's product key slides out of the switch on the Pool side
-            while that mode is on (Jack, 2026-09-06). */}
-        <PoolSpawnKeys />
       </ToolTray>
+      {/* Pool mode's product key: its OWN plate that appears to the right of
+          the switch while that mode is on (Jack, 2026-09-06). Absolutely
+          placed, so the switch never moves for it - it is not one of the
+          three, it only turns up when Pool does. */}
+      {/* The mask starts AT the switch's edge, so the plate comes out from
+          under Pool; the gap it settles at is inside the slide. */}
+      <div className="absolute left-full top-0">
+        <PoolSpawnKeys />
+      </div>
     </div>
     <div
       data-board-toolbar

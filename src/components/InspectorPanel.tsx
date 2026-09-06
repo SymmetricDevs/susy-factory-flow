@@ -651,7 +651,7 @@ function FlowIOPanel() {
             title="Hide"
             aria-label="Hide the resources column"
             className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-cyan-600 hover:text-cyan-400",
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
               hiddenCount > 0 ? "" : "ml-auto",
             ].join(" ")}
           >

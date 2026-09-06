@@ -1142,7 +1142,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
               type="button"
               onClick={() => writeWorkspaceView({ leftPanelOpen: false })}
               aria-label="Hide the items column"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-cyan-600 hover:text-cyan-400"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100"
             >
               <ChevronIcon direction="left" />
             </button>

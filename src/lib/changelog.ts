@@ -70,12 +70,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "2.58.0",
     date: "2026-09-05",
-    headline: "Pool mode: solve without wires",
+    headline: "Three modes: Build, Solve, Pool",
     notes: [
-      "A new key beside solve mode shares every resource between all machines, so nothing needs a wire.",
-      "Pin a product amount or a machine count and the plan works out the counts, the imports and the outputs.",
-      "Anything nobody makes is imported and listed under Inputs.",
-      "Wires fade out while the mode is on and come back when it is off.",
+      "One switch on the toolbar: Build reports what flows, Solve counts the machines, Pool also wires and imports for you.",
+      "In Pool, nothing needs a wire: every resource is shared, anything nobody makes is imported and listed under Inputs.",
+      "The setup rules sheet is gone; a filled cell and its fluid always wire together.",
+      "Solve and Pool no longer freeze the tab on a big plan.",
     ],
   },
   {

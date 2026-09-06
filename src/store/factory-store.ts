@@ -64,7 +64,6 @@ import {
   resourceLabel,
 } from "@/lib/model/resources";
 import type {
-  SetupRules,
   EntryIcon,
   FactoryAnnotation,
   FactoryEdge,
@@ -85,7 +84,6 @@ import type {
 import { nearestFreeSpot, type PlacementRect } from "@/components/flow/board-placement";
 import { collectPocketMembers, expandPocketSelection } from "@/lib/model/pocket-connections";
 import { paperForBoardId, pickBoardPaper } from "@/lib/model/board-paper";
-import { getSetupRules, packSetupRules } from "@/lib/model/setup-rules";
 import type { BoardCamera } from "@/lib/designs/design-camera";
 
 export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
@@ -383,8 +381,11 @@ interface FactoryStore {
   setStorageDrainMode: (storageId: string, drainMode: StorageDrainMode) => void;
   /** Solve mode's requirement on a product drawer; undefined clears it. */
   setStorageTarget: (storageId: string, targetPerSecond: number | undefined) => void;
-  /** Free inputs and free outputs: what the board does off its own edges. */
-  setSetupRules: (rules: Partial<SetupRules>) => void;
+  /**
+   * The board's three modes on one switch: build (both flags off), solve
+   * (solveMode), pool (solveMode plus poolMode). One undo step.
+   */
+  setBoardMode: (mode: "build" | "solve" | "pool") => void;
   /** Plan mode counts machines and reports flows; solve mode takes the
    * product drawers' typed amounts and reports machine counts. */
   setSolveMode: (solveMode: boolean) => void;
@@ -3738,13 +3739,17 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       });
     });
   },
-  setSetupRules: (rules) => {
+  setBoardMode: (mode) => {
     set((state) => {
-      const { assumeBoundaries: _legacy, ...rest } = state.project;
-      const project = touchProject({
-        ...rest,
-        setupRules: packSetupRules({ ...getSetupRules(state.project), ...rules }),
-      });
+      const solveMode = mode === "solve" || mode === "pool" ? true : undefined;
+      const poolMode = mode === "pool" ? true : undefined;
+      if (
+        (state.project.solveMode === true) === (solveMode === true) &&
+        (state.project.poolMode === true) === (poolMode === true)
+      ) {
+        return state;
+      }
+      const project = touchProject({ ...state.project, solveMode, poolMode });
       return withProjectHistory(state, {
         project,
         lastResult: solveBooks(project),

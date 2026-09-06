@@ -23,10 +23,12 @@ import { useEffect, useState, type RefObject } from "react";
  */
 const BUILD_ROW_WIDTH = 393;
 const BUILD_ROW_FOLDED_WIDTH = 124;
-// The pool mode key hangs UNDER the solve key (absolutely placed, see
-// SolveModeKeys) and never widens either row.
-const PAINT_ROW_WIDTH = 440;
-const PAINT_ROW_FOLDED_WIDTH = 280;
+// The three MODE keys (build, solve, pool) sit on a tray of their own where
+// the solve key and the rules key used to share one: one key more (32px
+// plus its 2px gap) and one more tray (12px of border and padding plus its
+// 4px gap), on both the unfolded and the folded row.
+const PAINT_ROW_WIDTH = 490;
+const PAINT_ROW_FOLDED_WIDTH = 330;
 const SIDE_MARGINS = 24;
 const BREATH = 24;
 

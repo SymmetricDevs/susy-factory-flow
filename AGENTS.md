@@ -117,8 +117,9 @@ Working notes for future agents on GTNH Factory Flow.
   Canner's power and time. Do NOT go further than this by default - an
   auto-inserted converter that discarded empty cells was designed and
   rejected in the same session.
-- LOOSE CELL WIRES is the one opt-in beyond it (`SetupRules.looseCellWires`,
-  off by default, in the board-rules sheet): a filled cell and its fluid wire
+- LOOSE CELL WIRES is the one step beyond it, ALWAYS ON since 2026-09-06
+  (it was an opt-in rule in the setup-rules sheet, which is gone; see "The
+  Three Modes"): a filled cell and its fluid wire
   straight together, EITHER WAY ROUND - cell output onto fluid input, fluid
   output onto cell input - and the gesture behaves like any compatible pair
   (green wash, whole-card drops, drags started from either end). The wire
@@ -495,7 +496,7 @@ Working notes for future agents on GTNH Factory Flow.
   still loses its stops and dragged label, and only ROOT-level ink is
   cleared. Do not resurrect the dump (`removeBoards` on
   `applyBoardArrangement` survives as API only).
-- The arrange button opens a small SHEET (same pattern as Setup Rules
+- The arrange button opens a small SHEET (the pattern the retired Setup Rules key used
   beside it): one setting, "Rearrange inside boards", and the Arrange
   button under it. The setting is a browser preference
   (`gtnh-factory-flow.arrange-tidy-boards.v1`, off by default), never part
@@ -830,12 +831,35 @@ Working notes for future agents on GTNH Factory Flow.
   conservation. Balance dust snaps at 1e-5 relative (`balances.ts`) because
   LP flows carry solver-precision dust proportional to board scale.
 
-## Pool Mode (No Wires)
+## The Three Modes (Build, Solve, Pool) And The Rules That Went
 
+- The board has THREE MODES on one switch (`ModeKeys` in FactoryFlow.tsx,
+  a tray of its own left of arrange and mute; `setBoardMode` in the store),
+  exactly one lit, each handing the planner more of the work (Jack,
+  2026-09-06): BUILD - you set machines, counts and wires, the board
+  reports what flows; SOLVE - you set machines and wires and type what
+  you want, the board counts the machines; POOL - you set machines and
+  type what you want, the board counts, wires and imports. Under the hood
+  build is both flags off, solve is `solveMode`, pool is `solveMode` plus
+  `poolMode`, so old plans open in the right position. Each mode has its
+  own sound (`buildOn`, `solveOn`, `poolOn`) - three separate things, not
+  a ladder. Build's icon is Blocks (Jack rejected the hammer).
+- THE SETUP RULES ARE GONE (Jack, 2026-09-06): no sheet, no key, no
+  `setSetupRules`. Free inputs and free outputs were what the modes now
+  do (build and solve are closed setups, pool imports and banks by
+  itself), and LOOSE CELL WIRES IS ALWAYS ON. `getSetupRules` still
+  exists because ~20 callers ask it, and answers every plan the same:
+  `{freeInputs: false, freeOutputs: false, looseCellWires: true}`. The
+  load funnel drops stored `setupRules` and the legacy `assumeBoundaries`
+  (`adoptSetupRules` in project-normalize.ts); the schema still accepts
+  them so old JSON parses. A test that needs an open boundary calls
+  `closeBoundaries` itself. `src/lib/solver/setup-rules.test.ts` pins all
+  of this. Community plans saved with free inputs/outputs on now solve
+  as closed setups - a known, decided consequence.
 - `FactoryProject.poolMode` (Jack, 2026-09-05) is the DEEPER SOLVE MODE:
-  the key only works with solve mode on, and leaving solve mode leaves it
-  too (`setPoolMode` / `setSolveMode`). You pin product amounts or machine
-  counts; the plan does the rest - counts, imports, outputs, wiring. ONE
+  pool implies solve, and leaving solve leaves it too. You pin product
+  amounts or machine counts; the plan does the rest - counts, imports,
+  outputs, wiring. ONE
   shared pool per resource: every machine output feeds it, every consumed
   input drinks from it, surplus banks, and anything NOBODY makes is
   imported and listed under INPUTS (the pool is a source). Wires DO NOT
@@ -873,13 +897,12 @@ Working notes for future agents on GTNH Factory Flow.
   on the plan as `poolCellRatios`, never guessed), and the expansion adds
   the loose-wire rule's hidden free Tank per direction - only FROM a side
   something real feeds, so a form nobody makes still imports instead of
-  two tanks feeding each other. `getSetupRules` in pool mode returns loose
-  cell wires ON and both boundary rules OFF regardless of what is stored,
-  and the rules sheet shows all three locked.
-- Chrome: `PoolModeButton` (Waves icon, left of solve mode; folded into the
-  brush when the paint row folds so `PAINT_ROW_FOLDED_WIDTH` stands),
-  `PoolModeAura` (orange room light, adds to the solve aura), sounds
-  `poolOn`/`poolOff` (a fourth, warmer and lower than the solve shimmer).
+  two tanks feeding each other.
+- Chrome: the pool key is the third of the `ModeKeys` (Waves icon, lit in
+  the brighter blue `#a8e8ff`; solve lights `#3fbdd3`), `PoolModeAura`
+  (the solve cyan taken whiter, half strength, REPLACES the solve aura
+  while on), sound `poolOn` (water: a low swell with two rising bubbles).
+  The wire layers fade under `factory-flow-board--pool` (pool-mode.css).
   `src/lib/solver/pool-mode.test.ts` is the exam.
 
 ## Verification

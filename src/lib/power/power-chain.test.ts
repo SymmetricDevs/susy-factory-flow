@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { calculateThroughput } from "@/lib/solver/throughput";
+import { closeBoundaries } from "@/lib/solver/close-boundaries";
 import { buildPowerRecipe } from "./power-recipe";
 
 /**
@@ -83,10 +84,14 @@ describe("power chain against the workbook", () => {
         },
       ],
       fuelProfiles: [],
-      setupRules: { freeInputs: true, freeOutputs: true },
     } as unknown as FactoryProject;
 
-    const result = calculateThroughput(project, { generatedAt: "fixed" });
+    // The board rules are gone; this exam is about the chain, not the
+    // boundary, so it closes the boundary itself the way the rules used to.
+    const result = calculateThroughput(
+      closeBoundaries(project, { inputs: "all", outputs: "all" }),
+      { generatedAt: "fixed" },
+    );
 
     // Everything runs flat out: 276,000 L/s of steam covers the turbines'
     // 256,000 with room to spare, and free outputs carry the surplus.

@@ -62,10 +62,9 @@ import {
   TriangleAlert,
   Type,
   Undo2,
+  Blocks,
   Check,
-  Download,
   Sigma,
-  SlidersHorizontal,
   Upload,
   Waves,
   X,
@@ -6508,7 +6507,6 @@ export function FactoryFlow() {
         ].join(" ")}
       >
         <UnwiredNotice onShow={handleShowNodes} />
-        <LooseWiresOffNotice onShow={handleShowNodes} />
         <DeathSpiralNotice onShow={handleShowNodes} />
         <ClogLockNotice onShow={handleShowNodes} />
         <SolveModeNotice onShow={handleShowNodes} />
@@ -6584,60 +6582,6 @@ const UnwiredNotice = memo(function UnwiredNotice({
   );
 });
 
-/**
- * Cross-form wires stranded by Loose cell wires going OFF. With the rule off
- * the conversion does not exist, so these wires carry nothing and the
- * machines they fed read unsupplied - a mystery unless something names the
- * cause. Amber, because nothing is broken: the plan and the rule just
- * disagree, and either deleting the wires or turning the rule back on ends
- * it. Not dismissible, deliberately, for the same reason the unwired notice
- * is not: those are its only endings.
- */
-const LooseWiresOffNotice = memo(function LooseWiresOffNotice({
-  onShow,
-}: {
-  onShow: (nodeIds: string[]) => void;
-}) {
-  const project = useFactoryStore((state) => state.project);
-  const deleteEdge = useFactoryStore((state) => state.deleteEdge);
-  const crossEdges = useMemo(
-    () =>
-      getSetupRules(project).looseCellWires
-        ? []
-        : project.edges.filter((edge) => edge.crossForm),
-    [project],
-  );
-
-  if (crossEdges.length === 0) {
-    return null;
-  }
-  const nodeIds = [...new Set(crossEdges.flatMap((edge) => [edge.source, edge.target]))];
-
-  return (
-    <div className="nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#c3a04c] bg-[#2b261c] px-2 py-1.5 font-mono text-[12px] text-[#f2ecdc] shadow-[inset_2px_2px_0_#7a6836,inset_-2px_-2px_0_#1a1610,4px_4px_0_rgba(0,0,0,0.35)]">
-      <span className="shrink-0 font-bold tracking-[0.5px] text-[#ffd98c]">LOOSE WIRES</span>
-      <span className="text-[#e6ddc2]">
-        {crossEdges.length === 1
-          ? "1 cell wire carries nothing with Loose cell wires off"
-          : `${crossEdges.length} cell wires carry nothing with Loose cell wires off`}
-      </span>
-      <button
-        type="button"
-        onClick={() => onShow(nodeIds)}
-        className="shrink-0 border border-[#c3a04c] bg-[#4a3f24] px-2 py-0.5 font-bold text-[#ffe9c0] hover:bg-[#635430]"
-      >
-        Show me
-      </button>
-      <button
-        type="button"
-        onClick={() => deleteEdge(crossEdges.map((edge) => edge.id))}
-        className="shrink-0 border border-[#c3a04c] bg-[#4a3f24] px-2 py-0.5 font-bold text-[#ffe9c0] hover:bg-[#635430]"
-      >
-        {crossEdges.length === 1 ? "Delete it" : "Delete them"}
-      </button>
-    </div>
-  );
-});
 
 const DeathSpiralNotice = memo(function DeathSpiralNotice({
   onShow,
@@ -7405,6 +7349,92 @@ const PoolModeAura = memo(function PoolModeAura() {
 });
 
 /**
+ * The board's three modes on one switch, exactly one lit. Each step hands
+ * the planner more of the work:
+ *
+ * - BUILD: you set the machines, the counts and the wires; the board
+ *   reports what flows.
+ * - SOLVE: you set the machines and the wires and type what you want; the
+ *   board counts the machines.
+ * - POOL: you set the machines and type what you want; the board counts,
+ *   wires and imports for you.
+ *
+ * The lit key takes no click. Under the hood build is both flags off, solve
+ * is solveMode, pool is solveMode plus poolMode, so old plans open in the
+ * right position without a migration. Each mode has a sound of its own.
+ */
+type BoardMode = "build" | "solve" | "pool";
+
+const MODE_KEYS: Array<{
+  mode: BoardMode;
+  label: string;
+  title: string;
+  Icon: LucideIcon;
+  ink: string;
+}> = [
+  {
+    mode: "build",
+    label: "Build mode",
+    title: "Build: you set the machines, the counts and the wires. The board reports what flows.",
+    Icon: Blocks,
+    ink: "text-[var(--mc-ink)]",
+  },
+  {
+    mode: "solve",
+    label: "Solve mode",
+    title: "Solve: you set the machines and the wires and type what you want. The board counts the machines.",
+    Icon: Sigma,
+    ink: "text-[#3fbdd3]",
+  },
+  {
+    mode: "pool",
+    label: "Pool mode",
+    title: "Pool: you set the machines and type what you want. The board counts, wires and imports for you.",
+    Icon: Waves,
+    ink: "text-[#a8e8ff]",
+  },
+];
+
+const ModeKeys = memo(function ModeKeys() {
+  const mode = useFactoryStore((state): BoardMode =>
+    state.project.poolMode === true ? "pool" : state.project.solveMode === true ? "solve" : "build",
+  );
+  const setBoardMode = useFactoryStore((state) => state.setBoardMode);
+  return (
+    <div className="flex items-center gap-0.5" role="radiogroup" aria-label="Board mode">
+      {MODE_KEYS.map(({ mode: key, label, title, Icon, ink }) => {
+        const on = mode === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => {
+              if (on) {
+                return;
+              }
+              // Three separate things, three separate sounds: never a
+              // ladder that rises and falls with the direction of travel.
+              playBoardSound(key === "pool" ? "poolOn" : key === "solve" ? "solveOn" : "buildOn");
+              setBoardMode(key);
+            }}
+            className={[
+              "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
+              on ? TOOL_FACE_ON : TOOL_FACE_OFF,
+            ].join(" ")}
+            title={title}
+            aria-label={label}
+          >
+            <Icon className={on ? `h-4 w-4 ${ink}` : "h-4 w-4"} />
+          </button>
+        );
+      })}
+    </div>
+  );
+});
+
+/**
  * Pool mode's two declarations, on the build tray right after the crop
  * farm: a SOURCE drawer (the plan imports this) and a PRODUCT drawer (the
  * plan makes this). With no wires there is no port to drag a drawer off, so
@@ -7524,239 +7554,9 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
   );
 });
 
-/**
- * The solve key with its deeper mode hanging under it. The pool key is a
- * DRAWER: while solve mode is on it slides down out from behind the solve
- * key; off, it slides back up under it and stops answering the pointer or
- * the keyboard. Absolutely placed, so it never widens the toolbar row
- * (toolbar-fold.ts measures the row without it) and it hangs under the
- * solve key wherever that key lives - the whole-board tray, or the brush
- * fold-out on a narrow board and on a phone.
- */
-const SolveModeKeys = memo(function SolveModeKeys() {
-  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
-  // ONE motion, the spawner keys' own turned downward: the clip grows from
-  // nothing to the tray's height while the tray slides the same distance
-  // the other way, on the same curve and clock, so the key comes out from
-  // under the solve key like a drawer, in a tray of its own. The clip
-  // starts at the parent tray's outer edge (6px of padding and border
-  // left and below the key) so the two trays line up.
-  return (
-    <div className="relative">
-      <SolveModeButton />
-      <div
-        aria-hidden={!solveMode}
-        className={[
-          "absolute -left-1.5 top-full z-0 overflow-hidden transition-[height] duration-500 ease-out",
-          solveMode ? "h-[52px]" : "pointer-events-none h-0",
-        ].join(" ")}
-      >
-        <div
-          className={[
-            "pt-2 transition-transform duration-500 ease-out",
-            solveMode ? "translate-y-0" : "-translate-y-[52px]",
-          ].join(" ")}
-        >
-          <ToolTray>
-            <PoolModeButton tabbable={solveMode} />
-          </ToolTray>
-        </div>
-      </div>
-    </div>
-  );
-});
 
-const PoolModeButton = memo(function PoolModeButton({ tabbable }: { tabbable: boolean }) {
-  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  const setPoolMode = useFactoryStore((state) => state.setPoolMode);
-  return (
-    <button
-      type="button"
-      disabled={!tabbable}
-      tabIndex={tabbable ? 0 : -1}
-      onClick={() => {
-        playBoardSound(poolMode ? "poolOff" : "poolOn");
-        setPoolMode(!poolMode);
-      }}
-      aria-pressed={poolMode}
-      className={[
-        "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-        poolMode ? TOOL_FACE_ON : TOOL_FACE_OFF,
-      ].join(" ")}
-      title={
-        poolMode
-          ? "Pool mode: every resource is shared, nothing needs a wire, anything nobody makes is imported. Click for plain solve mode."
-          : "Solve mode with wires. Click for pool mode: no wires, every resource shared, imports worked out for you."
-      }
-      aria-label={poolMode ? "Switch off pool mode" : "Switch to pool mode"}
-    >
-      <Waves className={poolMode ? "h-4 w-4 text-[#a8e8ff]" : "h-4 w-4"} />
-    </button>
-  );
-});
 
-const SolveModeButton = memo(function SolveModeButton() {
-  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
-  const setSolveMode = useFactoryStore((state) => state.setSolveMode);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        // The one button with a voice of its own: the whole board changes
-        // meaning, and the shimmer says which way it went.
-        playBoardSound(solveMode ? "solveOff" : "solveOn");
-        setSolveMode(!solveMode);
-      }}
-      aria-pressed={solveMode}
-      className={[
-        "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-        solveMode ? TOOL_FACE_ON : TOOL_FACE_OFF,
-      ].join(" ")}
-      title={solveMode ? "Solve mode: type amounts on product drawers, machines are solved. Click for plan mode." : "Plan mode: machine counts are yours. Click for solve mode."}
-      aria-label={solveMode ? "Switch to plan mode" : "Switch to solve mode"}
-    >
-      <Sigma className={solveMode ? "h-4 w-4 text-[#3fbdd3]" : "h-4 w-4"} />
-    </button>
-  );
-});
 
-const SetupRulesButton = memo(function SetupRulesButton({
-  open,
-  onOpenChange,
-}: {
-  /** Held by the paint toolbar, which lifts the row's z while the sheet is out. */
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const rules = useFactoryStore((state) => state.project.setupRules);
-  const legacy = useFactoryStore((state) => state.project.assumeBoundaries);
-  // Pool mode forces loose cell wires on (the pool bridges cells and
-  // fluids itself) and makes the two boundary rules moot: the row reads
-  // ON and locked, the other two read OFF and locked.
-  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  const setSetupRules = useFactoryStore((state) => state.setSetupRules);
-  const { freeInputs, freeOutputs, looseCellWires } = getSetupRules({
-    setupRules: rules,
-    assumeBoundaries: legacy,
-    poolMode,
-  });
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const closeSheet = useCallback(() => onOpenChange(false), [onOpenChange]);
-  useFoldoutDismiss(open, rootRef, closeSheet);
-
-  const choices: Array<{
-    id: "freeInputs" | "freeOutputs" | "looseCellWires";
-    on: boolean;
-    label: string;
-    line: string;
-    /** Pool mode decides this one; the row shows the answer and takes no click. */
-    locked?: boolean;
-  }> = [
-    {
-      id: "freeInputs",
-      on: freeInputs,
-      label: "Free inputs",
-      line: poolMode
-        ? "Pool mode imports whatever nobody makes by itself."
-        : "An input short of stock takes the rest from off the setup.",
-      locked: poolMode,
-    },
-    {
-      id: "freeOutputs",
-      on: freeOutputs,
-      label: "Free outputs",
-      line: poolMode
-        ? "Pool mode banks every surplus by itself."
-        : "Output with nowhere to go leaves the setup instead of backing up.",
-      locked: poolMode,
-    },
-    {
-      id: "looseCellWires",
-      on: looseCellWires,
-      label: "Loose cell wires",
-      line: poolMode
-        ? "Pool mode converts cells and fluids for free by itself."
-        : "A filled cell and its fluid wire straight together, converted for free.",
-      locked: poolMode,
-    },
-  ];
-
-  return (
-    // NOT `relative`: the sheet anchors to the toolbar ROOT (the nearest
-    // positioned ancestor), whose right edge is the screen's, so a 320px
-    // sheet never runs off the left of a phone the way it did anchored to
-    // this button's own edge.
-    <div ref={rootRef} className="pointer-events-auto flex">
-      <button
-        type="button"
-        onClick={() => onOpenChange(!open)}
-        aria-expanded={open}
-        className={[
-          "relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-          open || freeInputs || freeOutputs || looseCellWires ? TOOL_FACE_ON : TOOL_FACE_OFF,
-        ].join(" ")}
-        title="Setup rules"
-        aria-label="Setup rules"
-      >
-        <SlidersHorizontal className="h-4 w-4" />
-      </button>
-      {open ? (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-30 flex max-h-[70vh] w-[320px] max-w-[calc(100vw-24px)] flex-col gap-1 overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
-          <p className="px-1 pt-1 font-mono text-[11px] leading-snug text-[var(--mc-ink)] opacity-70">
-            What the setup does when a slot cannot be supplied or emptied.
-            <br />
-            Simulates more of an AE2 experience.
-          </p>
-          {choices.map((choice) => (
-            <button
-              key={choice.id}
-              type="button"
-              disabled={choice.locked}
-              onClick={() => setSetupRules({ [choice.id]: !choice.on })}
-              aria-pressed={choice.on}
-              className={[
-                "flex items-start gap-2 border-2 p-2 text-left",
-                choice.on
-                  ? `border-[var(--mc-good)] ${TOOL_FACE_ON}`
-                  : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
-                choice.locked ? "opacity-50" : "",
-              ].join(" ")}
-            >
-              {/* The tick box. Green and filled, or empty and near black -
-                  two states nobody has to compare against another row to
-                  tell apart. */}
-              <span
-                aria-hidden
-                className={[
-                  "mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
-                  choice.on ? "bg-[var(--mc-good)]" : "bg-[var(--mc-24)]",
-                ].join(" ")}
-              >
-                {choice.on ? <Check className="h-3 w-3 text-[var(--mc-15)]" strokeWidth={4} /> : null}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[12px] font-black uppercase">{choice.label}</span>
-                  {/* Said in words as well, because a tick is a convention and
-                      a word is not. */}
-                  <span
-                    className={[
-                      "font-mono text-[10px] font-black tracking-[1px]",
-                      choice.on ? "text-[var(--mc-good)]" : "text-[var(--mc-ink-muted)]",
-                    ].join(" ")}
-                  >
-                    {choice.on ? "ON" : "OFF"}
-                  </span>
-                </span>
-                <span className="font-mono text-[11px] leading-snug opacity-80">{choice.line}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-});
 
 const SourceToolbar = memo(function SourceToolbar({
   folded,
@@ -9323,7 +9123,6 @@ const PaintToolbar = memo(function PaintToolbar({
   // The view and rules sheets' open state lives here so the whole row can
   // lift its z while either is out, same as it does for the palette.
   const [isViewMenuOpen, setViewMenuOpen] = useState(false);
-  const [isRulesOpen, setRulesOpen] = useState(false);
   // The arrange sheet: one setting and the button that runs it. The setting
   // is remembered per browser; the default respects the boards you drew.
   const [isArrangeMenuOpen, setArrangeMenuOpen] = useState(false);
@@ -9354,10 +9153,14 @@ const PaintToolbar = memo(function PaintToolbar({
      is too narrow even for the folded row, when they fold in with the rest. */
   const wholeBoardTrays = (
     <>
+        {/* The three modes on a plate of their own: they change what the whole
+            board MEANS, and sharing a tray with arrange and mute read as one
+            more tool among tools. */}
         <ToolTray helpAnchor="rules">
-          <SolveModeKeys />
-          <SetupRulesButton open={isRulesOpen} onOpenChange={setRulesOpen} />
-          {/* Auto-arrange opens a small sheet, like the rules beside it: one
+          <ModeKeys />
+        </ToolTray>
+        <ToolTray>
+          {/* Auto-arrange opens a small sheet: one
               setting saying whether boards you drew are opened up, and the
               button that runs the arrange. The arrange respects boards by
               default, so the setting is where you say otherwise. */}
@@ -9460,7 +9263,7 @@ const PaintToolbar = memo(function PaintToolbar({
         // OVER it and take its clicks: the colours were once visible and
         // unpickable. The row lifts above every other toolbar for as long as
         // any of its fold-outs is out.
-        isPaletteOpen || isDrawMenuOpen || isViewMenuOpen || isRulesOpen || isArrangeMenuOpen
+        isPaletteOpen || isDrawMenuOpen || isViewMenuOpen || isArrangeMenuOpen
           ? "z-40"
           : "z-20",
       ].join(" ")}

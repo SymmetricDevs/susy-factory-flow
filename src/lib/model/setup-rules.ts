@@ -11,28 +11,26 @@ export type ResolvedSetupRules = Required<SetupRules>;
  * flag on the way in; this still honours it, because fixtures and tests build
  * projects by hand and never go through that funnel.
  */
-export function getSetupRules(project: {
+/**
+ * THE RULES ARE GONE (Jack, 2026-09-06). The board's three MODES do their
+ * job: build and solve are closed setups, pool mode imports and banks by
+ * itself, and loose cell wires is simply always on. This answers the same
+ * three questions every caller still asks, and answers them the same way
+ * for every plan - whatever a stored `setupRules` or the legacy sketch flag
+ * says (the load funnel drops both).
+ */
+const RULES: ResolvedSetupRules = Object.freeze({
+  freeInputs: false,
+  freeOutputs: false,
+  looseCellWires: true,
+});
+
+export function getSetupRules(_project: {
   setupRules?: SetupRules;
   assumeBoundaries?: boolean;
   poolMode?: boolean;
 }): ResolvedSetupRules {
-  // POOL MODE decides all three: it imports and banks by itself (the two
-  // boundary rules are moot, read OFF) and bridges cells and fluids by
-  // itself (loose cell wires forced ON). The stored rules are untouched
-  // and come back when the mode goes off.
-  if (project.poolMode) {
-    return { freeInputs: false, freeOutputs: false, looseCellWires: true };
-  }
-  const rules = project.setupRules;
-  if (!rules) {
-    const legacy = project.assumeBoundaries === true;
-    return { freeInputs: legacy, freeOutputs: legacy, looseCellWires: false };
-  }
-  return {
-    freeInputs: rules.freeInputs === true,
-    freeOutputs: rules.freeOutputs === true,
-    looseCellWires: rules.looseCellWires === true,
-  };
+  return RULES;
 }
 
 /** Stored form: nothing set at all when every rule is off. */

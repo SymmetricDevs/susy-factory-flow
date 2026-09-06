@@ -8,7 +8,11 @@ describe("toolbarFoldFor", () => {
 
   it("folds the paint row first: a 1400px window with both columns open", () => {
     // 1400 - 344 - 332: the width that buried the paint tray under POWER.
-    expect(toolbarFoldFor(722, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
+    // Since the three mode keys on their own tray (2026-09-06) the folded
+    // paint row is 330px, so this board folds the build row too: more
+    // folding, never a second line.
+    expect(toolbarFoldFor(722, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
+    expect(toolbarFoldFor(780, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
     // 1366 - 676: the common laptop, where even the folded paint row crowds it.
     expect(toolbarFoldFor(690, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
   });

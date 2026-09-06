@@ -132,8 +132,9 @@ export type BoardSoundKind =
   | "sweep" // one sound for a bulk change (paste, arrange, import)
   | "solveOn" // the board shifts into solve mode: a rising shimmer
   | "solveOff" // and back to plan mode: the same shimmer, settling home
-  | "poolOn" // the board pools its resources: a warm swell, a fourth up
-  | "poolOff" // and the pool drains away: the same swell, settling home
+  | "buildOn" // back to build mode: a block set down, low and dry
+  | "poolOn" // the board pools its resources: a warm low swell with a bubble
+  | "poolOff" // (unused since the mode switch; kept for older callers)
   // The build timelapse's family (board-timelapse.ts): the same events as
   // place/connect/open, but SLID rather than set down - mostly brush, a
   // whisper of tone - because dozens fire in a row and the thump family
@@ -597,23 +598,30 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       blip(ctx, out, { from: 988, to: 988, duration: 0.14, peak: 0.045, delay: 0.3 });
       puff(ctx, out, { frequency: 2200, q: 0.6, duration: 0.3, peak: 0.05, delay: 0.05 });
       break;
+    case "buildOn":
+      // BUILD: a block set down on the table. One dry brush for the body,
+      // a low tap for weight, no pad and no sparkle - the mode where you
+      // do the work yourself sounds like a hand doing it. Nothing in it
+      // rises or falls, so it is not a rung on the other two.
+      puff(ctx, out, { frequency: 520, q: 0.8, duration: 0.14, peak: 0.24 });
+      blip(ctx, out, { from: 147, to: 147, duration: 0.12, peak: 0.12, delay: 0.02 });
+      puff(ctx, out, { frequency: 1400, q: 1.5, duration: 0.05, peak: 0.08, delay: 0.05 });
+      break;
     case "poolOn":
-      // The deeper solve mode: the solve shimmer again, one step further
-      // up. The pad starts where solveOn's ended (the fifth) and rises a
-      // fourth on top, the sparkles a fourth above solveOn's, the air a
-      // little brighter - the same sound, taken one dimension deeper.
-      shimmerPad(ctx, out, { from: 392, to: 523, duration: 0.6, peak: 0.22 });
-      blip(ctx, out, { from: 1760, to: 1760, duration: 0.12, peak: 0.055, delay: 0.18 });
-      blip(ctx, out, { from: 2349, to: 2349, duration: 0.14, peak: 0.04, delay: 0.32 });
-      puff(ctx, out, { frequency: 3600, q: 0.6, duration: 0.35, peak: 0.055, delay: 0.05 });
+      // POOL: water. A warm LOW swell (an octave under the solve shimmer,
+      // rising a fourth) under two round bubbles that each start low and
+      // lift, and a soft wash of air like a surface settling. Its own
+      // material, not the solve shimmer moved up a step.
+      shimmerPad(ctx, out, { from: 131, to: 175, duration: 0.65, peak: 0.24 });
+      blip(ctx, out, { from: 440, to: 660, duration: 0.11, peak: 0.07, delay: 0.14 });
+      blip(ctx, out, { from: 523, to: 784, duration: 0.11, peak: 0.055, delay: 0.3 });
+      puff(ctx, out, { frequency: 700, q: 0.5, duration: 0.5, peak: 0.07, delay: 0.06 });
       break;
     case "poolOff":
-      // Back to plain solve mode: the same shimmer settling from the
-      // octave to the fifth (the close family's glide), sparkles descending.
-      shimmerPad(ctx, out, { from: 523, to: 392, duration: 0.55, peak: 0.2 });
-      blip(ctx, out, { from: 1760, to: 1760, duration: 0.12, peak: 0.045, delay: 0.16 });
-      blip(ctx, out, { from: 1319, to: 1319, duration: 0.14, peak: 0.04, delay: 0.3 });
-      puff(ctx, out, { frequency: 2800, q: 0.6, duration: 0.3, peak: 0.045, delay: 0.05 });
+      // Unused since the mode switch; the pool swell settling, kept so an
+      // older caller still gets a sound.
+      shimmerPad(ctx, out, { from: 175, to: 131, duration: 0.55, peak: 0.2 });
+      puff(ctx, out, { frequency: 600, q: 0.5, duration: 0.4, peak: 0.06, delay: 0.04 });
       break;
     case "shuffle":
       // A card SLID onto the table: two brushes - a soft body and a lighter

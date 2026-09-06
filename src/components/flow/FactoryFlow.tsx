@@ -7514,31 +7514,29 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
         aria-hidden={!on}
         className={[
           "overflow-hidden transition-[width] duration-500 ease-out",
-          on ? "w-[44px]" : "pointer-events-none w-0",
+          on ? "w-[36px]" : "pointer-events-none w-0",
         ].join(" ")}
       >
         <div
           className={[
-            "flex w-[44px] items-center transition-transform duration-500 ease-out",
-            on ? "translate-x-0" : "-translate-x-[44px]",
+            "flex w-[36px] items-center pl-1 transition-transform duration-500 ease-out",
+            on ? "translate-x-0" : "-translate-x-[36px]",
           ].join(" ")}
         >
-          <ToolTray>
-            <button
-              type="button"
-              onClick={() => setPicking((was) => !was)}
-              aria-pressed={picking}
-              tabIndex={on ? 0 : -1}
-              className={[
-                "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
-                picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
-              ].join(" ")}
-              title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
-              aria-label="Add a product drawer"
-            >
-              <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
-            </button>
-            </ToolTray>
+          <button
+            type="button"
+            onClick={() => setPicking((was) => !was)}
+            aria-pressed={picking}
+            tabIndex={on ? 0 : -1}
+            className={[
+              "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
+              picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
+            ].join(" ")}
+            title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
+            aria-label="Add a product drawer"
+          >
+            <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
+          </button>
         </div>
       </div>
       {picking ? (
@@ -7861,12 +7859,6 @@ const SourceToolbar = memo(function SourceToolbar({
           ) : null}
         </div>
       </ToolTray>
-      {/* ...while the plate on the right is the one that puts new cards down.
-          The generator, custom rate and crop farm spawners moved to the top
-          of the items column (2026-09-06, the tray ran out of room for the
-          mode keys; `SpawnKeys`). What is left is pool mode's product key,
-          which slides out only while that mode is on. */}
-      <PoolSpawnKeys />
       </ToolGroup>
     </div>
   );
@@ -9303,6 +9295,9 @@ const PaintToolbar = memo(function PaintToolbar({
     >
       <ToolTray helpAnchor="rules">
         <ModeKeys />
+        {/* Pool mode's product key slides out of the switch on the Pool side
+            while that mode is on (Jack, 2026-09-06). */}
+        <PoolSpawnKeys />
       </ToolTray>
     </div>
     <div

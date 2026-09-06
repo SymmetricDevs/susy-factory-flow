@@ -22,9 +22,9 @@ import { useEffect, useState, type RefObject } from "react";
  * once the previous fold has happened.
  */
 // Measured on the live board (2026-09-06) after the toolbar rework: the
-// build row is the undo pair, the rate keys and pool mode's product tray
-// (which slides away whole while that mode is off; 264 is with it out).
-const BUILD_ROW_WIDTH = 264;
+// build row is the undo pair and the rate keys. (Pool mode's product key
+// slides out of the centre mode switch, which is no part of either row.)
+const BUILD_ROW_WIDTH = 220;
 const BUILD_ROW_FOLDED_WIDTH = 132;
 // The right row: the mode switch's tray first, the paint tray, arrange,
 // the view tray (annotations and view options) and the bin last; mute and

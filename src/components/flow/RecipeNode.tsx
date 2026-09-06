@@ -1802,9 +1802,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   <>
                     <div
                       className={[
-                        // justify-start: auto tracks would otherwise stretch
-                        // into the footer's free space; the cells pack left.
-                        "grid min-w-0 items-center justify-start gap-1",
+                        // Every cell shares the footer's leftover width equally
+                        // (auto tracks stretch together): no gap, and no one
+                        // cell - the machine count alone, before - grows to
+                        // fill the whole row while its neighbours stay narrow.
+                        "grid min-w-0 items-center gap-1",
                         isCropProductionNode ? CROP_CONFIG_PANEL_WIDTH_CLASS : "",
                       ].join(" ")}
                       // Every cell sizes to its content except MACHINES, which
@@ -1831,10 +1833,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                               // As wide as its count needs, no wider (Jack,
                               // 2026-09-06): the cells pack left and the
                               // footer's slack stays empty on the right.
-                              "minmax(84px,max-content)",
-                              // A spacer track, then the circuit in the last
-                              // one: the chip ends the row in the right corner.
-                              ...(programmedCircuit ? ["1fr", "auto"] : []),
+                              "minmax(84px,auto)",
+                              // The circuit ends the row, square, in the corner.
+                              ...(programmedCircuit ? ["max-content"] : []),
                             ].join(" "),
                       }}
                     >
@@ -1915,9 +1916,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                             />
                           )}
                           {programmedCircuit ? (
-                            <span className="flex self-stretch" style={{ gridColumn: "-2 / -1" }}>
-                              <CircuitChip circuit={programmedCircuit} />
-                            </span>
+                            <CircuitChip circuit={programmedCircuit} />
                           ) : null}
                         </>
                       ) : null}

@@ -388,7 +388,7 @@ const VOLTAGE_TIER_NAMES = [
 ];
 
 /** `cropsnh_tooltip.cropManager.name.<tier>` from the mod's lang file. */
-const CROP_MANAGER_ITEM_NAMES: Record<string, string> = {
+export const CROP_MANAGER_ITEM_NAMES: Record<string, string> = {
   LV: "Basic Crop Manager",
   MV: "Advanced Crop Manager",
   HV: "Advanced Crop Manager II",

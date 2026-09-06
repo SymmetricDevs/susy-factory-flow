@@ -21,6 +21,7 @@ import {
   AUTO_WORKBENCH_HANDLER_ID,
   CROP_HARVESTER_INDUSTRIAL_FARM_ID,
   CROP_HARVESTER_MANAGER_ID,
+  CROP_MANAGER_ITEM_NAMES,
   enrichPassiveProductionRecipe,
   getFilledCellFluidEquivalent,
   isFluidEquivalentToFilledCell,
@@ -239,28 +240,41 @@ export async function getDatasetCatalog(versionId: string) {
  * in order because datasets disagree (2.8.4 says "Crop Manager (LV)" and has
  * no Industrial Farm); a family with no match simply keeps its letter chip.
  */
-const SYNTHESIZED_HANDLER_FACES: Array<{ familyId: string; displayNames: string[] }> = [
+const SYNTHESIZED_HANDLER_FACES: Array<{
+  familyId: string;
+  displayNames: string[];
+  /** Tier -> the tier's own item name, for families whose card wears its tier's block. */
+  tierNames?: Record<string, string>;
+}> = [
   { familyId: AUTO_WORKBENCH_HANDLER_ID, displayNames: ["Auto Workbench (LV)"] },
   {
     familyId: CROP_HARVESTER_MANAGER_ID,
     displayNames: ["Basic Crop Manager", "Crop Manager (LV)"],
+    tierNames: CROP_MANAGER_ITEM_NAMES,
   },
   { familyId: CROP_HARVESTER_INDUSTRIAL_FARM_ID, displayNames: ["Industrial Farm"] },
 ];
 
 function withSynthesizedHandlerIcons(catalog: LoadedRecipeIndex): MachineHandlerIconEntry[] {
   const icons = [...(catalog.machineHandlerIcons ?? [])];
-  for (const { familyId, displayNames } of SYNTHESIZED_HANDLER_FACES) {
+  const byName = new Map(catalog.resources.map((resource) => [resource.displayName, resource] as const));
+  for (const { familyId, displayNames, tierNames } of SYNTHESIZED_HANDLER_FACES) {
     if (icons.some((entry) => entry.familyId === familyId)) {
       continue;
     }
-    for (const displayName of displayNames) {
-      const face = catalog.resources.find((resource) => resource.displayName === displayName);
-      if (face) {
-        icons.push({ familyId, resource: { ...face, amount: 1 } });
-        break;
-      }
+    const face = displayNames.map((name) => byName.get(name)).find(Boolean);
+    if (!face) {
+      continue;
     }
+    const tiers = Object.entries(tierNames ?? {}).flatMap(([tier, name]) => {
+      const resource = byName.get(name);
+      return resource ? [{ tier, resource: { ...resource, amount: 1 } }] : [];
+    });
+    icons.push({
+      familyId,
+      resource: { ...face, amount: 1 },
+      ...(tiers.length > 1 ? { tiers } : {}),
+    });
   }
   return icons;
 }

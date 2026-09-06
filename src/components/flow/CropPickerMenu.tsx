@@ -22,6 +22,9 @@ export function cropDisplayName(recipeName: string): string {
  * Searchable crop list for crop source nodes. Picking a crop swaps the node's
  * recipe to that crop's Crop Farm entry.
  */
+/** The search box plus the capped crop grid, for placing the panel before it exists. */
+const MENU_ESTIMATED_HEIGHT = 470;
+
 export function CropPickerMenu({
   nodeId,
   onClose,
@@ -112,6 +115,11 @@ export function CropPickerMenu({
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const root = rootRef.current;
+      // The sprout key manages its own toggle; closing here too would make
+      // its click immediately reopen the panel.
+      if ((event.target as Element | null)?.closest?.("[data-crop-picker-toggle]")) {
+        return;
+      }
       if (root && event.target instanceof Node && !root.contains(event.target)) {
         onClose();
       }
@@ -124,16 +132,24 @@ export function CropPickerMenu({
   // layer's stacking context, under the marching-dash canvas and every
   // higher card. Measured once from the name bar on open; a board pan
   // closes it anyway through the click-away.
+  // As wide as the card's window and ABOVE it when there is room, the way
+  // the machine menu sits: over the canvas, not over the card's own knobs.
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [anchorAt, setAnchorAt] = useState<{ left: number; top: number }>();
+  const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number }>();
   useEffect(() => {
     const parent = anchorRef.current?.parentElement;
+    const card = anchorRef.current?.closest("[data-node-glance-root]");
     if (parent) {
       const rect = parent.getBoundingClientRect();
-      setAnchorAt({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 372)),
-        top: Math.min(rect.bottom + 2, window.innerHeight - 120),
-      });
+      const cardRect = card?.getBoundingClientRect() ?? rect;
+      const width = Math.max(360, Math.round(cardRect.width));
+      const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
+      const above = Math.round(cardRect.top) - 4 - MENU_ESTIMATED_HEIGHT >= 8;
+      setAnchorAt(
+        above
+          ? { left, width, bottom: window.innerHeight - Math.round(cardRect.top) + 4 }
+          : { left, width, top: Math.min(rect.bottom + 2, window.innerHeight - 120) },
+      );
     }
   }, []);
 
@@ -153,11 +169,11 @@ export function CropPickerMenu({
   const menu = anchorAt ? (
     <div
       ref={rootRef}
-      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top }}
+      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, bottom: anchorAt.bottom, width: anchorAt.width }}
       // "nowheel" stops React Flow from zooming the canvas when scrolling the
       // list: its native wheel handler runs before React's synthetic one, so
       // stopPropagation alone is not enough.
-      className="nodrag nowheel z-[300] w-[360px] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className="nodrag nowheel z-[300] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}

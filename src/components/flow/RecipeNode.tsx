@@ -484,6 +484,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       cropProductionControls,
       cropTierControl,
       cropTitle,
+      cropSeedResource,
       isCropFarmNode,
       isCropFarmPlaceholder,
       isCustomRateNode,
@@ -528,6 +529,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     cropProductionControls,
     cropTierControl,
     cropTitle,
+    cropSeedResource,
     isCropFarmNode,
     isCropFarmPlaceholder,
     isCustomRateNode,
@@ -895,10 +897,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           dominantColor: powerMachineIcon.dominantColor,
         } as unknown as MachineHandlerIcon)
       : undefined
-    : !isCropFarmNode && !isCustomRateNode
+    : !isCustomRateNode
       ? // The same pick as the picture window: the tier's own block, the
         // family face, or the map's machine - the glance must mirror the card.
-        (machineIconAtTier(machineIconEntries.get(selectedMachineHandler.id), projectNode.overclockTier) ??
+        (machineIconAtTier(machineIconEntries.get(selectedMachineHandler.id), cropTierControl?.current.label ?? projectNode.overclockTier) ??
         recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType))
       : undefined;
   const previewHandler = hasMachinePicker
@@ -912,22 +914,25 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // The tier's own block for a tiered singleblock family, the family face
   // otherwise, and the MAP's machine for a one-family map whose placeholder
   // handler no family icon is keyed by (the Chemical Plant).
+  // A crop card's tier is its harvester chip (Crop Manager tier, seed bed
+  // tier), not a voltage tier on the node.
+  const pictureTier = cropTierControl?.current.label ?? projectNode.overclockTier;
   const previewMachineIcon =
-    machineIconAtTier(machineIconEntries.get(previewHandler.id), projectNode.overclockTier) ??
+    machineIconAtTier(machineIconEntries.get(previewHandler.id), pictureTier) ??
     recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType);
   // The machine's REAL name (Jack, 2026-09-06): the tier variant's own item
   // name - "Advanced Centrifuge II", not the family word "Centrifuge" - and
   // the map's machine for a one-family map. Generators, crops and custom
   // rate cards name themselves.
   const machineDisplayName =
-    !powerInfo && !isCropFarmNode && !isCustomRateNode && previewMachineIcon?.displayName
+    !powerInfo && !isCustomRateNode && previewMachineIcon?.displayName
       ? previewMachineIcon.displayName
       : previewHandler.label;
   const titleRef = useFitTitle(machineDisplayName);
   const hasPowerPicture = Boolean(
     powerArt ||
       powerMachineIcon?.iconPath ||
-      (!isCropFarmNode && !isCustomRateNode && previewMachineIcon?.iconPath),
+      (!isCustomRateNode && previewMachineIcon?.iconPath),
   );
   // The outlines the card is wearing, innermost first. They STACK rather than
   // override: each ring starts where the one inside it stopped. Selection is
@@ -1266,7 +1271,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 ? []
                 : isCropFarmPlaceholder || isCustomRateNode
                   ? ["24px", "24px"]
-                  : ["24px", "24px", "24px"]),
+                  : isCropFarmNode
+                    ? ["24px", "24px", "24px", "24px"]
+                    : ["24px", "24px", "24px"]),
               "minmax(0,1fr)",
               // The tier chip, with its hatch sister fused on the left when
               // the machine is a multiblock that takes energy hatches. The
@@ -1321,6 +1328,32 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   <RefreshCw aria-hidden className="h-3.5 w-3.5" />
                 </button>
               ) : null}
+              {isCropFarmNode && !isCropFarmPlaceholder ? (
+                // WHAT IS PLANTED (Jack, 2026-09-06): the crop is picked from
+                // this key, the farm's own sprout, and the picker opens over
+                // the card at its width like the machine menu; the name bar
+                // is the harvester like every other card's machine.
+                <span className="relative">
+                  <button
+                    type="button"
+                    data-crop-picker-toggle
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setCropMenuOpen((open) => !open);
+                    }}
+                    className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+                    title={cropTitle ? `${cropTitle}. Click to pick another crop.` : "Pick a crop"}
+                    aria-label="Pick a crop"
+                    aria-haspopup="dialog"
+                    aria-expanded={isCropMenuOpen}
+                  >
+                    <Sprout aria-hidden className="h-3.5 w-3.5" />
+                  </button>
+                  {isCropMenuOpen ? (
+                    <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} />
+                  ) : null}
+                </span>
+              ) : null}
             </>
           ) : null}
           <div className="relative min-w-0">
@@ -1360,20 +1393,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   the narrow card; those numbers live in the hover and the
                   footer. */}
               <div
-                role={isCropFarmNode || hasMachineMenu ? "button" : undefined}
-                tabIndex={isCropFarmNode || hasMachineMenu ? 0 : undefined}
+                role={hasMachineMenu ? "button" : undefined}
+                tabIndex={hasMachineMenu ? 0 : undefined}
                 onClick={
-                  isCropFarmNode
+                  hasMachineMenu
                     ? (event) => {
                         event.stopPropagation();
-                        setCropMenuOpen((open) => !open);
+                        setCompareOpen((open) => !open);
                       }
-                    : hasMachineMenu
-                      ? (event) => {
-                          event.stopPropagation();
-                          setCompareOpen((open) => !open);
-                        }
-                      : undefined
+                    : undefined
                 }
                 // The wheel walks the machines in the menu's own order, the
                 // way the tier chip walks tiers; the hover stays put for it.
@@ -1389,16 +1417,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   // ("Advanced Chemical Reactor III") read whole before the
                   // bar has to truncate them.
                   "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[13px] leading-[18px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
-                  // Symmetric padding keeps the crop name in the true middle;
-                  // the picker chevron floats on the right without shifting it.
-                  isCropFarmNode
-                    ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
-                    : hasMachineMenu
-                      ? "nodrag nowheel relative cursor-pointer pl-4 pr-1.5 hover:brightness-110"
-                      : "px-2",
+                  hasMachineMenu
+                    ? "nodrag nowheel relative cursor-pointer pl-4 pr-1.5 hover:brightness-110"
+                    : "px-2",
                 ].join(" ")}
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
-                title={isCropFarmNode ? "Pick a crop" : undefined}
               >
                 {hasMachineMenu ? (
                   // The bar IS the machine switch: click anywhere on it for
@@ -1423,19 +1446,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                         // with its icon. Repeating its name in the title only
                         // ever made the card wider.
                         "Custom Rate"
-                      : (cropTitle ?? machineDisplayName)}
+                      : machineDisplayName}
                 </span>
-                {isCropFarmNode ? (
-                  <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />
-                ) : null}
               </div>
             </MinecraftTooltip>
-            {isCropMenuOpen ? (
-              <CropPickerMenu
-                nodeId={projectNode.id}
-                onClose={() => setCropMenuOpen(false)}
-              />
-            ) : null}
             {hasMachinePicker && isCompareOpen && !calmMode ? (
               <MachineMenu
                 recipe={recipe}
@@ -1620,9 +1634,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           <PowerStructureWindow
             art={powerArt}
             icon={powerMachineIcon ?? previewMachineIcon}
-            tint={cropStructureArt ? "#4f8c33" : powerInfo ? undefined : "#8a8f99"}
+            tint={isCropFarmNode ? "#4f8c33" : powerInfo ? undefined : "#8a8f99"}
             // Which handler and tier the art was picked for, for probes.
-            pickedFor={`${previewHandler.id}@${projectNode.overclockTier}:${machineIconEntries.get(previewHandler.id)?.tiers?.length ?? 0}`}
+            pickedFor={`${previewHandler.id}@${pictureTier}:${machineIconEntries.get(previewHandler.id)?.tiers?.length ?? 0}`}
           />
         ) : null}
         {/* The card body. No paint of its own: the window behind it is
@@ -1638,6 +1652,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               className="nodrag mx-auto my-0 flex h-[80px] w-[240px] items-center justify-center gap-2 border-2 border-dashed border-[var(--mc-33)] bg-[var(--mc-71)] text-[14px] font-bold text-[var(--mc-ink)] hover:bg-[var(--mc-85)]"
             >
               <Sprout className="h-5 w-5" /> Pick a crop
+              {/* The picker hangs under this button while there is no crop
+                  tile yet to hang it from. */}
+              {isCropMenuOpen ? (
+                <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} />
+              ) : null}
             </button>
           ) : isCustomRatePlaceholder ? (
             <CustomRateUniversalPorts nodeId={projectNode.id} />

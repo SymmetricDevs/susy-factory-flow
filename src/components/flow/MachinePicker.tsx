@@ -148,6 +148,10 @@ function formatCompact(value: number): string {
 /* Machine menu                                                        */
 /* ------------------------------------------------------------------ */
 
+/** The panel's scroll cap, and one row's height, for placing it before it exists. */
+const MENU_MAX_HEIGHT = 400;
+const MENU_ROW_HEIGHT = 30;
+
 const TIER_ORDER = ["NONE", "ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UMV", "UXV", "MAX"];
 const tierRank = (tier: string | undefined) => {
   const index = TIER_ORDER.indexOf(tier ?? "NONE");
@@ -189,11 +193,13 @@ export function MachineMenu({
   // The menu PORTALS to the body, like the crop and hatch menus: inside the
   // card it would sit in the node layer, under the marching-dash canvas and
   // every higher card. Fixed and in screen pixels, so it reads the same at
-  // every zoom. It hangs under the name bar and is exactly as wide as the
-  // card's window, so its edges line up with the card's; measured once on
-  // open, and a board pan closes it through the click-away.
+  // every zoom. It is exactly as wide as the card's window, so its edges
+  // line up with the card's, and it opens ABOVE the card when there is room
+  // - over the canvas, not over the card's own ports - and below it
+  // otherwise. Measured once on open; a board pan closes it through the
+  // click-away.
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [anchorAt, setAnchorAt] = useState<{ left: number; top: number; width: number }>();
+  const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number }>();
   useEffect(() => {
     const bar = anchorRef.current?.parentElement;
     const card = anchorRef.current?.closest("[data-node-glance-root]");
@@ -201,13 +207,18 @@ export function MachineMenu({
       const barRect = bar.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
       const width = Math.max(320, Math.round(cardRect.width));
-      setAnchorAt({
-        left: Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8)),
-        top: Math.min(Math.round(barRect.bottom) + 4, window.innerHeight - 120),
-        width,
-      });
+      const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
+      // The list's height before it exists: one row per machine, capped
+      // where the panel starts scrolling.
+      const estimated = Math.min(MENU_MAX_HEIGHT, handlers.length * MENU_ROW_HEIGHT + 16);
+      const above = Math.round(cardRect.top) - 4 - estimated >= 8;
+      setAnchorAt(
+        above
+          ? { left, width, bottom: window.innerHeight - Math.round(cardRect.top) + 4 }
+          : { left, width, top: Math.min(Math.round(barRect.bottom) + 4, window.innerHeight - 120) },
+      );
     }
-  }, []);
+  }, [handlers.length]);
   const rows = useMemo(
     () =>
       orderMachineHandlers(handlers).map((handler) => {
@@ -254,7 +265,7 @@ export function MachineMenu({
       role="listbox"
       aria-label="Machine"
       className="nodrag nowheel z-[300] max-h-[400px] overflow-y-auto overflow-x-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1.5 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
-      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, width: anchorAt.width }}
+      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, bottom: anchorAt.bottom, width: anchorAt.width }}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}

@@ -894,7 +894,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const previewHandler = hasMachinePicker
     ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
     : selectedMachineHandler;
-  const isPreviewing = hasMachinePicker && previewHandler.id !== selectedMachineHandler.id;
   // The outlines the card is wearing, innermost first. They STACK rather than
   // override: each ring starts where the one inside it stopped. Selection is
   // innermost, which is also the ring painted on top — clicking a card has to
@@ -1409,7 +1408,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                         // ever made the card wider.
                         "Custom Rate"
                       : (cropTitle ?? previewHandler.label)}
-                  {isPreviewing ? " ?" : ""}
                 </span>
                 {isCropFarmNode ? (
                   <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />

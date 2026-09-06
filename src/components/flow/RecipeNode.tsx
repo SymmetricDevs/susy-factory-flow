@@ -1335,7 +1335,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     beginRecipeRefactor(projectNode.id);
                   }}
                   className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
-                  title="Refactor: search for a replacement recipe"
+                  title="Replace the recipe"
                   aria-label="Refactor node"
                 >
                   <RefreshCw aria-hidden className="h-3.5 w-3.5" />

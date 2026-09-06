@@ -30,7 +30,7 @@ function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
 export function TooltipActions({ actions }: { actions: readonly TooltipAction[] }) {
   if (!actions.length) return null;
   return (
-    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-line pt-2.5 text-fg-subtle" data-tooltip-actions="">
+    <div className="mt-3 flex flex-col gap-y-1 border-t border-line pt-2.5 text-fg-subtle" data-tooltip-actions="">
       {actions.map((action) => (
         <span key={`${action.gesture}-${action.label}`} className="flex items-center gap-2">
           <span role="img" aria-label={GESTURE_NAME[action.gesture]}>
@@ -47,8 +47,9 @@ export function RecipeTooltip({ view, children }: { view: RecipeTooltipView; chi
   const modeColor = view.mode === "pool" ? "text-[#6f9cff]" : view.mode === "solve" ? "text-[#c78bff]" : "text-[#f5b642]";
   // ONE body size (14/20) everywhere but the heading; the panel is as wide
   // as its longest line and no wider, capped so a paragraph still wraps.
+  // The footer stacks one gesture per line so it never sets that width.
   return (
-    <div className="w-max min-w-[200px] max-w-[300px] text-sm leading-5 text-fg-subtle">
+    <div className="w-max max-w-[300px] text-sm leading-5 text-fg-subtle">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 break-words text-base font-semibold leading-6 text-fg">{view.title}</div>
         {view.mode && <span className={`shrink-0 capitalize ${modeColor}`}>{view.mode}</span>}

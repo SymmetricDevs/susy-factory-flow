@@ -225,7 +225,13 @@ interface FactoryStore {
   redo: () => void;
   setDatasetManifest: (manifest: DatasetManifest, manifestUrl: string) => void;
   setDataset: (dataset: RecipeDataset) => void;
-  refreshProjectRecipes: (recipes: Recipe[]) => void;
+  /**
+   * Swap the plan's stored recipe bodies for the dataset's. `migration`
+   * maps a stored id the dataset no longer has to the id of the recipe
+   * that stands in for it (matched by content on load), and the nodes on
+   * it follow to the new id.
+   */
+  refreshProjectRecipes: (recipes: Recipe[], migration?: Record<string, string>) => void;
   clearDataset: () => void;
   setDatasetLoading: (isLoading: boolean) => void;
   setProjectImporting: (isImporting: boolean) => void;
@@ -976,22 +982,25 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       isDatasetLoading: false,
     }));
   },
-  refreshProjectRecipes: (recipes) => {
+  refreshProjectRecipes: (recipes, migration = {}) => {
     set((state) => {
       if (recipes.length === 0) {
         return state;
       }
 
       const recipesById = new Map(recipes.map((recipe) => [recipe.id, recipe] as const));
+      const refreshedFor = (storedId: string) =>
+        recipesById.get(storedId) ??
+        (migration[storedId] ? recipesById.get(migration[storedId]) : undefined);
       const project = {
         ...state.project,
         recipes: state.project.recipes.map((recipe) => {
-          const refreshedRecipe = recipesById.get(recipe.id);
+          const refreshedRecipe = refreshedFor(recipe.id);
           return refreshedRecipe ? mergeRefreshedRecipe(refreshedRecipe) : recipe;
         }),
         nodes: state.project.nodes.map((node) => {
           const recipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
-          const refreshedRecipe = recipe ? recipesById.get(recipe.id) : undefined;
+          const refreshedRecipe = recipe ? refreshedFor(recipe.id) : undefined;
           if (!recipe || !refreshedRecipe) {
             return node;
           }
@@ -1007,12 +1016,14 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
             ...contextualInputOverrides,
             ...node.recipeInputOverrides,
           };
-          const nextNode: FactoryNode = Object.keys(nextRecipeInputOverrides).length
-            ? {
-                ...node,
-                recipeInputOverrides: nextRecipeInputOverrides,
-              }
-            : node;
+          const nextNode: FactoryNode = {
+            ...node,
+            // A migrated recipe has a new id; the node follows it.
+            ...(refreshedRecipe.id !== node.recipeId ? { recipeId: refreshedRecipe.id } : {}),
+            ...(Object.keys(nextRecipeInputOverrides).length
+              ? { recipeInputOverrides: nextRecipeInputOverrides }
+              : {}),
+          };
           return nextNode.machineHandlerId && !validMachineHandlerIds.has(nextNode.machineHandlerId)
             ? { ...nextNode, machineHandlerId: undefined }
             : nextNode;

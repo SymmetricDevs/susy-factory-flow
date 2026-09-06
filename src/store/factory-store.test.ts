@@ -1023,6 +1023,19 @@ describe("factory resource links", () => {
     expect(getStorageRole(useFactoryStore.getState().project, drawer!.id)).toBe("product");
   });
 
+  it("migrates a stored recipe to its content match and moves the node onto the new id", () => {
+    const before = useFactoryStore.getState().project;
+    const stored = before.recipes.find((recipe) => recipe.id === "item-recipe") ?? before.recipes[0]!;
+    const node = before.nodes.find((entry) => entry.recipeId === stored.id)!;
+    const rekeyed = { ...stored, id: stored.id + "-content", machineHandlers: [{ id: "fam", label: "Fam", machineType: "Fam", minimumTier: "LV", maximumTier: "HV" }] };
+    useFactoryStore.getState().refreshProjectRecipes([rekeyed], { [stored.id]: rekeyed.id });
+    const after = useFactoryStore.getState().project;
+    expect(after.recipes.some((recipe) => recipe.id === rekeyed.id)).toBe(true);
+    expect(after.recipes.some((recipe) => recipe.id === stored.id)).toBe(false);
+    expect(after.nodes.find((entry) => entry.id === node.id)?.recipeId).toBe(rekeyed.id);
+    expect(after.recipes.find((recipe) => recipe.id === rekeyed.id)?.machineHandlers?.[0]?.maximumTier).toBe("HV");
+  });
+
   it("undoes and redoes structural project edits", () => {
     useFactoryStore.getState().connectNodes("item-source", "item-target", {
       kind: "item",

@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveProjectRecipes } from "@/lib/datasets/refresh-project-recipes";
 import { useCallback, useEffect, useRef } from "react";
 import {
   DEFAULT_DATASET_MANIFEST_URL,
@@ -7,7 +8,6 @@ import {
   pickDefaultDatasetVersion,
 } from "@/lib/datasets";
 import {
-  getRecipeDatasetRecipe,
   initRecipeDatasetVersion,
 } from "@/lib/datasets/browser-loader";
 import { loadResourceHistory, useFactoryStore } from "@/store/factory-store";
@@ -51,6 +51,44 @@ export function FactoryPlannerApp() {
   const setDatasetLoading = useFactoryStore((state) => state.setDatasetLoading);
   const setDatasetError = useFactoryStore((state) => state.setDatasetError);
   const hydratedRef = useRef(false);
+  // Which stored recipes have been checked against which dataset version,
+  // so a design opened AFTER the dataset landed (a tab switch, a hydrated
+  // plan) gets the same refresh the boot load gives, exactly once each.
+  const checkedRecipesRef = useRef<Set<string>>(new Set());
+  const datasetVersionId = useFactoryStore((state) => state.dataset?.datasetVersionId);
+  const datasetManifest = useFactoryStore((state) => state.datasetManifest);
+  const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
+  useEffect(() => {
+    if (!datasetVersionId) {
+      return;
+    }
+    const version = datasetManifest?.versions.find((entry) => entry.id === datasetVersionId);
+    if (!version) {
+      return;
+    }
+    const pending = project.recipes.filter(
+      (recipe) => !checkedRecipesRef.current.has(`${version.id}|${recipe.id}`),
+    );
+    if (pending.length === 0) {
+      return;
+    }
+    for (const recipe of pending) {
+      checkedRecipesRef.current.add(`${version.id}|${recipe.id}`);
+    }
+    let cancelled = false;
+    void resolveProjectRecipes(
+      datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+      version,
+      pending,
+    ).then(({ refreshed, migration }) => {
+      if (!cancelled && refreshed.length > 0) {
+        refreshProjectRecipes(refreshed, migration);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [datasetManifest, datasetManifestUrl, datasetVersionId, project.recipes, refreshProjectRecipes]);
   useBoardSoundEffects();
   const skipInitialSaveRef = useRef(true);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
@@ -73,18 +111,11 @@ export function FactoryPlannerApp() {
         setDataset(dataset);
         const projectRecipes = useFactoryStore.getState().project.recipes;
         if (projectRecipes.length > 0) {
-          const refreshedRecipes = (
-            await Promise.allSettled(
-              projectRecipes.map((recipe) =>
-                getRecipeDatasetRecipe(manifestUrl, version, recipe.id),
-              ),
-            )
-          )
-            .filter((result): result is PromiseFulfilledResult<(typeof projectRecipes)[number]> => {
-              return result.status === "fulfilled";
-            })
-            .map((result) => result.value);
-          refreshProjectRecipes(refreshedRecipes);
+          const { refreshed, migration } = await resolveProjectRecipes(manifestUrl, version, projectRecipes);
+          checkedRecipesRef.current = new Set(
+            projectRecipes.map((recipe) => `${version.id}|${recipe.id}`),
+          );
+          refreshProjectRecipes(refreshed, migration);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Dataset load failed.";

@@ -98,6 +98,15 @@ export function storageRoleFor(
   if (drawn) {
     return "source";
   }
+  // Unwired, but declared in pool mode: it stays the product (or source) it
+  // was made as, a lingering drawer rather than a blank one, until a wire
+  // says otherwise.
+  if (storage.poolSide === "drain") {
+    return drainRole();
+  }
+  if (storage.poolSide === "source") {
+    return "source";
+  }
   return "idle";
 }
 

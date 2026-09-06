@@ -4598,7 +4598,12 @@ function pruneOrphanStorages(project: FactoryProject): FactoryProject {
     linkedStorageIds.add(edge.target);
   }
 
-  const nextStorages = storages.filter((storage) => linkedStorageIds.has(storage.id));
+  // A drawer with a declared pool side is never an orphan: in pool mode it
+  // has no wires by design (the side IS its link), and it must survive every
+  // other edit on the board - and the trip back to build or solve.
+  const nextStorages = storages.filter(
+    (storage) => storage.poolSide !== undefined || linkedStorageIds.has(storage.id),
+  );
   return nextStorages.length === storages.length ? project : { ...project, storages: nextStorages };
 }
 

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { getStorageRole } from "@/lib/model/storage-role";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { makeResourceHandleId } from "@/components/flow/resource-handles";
 import { captureBoardSelection, useFactoryStore } from "./factory-store";
@@ -990,6 +991,36 @@ describe("factory resource links", () => {
     expect(useFactoryStore.getState().project.storages).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "water-tank" })]),
     );
+  });
+
+  it("keeps a pool-made product drawer through other edits and the trip back to build", () => {
+    useFactoryStore.getState().setBoardMode("pool");
+    useFactoryStore.getState().addStorageForConnection(
+      { kind: "item", id: "dust", displayName: "Dust" },
+      "item-source",
+      "output",
+      { x: 600, y: 300 },
+      makeResourceHandleId("output", { kind: "item", id: "dust" }, 0),
+    );
+    const drawer = useFactoryStore
+      .getState()
+      .project.storages?.find((storage) => storage.poolSide === "drain");
+    expect(drawer).toBeDefined();
+    expect(useFactoryStore.getState().project.edges).toHaveLength(0);
+
+    // Any edit on any card used to sweep it as an orphan: it has no wires,
+    // because in pool mode the declared side is the whole link.
+    useFactoryStore.getState().updateNode("item-target", { overclockTier: "HV" });
+    expect(useFactoryStore.getState().project.storages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: drawer!.id, poolSide: "drain" })]),
+    );
+
+    // Back in build or solve it lingers as the product it was made as.
+    useFactoryStore.getState().setBoardMode("solve");
+    expect(useFactoryStore.getState().project.storages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: drawer!.id })]),
+    );
+    expect(getStorageRole(useFactoryStore.getState().project, drawer!.id)).toBe("product");
   });
 
   it("undoes and redoes structural project edits", () => {

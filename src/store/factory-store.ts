@@ -388,6 +388,24 @@ interface FactoryStore {
   /** Plan mode counts machines and reports flows; solve mode takes the
    * product drawers' typed amounts and reports machine counts. */
   setSolveMode: (solveMode: boolean) => void;
+  /** Pool mode: every resource is one shared pool, no wires needed. */
+  setPoolMode: (poolMode: boolean) => void;
+  /**
+   * Pool mode's two declarations: a loose SOURCE drawer (the plan imports
+   * this) or a loose DRAIN drawer (the plan makes this), placed on clear
+   * floor and framed by the camera. Nothing is wired; the pool does that.
+   */
+  addPoolStorage: (
+    resource: {
+      kind: FactoryStorage["kind"];
+      id: string;
+      displayName?: string;
+      iconPath?: string;
+      iconAtlas?: FactoryStorage["iconAtlas"];
+      dominantColor?: string;
+    },
+    side: "source" | "drain",
+  ) => void;
   deleteStorage: (storageId: string) => void;
   /** Clone a node (same recipe/config, no wires) beside the original. */
   duplicateNode: (nodeId: string) => void;
@@ -1980,6 +1998,59 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return withProjectHistory(state, {
         project,
         lastResult: solveBooks(project),
+      });
+    });
+  },
+  setPoolMode: (poolMode) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        poolMode: poolMode ? true : undefined,
+      });
+      return withProjectHistory(state, {
+        project,
+        lastResult: solveBooks(project),
+      });
+    });
+  },
+  addPoolStorage: (resource, side) => {
+    set((state) => {
+      const index = (state.project.storages ?? []).length;
+      // Same magnet a recipe add obeys: never on top of anything.
+      const position = snapPositionToGrid(
+        nearestFreeSpot(
+          {
+            ...snapPositionToGrid({ x: 100 + index * 60, y: 120 + (index % 4) * 100 }),
+            width: STORAGE_NODE_WIDTH,
+            height: STORAGE_NODE_HEIGHT,
+          },
+          projectBlockerRects(state.project),
+          BOARD_GRID,
+        ),
+      );
+      const storage: FactoryStorage = {
+        id: createId("storage"),
+        kind: resource.kind,
+        resourceId: resource.id,
+        displayName: resource.displayName,
+        iconPath: resource.iconPath,
+        iconAtlas: resource.iconAtlas,
+        dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
+        poolSide: side,
+        position,
+      };
+      const project = touchProject({
+        ...state.project,
+        storages: [...(state.project.storages ?? []), storage],
+      });
+      return withProjectHistory(state, {
+        project,
+        lastResult: solveBooks(project),
+        boardFocusRequest: {
+          mode: "centre",
+          nodeIds: [storage.id],
+          token: (state.boardFocusRequest?.token ?? 0) + 1,
+        },
       });
     });
   },

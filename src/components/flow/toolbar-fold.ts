@@ -23,7 +23,10 @@ import { useEffect, useState, type RefObject } from "react";
  */
 const BUILD_ROW_WIDTH = 393;
 const BUILD_ROW_FOLDED_WIDTH = 124;
-const PAINT_ROW_WIDTH = 440;
+// The unfolded row carries the pool mode key in the whole-board tray (32px
+// plus its 2px gap); folded, that key rides into the brush so the folded
+// row keeps the width a 1400px window with both columns open can hold.
+const PAINT_ROW_WIDTH = 474;
 const PAINT_ROW_FOLDED_WIDTH = 280;
 const SIDE_MARGINS = 24;
 const BREATH = 24;

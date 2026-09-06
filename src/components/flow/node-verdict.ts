@@ -8,6 +8,7 @@ import type {
   ThroughputResult,
 } from "@/lib/model/types";
 import { isFreeRecipeInput, isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
+import { getPoolProject, isPoolStorageId } from "@/lib/solver/pool-mode";
 import { findDeathSpirals, type DeathSpiral } from "./death-spiral";
 import { findClogLocks, type ClogLock } from "./clog-lock";
 import { findBareSlots } from "./bare-slots";
@@ -722,6 +723,9 @@ export function deriveNodeVerdict(
   result: ThroughputResult | undefined,
   nodeId: string,
 ): NodeVerdict {
+  // Pool mode: every story below reads the graph the solve ran on, pools
+  // and all, never the wireless drawing.
+  project = getPoolProject(project);
   const node = project.nodes.find((entry) => entry.id === nodeId);
   if (!node || node.enabled === false) {
     return { kind: "off", pct: 0 };
@@ -923,6 +927,7 @@ export function findUnwiredNodeIds(
   project: FactoryProject,
   result: ThroughputResult | undefined,
 ): string[] {
+  project = getPoolProject(project);
   // With both board rules on, the solve feeds and drains every bare slot
   // itself; a checklist of things the rules already handled would just nag.
   const rules = getSetupRules(project);
@@ -1384,6 +1389,26 @@ function findUpstreamCulprit(
 
   const storage = (project.storages ?? []).find((entry) => entry.id === pick.source);
   if (storage) {
+    // A POOL is not a place to go fix: look through it to the machines
+    // feeding it and name the one that matters, exactly as a direct wire
+    // would. A pool fed only by a source drawer names that drawer.
+    if (isPoolStorageId(storage.id)) {
+      const feeders = project.edges.filter((edge) => edge.target === storage.id);
+      const machineFeeders = feeders.filter((edge) =>
+        project.nodes.some((entry) => entry.id === edge.source),
+      );
+      const through = findUpstreamCulprit(
+        project,
+        result,
+        nodeId,
+        machineFeeders.length > 0 ? machineFeeders : feeders,
+        shortfallPerSecond,
+        neededPerSecond,
+      );
+      if (through) {
+        return through;
+      }
+    }
     return {
       name: describeStorage(storage, getStorageRole(project, storage.id)),
       kind: "buffer",
@@ -1590,6 +1615,7 @@ export function buildRailPorts(
   displayRecipe: Pick<Recipe, "inputs" | "outputs">,
   verdict: NodeVerdict,
 ): { inputs: RailPort[]; outputs: RailPort[] } {
+  project = getPoolProject(project);
   const nodeResult = result?.nodes[nodeId];
   const utilization = clamp01(nodeResult?.utilization, 0);
   const demand = clamp01(nodeResult?.demandUtilization, utilization);
@@ -1914,6 +1940,7 @@ export function buildLimitLadder(
   result: ThroughputResult | undefined,
   nodeId: string,
 ): LimitRung[] {
+  project = getPoolProject(project);
   const nodeResult = result?.nodes[nodeId];
   const node = project.nodes.find((entry) => entry.id === nodeId);
   if (!nodeResult || !node || node.enabled === false) {

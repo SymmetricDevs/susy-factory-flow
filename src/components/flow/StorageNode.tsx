@@ -9,7 +9,7 @@ import type {
   StorageThroughputResult,
 } from "@/lib/model/types";
 import { formatCompact, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
-import { isDrainRole, type StorageRole } from "@/lib/model/storage-role";
+import { isDrainRole, storageRoleFor, type StorageRole } from "@/lib/model/storage-role";
 import {
   rateMultiplierForKind,
   rateSuffixForKind,
@@ -277,17 +277,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         break;
       }
     }
-    return hasIn
-      ? hasOut
-        ? "buffer"
-        : storage.drainMode === "byproduct"
-          ? "byproduct"
-          : storage.drainMode === "trash"
-            ? "trash"
-            : "product"
-      : hasOut
-        ? "source"
-        : "idle";
+    return storageRoleFor(storage, hasIn, hasOut, state.project.poolMode === true);
   });
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);

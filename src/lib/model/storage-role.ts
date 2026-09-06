@@ -1,4 +1,4 @@
-import type { FactoryProject } from "./types";
+import type { FactoryProject, FactoryStorage } from "./types";
 
 /**
  * What a drawer IS. Four jobs that happen to share one card, and they mean
@@ -69,24 +69,38 @@ export function getStorageRoles(project: FactoryProject): Map<string, StorageRol
   }
 
   for (const storage of storages) {
-    const fed = hasIn.has(storage.id);
-    const drawn = hasOut.has(storage.id);
-    roles.set(
-      storage.id,
-      fed
-        ? drawn
-          ? "buffer"
-          : storage.drainMode === "byproduct"
-            ? "byproduct"
-            : storage.drainMode === "trash"
-              ? "trash"
-              : "product"
-        : drawn
-          ? "source"
-          : "idle",
-    );
+    roles.set(storage.id, storageRoleFor(storage, hasIn.has(storage.id), hasOut.has(storage.id), project.poolMode === true));
   }
   return roles;
+}
+
+/**
+ * One drawer's role from what is wired to it. In POOL MODE a drawer with no
+ * wires still has a job if it says which side of the pool it sits on: the
+ * pool expansion wires it in, and the card should wear that role before
+ * the solve has run. Shared with the card, which reads its own wires.
+ */
+export function storageRoleFor(
+  storage: Pick<FactoryStorage, "drainMode" | "poolSide">,
+  fed: boolean,
+  drawn: boolean,
+  poolMode: boolean,
+): StorageRole {
+  const drainRole = (): StorageRole =>
+    storage.drainMode === "byproduct" ? "byproduct" : storage.drainMode === "trash" ? "trash" : "product";
+  if (fed) {
+    return drawn ? "buffer" : drainRole();
+  }
+  if (drawn) {
+    return "source";
+  }
+  if (poolMode && storage.poolSide === "source") {
+    return "source";
+  }
+  if (poolMode && storage.poolSide === "drain") {
+    return drainRole();
+  }
+  return "idle";
 }
 
 /**

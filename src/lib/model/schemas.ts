@@ -351,6 +351,8 @@ export const factoryStorageSchema = z.object({
   // Absent means `overflow`: every buffer catches surplus unless the player
   // deliberately sets it strict.
   bufferMode: z.enum(["overflow", "strict"]).optional(),
+  // Pool mode: which side of the shared pool an unwired drawer sits on.
+  poolSide: z.enum(["source", "drain"]).optional(),
   // Solve mode's requirement on a product drawer; absent = unconstrained.
   targetPerSecond: z.number().nonnegative().optional(),
   pocketId: z.string().min(1).optional(),
@@ -508,6 +510,8 @@ export const factoryProjectSchema = z.object({
   assumeBoundaries: z.boolean().optional(),
   // Solve mode: product amounts are the question, machine counts the answer.
   solveMode: z.boolean().optional(),
+  // Pool mode: every resource is shared, no wires needed.
+  poolMode: z.boolean().optional(),
   recipes: z.array(recipeSchema),
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema).optional().default([]),

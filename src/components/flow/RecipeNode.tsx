@@ -2457,8 +2457,11 @@ function VerdictHoverContent({
   verdict: NodeVerdict;
   isCustomRate: boolean;
 }) {
-  const title = verdictHoverTitle(verdict, isCustomRate);
-  const detail = verdictHoverDetail(verdict, isCustomRate);
+  // In pool mode a bare input means nothing on the board makes it, not
+  // that a wire is missing: the sentence has to say so.
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const title = verdictHoverTitle(verdict, isCustomRate, poolMode);
+  const detail = verdictHoverDetail(verdict, isCustomRate, poolMode);
 
   // Two lines: what this card is doing, and why it reads that way. Nothing
   // else. This used to carry a fix note and a four-rung ladder of what caps
@@ -2479,10 +2482,16 @@ function VerdictHoverContent({
  * marked them. Counts rather than a list once there are more than a couple,
  * so a twelve-slot multiblock does not write a paragraph.
  */
-function unwiredTitle(verdict: NodeVerdict): string {
+function unwiredTitle(verdict: NodeVerdict, poolMode = false): string {
   const inputs = verdict.bare?.inputs ?? [];
   const outputs = verdict.bare?.outputs ?? [];
   const total = inputs.length + outputs.length;
+  if (poolMode) {
+    // Only inputs can be bare here: every output has its pool.
+    return inputs.length === 1
+      ? `Nothing makes ${inputs[0]!.displayName}`
+      : `Nothing makes ${inputs.length} of its inputs`;
+  }
   if (total === 0) {
     return "Nothing is wired to it";
   }
@@ -2495,11 +2504,15 @@ function unwiredTitle(verdict: NodeVerdict): string {
   return `${total} slots have no wire`;
 }
 
-function unwiredDetail(verdict: NodeVerdict): string {
+function unwiredDetail(verdict: NodeVerdict, poolMode = false): string {
   const inputs = verdict.bare?.inputs ?? [];
   const outputs = verdict.bare?.outputs ?? [];
   const name = (list: typeof inputs) =>
     list.length <= 2 ? list.map((entry) => entry.displayName).join(" and ") : `${list.length} of them`;
+
+  if (poolMode) {
+    return `No machine on the board makes ${name(inputs)}, and no source drawer declares it. Add a machine that makes it, or a source drawer from the pool mode bar.`;
+  }
 
   const parts: string[] = [];
   if (inputs.length > 0) {
@@ -2512,7 +2525,7 @@ function unwiredDetail(verdict: NodeVerdict): string {
   return `A machine runs on what arrives and stops when what it makes has nowhere to go, so ${marked}. Wire each marked slot to a machine, or to a SOURCE or DRAIN drawer to say you handle that end yourself.`;
 }
 
-function verdictHoverTitle(verdict: NodeVerdict, isCustomRate: boolean): string {
+function verdictHoverTitle(verdict: NodeVerdict, isCustomRate: boolean, poolMode = false): string {
   switch (verdict.kind) {
     case "starved":
       return `Short on ${verdict.binding?.displayName ?? "an input"}`;
@@ -2535,7 +2548,7 @@ function verdictHoverTitle(verdict: NodeVerdict, isCustomRate: boolean): string 
     case "balanced":
       return isCustomRate ? "Dialed rate met exactly" : "Full speed, all asks met";
     case "unwired":
-      return isCustomRate ? "No wires on this dial" : unwiredTitle(verdict);
+      return isCustomRate ? "No wires on this dial" : unwiredTitle(verdict, poolMode);
     case "off":
       return "Disabled";
     case "no-recipe":
@@ -2543,7 +2556,11 @@ function verdictHoverTitle(verdict: NodeVerdict, isCustomRate: boolean): string 
   }
 }
 
-function verdictHoverDetail(verdict: NodeVerdict, isCustomRate: boolean): string | undefined {
+function verdictHoverDetail(
+  verdict: NodeVerdict,
+  isCustomRate: boolean,
+  poolMode = false,
+): string | undefined {
   switch (verdict.kind) {
     case "starved":
     case "blocked": {
@@ -2612,7 +2629,7 @@ function verdictHoverDetail(verdict: NodeVerdict, isCustomRate: boolean): string
     case "unwired":
       return isCustomRate
         ? "This dial does nothing until something is wired to it."
-        : unwiredDetail(verdict);
+        : unwiredDetail(verdict, poolMode);
     default:
       return undefined;
   }

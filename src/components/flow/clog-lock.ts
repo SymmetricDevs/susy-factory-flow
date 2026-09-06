@@ -7,6 +7,7 @@ import type {
   ThroughputResult,
 } from "@/lib/model/types";
 import { solveEquationsCore } from "@/lib/solver/equations-core";
+import { getPoolProject } from "@/lib/solver/pool-mode";
 
 /**
  * Clog locks: machines frozen at 0% because their surpluses have nowhere to
@@ -76,6 +77,8 @@ function build(project: FactoryProject, result: ThroughputResult | undefined): C
   if (!result) {
     return EMPTY_INDEX;
   }
+  // Pool mode: the graph the solve ran on, pools and all.
+  project = getPoolProject(project);
   // SOLVE MODE has no clog locks: machines at zero there are "not needed by
   // any typed amount", never "frozen by their own surplus" - and the vent
   // solve would burn a real LP diagnosing a build that is not on screen.

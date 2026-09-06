@@ -68,6 +68,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.58.0",
+    date: "2026-09-05",
+    headline: "Pool mode: plan without wires",
+    notes: [
+      "A new key beside solve mode shares every resource between all machines, so nothing needs a wire.",
+      "The pool mode bar adds source drawers for what you import and product drawers for what you make.",
+      "A resource nobody makes stays short and its card says so.",
+      "Pool mode and solve mode work together.",
+    ],
+  },
+  {
     version: "2.57.0",
     date: "2026-09-05",
     headline: "Free inputs stay off the wires",

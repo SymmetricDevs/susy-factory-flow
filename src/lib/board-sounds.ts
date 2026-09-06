@@ -132,6 +132,8 @@ export type BoardSoundKind =
   | "sweep" // one sound for a bulk change (paste, arrange, import)
   | "solveOn" // the board shifts into solve mode: a rising shimmer
   | "solveOff" // and back to plan mode: the same shimmer, settling home
+  | "poolOn" // the board pools its resources: a warm swell, a fourth up
+  | "poolOff" // and the pool drains away: the same swell, settling home
   // The build timelapse's family (board-timelapse.ts): the same events as
   // place/connect/open, but SLID rather than set down - mostly brush, a
   // whisper of tone - because dozens fire in a row and the thump family
@@ -594,6 +596,22 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       blip(ctx, out, { from: 1319, to: 1319, duration: 0.12, peak: 0.05, delay: 0.16 });
       blip(ctx, out, { from: 988, to: 988, duration: 0.14, peak: 0.045, delay: 0.3 });
       puff(ctx, out, { frequency: 2200, q: 0.6, duration: 0.3, peak: 0.05, delay: 0.05 });
+      break;
+    case "poolOn":
+      // The resources POOL: a warmer, lower swell than the solve shimmer,
+      // rising a fourth (the solve's fifth is the other dimension; this is
+      // the same room with the walls taken out), one soft sparkle, and a
+      // low wash of air like water settling. Big change, quiet voice.
+      shimmerPad(ctx, out, { from: 196, to: 262, duration: 0.6, peak: 0.24 });
+      blip(ctx, out, { from: 1047, to: 1047, duration: 0.14, peak: 0.05, delay: 0.22 });
+      puff(ctx, out, { frequency: 900, q: 0.5, duration: 0.45, peak: 0.07, delay: 0.04 });
+      break;
+    case "poolOff":
+      // The pool drains: the swell glides back down the fourth (the close
+      // family's motion, never the delete step), sparkle a shade lower.
+      shimmerPad(ctx, out, { from: 262, to: 196, duration: 0.55, peak: 0.22 });
+      blip(ctx, out, { from: 784, to: 784, duration: 0.14, peak: 0.045, delay: 0.2 });
+      puff(ctx, out, { frequency: 700, q: 0.5, duration: 0.4, peak: 0.06, delay: 0.04 });
       break;
     case "shuffle":
       // A card SLID onto the table: two brushes - a soft body and a lighter

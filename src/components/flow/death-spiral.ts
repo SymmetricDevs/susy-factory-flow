@@ -2,6 +2,7 @@ import type { FactoryProject, ThroughputResult } from "@/lib/model/types";
 import { makeResourceKey } from "@/lib/model";
 import { DEAD_RING_EPSILON, stronglyConnectedComponents } from "@/lib/solver/equilibrium";
 import { getSetupRules } from "@/lib/model/setup-rules";
+import { getPoolProject } from "@/lib/solver/pool-mode";
 import { findBareSlots } from "./bare-slots";
 
 /**
@@ -102,6 +103,8 @@ export function findDeathSpirals(
   project: FactoryProject,
   result: ThroughputResult | undefined,
 ): DeathSpiralIndex {
+  // Pool mode: the graph the solve ran on, pools and all.
+  project = getPoolProject(project);
   const cached = cache.get(project);
   if (cached && cached.result === result) {
     return cached.index;

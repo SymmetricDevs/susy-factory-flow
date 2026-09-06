@@ -65,6 +65,7 @@ import {
   Check,
   Sigma,
   SlidersHorizontal,
+  Waves,
   X,
   Zap,
   type LucideIcon,
@@ -99,6 +100,10 @@ import {
 } from "@/lib/model";
 import { getCrossFormCellMatch } from "@/lib/model/resources";
 import { fetchLitresPerCell } from "@/lib/datasets/cell-ratio";
+import { queryRecipeDatasetResources } from "@/lib/datasets/browser-loader";
+import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets/remote";
+import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
+import { ItemPickerPopover } from "@/components/ItemPickerPopover";
 import {
   getEffectiveNodeRecipe,
   isPocketId,
@@ -6358,6 +6363,7 @@ export function FactoryFlow() {
         className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_60px_10px_rgba(0,0,0,0.35)]"
       />
       <SolveModeAura />
+      <PoolModeAura />
       <SolvingBooksOverlay />
       <PaintToolbar
         paintMode={nodeColorPaintMode}
@@ -6455,6 +6461,7 @@ export function FactoryFlow() {
         <DeathSpiralNotice onShow={handleShowNodes} />
         <ClogLockNotice onShow={handleShowNodes} />
         <SolveModeNotice onShow={handleShowNodes} />
+        <PoolModeNotice />
         <RecipeAddChips />
       </div>
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
@@ -7317,6 +7324,154 @@ const SolveModeNotice = memo(function SolveModeNotice({
         </button>
       ) : null}
     </div>
+  );
+});
+
+/**
+ * Pool mode's light: the same screen-space room edge as the solve aura, in
+ * the pool's own warm orange. Both can be on at once (pool + solve is the
+ * classic calculator), so each is its own layer and the two glows add.
+ */
+const PoolModeAura = memo(function PoolModeAura() {
+  const on = useFactoryStore((state) => state.project.poolMode === true);
+  return (
+    <div
+      aria-hidden
+      className={[
+        "pointer-events-none absolute inset-0 z-10 transition-opacity duration-700",
+        on ? "opacity-100" : "opacity-0",
+      ].join(" ")}
+      style={{
+        boxShadow:
+          "inset 0 0 90px 6px rgba(249,146,60,0.16), inset 0 0 14px 1px rgba(249,146,60,0.22)",
+      }}
+    />
+  );
+});
+
+/**
+ * Pool mode's banner, in the notice stack with the solve family's, wearing
+ * the same anatomy in the pool's orange. It carries the mode's two
+ * declarations - a SOURCE drawer (the plan imports this) and a PRODUCT
+ * drawer (the plan makes this) - because with no wires there is no port to
+ * drag a drawer off, so this is where drawers come from. Each opens the item
+ * picker the recipe search uses; the pick lands on clear floor and the
+ * camera goes to it. No dismiss: the mode itself is the reason it shows.
+ */
+const PoolModeNotice = memo(function PoolModeNotice() {
+  const on = useFactoryStore((state) => state.project.poolMode === true);
+  const addPoolStorage = useFactoryStore((state) => state.addPoolStorage);
+  const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
+  const datasetManifest = useFactoryStore((state) => state.datasetManifest);
+  const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
+  const [picking, setPicking] = useState<"source" | "drain" | undefined>();
+  const selectedDatasetVersion = useMemo(
+    () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
+    [datasetManifest?.versions, selectedDatasetVersionId],
+  );
+  const searchPickerResources = useCallback(
+    async (pickerQuery: string, signal: AbortSignal) => {
+      if (!selectedDatasetVersion) {
+        return [];
+      }
+      const result = await queryRecipeDatasetResources(
+        datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+        selectedDatasetVersion,
+        { query: pickerQuery, offset: 0, limit: 48 },
+        { signal },
+      );
+      return result.resources;
+    },
+    [datasetManifestUrl, selectedDatasetVersion],
+  );
+  const closePicker = useCallback(() => setPicking(undefined), []);
+  const onPick = useCallback(
+    (entry: DatasetResourceIndexEntry) => {
+      if (!picking || entry.kind === "aspect") {
+        return;
+      }
+      addPoolStorage(
+        {
+          kind: entry.kind,
+          id: entry.id,
+          displayName: entry.displayName,
+          iconPath: entry.iconPath,
+          iconAtlas: entry.iconAtlas,
+          dominantColor: entry.dominantColor,
+        },
+        picking,
+      );
+      playBoardSound("shuffle");
+      setPicking(undefined);
+    },
+    [addPoolStorage, picking],
+  );
+  if (!on) {
+    return null;
+  }
+  const keyClass =
+    "shrink-0 border border-[#d98b3a] bg-[#4a2f18] px-2 py-0.5 font-bold text-[#ffd9b3] hover:bg-[#5d3d20]";
+  return (
+    <div className="nodrag pointer-events-auto relative flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#d98b3a] bg-[#2b1d12] px-2 py-1.5 font-mono text-[12px] text-[#f2e6d8] shadow-[inset_2px_2px_0_#7a4d24,inset_-2px_-2px_0_#160d06,4px_4px_0_rgba(0,0,0,0.35)]">
+      <span className="shrink-0 font-bold tracking-[0.5px] text-[#ffb86b]">POOL MODE</span>
+      <span className="text-[#e6d5c2]">Every resource is shared. Nothing needs a wire.</span>
+      <button
+        type="button"
+        onClick={() => setPicking((was) => (was === "source" ? undefined : "source"))}
+        aria-pressed={picking === "source"}
+        className={keyClass}
+        title="Add a source drawer: the plan imports this"
+      >
+        + Source
+      </button>
+      <button
+        type="button"
+        onClick={() => setPicking((was) => (was === "drain" ? undefined : "drain"))}
+        aria-pressed={picking === "drain"}
+        className={keyClass}
+        title="Add a product drawer: the plan makes this"
+      >
+        + Product
+      </button>
+      {picking ? (
+        <div className="absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2">
+          <ItemPickerPopover
+            role={picking === "source" ? "takes" : "makes"}
+            placement="below"
+            onPick={onPick}
+            onClose={closePicker}
+            searchPickerResources={searchPickerResources}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
+const PoolModeButton = memo(function PoolModeButton() {
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const setPoolMode = useFactoryStore((state) => state.setPoolMode);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        playBoardSound(poolMode ? "poolOff" : "poolOn");
+        setPoolMode(!poolMode);
+      }}
+      aria-pressed={poolMode}
+      className={[
+        "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
+        poolMode ? TOOL_FACE_ON : TOOL_FACE_OFF,
+      ].join(" ")}
+      title={
+        poolMode
+          ? "Pool mode: every resource is shared, nothing needs a wire. Click to go back to wires."
+          : "Wires: each slot takes what is wired to it. Click for pool mode, where every resource is shared."
+      }
+      aria-label={poolMode ? "Switch off pool mode" : "Switch to pool mode"}
+    >
+      <Waves className={poolMode ? "h-4 w-4 text-[#f9923c]" : "h-4 w-4"} />
+    </button>
   );
 });
 
@@ -9061,6 +9216,9 @@ const PaintToolbar = memo(function PaintToolbar({
   const wholeBoardTrays = (
     <>
         <ToolTray helpAnchor="rules">
+          {/* Folded, the pool key rides into the brush (below) so the folded
+              row keeps the width toolbar-fold.ts measured for it. */}
+          {folded ? null : <PoolModeButton />}
           <SolveModeButton />
           <SetupRulesButton open={isRulesOpen} onOpenChange={setRulesOpen} />
           {/* Auto-arrange opens a small sheet, like the rules beside it: one
@@ -9343,6 +9501,11 @@ const PaintToolbar = memo(function PaintToolbar({
           <Trash2 className={isDeleteMode ? "h-4 w-4 text-red-500" : "h-4 w-4"} />
         </button>
       </ToolTray>
+      {folded && !foldAll ? (
+        <ToolTray>
+          <PoolModeButton />
+        </ToolTray>
+      ) : null}
       {foldAll ? wholeBoardTrays : null}
       </ToolGroup>
       {foldAll ? null : wholeBoardTrays}

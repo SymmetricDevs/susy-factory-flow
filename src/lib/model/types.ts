@@ -401,6 +401,13 @@ export interface FactoryStorage {
   targetPerSecond?: number;
   /** Buffers only; absent means `overflow`. See StorageBufferMode. */
   bufferMode?: StorageBufferMode;
+  /**
+   * Which side of the POOL this drawer sits on when it has no wires of its
+   * own (`FactoryProject.poolMode`): a `source` feeds the pool, a `drain`
+   * takes from it (its `drainMode` still says product, byproduct or trash).
+   * Ignored while the drawer has wires, and outside pool mode.
+   */
+  poolSide?: "source" | "drain";
   colorTag?: FactoryNodeColorTag;
   displayName?: string;
   iconPath?: string;
@@ -697,6 +704,15 @@ export interface FactoryProject {
    * was authored in.
    */
   solveMode?: boolean;
+  /**
+   * POOL MODE: no wires needed. Every resource is one shared pool: whatever
+   * any machine makes goes in, whatever any machine needs comes out, the
+   * surplus banks. Imports are SOURCE drawers placed on the board with
+   * `poolSide: "source"`, products are DRAIN drawers with `poolSide: "drain"`;
+   * a resource nobody makes and no source declares stays short. Wires drawn
+   * anyway still count. Combines with solve mode. Part of the plan JSON.
+   */
+  poolMode?: boolean;
   /**
    * LEGACY sketch mode, read on load and rewritten as both board rules.
    * Plans saved before the rules existed still carry it; nothing writes it.

@@ -49,6 +49,7 @@ import {
   selectRuntimeCalculationVariant,
 } from "./runtime-calculation";
 import { closeBoundaries } from "./close-boundaries";
+import { expandPool } from "./pool-mode";
 import { getSetupRules } from "../model/setup-rules";
 import { solveEquationsCore } from "./equations-core";
 import { solveSolveMode } from "./solve-mode";
@@ -78,7 +79,13 @@ export function calculateThroughput(
   // spends a free source only after every real wire (its recycle-before-
   // importing stage), so nothing the player drew is bypassed.
   const rules = getSetupRules(project);
-  if (rules.freeInputs || rules.freeOutputs) {
+  // POOL MODE (pool-mode.ts) replaces the boundary rules: every output
+  // already has somewhere to go (its pool) and every input is fed from
+  // the pool or stays honestly short. The hidden pool drawers and wires
+  // stay in the result so the cards' rails can read the pool's answer.
+  if (project.poolMode) {
+    project = expandPool(project).project;
+  } else if (rules.freeInputs || rules.freeOutputs) {
     project = closeBoundaries(project, {
       inputs: rules.freeInputs ? "all" : "none",
       outputs: rules.freeOutputs ? "all" : "none",

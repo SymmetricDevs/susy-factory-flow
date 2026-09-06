@@ -830,6 +830,42 @@ Working notes for future agents on GTNH Factory Flow.
   conservation. Balance dust snaps at 1e-5 relative (`balances.ts`) because
   LP flows carry solver-precision dust proportional to board scale.
 
+## Pool Mode (No Wires)
+
+- `FactoryProject.poolMode` (Jack, 2026-09-05): the board is read as a bill
+  of machines. ONE shared pool per resource: every machine output feeds it,
+  every consumed input drinks from it, surplus banks. It is NOT free inputs
+  plus free outputs: with negatives allowed the two are identical, so the
+  pool never goes negative - a resource nobody makes and no source declares
+  stays short and the card says "Nothing makes X". Combines with solve mode
+  (the classic calculator).
+- The mechanism is `expandPool` in `src/lib/solver/pool-mode.ts`: hidden
+  drawers (`pool:<key>`) and wires (`pool-edge:...`) added to the project
+  before the solve, so conservation, fairness, recycle-before-import and
+  banking apply unchanged. A pool with takers is an overflow buffer; with
+  feeders only it is a PRODUCT drain (not byproduct - a byproduct asks for
+  nothing and a machine whose only outlet asks for nothing read "on demand"
+  when it was really starved). A pool with no feeder is never created.
+  The expansion is cached per project object and the expanded project
+  expands to itself; the solve keeps the hidden edges and storages in the
+  result so the rails can read them.
+- Everything that walks the graph asks `getPoolProject(project)` first:
+  `deriveNodeVerdict`, `findUnwiredNodeIds`, `buildRailPorts`,
+  `buildLimitLadder`, `findDeathSpirals`, `findClogLocks`. A starved card
+  looks THROUGH a pool to the machine feeding it (`findUpstreamCulprit`).
+- Declarations are loose drawers with `FactoryStorage.poolSide`: `source`
+  (the plan imports this) or `drain` (the plan makes this; `drainMode` still
+  says product/byproduct/trash, and a product drawer's `targetPerSecond` is
+  the solve-mode ask). `storageRoleFor` gives them their role while unwired.
+  They come from the POOL MODE banner (`PoolModeNotice`, two keys opening
+  the recipe search's `ItemPickerPopover`) and `addPoolStorage`; a loose
+  drawer with no side is still idle.
+- Chrome: `PoolModeButton` (Waves icon, left of solve mode; folded into the
+  brush when the paint row folds so `PAINT_ROW_FOLDED_WIDTH` stands),
+  `PoolModeAura` (orange room light, adds to the solve aura), sounds
+  `poolOn`/`poolOff` (a fourth, warmer and lower than the solve shimmer).
+  `src/lib/solver/pool-mode.test.ts` is the exam.
+
 ## Verification
 
 - For code changes:

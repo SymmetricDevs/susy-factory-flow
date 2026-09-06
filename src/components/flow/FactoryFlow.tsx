@@ -7607,7 +7607,7 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
                       mode: "pool",
                       rows: [],
                       reason:
-                        "The pool supplies every input and banks every surplus. A product drawer declares what the plan is for; its amount is what the solve meets.",
+                        "Pool has no wires. A product is declared, not wired: place one here, or drag one off an output.",
                       actions: [{ gesture: "left", label: "Choose a product" }],
                     }}
                   />

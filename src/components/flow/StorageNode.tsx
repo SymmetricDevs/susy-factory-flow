@@ -280,6 +280,12 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     return storageRoleFor(storage, hasIn, hasOut, state.project.poolMode === true);
   });
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
+  // POOL MODE leaves some drawers with nothing to do: a SOURCE (the pool
+  // imports by itself) and a loose drawer with no side (the pool is the
+  // buffer now). They stay on the board untouched - switching modes must
+  // never delete anything - and read greyed and see-through while inert.
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const inertInPool = poolMode && (role === "source" || role === "idle" || role === "buffer");
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);
   // Lit when a hovered port/label/drawer pulls this buffer into its flow scope.
   const isFlowScopeLit = useFactoryStore((state) =>
@@ -346,9 +352,13 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
       data-storage-kind={storage.kind}
       data-storage-resource-id={storage.resourceId}
       className={[
-        "group relative text-[#e8e9ee]",
+        "group relative text-[#e8e9ee] transition-[opacity,filter] duration-500",
         (isFlowScopeLit || isFlowScopePort) && !isHighlighted ? "flow-scope-glow" : "",
         isHighlighted ? "resource-glow" : "",
+        // Inert: mostly grey with a trace of its own colour, and nothing on
+        // it takes the pointer - no port to drag off, no pill - while the
+        // card itself still drags (the events fall through to the node).
+        inertInPool ? "opacity-40 grayscale-[0.75] [&>*]:pointer-events-none" : "",
       ].join(" ")}
       style={paintCursor ? { cursor: paintCursor } : undefined}
     >

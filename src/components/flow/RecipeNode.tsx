@@ -896,7 +896,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         } as unknown as MachineHandlerIcon)
       : undefined
     : !isCropFarmNode && !isCustomRateNode
-      ? machineIcons.get(selectedMachineHandler.id)
+      ? // The same pick as the picture window: the tier's own block, the
+        // family face, or the map's machine - the glance must mirror the card.
+        (machineIconAtTier(machineIconEntries.get(selectedMachineHandler.id), projectNode.overclockTier) ??
+        recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType))
       : undefined;
   const previewHandler = hasMachinePicker
     ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
@@ -1094,7 +1097,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           label={
             isCustomRateNode
               ? (effectiveRecipe.name ?? "Custom rate")
-              : `${projectNode.machineCount}× ${selectedMachineHandler.label ?? effectiveRecipe.machineType ?? effectiveRecipe.name}`
+              : `${projectNode.machineCount}× ${machineDisplayName ?? effectiveRecipe.machineType ?? effectiveRecipe.name}`
           }
           inputs={rails.inputs}
           outputs={rails.outputs}

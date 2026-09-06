@@ -512,6 +512,8 @@ export const factoryProjectSchema = z.object({
   solveMode: z.boolean().optional(),
   // Pool mode: every resource is shared, no wires needed.
   poolMode: z.boolean().optional(),
+  // Pool mode's cell-to-fluid ratios, litres per filled cell by cell id.
+  poolCellRatios: z.record(z.string(), z.number().positive()).optional(),
   recipes: z.array(recipeSchema),
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema).optional().default([]),

@@ -1,8 +1,19 @@
-import { isRecipeInputConsumed, makeResourceKey } from "../model/resources";
+import {
+  getFilledCellFluidEquivalent,
+  isFluidEquivalentToFilledCell,
+  isRecipeInputConsumed,
+  makeResourceKey,
+} from "../model/resources";
 import { applyRecipeInputOverrides } from "../model/recipe-input-overrides";
 import { applyMachineHandlerToRecipe } from "../model/recipe-rules";
 import { poolSideOf } from "../model/storage-role";
-import type { FactoryProject, FactoryStorage, ResourceKey, ResourceKind } from "../model/types";
+import type {
+  FactoryProject,
+  FactoryStorage,
+  ResourceAmount,
+  ResourceKey,
+  ResourceKind,
+} from "../model/types";
 import { getRuntimeCalculationOutputs } from "./runtime-calculation";
 
 /**
@@ -57,6 +68,54 @@ interface PoolExpansion {
   project: FactoryProject;
   hiddenStorageIds: string[];
   hiddenEdgeIds: string[];
+  /** The cell-fluid bridge tanks: weightless in solve mode, off the board. */
+  hiddenNodeIds: string[];
+}
+
+/**
+ * Every filled-cell item and fluid the plan's machines name in BOTH forms,
+ * matched the way the search does (`isFluidEquivalentToFilledCell`: an
+ * alternatives entry first, then the cell's name). What the ratio fetch
+ * asks the Canner about, and what the expansion bridges once it knows.
+ */
+export function listPoolCellPairs(
+  project: FactoryProject,
+): Array<{ cellId: string; fluidId: string }> {
+  const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
+  const cells = new Map<string, ResourceAmount>();
+  const fluids = new Map<string, ResourceAmount>();
+  for (const node of project.nodes) {
+    if (node.enabled === false) {
+      continue;
+    }
+    const recipe = recipesById.get(node.recipeId);
+    if (!recipe) {
+      continue;
+    }
+    const nodeRecipe = applyRecipeInputOverrides(recipe, node);
+    const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, node);
+    const slots = [
+      ...nodeRecipe.inputs.filter((input) => isRecipeInputConsumed(input)),
+      ...(getRuntimeCalculationOutputs(effectiveRecipe, node) ?? effectiveRecipe.outputs),
+    ];
+    for (const slot of slots) {
+      if (slot.kind === "fluid") {
+        fluids.set(slot.id, slot);
+      } else if (slot.kind === "item" && getFilledCellFluidEquivalent(slot)) {
+        cells.set(slot.id, slot);
+      }
+    }
+  }
+  const pairs: Array<{ cellId: string; fluidId: string }> = [];
+  for (const [cellId, cell] of [...cells].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    for (const [fluidId, fluid] of [...fluids].sort(([a], [b]) => (a < b ? -1 : 1))) {
+      if (isFluidEquivalentToFilledCell(fluid, cell)) {
+        pairs.push({ cellId, fluidId });
+        break;
+      }
+    }
+  }
+  return pairs;
 }
 
 const expansionCache = new WeakMap<FactoryProject, PoolExpansion>();
@@ -68,7 +127,7 @@ export function getPoolProject(project: FactoryProject): FactoryProject {
 
 export function expandPool(project: FactoryProject): PoolExpansion {
   if (!project.poolMode) {
-    return { project, hiddenStorageIds: [], hiddenEdgeIds: [] };
+    return { project, hiddenStorageIds: [], hiddenEdgeIds: [], hiddenNodeIds: [] };
   }
   const cached = expansionCache.get(project);
   if (cached) {
@@ -156,11 +215,84 @@ export function expandPool(project: FactoryProject): PoolExpansion {
   }
 
   const storages: FactoryStorage[] = [...(project.storages ?? [])];
+  const recipes = [...project.recipes];
+  const nodes = [...project.nodes];
   // The drawn wires are dropped whole: the pool is the only carrier here,
   // and a wire kept beside it would be a second route saying the same thing.
   const edges: FactoryProject["edges"] = [];
   const hiddenStorageIds: string[] = [];
   const hiddenEdgeIds: string[] = [];
+  const hiddenNodeIds: string[] = [];
+
+  // CELLS AND FLUIDS. The pool never crosses kinds on its own, exactly as a
+  // wire never does; loose cell wires is forced ON here and the bridge is
+  // the same hidden free Tank that rule runs a wire through: one node per
+  // direction per pair, zero EU, one tick, a machine count high enough that
+  // only its neighbours can bind, converting at the Canner's litres-per-
+  // cell stored on the plan (`poolCellRatios`, never guessed - a pair with
+  // no ratio is not bridged). The tanks are machines to the pool like any
+  // other: they feed and drink through it, so the LP picks the direction
+  // the board needs and leaves the other idle. Weightless in solve mode.
+  for (const pair of listPoolCellPairs(project)) {
+    const litresPerCell = project.poolCellRatios?.[pair.cellId];
+    if (!litresPerCell || litresPerCell <= 0) {
+      continue;
+    }
+    // Only from a side something REAL feeds. A tank feeding a pool would
+    // otherwise stop that pool reading as an import, and two tanks feeding
+    // each other's pools would leave a resource nobody makes in either form
+    // starving instead of imported.
+    const cellFed = (pools.get(makeResourceKey("item", pair.cellId))?.feeders.length ?? 0) > 0;
+    const fluidFed = (pools.get(makeResourceKey("fluid", pair.fluidId))?.feeders.length ?? 0) > 0;
+    const directions: Array<"empty" | "fill"> = [
+      ...(cellFed ? (["empty"] as const) : []),
+      ...(fluidFed ? (["fill"] as const) : []),
+    ];
+    for (const direction of directions) {
+      const cellToFluid = direction === "empty";
+      const recipeId = `pool-tank-recipe:${direction}:${pair.cellId}`;
+      const nodeId = `pool-tank:${direction}:${pair.cellId}`;
+      recipes.push({
+        id: recipeId,
+        name: `Tank: ${pair.fluidId}`,
+        kind: "custom",
+        category: "crossform-tank",
+        machineType: "Tank",
+        minimumTier: "NONE",
+        durationTicks: 1,
+        eut: 0,
+        inputs: [
+          cellToFluid
+            ? { kind: "item", id: pair.cellId, amount: 1 }
+            : { kind: "fluid", id: pair.fluidId, amount: litresPerCell },
+        ],
+        outputs: [
+          cellToFluid
+            ? { kind: "fluid", id: pair.fluidId, amount: litresPerCell }
+            : { kind: "item", id: pair.cellId, amount: 1 },
+        ],
+        source: { recipeMap: "crossform-tank" },
+      });
+      nodes.push({
+        id: nodeId,
+        recipeId,
+        machineCount: 1_000,
+        parallel: 1,
+        overclockTier: "NONE",
+        enabled: true,
+        position: { x: 0, y: 0 },
+      });
+      hiddenNodeIds.push(nodeId);
+      if (cellToFluid) {
+        poolFor("item", pair.cellId).takers.push({ id: nodeId, storage: false });
+        poolFor("fluid", pair.fluidId).feeders.push({ id: nodeId, storage: false });
+      } else {
+        poolFor("fluid", pair.fluidId).takers.push({ id: nodeId, storage: false });
+        poolFor("item", pair.cellId).feeders.push({ id: nodeId, storage: false });
+      }
+    }
+  }
+
   const keys = [...pools.keys()].sort();
   for (const key of keys) {
     const pool = pools.get(key)!;
@@ -209,9 +341,10 @@ export function expandPool(project: FactoryProject): PoolExpansion {
   }
 
   const expansion: PoolExpansion = {
-    project: { ...project, storages, edges },
+    project: { ...project, recipes, nodes, storages, edges },
     hiddenStorageIds,
     hiddenEdgeIds,
+    hiddenNodeIds,
   };
   expansionCache.set(project, expansion);
   // The expanded plan still says poolMode, and it is what the solver hands

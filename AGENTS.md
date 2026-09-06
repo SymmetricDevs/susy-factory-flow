@@ -860,11 +860,22 @@ Working notes for future agents on GTNH Factory Flow.
   when set, else what its (ignored) wires said it was for (`poolSideOf`:
   fed only = drain, drawn only = source, a buffer has no side and is idle).
   A DRAIN drawer is the plan's declared product (its `drainMode` still says
-  product/byproduct/trash, and `targetPerSecond` is the solve ask); a SOURCE
-  drawer is harmless but unnecessary now that the pool imports by itself.
-  New drawers come from the build tray's pool keys (`addPoolStorage`,
-  through the recipe search's `ItemPickerPopover`) or a drag off a port
-  into empty space (`addStorageForConnection`, side from the port, no wire).
+  product/byproduct/trash, and `targetPerSecond` is the solve ask). There
+  is NO source key (Jack, 2026-09-05): the pool imports by itself, so a
+  source drawer says nothing. New product drawers come from the build
+  tray's one pool key (`PoolSpawnKeys` -> `addPoolStorage`, through the
+  recipe search's `ItemPickerPopover`) or a drag off a port into empty
+  space (`addStorageForConnection`, side from the port, no wire).
+- CELLS AND FLUIDS are bridged inside the pool: `listPoolCellPairs` names
+  every cell/fluid pair the plan's slots carry in both forms (the search's
+  `isFluidEquivalentToFilledCell` match), the board fetches each cell's
+  litres from the Canner (`fetchLitresPerCell`, `setPoolCellRatios`, stored
+  on the plan as `poolCellRatios`, never guessed), and the expansion adds
+  the loose-wire rule's hidden free Tank per direction - only FROM a side
+  something real feeds, so a form nobody makes still imports instead of
+  two tanks feeding each other. `getSetupRules` in pool mode returns loose
+  cell wires ON and both boundary rules OFF regardless of what is stored,
+  and the rules sheet shows all three locked.
 - Chrome: `PoolModeButton` (Waves icon, left of solve mode; folded into the
   brush when the paint row folds so `PAINT_ROW_FOLDED_WIDTH` stands),
   `PoolModeAura` (orange room light, adds to the solve aura), sounds

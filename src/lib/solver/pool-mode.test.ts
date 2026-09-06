@@ -203,6 +203,67 @@ describe("pool mode", () => {
     expect(getPoolProject(proj).edges.every((edge) => edge.id.startsWith("pool-edge:"))).toBe(true);
   });
 
+  it("bridges a filled cell to its fluid at the Canner's ratio, from the fed side", () => {
+    // A machine makes water CELLS, another drinks water FLUID: the pool
+    // empties the cells for free at the stored litres-per-cell.
+    const cell = {
+      kind: "item" as const,
+      id: "water_cell",
+      amount: 1,
+      displayName: "Water Cell",
+      alternatives: [{ kind: "fluid" as const, id: "water", displayName: "Water", amount: 1000 }],
+    };
+    const proj = project({
+      recipes: [
+        { ...recipe("fill", [], [["x", 1]]), outputs: [cell] },
+        { ...recipe("drink", [], [["steam", 1]]), inputs: [{ kind: "fluid", id: "water", amount: 500 }] },
+      ],
+      nodes: [node("f", "fill"), node("d", "drink")],
+      poolCellRatios: { water_cell: 1000 },
+    });
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    // 1 cell/s = 1000 L/s made, 500 L/s drunk: the drinker runs full.
+    expect(result.nodes["d"]!.utilization).toBeCloseTo(1, 4);
+    expect(result.externalInputs.find((entry) => entry.resourceId === "water")).toBeUndefined();
+    // The tank is a hidden helper: not in the result's nodes.
+    expect(Object.keys(result.nodes).every((id) => !id.startsWith("pool-tank:"))).toBe(true);
+  });
+
+  it("does not bridge a pair without a ratio, and imports a form nobody makes", () => {
+    const cell = {
+      kind: "item" as const,
+      id: "water_cell",
+      amount: 1,
+      displayName: "Water Cell",
+      alternatives: [{ kind: "fluid" as const, id: "water", displayName: "Water", amount: 1000 }],
+    };
+    const noRatio = project({
+      recipes: [
+        { ...recipe("fill", [], [["x", 1]]), outputs: [cell] },
+        { ...recipe("drink", [], [["steam", 1]]), inputs: [{ kind: "fluid", id: "water", amount: 500 }] },
+      ],
+      nodes: [node("f", "fill"), node("d", "drink")],
+    });
+    const result = calculateThroughput(noRatio, { generatedAt: "fixed" });
+    // No ratio: the fluid is imported on its own, the cells ship as a product.
+    expect(result.nodes["d"]!.utilization).toBeCloseTo(1, 4);
+    expect(result.externalInputs.find((entry) => entry.resourceId === "water")?.deficitPerSecond).toBeCloseTo(500, 3);
+    // Neither form made: both import, and no tank is built between them.
+    const neither = project({
+      recipes: [
+        { ...recipe("eatcell", [], [["y", 1]]), inputs: [cell] },
+        { ...recipe("drink", [], [["steam", 1]]), inputs: [{ kind: "fluid", id: "water", amount: 500 }] },
+      ],
+      nodes: [node("e", "eatcell"), node("d", "drink")],
+      poolCellRatios: { water_cell: 1000 },
+    });
+    const expanded = expandPool(neither);
+    expect(expanded.hiddenNodeIds).toEqual([]);
+    const both = calculateThroughput(neither, { generatedAt: "fixed" });
+    expect(both.nodes["e"]!.utilization).toBeCloseTo(1, 4);
+    expect(both.nodes["d"]!.utilization).toBeCloseTo(1, 4);
+  });
+
   it("reads a drawer's old wires as its side: fed was a product, drawn was a source", () => {
     const proj = project({
       recipes: RECIPES,

@@ -83,8 +83,11 @@ export function calculateThroughput(
   // already has somewhere to go (its pool) and every input is fed from
   // the pool or stays honestly short. The hidden pool drawers and wires
   // stay in the result so the cards' rails can read the pool's answer.
+  let poolTankIds: string[] = [];
   if (project.poolMode) {
-    project = expandPool(project).project;
+    const pool = expandPool(project);
+    project = pool.project;
+    poolTankIds = pool.hiddenNodeIds;
   } else if (rules.freeInputs || rules.freeOutputs) {
     project = closeBoundaries(project, {
       inputs: rules.freeInputs ? "all" : "none",
@@ -95,9 +98,15 @@ export function calculateThroughput(
   // on the board carries nothing (its far end reads NO SUPPLY), and the
   // board raises a notice naming it. Anything else would let a disabled
   // rule keep converting.
-  const crossForm = rules.looseCellWires
+  const crossFormEdges = rules.looseCellWires
     ? expandCrossFormEdges(project)
     : { project, hiddenNodeIds: [], hiddenEdgeIds: [] };
+  // The pool's cell-fluid tanks are hidden helpers exactly like the loose
+  // wires' tanks: weightless to solve mode, and struck from the result.
+  const crossForm = {
+    ...crossFormEdges,
+    hiddenNodeIds: [...crossFormEdges.hiddenNodeIds, ...poolTankIds],
+  };
   project = crossForm.project;
   const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
   const nodes: Record<string, NodeThroughputResult> = {};

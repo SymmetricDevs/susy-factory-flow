@@ -714,6 +714,14 @@ export interface FactoryProject {
    */
   poolMode?: boolean;
   /**
+   * Pool mode's cell-to-fluid bridges: litres one filled cell holds, keyed
+   * by the cell item id, read from the Canner's own recipes (never
+   * guessed) and fetched for every cell/fluid pair the plan's slots name.
+   * A pair with no ratio here is not bridged. Stored so a shared plan
+   * solves the same everywhere without a lookup.
+   */
+  poolCellRatios?: Record<string, number>;
+  /**
    * LEGACY sketch mode, read on load and rewritten as both board rules.
    * Plans saved before the rules existed still carry it; nothing writes it.
    */

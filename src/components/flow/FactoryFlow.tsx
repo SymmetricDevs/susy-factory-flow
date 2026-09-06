@@ -106,6 +106,7 @@ import { queryRecipeDatasetResources } from "@/lib/datasets/browser-loader";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets/remote";
 import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
 import { ItemPickerPopover } from "@/components/ItemPickerPopover";
+import { listPoolCellPairs } from "@/lib/solver/pool-mode";
 import "./pool-mode.css";
 import {
   getEffectiveNodeRecipe,
@@ -1884,6 +1885,45 @@ export function FactoryFlow() {
   // The wire carries the SOURCE's own resource - the cell on a cell-to-fluid
   // wire, the fluid on a fluid-to-cell one - and the target handle names the
   // far form.
+  // POOL MODE's cell-fluid bridges need the Canner's litres-per-cell for
+  // every cell/fluid pair the plan names in both forms. Fetched here as the
+  // plan changes, merged onto the plan (`poolCellRatios`) so the solve and
+  // every shared copy read the same numbers; a pair the Canner does not
+  // know stays unbridged, never guessed. One request per new cell, ever.
+  const poolPairsSignature = useFactoryStore((state) =>
+    state.project.poolMode === true
+      ? listPoolCellPairs(state.project)
+          .filter((pair) => !state.project.poolCellRatios?.[pair.cellId])
+          .map((pair) => `${pair.cellId}=${pair.fluidId}`)
+          .join("|")
+      : "",
+  );
+  const poolRatioAsked = useRef(new Set<string>());
+  useEffect(() => {
+    if (!poolPairsSignature) {
+      return;
+    }
+    const state = useFactoryStore.getState();
+    const version = state.datasetManifest?.versions.find(
+      (entry) => entry.id === state.selectedDatasetVersionId,
+    );
+    if (!version) {
+      return;
+    }
+    for (const pairKey of poolPairsSignature.split("|")) {
+      if (poolRatioAsked.current.has(pairKey)) {
+        continue;
+      }
+      poolRatioAsked.current.add(pairKey);
+      const [cellId, fluidId] = pairKey.split("=") as [string, string];
+      void fetchLitresPerCell(version, cellId, fluidId).then((litres) => {
+        if (litres) {
+          useFactoryStore.getState().setPoolCellRatios({ [cellId]: litres });
+        }
+      });
+    }
+  }, [poolPairsSignature]);
+
   const connectLooseCellWire = useCallback(
     async (
       source: { nodeId: string; handleId: string },
@@ -2176,7 +2216,7 @@ export function FactoryFlow() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [isNodeDragging, setNodeDragging] = useState(false);
-  // Pool mode: the wire layers fade out (pool-mode.css, factory-flow-board--pool).
+  // Pool mode: the wire layers fade out (globals.css, factory-flow-board--pool).
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   const [annotationTool, setAnnotationTool] = useState<BoardDrawTool | undefined>(undefined);
   // Shared by the brush and the annotation tools: the last colour picked in
@@ -7379,7 +7419,10 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
   const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
   const datasetManifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
-  const [picking, setPicking] = useState<"source" | "drain" | undefined>();
+  // ONE key: the product drawer, where a typed amount goes. There is no
+  // source key any more (Jack, 2026-09-05): the pool imports whatever
+  // nobody makes by itself, so a source drawer had nothing left to say.
+  const [picking, setPicking] = useState(false);
   const selectedDatasetVersion = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
     [datasetManifest?.versions, selectedDatasetVersionId],
@@ -7399,10 +7442,10 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
     },
     [datasetManifestUrl, selectedDatasetVersion],
   );
-  const closePicker = useCallback(() => setPicking(undefined), []);
+  const closePicker = useCallback(() => setPicking(false), []);
   const onPick = useCallback(
     (entry: DatasetResourceIndexEntry) => {
-      if (!picking || entry.kind === "aspect") {
+      if (entry.kind === "aspect") {
         return;
       }
       addPoolStorage(
@@ -7414,55 +7457,62 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
           iconAtlas: entry.iconAtlas,
           dominantColor: entry.dominantColor,
         },
-        picking,
+        "drain",
       );
       playBoardSound("shuffle");
-      setPicking(undefined);
+      setPicking(false);
     },
-    [addPoolStorage, picking],
+    [addPoolStorage],
   );
   useEffect(() => {
     if (!on) {
-      setPicking(undefined);
+      setPicking(false);
     }
   }, [on]);
-  const key = (
-    side: "source" | "drain",
-    label: string,
-    title: string,
-    Icon: LucideIcon,
-    trailMs: number,
-  ) => (
-    <div
-      className={[
-        // The keys themselves travel: out from behind the crop farm key and
-        // up to full ink on the same clock the tray grows on, the second a
-        // beat behind the first, so the pair reads as one motion.
-        "relative transition-[transform,opacity] duration-500 ease-out",
-        on ? "translate-x-0 opacity-100" : "-translate-x-6 opacity-0",
-      ].join(" ")}
-      style={{ transitionDelay: on ? `${trailMs}ms` : "0ms" }}
-    >
-      <button
-        type="button"
-        onClick={() => setPicking((was) => (was === side ? undefined : side))}
-        aria-pressed={picking === side}
-        tabIndex={on ? 0 : -1}
+  // ONE motion. The clip grows from nothing to the key's width while the
+  // key slides the same distance the other way, on the same curve and the
+  // same clock, so it comes out from under the crop farm key like a
+  // drawer: the tray only ever shows the part that has emerged. No fade,
+  // no stagger - anything else here read as two animations disagreeing.
+  return (
+    <div className="relative flex items-center">
+      <div
+        aria-hidden={!on}
         className={[
-          "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[#d98b3a] text-[#ffd9b3] hover:brightness-110",
-          picking === side
-            ? "bg-[#8a5a2a] shadow-[inset_2px_2px_0_#3a2510]"
-            : "bg-[#5d3d20] shadow-[inset_2px_2px_0_#9a6230,inset_-2px_-2px_0_#2b1d12]",
+          "overflow-hidden transition-[width] duration-500 ease-out",
+          on ? "w-[36px]" : "pointer-events-none w-0",
         ].join(" ")}
-        title={title}
-        aria-label={label}
       >
-        <Icon className="h-4 w-4" />
-      </button>
-      {picking === side ? (
-        <div className="absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2">
+        <div
+          className={[
+            "flex w-[36px] items-center pl-0.5 transition-transform duration-500 ease-out",
+            on ? "translate-x-0" : "-translate-x-[36px]",
+          ].join(" ")}
+        >
+          <button
+            type="button"
+            onClick={() => setPicking((was) => !was)}
+            aria-pressed={picking}
+            tabIndex={on ? 0 : -1}
+            className={[
+              "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
+              picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
+            ].join(" ")}
+            title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
+            aria-label="Add a product drawer"
+          >
+            <Upload className={picking ? "h-4 w-4 text-[#a8e8ff]" : "h-4 w-4"} />
+          </button>
+        </div>
+      </div>
+      {picking ? (
+        // Outside the clip, centred under the key that opened it.
+        <div
+          className="absolute top-full z-30 mt-1 -translate-x-1/2"
+          style={{ left: 20 }}
+        >
           <ItemPickerPopover
-            role={side === "source" ? "takes" : "makes"}
+            role="makes"
             placement="below"
             onPick={onPick}
             onClose={closePicker}
@@ -7470,20 +7520,6 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
           />
         </div>
       ) : null}
-    </div>
-  );
-  return (
-    <div
-      aria-hidden={!on}
-      className={[
-        // The pair slides in from nothing: width and opacity ease together so
-        // the tray grows to make room rather than the keys popping into it.
-        "flex items-center gap-0.5 overflow-visible transition-[width,margin] duration-500 ease-out",
-        on ? "ml-0.5 w-[66px]" : "pointer-events-none ml-0 w-0",
-      ].join(" ")}
-    >
-      {key("source", "Add a source drawer", "Add a source drawer: the plan imports this", Download, 0)}
-      {key("drain", "Add a product drawer", "Add a product drawer: the plan makes this", Upload, 70)}
     </div>
   );
 });
@@ -7594,10 +7630,15 @@ const SetupRulesButton = memo(function SetupRulesButton({
 }) {
   const rules = useFactoryStore((state) => state.project.setupRules);
   const legacy = useFactoryStore((state) => state.project.assumeBoundaries);
+  // Pool mode forces loose cell wires on (the pool bridges cells and
+  // fluids itself) and makes the two boundary rules moot: the row reads
+  // ON and locked, the other two read OFF and locked.
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   const setSetupRules = useFactoryStore((state) => state.setSetupRules);
   const { freeInputs, freeOutputs, looseCellWires } = getSetupRules({
     setupRules: rules,
     assumeBoundaries: legacy,
+    poolMode,
   });
   const rootRef = useRef<HTMLDivElement | null>(null);
   const closeSheet = useCallback(() => onOpenChange(false), [onOpenChange]);
@@ -7608,24 +7649,35 @@ const SetupRulesButton = memo(function SetupRulesButton({
     on: boolean;
     label: string;
     line: string;
+    /** Pool mode decides this one; the row shows the answer and takes no click. */
+    locked?: boolean;
   }> = [
     {
       id: "freeInputs",
       on: freeInputs,
       label: "Free inputs",
-      line: "An input short of stock takes the rest from off the setup.",
+      line: poolMode
+        ? "Pool mode imports whatever nobody makes by itself."
+        : "An input short of stock takes the rest from off the setup.",
+      locked: poolMode,
     },
     {
       id: "freeOutputs",
       on: freeOutputs,
       label: "Free outputs",
-      line: "Output with nowhere to go leaves the setup instead of backing up.",
+      line: poolMode
+        ? "Pool mode banks every surplus by itself."
+        : "Output with nowhere to go leaves the setup instead of backing up.",
+      locked: poolMode,
     },
     {
       id: "looseCellWires",
       on: looseCellWires,
       label: "Loose cell wires",
-      line: "A filled cell and its fluid wire straight together, converted for free.",
+      line: poolMode
+        ? "Pool mode converts cells and fluids for free by itself."
+        : "A filled cell and its fluid wire straight together, converted for free.",
+      locked: poolMode,
     },
   ];
 
@@ -7659,6 +7711,7 @@ const SetupRulesButton = memo(function SetupRulesButton({
             <button
               key={choice.id}
               type="button"
+              disabled={choice.locked}
               onClick={() => setSetupRules({ [choice.id]: !choice.on })}
               aria-pressed={choice.on}
               className={[
@@ -7666,6 +7719,7 @@ const SetupRulesButton = memo(function SetupRulesButton({
                 choice.on
                   ? `border-[var(--mc-good)] ${TOOL_FACE_ON}`
                   : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
+                choice.locked ? "opacity-50" : "",
               ].join(" ")}
             >
               {/* The tick box. Green and filled, or empty and near black -

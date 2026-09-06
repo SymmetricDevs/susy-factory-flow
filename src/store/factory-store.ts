@@ -391,6 +391,12 @@ interface FactoryStore {
   /** Pool mode: every resource is one shared pool, no wires needed. */
   setPoolMode: (poolMode: boolean) => void;
   /**
+   * Pool mode's cell-to-fluid ratios, merged in as the board fetches them
+   * from the Canner (litres per filled cell, by cell id). Not an undo step:
+   * nothing the player did, only something the plan learned.
+   */
+  setPoolCellRatios: (ratios: Record<string, number>) => void;
+  /**
    * Pool mode's two declarations: a loose SOURCE drawer (the plan imports
    * this) or a loose DRAIN drawer (the plan makes this), placed on clear
    * floor and framed by the camera. Nothing is wired; the pool does that.
@@ -2018,6 +2024,24 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         project,
         lastResult: solveBooks(project),
       });
+    });
+  },
+  setPoolCellRatios: (ratios) => {
+    set((state) => {
+      const current = state.project.poolCellRatios ?? {};
+      let changed = false;
+      const merged = { ...current };
+      for (const [cellId, litres] of Object.entries(ratios)) {
+        if (litres > 0 && merged[cellId] !== litres) {
+          merged[cellId] = litres;
+          changed = true;
+        }
+      }
+      if (!changed) {
+        return state;
+      }
+      const project = touchProject({ ...state.project, poolCellRatios: merged });
+      return { project, lastResult: solveBooks(project) };
     });
   },
   addPoolStorage: (resource, side) => {

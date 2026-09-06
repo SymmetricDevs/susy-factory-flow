@@ -27,6 +27,7 @@ import {
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { RecipeTooltip } from "./RecipeTooltip";
 import {
   Activity,
   AlignJustify,
@@ -6501,7 +6502,10 @@ export function FactoryFlow() {
           on top: they are the most transient thing here. */}
       <div
         className={[
-          "nodrag pointer-events-none absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 flex-col-reverse items-center gap-2 transition-opacity",
+          // w-max: hung from the board's centre, the column's shrink-to-fit
+          // width was capped at HALF the board, which folded every notice
+          // onto three centred rows on a narrow board.
+          "nodrag pointer-events-none absolute bottom-3 left-1/2 z-30 flex w-max max-w-[94vw] -translate-x-1/2 flex-col-reverse items-center gap-2 transition-opacity",
           // The recipe search dims the whole board; these sit level with it
           // in the stack, so they mute themselves or they shout through it.
           recipeSearchOpen ? "opacity-20 grayscale [&_*]:pointer-events-none" : "",
@@ -7248,17 +7252,18 @@ const SolveModeNotice = memo(function SolveModeNotice({
     return null;
   }
   return (
-    <div className={`nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 px-2 py-1.5 font-mono text-[12px] ${poolMode
+    // One line on a desktop: label, sentence, button. Wider and a point
+    // larger than its siblings so the button never folds onto a centred
+    // second row; only a phone is allowed to wrap it.
+    <div className={`nodrag pointer-events-auto flex max-w-[min(94vw,760px)] flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-2 px-3 py-2 font-mono text-[13px] ${poolMode
       ? "border-[#6f9cff] bg-[#1a2233] text-[#d3dff4] shadow-[inset_2px_2px_0_#3e567d,inset_-2px_-2px_0_#101622,4px_4px_0_rgba(0,0,0,0.35)]"
       : "border-[#9a6fd1] bg-[#241a2e] text-[#e0d3ec] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]"}`}>
       <span className={`shrink-0 font-bold tracking-[0.5px] ${poolMode ? "text-[#adc7ff]" : "text-[#d9b8ff]"}`}>
         {poolMode ? "POOL MODE" : "SOLVE MODE"}
       </span>
-      <span>
-        {missingCount > 0
-          ? `You must set a target for ${missingCount === 1 ? "1 product" : `${missingCount} products`}.`
-          : "You must set a target or pin a machine count."}
-      </span>
+      {/* One line, never a count: what the solve needs is one number,
+          anywhere. The button still points at the products missing theirs. */}
+      <span className="whitespace-nowrap compact:whitespace-normal">Set at least one product rate or machine count.</span>
       {missingCount > 0 ? (
         <button
           type="button"
@@ -7593,6 +7598,22 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
           ].join(" ")}
         >
           <ToolTray>
+            <MinecraftTooltip
+              content={
+                picking ? undefined : () => (
+                  <RecipeTooltip
+                    view={{
+                      title: "Product drawer",
+                      mode: "pool",
+                      rows: [],
+                      reason:
+                        "The pool supplies every input and banks every surplus. A product drawer declares what the plan is for; its amount is what the solve meets.",
+                      actions: [{ gesture: "left", label: "Choose a product" }],
+                    }}
+                  />
+                )
+              }
+            >
             <button
               type="button"
               onClick={() => setPicking((was) => !was)}
@@ -7602,11 +7623,11 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
                 "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
                 picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
               ].join(" ")}
-              title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
               aria-label="Add a product drawer"
             >
               <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
             </button>
+            </MinecraftTooltip>
             </ToolTray>
         </div>
       </div>

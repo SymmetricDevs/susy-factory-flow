@@ -63,6 +63,8 @@ import {
   Type,
   Undo2,
   Check,
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Sigma,
   SlidersHorizontal,
   Waves,
@@ -6461,7 +6463,6 @@ export function FactoryFlow() {
         <DeathSpiralNotice onShow={handleShowNodes} />
         <ClogLockNotice onShow={handleShowNodes} />
         <SolveModeNotice onShow={handleShowNodes} />
-        <PoolModeNotice />
         <RecipeAddChips />
       </div>
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
@@ -7350,15 +7351,15 @@ const PoolModeAura = memo(function PoolModeAura() {
 });
 
 /**
- * Pool mode's banner, in the notice stack with the solve family's, wearing
- * the same anatomy in the pool's orange. It carries the mode's two
- * declarations - a SOURCE drawer (the plan imports this) and a PRODUCT
- * drawer (the plan makes this) - because with no wires there is no port to
- * drag a drawer off, so this is where drawers come from. Each opens the item
- * picker the recipe search uses; the pick lands on clear floor and the
- * camera goes to it. No dismiss: the mode itself is the reason it shows.
+ * Pool mode's two declarations, on the build tray right after the crop
+ * farm: a SOURCE drawer (the plan imports this) and a PRODUCT drawer (the
+ * plan makes this). With no wires there is no port to drag a drawer off, so
+ * these are where drawers come from. Orange like the mode, and they fade
+ * and slide in when the mode comes on rather than sitting greyed on every
+ * board. Each drops the recipe search's item picker centred under itself;
+ * the pick lands on clear floor and the camera goes to it.
  */
-const PoolModeNotice = memo(function PoolModeNotice() {
+const PoolSpawnKeys = memo(function PoolSpawnKeys() {
   const on = useFactoryStore((state) => state.project.poolMode === true);
   const addPoolStorage = useFactoryStore((state) => state.addPoolStorage);
   const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
@@ -7406,37 +7407,36 @@ const PoolModeNotice = memo(function PoolModeNotice() {
     },
     [addPoolStorage, picking],
   );
-  if (!on) {
-    return null;
-  }
-  const keyClass =
-    "shrink-0 border border-[#d98b3a] bg-[#4a2f18] px-2 py-0.5 font-bold text-[#ffd9b3] hover:bg-[#5d3d20]";
-  return (
-    <div className="nodrag pointer-events-auto relative flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#d98b3a] bg-[#2b1d12] px-2 py-1.5 font-mono text-[12px] text-[#f2e6d8] shadow-[inset_2px_2px_0_#7a4d24,inset_-2px_-2px_0_#160d06,4px_4px_0_rgba(0,0,0,0.35)]">
-      <span className="shrink-0 font-bold tracking-[0.5px] text-[#ffb86b]">POOL MODE</span>
-      <span className="text-[#e6d5c2]">Every resource is shared. Nothing needs a wire.</span>
+  useEffect(() => {
+    if (!on) {
+      setPicking(undefined);
+    }
+  }, [on]);
+  const key = (side: "source" | "drain", label: string, title: string, Icon: LucideIcon) => (
+    <div className="relative">
       <button
         type="button"
-        onClick={() => setPicking((was) => (was === "source" ? undefined : "source"))}
-        aria-pressed={picking === "source"}
-        className={keyClass}
-        title="Add a source drawer: the plan imports this"
+        onClick={() => setPicking((was) => (was === side ? undefined : side))}
+        aria-pressed={picking === side}
+        tabIndex={on ? 0 : -1}
+        className={[
+          // One motion with the tray growing beside it: the key slides out
+          // from under the crop farm and fades in over the same half second.
+          "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[#d98b3a] text-[#ffd9b3] transition-[transform,opacity] duration-500 ease-out hover:brightness-110",
+          on ? "translate-x-0 opacity-100" : "-translate-x-6 opacity-0",
+          picking === side
+            ? "bg-[#8a5a2a] shadow-[inset_2px_2px_0_#3a2510]"
+            : "bg-[#5d3d20] shadow-[inset_2px_2px_0_#9a6230,inset_-2px_-2px_0_#2b1d12]",
+        ].join(" ")}
+        title={title}
+        aria-label={label}
       >
-        + Source
+        <Icon className="h-4 w-4" />
       </button>
-      <button
-        type="button"
-        onClick={() => setPicking((was) => (was === "drain" ? undefined : "drain"))}
-        aria-pressed={picking === "drain"}
-        className={keyClass}
-        title="Add a product drawer: the plan makes this"
-      >
-        + Product
-      </button>
-      {picking ? (
+      {picking === side ? (
         <div className="absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2">
           <ItemPickerPopover
-            role={picking === "source" ? "takes" : "makes"}
+            role={side === "source" ? "takes" : "makes"}
             placement="below"
             onPick={onPick}
             onClose={closePicker}
@@ -7444,6 +7444,20 @@ const PoolModeNotice = memo(function PoolModeNotice() {
           />
         </div>
       ) : null}
+    </div>
+  );
+  return (
+    <div
+      aria-hidden={!on}
+      className={[
+        // The pair slides in from nothing: width and opacity ease together so
+        // the tray grows to make room rather than the keys popping into it.
+        "flex items-center gap-0.5 overflow-visible transition-[width,margin] duration-500 ease-out",
+        on ? "ml-0.5 w-[66px]" : "pointer-events-none ml-0 w-0",
+      ].join(" ")}
+    >
+      {key("source", "Add a source drawer", "Add a source drawer: the plan imports this", ArrowDownToLine)}
+      {key("drain", "Add a product drawer", "Add a product drawer: the plan makes this", ArrowUpFromLine)}
     </div>
   );
 });
@@ -7959,6 +7973,7 @@ const SourceToolbar = memo(function SourceToolbar({
         >
           <Sprout className="h-4 w-4" />
         </button>
+        <PoolSpawnKeys />
       </ToolTray>
       </ToolGroup>
     </div>

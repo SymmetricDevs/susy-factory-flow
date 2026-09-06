@@ -22,6 +22,11 @@ describe("machineIconAtTier", () => {
   it("wears the highest variant not above the tier when there is no exact one", () => {
     expect(machineIconAtTier(entry, "IV")?.id).toBe("advanced-iii");
     expect(machineIconAtTier(entry, "UV")?.id).toBe("advanced-iii");
+    // Every GT tier ranks, UMV included: a card past the ladder's top keeps
+    // the top variant instead of falling to the bottom (a 2026-09-06 slip).
+    expect(machineIconAtTier(entry, "UMV")?.id).toBe("advanced-iii");
+    expect(machineIconAtTier(entry, "UXV")?.id).toBe("advanced-iii");
+    expect(machineIconAtTier(entry, "MAX")?.id).toBe("advanced-iii");
   });
   it("falls to the lowest variant below the family's range, and to the face without a list", () => {
     expect(machineIconAtTier(entry, "ULV")?.id).toBe("basic");

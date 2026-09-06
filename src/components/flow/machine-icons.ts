@@ -3,10 +3,14 @@
 import { useMemo } from "react";
 import type { MachineHandlerIconEntry, RecipeMapIconEntry } from "@/lib/datasets/types";
 import { useFactoryStore } from "@/store/factory-store";
+import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 
 export type MachineHandlerIcon = MachineHandlerIconEntry["resource"];
 
-const TIER_ORDER = ["ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UXV", "OpV", "MAX"];
+// The game's own ladder, from the one table the app keeps for it - a
+// hand-typed copy here once left UMV out and sent every UMV card back to
+// its family's lowest block.
+const TIER_ORDER: string[] = GT_VOLTAGE_TIERS.map((entry) => entry.tier);
 const tierRank = (tier: string | undefined) => {
   const index = TIER_ORDER.findIndex((name) => name.toLowerCase() === String(tier ?? "").toLowerCase());
   return index < 0 ? -1 : index;

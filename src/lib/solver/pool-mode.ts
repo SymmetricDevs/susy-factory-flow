@@ -31,10 +31,11 @@ import { getRuntimeCalculationOutputs } from "./runtime-calculation";
  * with feeders and takers is an overflow BUFFER, which passes on what its
  * takers pull and banks the rest (the visible +N/s surplus). A pool with
  * feeders only is a PRODUCT drain: what the plan puts out, the free
- * outputs rule for that one resource. A pool with takers and no feeder at
- * all is NOT created: a resource nobody makes and no source declares stays
- * short, and its takers say so - creating the drawer would make it a
- * SOURCE, which invents things from nothing.
+ * outputs rule for that one resource. A pool with takers and no feeder is
+ * a SOURCE: the plan IMPORTS that resource, and the books list it under
+ * INPUTS at the rate its takers drink. Pool mode is the deeper solve mode
+ * (it needs solve mode on): you pin product amounts or machine counts and
+ * the plan does the rest - counts, imports, outputs, wiring.
  *
  * The hidden drawers and wires never reach the board. They ride the solve
  * result (edge and storage figures keyed by their ids) so the cards' rails
@@ -163,10 +164,10 @@ export function expandPool(project: FactoryProject): PoolExpansion {
   const keys = [...pools.keys()].sort();
   for (const key of keys) {
     const pool = pools.get(key)!;
-    if (pool.feeders.length === 0) {
-      // Nobody makes it and nobody declares it: stays short, by design.
-      continue;
-    }
+    // A pool nobody feeds has takers only, so it is a SOURCE: the plan
+    // imports that resource, and the books list it under INPUTS at the
+    // rate the takers drink. That is the deeper-solve reading (Jack,
+    // 2026-09-05): you pin amounts and counts, the plan does the rest.
     let poolId = `${POOL_STORAGE_PREFIX}${key}`;
     while (storageIds.has(poolId)) {
       poolId = `${poolId}:`;

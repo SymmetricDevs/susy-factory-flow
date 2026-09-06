@@ -2008,9 +2008,11 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   setPoolMode: (poolMode) => {
     set((state) => {
+      // Pool mode is the deeper solve mode: it cannot be on without it.
       const project = touchProject({
         ...state.project,
         poolMode: poolMode ? true : undefined,
+        solveMode: poolMode ? true : state.project.solveMode,
       });
       return withProjectHistory(state, {
         project,
@@ -2064,6 +2066,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       const project = touchProject({
         ...state.project,
         solveMode: solveMode ? true : undefined,
+        // Leaving solve mode leaves its deeper mode too.
+        poolMode: solveMode ? state.project.poolMode : undefined,
       });
 
       return withProjectHistory(state, {

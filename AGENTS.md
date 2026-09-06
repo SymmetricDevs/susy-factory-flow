@@ -832,20 +832,23 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Pool Mode (No Wires)
 
-- `FactoryProject.poolMode` (Jack, 2026-09-05): the board is read as a bill
-  of machines. ONE shared pool per resource: every machine output feeds it,
-  every consumed input drinks from it, surplus banks. It is NOT free inputs
-  plus free outputs: with negatives allowed the two are identical, so the
-  pool never goes negative - a resource nobody makes and no source declares
-  stays short and the card says "Nothing makes X". Combines with solve mode
-  (the classic calculator).
+- `FactoryProject.poolMode` (Jack, 2026-09-05) is the DEEPER SOLVE MODE:
+  the key only works with solve mode on, and leaving solve mode leaves it
+  too (`setPoolMode` / `setSolveMode`). You pin product amounts or machine
+  counts; the plan does the rest - counts, imports, outputs, wiring. ONE
+  shared pool per resource: every machine output feeds it, every consumed
+  input drinks from it, surplus banks, and anything NOBODY makes is
+  imported and listed under INPUTS (the pool is a source). Wires DO NOT
+  EXIST in it: the solve drops them whole and the board fades the wire
+  layers (`pool-mode.css`, `factory-flow-board--pool`); they come back
+  untouched when the mode goes off. Port-to-port drags land nothing.
 - The mechanism is `expandPool` in `src/lib/solver/pool-mode.ts`: hidden
   drawers (`pool:<key>`) and wires (`pool-edge:...`) added to the project
   before the solve, so conservation, fairness, recycle-before-import and
-  banking apply unchanged. A pool with takers is an overflow buffer; with
-  feeders only it is a PRODUCT drain (not byproduct - a byproduct asks for
-  nothing and a machine whose only outlet asks for nothing read "on demand"
-  when it was really starved). A pool with no feeder is never created.
+  banking apply unchanged. A pool with feeders and takers is an overflow
+  buffer; feeders only, a PRODUCT drain (not byproduct - a byproduct asks
+  for nothing and a machine whose only outlet asks for nothing read "on
+  demand" when it was really starved); takers only, a SOURCE (the import).
   The expansion is cached per project object and the expanded project
   expands to itself; the solve keeps the hidden edges and storages in the
   result so the rails can read them.
@@ -853,13 +856,15 @@ Working notes for future agents on GTNH Factory Flow.
   `deriveNodeVerdict`, `findUnwiredNodeIds`, `buildRailPorts`,
   `buildLimitLadder`, `findDeathSpirals`, `findClogLocks`. A starved card
   looks THROUGH a pool to the machine feeding it (`findUpstreamCulprit`).
-- Declarations are loose drawers with `FactoryStorage.poolSide`: `source`
-  (the plan imports this) or `drain` (the plan makes this; `drainMode` still
-  says product/byproduct/trash, and a product drawer's `targetPerSecond` is
-  the solve-mode ask). `storageRoleFor` gives them their role while unwired.
-  They come from the POOL MODE banner (`PoolModeNotice`, two keys opening
-  the recipe search's `ItemPickerPopover`) and `addPoolStorage`; a loose
-  drawer with no side is still idle.
+- Drawers carry over: a drawer's pool side is `FactoryStorage.poolSide`
+  when set, else what its (ignored) wires said it was for (`poolSideOf`:
+  fed only = drain, drawn only = source, a buffer has no side and is idle).
+  A DRAIN drawer is the plan's declared product (its `drainMode` still says
+  product/byproduct/trash, and `targetPerSecond` is the solve ask); a SOURCE
+  drawer is harmless but unnecessary now that the pool imports by itself.
+  New drawers come from the build tray's pool keys (`addPoolStorage`,
+  through the recipe search's `ItemPickerPopover`) or a drag off a port
+  into empty space (`addStorageForConnection`, side from the port, no wire).
 - Chrome: `PoolModeButton` (Waves icon, left of solve mode; folded into the
   brush when the paint row folds so `PAINT_ROW_FOLDED_WIDTH` stands),
   `PoolModeAura` (orange room light, adds to the solve aura), sounds

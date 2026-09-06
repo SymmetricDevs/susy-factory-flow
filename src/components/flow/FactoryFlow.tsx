@@ -7485,10 +7485,13 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
 
 const PoolModeButton = memo(function PoolModeButton() {
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  // The deeper solve mode: the key only works while solve mode is on.
+  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
   const setPoolMode = useFactoryStore((state) => state.setPoolMode);
   return (
     <button
       type="button"
+      disabled={!solveMode}
       onClick={() => {
         playBoardSound(poolMode ? "poolOff" : "poolOn");
         setPoolMode(!poolMode);
@@ -7497,11 +7500,14 @@ const PoolModeButton = memo(function PoolModeButton() {
       className={[
         "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
         poolMode ? TOOL_FACE_ON : TOOL_FACE_OFF,
+        solveMode ? "" : "opacity-40",
       ].join(" ")}
       title={
-        poolMode
-          ? "Pool mode: every resource is shared, nothing needs a wire. Click to go back to wires."
-          : "Wires: each slot takes what is wired to it. Click for pool mode, where every resource is shared."
+        !solveMode
+          ? "Pool mode needs solve mode: switch that on first."
+          : poolMode
+            ? "Pool mode: every resource is shared, nothing needs a wire, anything nobody makes is imported. Click for plain solve mode."
+            : "Solve mode with wires. Click for pool mode: no wires, every resource shared, imports worked out for you."
       }
       aria-label={poolMode ? "Switch off pool mode" : "Switch to pool mode"}
     >

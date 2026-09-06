@@ -109,15 +109,14 @@ describe("pool mode", () => {
     expect(deriveNodeVerdict(proj, result, "c1").kind).toBe("starved");
   });
 
-  it("leaves a resource nobody makes honestly short", () => {
+  it("imports a resource nobody makes and lists it under inputs", () => {
     const proj = project({ recipes: RECIPES, nodes: [node("s", "smelt")] });
     const result = calculateThroughput(proj, { generatedAt: "fixed" });
-    expect(result.nodes["s"]!.utilization).toBeCloseTo(0, 4);
-    const verdict = deriveNodeVerdict(proj, result, "s");
-    expect(verdict.kind).toBe("unwired");
-    expect(verdict.bare?.inputs.map((slot) => slot.displayName)).toEqual(["sand"]);
-    // Its glass has a pool to go to, so the output side is never bare.
-    expect(verdict.bare?.outputs).toEqual([]);
+    expect(result.nodes["s"]!.utilization).toBeCloseTo(1, 4);
+    expect(findUnwiredNodeIds(proj, result)).toEqual([]);
+    expect(deriveNodeVerdict(proj, result, "s").kind).toBe("balanced");
+    const sand = result.externalInputs.find((entry) => entry.resourceId === "sand");
+    expect(sand?.deficitPerSecond).toBeCloseTo(1, 4);
   });
 
   it("takes imports from a loose source drawer and products to a loose drain", () => {
@@ -146,8 +145,10 @@ describe("pool mode", () => {
       storages: [drawer("sand-in", "sand")],
     });
     const result = calculateThroughput(proj, { generatedAt: "fixed" });
-    expect(result.nodes["s"]!.utilization).toBeCloseTo(0, 4);
+    // The pool imports the sand by itself; the drawer takes no part.
+    expect(result.nodes["s"]!.utilization).toBeCloseTo(1, 4);
     expect(getStorageRoles(proj).get("sand-in")).toBe("idle");
+    expect(result.storages["sand-in"]!.consumedPerSecond).toBeCloseTo(0, 4);
   });
 
   it("rails read the pool: the consumer's port is connected and fed", () => {

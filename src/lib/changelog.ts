@@ -70,12 +70,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "2.58.0",
     date: "2026-09-05",
-    headline: "Pool mode: plan without wires",
+    headline: "Pool mode: solve without wires",
     notes: [
       "A new key beside solve mode shares every resource between all machines, so nothing needs a wire.",
-      "The pool mode bar adds source drawers for what you import and product drawers for what you make.",
-      "A resource nobody makes stays short and its card says so.",
-      "Pool mode and solve mode work together.",
+      "Pin a product amount or a machine count and the plan works out the counts, the imports and the outputs.",
+      "Anything nobody makes is imported and listed under Inputs.",
+      "Wires fade out while the mode is on and come back when it is off.",
     ],
   },
   {

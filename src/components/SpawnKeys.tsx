@@ -21,10 +21,12 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
   const openPowerMenu = useFactoryStore((state) => state.openPowerMenu);
   const addCustomRateNode = useFactoryStore((state) => state.addCustomRateNode);
   const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
+  // The filter chips' exact dress (height, font, ground, border, hover), so
+  // the row reads as one more row of the column's chips.
   const key =
-    "flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 font-mono text-[11px] font-black tracking-wide text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] hover:border-cyan-600 hover:text-cyan-300";
+    "flex h-6 min-w-0 flex-1 items-center justify-center gap-1 truncate rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-200";
   return (
-    <div className="mx-2 mt-2 flex shrink-0 gap-1.5">
+    <div className="mx-2 mt-2 flex shrink-0 gap-1">
       {leading}
       <button
         type="button"
@@ -33,8 +35,8 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
         title="Place a generator"
         aria-label="Place a generator"
       >
-        <Zap className="h-4 w-4 shrink-0" />
-        POWER
+        <Zap className="h-3.5 w-3.5 shrink-0" />
+        Power
       </button>
       <button
         type="button"
@@ -43,8 +45,8 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
         title="Add custom rate node"
         aria-label="Add custom rate node"
       >
-        <Gauge className="h-4 w-4 shrink-0" />
-        CUSTOM
+        <Gauge className="h-3.5 w-3.5 shrink-0" />
+        Custom
       </button>
       <button
         type="button"
@@ -53,8 +55,8 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
         title="Add crop farm"
         aria-label="Add crop farm"
       >
-        <Sprout className="h-4 w-4 shrink-0" />
-        FARM
+        <Sprout className="h-3.5 w-3.5 shrink-0" />
+        Farm
       </button>
     </div>
   );

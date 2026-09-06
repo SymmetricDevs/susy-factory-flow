@@ -1,6 +1,6 @@
 "use client";
 
-import { Minus, Plus } from "lucide-react";
+import { ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { MachineConfigTierControl } from "@/lib/model/recipe-rules";
@@ -11,12 +11,14 @@ import { ResourceIcon } from "@/components/nei/ResourceIcon";
 /**
  * ONE TILE GRAMMAR for a card's machine settings (docs/config-tiles-prd.md).
  *
- * A setting is a captioned tile with a value and one gesture: minus and
- * plus step a ladder, a toggle is a two-rung ladder, a count also types on
- * click. The wheel steps. Right click (or a held press) on a ladder opens
- * the full list to jump. A face - the rung's own item, bare - sits in the
- * well only when EVERY rung of the ladder has one; otherwise the value text
- * carries the whole meaning. No letters stand in for missing art.
+ * A setting is a captioned tile with a value and one gesture. A SHORT
+ * ladder (six rungs or fewer: pressure, a casing mark, on/off) is stepped
+ * with minus and plus and the wheel. A LONG ladder (fourteen coils, a dozen
+ * fuels) is a dropdown: the well is the button, and the list it opens has
+ * a search box, because those rungs are picked by name, not walked. A
+ * count also types on click. A face - the rung's own item, bare - sits in
+ * the well only when EVERY rung of the ladder has one; otherwise the value
+ * text carries the whole meaning. No letters stand in for missing art.
  *
  * The chrome is the crop card's SEEDS tile exactly, so every card's settings
  * read as one family.
@@ -33,6 +35,8 @@ const SETTING_TILE_WELL_CLASS =
 
 /** One tile is a caption line over a 20px control row: two grid cells. */
 export const SETTING_TILE_HEIGHT_PX = 40;
+/** Past this many rungs a ladder is picked from a searchable list, not stepped. */
+export const STEPPER_MAX_RUNGS = 6;
 
 /**
  * The caption: the setting's short name in the game's own word. The
@@ -222,14 +226,20 @@ export function SettingListMenu({
   currentKey,
   onPick,
   onClose,
+  searchable = false,
 }: {
   anchor: DOMRect;
   rows: Array<{ key: string; label: string; face?: ResourceAmount; hint?: string }>;
   currentKey: string;
   onPick: (key: string) => void;
   onClose: () => void;
+  /** A filter box at the top, for lists picked by name. */
+  searchable?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? rows.filter((row) => row.label.toLowerCase().includes(needle)) : rows;
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) onClose();
@@ -249,17 +259,40 @@ export function SettingListMenu({
   const left = Math.max(8, Math.min(anchor.left + anchor.width / 2 - width / 2, window.innerWidth - width - 8));
   const below = anchor.bottom + 4;
   const above = window.innerHeight - anchor.top + 4;
-  const fitsBelow = window.innerHeight - below >= Math.min(320, rows.length * 28 + 12);
+  const fitsBelow = window.innerHeight - below >= Math.min(320, rows.length * 28 + 12 + (searchable ? 36 : 0));
   return createPortal(
     <div
       ref={rootRef}
       role="listbox"
-      className="nodrag nowheel fixed z-[300] max-h-[320px] overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
+      className="nodrag nowheel fixed z-[300] flex max-h-[360px] flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
       style={{ left, width, ...(fitsBelow ? { top: below } : { bottom: above }) }}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >
-      {rows.map((row) => (
+      {searchable ? (
+        <label className="mx-1 mb-1 flex h-7 shrink-0 items-center gap-1.5 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1.5 text-[12px] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)]">
+          <Search className="h-3.5 w-3.5 shrink-0 text-[var(--mc-ink-muted)]" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && shown[0]) {
+                event.preventDefault();
+                onPick(shown[0].key);
+              }
+            }}
+            placeholder="Filter..."
+            aria-label="Filter options"
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--mc-ink-muted)]"
+          />
+        </label>
+      ) : null}
+      <div className="min-h-0 overflow-y-auto">
+      {shown.length === 0 ? (
+        <div className="px-2 py-1.5 text-[12px] text-[var(--mc-ink-muted)]">No match.</div>
+      ) : null}
+      {shown.map((row) => (
         <button
           key={row.key}
           type="button"
@@ -279,9 +312,87 @@ export function SettingListMenu({
           {row.hint ? <span className="shrink-0 text-[10px] text-[var(--mc-ink-muted)]">{row.hint}</span> : null}
         </button>
       ))}
+      </div>
     </div>,
     document.body,
   );
+}
+
+/**
+ * The dropdown tile for a long ladder: the same caption and well, but the
+ * well is one button wearing the current rung's face and name with a
+ * chevron, and a click opens the searchable list. The wheel still steps.
+ */
+export function SettingSelectTile({
+  caption,
+  rows,
+  currentKey,
+  onPick,
+  disabled = false,
+  help,
+}: {
+  caption: string;
+  rows: Array<{ key: string; label: string; face?: ResourceAmount; hint?: string }>;
+  currentKey: string;
+  onPick: (key: string) => void;
+  disabled?: boolean;
+  help?: ReactNode | (() => ReactNode);
+}) {
+  const [listAt, setListAt] = useState<DOMRect | undefined>();
+  const wellRef = useRef<HTMLButtonElement>(null);
+  const index = Math.max(0, rows.findIndex((row) => row.key === currentKey));
+  const current = rows[index];
+  const tile = (
+    <div
+      className={[SETTING_TILE_CLASS, disabled ? "opacity-35" : ""].join(" ")}
+      onWheel={(event) => {
+        event.stopPropagation();
+        if (disabled) return;
+        const next = rows[Math.max(0, Math.min(rows.length - 1, index + (event.deltaY < 0 ? 1 : -1)))];
+        if (next && next.key !== currentKey) onPick(next.key);
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <div className={SETTING_TILE_CAPTION_CLASS}>
+        <span className="min-w-0 truncate">{caption}</span>
+      </div>
+      <button
+        ref={wellRef}
+        type="button"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={listAt !== undefined}
+        aria-label={caption}
+        onClick={(event) => {
+          event.stopPropagation();
+          const rect = wellRef.current?.getBoundingClientRect();
+          if (rect) setListAt(listAt ? undefined : rect);
+        }}
+        className={[SETTING_TILE_WELL_CLASS, "w-full flex-none justify-between px-1 enabled:hover:bg-[var(--mc-93)]"].join(" ")}
+        title={current?.label}
+      >
+        <span className="flex min-w-0 items-center gap-1">
+          {current?.face ? <Face resource={current.face} /> : null}
+          <span className="min-w-0 truncate">{current?.label ?? currentKey}</span>
+        </span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-[var(--mc-ink-muted)]" />
+      </button>
+      {listAt ? (
+        <SettingListMenu
+          anchor={listAt}
+          rows={rows}
+          currentKey={currentKey}
+          searchable
+          onPick={(key) => {
+            setListAt(undefined);
+            onPick(key);
+          }}
+          onClose={() => setListAt(undefined)}
+        />
+      ) : null}
+    </div>
+  );
+  return help ? <MinecraftTooltip content={help}>{tile}</MinecraftTooltip> : tile;
 }
 
 /** A tile over a ladder of tier options: the shape most machine settings take. */
@@ -297,6 +408,21 @@ export function LadderTile({
   const [listAt, setListAt] = useState<DOMRect | undefined>();
   const index = Math.max(0, control.tiers.findIndex((tier) => tier.key === control.current.key));
   const faces = controlHasFaces(control);
+  if (control.tiers.length > STEPPER_MAX_RUNGS) {
+    return (
+      <SettingSelectTile
+        caption={settingCaption(control)}
+        rows={control.tiers.map((tier) => ({
+          key: tier.key,
+          label: settingValueLabel(tier),
+          face: faces ? (tier.resource ?? control.resource) : undefined,
+        }))}
+        currentKey={control.current.key}
+        onPick={onSelect}
+        help={help}
+      />
+    );
+  }
   const step = (direction: -1 | 1) => {
     const next = control.tiers[Math.max(0, Math.min(control.tiers.length - 1, index + direction))];
     if (next && next.key !== control.current.key) onSelect(next.key);

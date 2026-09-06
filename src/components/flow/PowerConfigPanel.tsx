@@ -9,7 +9,7 @@ import type {
 } from "@/lib/power/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { RecipeTooltip } from "./RecipeTooltip";
-import { SettingListMenu, SettingTile } from "./SettingTile";
+import { SettingListMenu, SettingSelectTile, SettingTile, STEPPER_MAX_RUNGS } from "./SettingTile";
 
 /**
  * The knobs on a power card: the source definition's settings on the same
@@ -128,6 +128,18 @@ function PowerSelectTile({
   const [listAt, setListAt] = useState<DOMRect | undefined>();
   const index = Math.max(0, options.findIndex((option) => option.key === value));
   const current = options[index];
+  if (options.length > STEPPER_MAX_RUNGS) {
+    return (
+      <SettingSelectTile
+        caption={caption}
+        rows={options}
+        currentKey={value}
+        onPick={onPick}
+        disabled={!enabled}
+        help={() => <RecipeTooltip view={{ title: caption, rows: [{ label: "Selected", value: current?.label ?? value }] }} />}
+      />
+    );
+  }
   return (
     <>
       <SettingTile

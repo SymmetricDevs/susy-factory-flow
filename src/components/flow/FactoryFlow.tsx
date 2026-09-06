@@ -7607,7 +7607,7 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
                       mode: "pool",
                       rows: [],
                       reason:
-                        "Pool has no wires. A product is declared, not wired: place one here, or drag one off an output.",
+                        "Pool mode has no wires. A product is declared, not wired. Place one here, or drag one off an output.",
                       actions: [{ gesture: "left", label: "Choose a product" }],
                     }}
                   />

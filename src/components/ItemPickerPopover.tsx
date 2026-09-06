@@ -92,7 +92,10 @@ export function ItemPickerPopover({
       // The items column's own shell: same ground, same border. Tall enough
       // for the paged grid to show a few rows; the pane sizes its page to it.
       className={[
-        "absolute z-20 flex h-[min(560px,calc(100vh-120px))] w-full max-w-[calc(100vw-16px)] flex-col overflow-hidden border border-neutral-800 bg-[#25272c] text-neutral-100 shadow-[0_8px_24px_rgba(0,0,0,0.5)] sm:w-[380px] sm:max-w-[380px]",
+        // pointer-events-auto: the board's toolbars are pointer-events-none
+        // layers and the picker inherits that; nowheel/nodrag keep the wheel
+        // paging the list instead of zooming the board under it.
+        "pointer-events-auto nodrag nowheel absolute z-20 flex h-[min(560px,calc(100vh-120px))] w-full max-w-[calc(100vw-16px)] flex-col overflow-hidden border border-neutral-800 bg-[#25272c] text-neutral-100 shadow-[0_8px_24px_rgba(0,0,0,0.5)] sm:w-[380px] sm:max-w-[380px]",
         placement === "above" ? "bottom-full left-1/2 mb-2 -translate-x-1/2" : "left-1/2 top-full mt-2",
       ].join(" ")}
       data-item-picker={role}

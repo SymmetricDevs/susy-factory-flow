@@ -914,7 +914,7 @@ Working notes for future agents on GTNH Factory Flow.
   two tanks feeding each other.
 - Chrome: the pool key is the third of the `ModeKeys` (Waves icon). Each
   lit key has its own colour and nothing else changes: build gold
-  `#f5b642`, solve cyan `#3fbdd3`, pool blue `#6f9cff` (the product key on
+  `#f5b642`, solve violet `#c78bff` (cyan clashed with pool), pool blue `#6f9cff` (the product key on
   the build tray lights the same blue while its picker is open). There is
   NO room light for any mode (Jack, 2026-09-06; the solve and pool auras
   were removed). Sounds: `buildOn` a latch (tick, then a wooden knock),

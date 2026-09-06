@@ -7241,9 +7241,9 @@ const SolveModeNotice = memo(function SolveModeNotice({
     return null;
   }
   return (
-    <div className="nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#3fbdd3] bg-[#14262b] px-2 py-1.5 font-mono text-[12px] text-[#e4f0f2] shadow-[inset_2px_2px_0_#2b6d7a,inset_-2px_-2px_0_#0d181a,4px_4px_0_rgba(0,0,0,0.35)]">
-      <span className="shrink-0 font-bold tracking-[0.5px] text-[#8fe3f2]">SOLVE MODE</span>
-      <span className="text-[#d2e4e6]">
+    <div className="nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#9a6fd1] bg-[#241a2e] px-2 py-1.5 font-mono text-[12px] text-[#eee6f6] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]">
+      <span className="shrink-0 font-bold tracking-[0.5px] text-[#d9b8ff]">SOLVE MODE</span>
+      <span className="text-[#e0d3ec]">
         {missingCount > 0
           ? `${missingCount} ${missingCount === 1 ? "product needs a number" : "products need numbers"} to solve for`
           : "Nothing asks, so nothing runs: type a product amount or pin a machine count"}
@@ -7252,7 +7252,7 @@ const SolveModeNotice = memo(function SolveModeNotice({
         <button
           type="button"
           onClick={() => onShow(missingProductIds(useFactoryStore.getState().project))}
-          className="shrink-0 border border-[#3fbdd3] bg-[#1e3d45] px-2 py-0.5 font-bold text-[#c9f2fb] hover:bg-[#2a525c]"
+          className="shrink-0 border border-[#9a6fd1] bg-[#3a2a52] px-2 py-0.5 font-bold text-[#ead9ff] hover:bg-[#4a3766]"
         >
           Show me
         </button>
@@ -7285,6 +7285,8 @@ const MODE_KEYS: Array<{
   title: string;
   Icon: LucideIcon;
   ink: string;
+  /** The ink while NOT engaged: the same colour, a deeper shade - never a fade. */
+  dim: string;
   /** The pane of light that slides onto the engaged key: its colour, faint. */
   glass: string;
 }> = [
@@ -7294,6 +7296,7 @@ const MODE_KEYS: Array<{
     title: "Build: you set the machines, the counts and the wires. The board reports what flows.",
     Icon: Blocks,
     ink: "text-[#f5b642]",
+    dim: "text-[#b48a3b]",
     glass: "rgba(245,182,66,0.16)",
   },
   {
@@ -7301,8 +7304,10 @@ const MODE_KEYS: Array<{
     label: "Solve mode",
     title: "Solve: you set the machines and the wires and type what you want. The board counts the machines.",
     Icon: Sigma,
-    ink: "text-[#3fbdd3]",
-    glass: "rgba(63,189,211,0.16)",
+    // Violet, not the cyan it had: cyan and pool's blue read as one colour.
+    ink: "text-[#c78bff]",
+    dim: "text-[#8f68b8]",
+    glass: "rgba(199,139,255,0.16)",
   },
   {
     mode: "pool",
@@ -7310,6 +7315,7 @@ const MODE_KEYS: Array<{
     title: "Pool: you set the machines and type what you want. The board counts, wires and imports for you.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
+    dim: "text-[#5273b8]",
     glass: "rgba(111,156,255,0.18)",
   },
 ];
@@ -7390,7 +7396,7 @@ const ModeKeys = memo(function ModeKeys() {
         dragX === undefined ? "" : "cursor-grabbing",
       ].join(" ")}
     >
-      {MODE_KEYS.map(({ mode: key, label, title, Icon, ink }, at) => (
+      {MODE_KEYS.map(({ mode: key, label, title, Icon, ink, dim }, at) => (
         <button
           key={key}
           type="button"
@@ -7400,12 +7406,13 @@ const ModeKeys = memo(function ModeKeys() {
           title={title}
           aria-label={label}
           className={[
-            "flex h-full items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-opacity duration-200",
+            "flex h-full items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-colors duration-200",
             TOOL_FACE_OFF,
             at > 0 ? "border-l-2 border-[var(--mc-15)]" : "",
-            // Each key in its own colour always, quietly; the engaged one in full.
-            ink,
-            shown === at ? "opacity-100" : "opacity-55 hover:opacity-90",
+            // Each key in its own colour always: a deeper shade at rest, the
+            // full colour when engaged. The face never fades - a faded key
+            // read as one you could not press.
+            shown === at ? ink : `${dim} hover:brightness-125`,
           ].join(" ")}
           style={{ width: MODE_STEP }}
         >

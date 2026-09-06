@@ -7258,7 +7258,11 @@ function playRateDial(unit: RateUnit, step: number): void {
  * it, always rendered so the fade runs both ways, never a pointer target.
  */
 const SolveModeAura = memo(function SolveModeAura() {
-  const on = useFactoryStore((state) => state.project.solveMode === true);
+  // The pool light REPLACES this one while pool mode is on: two room
+  // lights stacked read as one twice too strong.
+  const on = useFactoryStore(
+    (state) => state.project.solveMode === true && state.project.poolMode !== true,
+  );
   return (
     <div
       aria-hidden
@@ -7268,7 +7272,7 @@ const SolveModeAura = memo(function SolveModeAura() {
       ].join(" ")}
       style={{
         boxShadow:
-          "inset 0 0 90px 6px rgba(34,211,238,0.16), inset 0 0 14px 1px rgba(34,211,238,0.22)",
+          "inset 0 0 90px 6px rgba(34,211,238,0.08), inset 0 0 14px 1px rgba(34,211,238,0.11)",
       }}
     />
   );
@@ -7339,8 +7343,9 @@ const SolveModeNotice = memo(function SolveModeNotice({
 
 /**
  * Pool mode's light: the same screen-space room edge as the solve aura, in
- * the pool's own warm orange. Both can be on at once (pool + solve is the
- * classic calculator), so each is its own layer and the two glows add.
+ * the solve cyan taken brighter and whiter - the deeper mode's sparkle -
+ * and at half the solve light's strength. It takes over from the solve
+ * aura while it is on, so the room never wears two lights at once.
  */
 const PoolModeAura = memo(function PoolModeAura() {
   const on = useFactoryStore((state) => state.project.poolMode === true);
@@ -7353,7 +7358,7 @@ const PoolModeAura = memo(function PoolModeAura() {
       ].join(" ")}
       style={{
         boxShadow:
-          "inset 0 0 90px 6px rgba(249,146,60,0.16), inset 0 0 14px 1px rgba(249,146,60,0.22)",
+          "inset 0 0 90px 6px rgba(168,232,255,0.08), inset 0 0 14px 1px rgba(168,232,255,0.11)",
       }}
     />
   );
@@ -7483,15 +7488,56 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
   );
 });
 
-const PoolModeButton = memo(function PoolModeButton() {
-  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  // The deeper solve mode: the key only works while solve mode is on.
+/**
+ * The solve key with its deeper mode hanging under it. The pool key is a
+ * DRAWER: while solve mode is on it slides down out from behind the solve
+ * key; off, it slides back up under it and stops answering the pointer or
+ * the keyboard. Absolutely placed, so it never widens the toolbar row
+ * (toolbar-fold.ts measures the row without it) and it hangs under the
+ * solve key wherever that key lives - the whole-board tray, or the brush
+ * fold-out on a narrow board and on a phone.
+ */
+const SolveModeKeys = memo(function SolveModeKeys() {
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
+  // ONE motion, the spawner keys' own turned downward: the clip grows from
+  // nothing to the tray's height while the tray slides the same distance
+  // the other way, on the same curve and clock, so the key comes out from
+  // under the solve key like a drawer, in a tray of its own. The clip
+  // starts at the parent tray's outer edge (6px of padding and border
+  // left and below the key) so the two trays line up.
+  return (
+    <div className="relative">
+      <SolveModeButton />
+      <div
+        aria-hidden={!solveMode}
+        className={[
+          "absolute -left-1.5 top-full z-0 overflow-hidden transition-[height] duration-500 ease-out",
+          solveMode ? "h-[52px]" : "pointer-events-none h-0",
+        ].join(" ")}
+      >
+        <div
+          className={[
+            "pt-2 transition-transform duration-500 ease-out",
+            solveMode ? "translate-y-0" : "-translate-y-[52px]",
+          ].join(" ")}
+        >
+          <ToolTray>
+            <PoolModeButton tabbable={solveMode} />
+          </ToolTray>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const PoolModeButton = memo(function PoolModeButton({ tabbable }: { tabbable: boolean }) {
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   const setPoolMode = useFactoryStore((state) => state.setPoolMode);
   return (
     <button
       type="button"
-      disabled={!solveMode}
+      disabled={!tabbable}
+      tabIndex={tabbable ? 0 : -1}
       onClick={() => {
         playBoardSound(poolMode ? "poolOff" : "poolOn");
         setPoolMode(!poolMode);
@@ -7500,18 +7546,15 @@ const PoolModeButton = memo(function PoolModeButton() {
       className={[
         "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
         poolMode ? TOOL_FACE_ON : TOOL_FACE_OFF,
-        solveMode ? "" : "opacity-40",
       ].join(" ")}
       title={
-        !solveMode
-          ? "Pool mode needs solve mode: switch that on first."
-          : poolMode
-            ? "Pool mode: every resource is shared, nothing needs a wire, anything nobody makes is imported. Click for plain solve mode."
-            : "Solve mode with wires. Click for pool mode: no wires, every resource shared, imports worked out for you."
+        poolMode
+          ? "Pool mode: every resource is shared, nothing needs a wire, anything nobody makes is imported. Click for plain solve mode."
+          : "Solve mode with wires. Click for pool mode: no wires, every resource shared, imports worked out for you."
       }
       aria-label={poolMode ? "Switch off pool mode" : "Switch to pool mode"}
     >
-      <Waves className={poolMode ? "h-4 w-4 text-[#f9923c]" : "h-4 w-4"} />
+      <Waves className={poolMode ? "h-4 w-4 text-[#a8e8ff]" : "h-4 w-4"} />
     </button>
   );
 });
@@ -7536,7 +7579,7 @@ const SolveModeButton = memo(function SolveModeButton() {
       title={solveMode ? "Solve mode: type amounts on product drawers, machines are solved. Click for plan mode." : "Plan mode: machine counts are yours. Click for solve mode."}
       aria-label={solveMode ? "Switch to plan mode" : "Switch to solve mode"}
     >
-      <Sigma className={solveMode ? "h-4 w-4 text-[var(--mc-good)]" : "h-4 w-4"} />
+      <Sigma className={solveMode ? "h-4 w-4 text-[#3fbdd3]" : "h-4 w-4"} />
     </button>
   );
 });
@@ -9258,10 +9301,7 @@ const PaintToolbar = memo(function PaintToolbar({
   const wholeBoardTrays = (
     <>
         <ToolTray helpAnchor="rules">
-          {/* Folded, the pool key rides into the brush (below) so the folded
-              row keeps the width toolbar-fold.ts measured for it. */}
-          {folded ? null : <PoolModeButton />}
-          <SolveModeButton />
+          <SolveModeKeys />
           <SetupRulesButton open={isRulesOpen} onOpenChange={setRulesOpen} />
           {/* Auto-arrange opens a small sheet, like the rules beside it: one
               setting saying whether boards you drew are opened up, and the
@@ -9543,11 +9583,6 @@ const PaintToolbar = memo(function PaintToolbar({
           <Trash2 className={isDeleteMode ? "h-4 w-4 text-red-500" : "h-4 w-4"} />
         </button>
       </ToolTray>
-      {folded && !foldAll ? (
-        <ToolTray>
-          <PoolModeButton />
-        </ToolTray>
-      ) : null}
       {foldAll ? wholeBoardTrays : null}
       </ToolGroup>
       {foldAll ? null : wholeBoardTrays}

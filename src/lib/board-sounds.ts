@@ -598,20 +598,22 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       puff(ctx, out, { frequency: 2200, q: 0.6, duration: 0.3, peak: 0.05, delay: 0.05 });
       break;
     case "poolOn":
-      // The resources POOL: a warmer, lower swell than the solve shimmer,
-      // rising a fourth (the solve's fifth is the other dimension; this is
-      // the same room with the walls taken out), one soft sparkle, and a
-      // low wash of air like water settling. Big change, quiet voice.
-      shimmerPad(ctx, out, { from: 196, to: 262, duration: 0.6, peak: 0.24 });
-      blip(ctx, out, { from: 1047, to: 1047, duration: 0.14, peak: 0.05, delay: 0.22 });
-      puff(ctx, out, { frequency: 900, q: 0.5, duration: 0.45, peak: 0.07, delay: 0.04 });
+      // The deeper solve mode: the solve shimmer again, one step further
+      // up. The pad starts where solveOn's ended (the fifth) and rises a
+      // fourth on top, the sparkles a fourth above solveOn's, the air a
+      // little brighter - the same sound, taken one dimension deeper.
+      shimmerPad(ctx, out, { from: 392, to: 523, duration: 0.6, peak: 0.22 });
+      blip(ctx, out, { from: 1760, to: 1760, duration: 0.12, peak: 0.055, delay: 0.18 });
+      blip(ctx, out, { from: 2349, to: 2349, duration: 0.14, peak: 0.04, delay: 0.32 });
+      puff(ctx, out, { frequency: 3600, q: 0.6, duration: 0.35, peak: 0.055, delay: 0.05 });
       break;
     case "poolOff":
-      // The pool drains: the swell glides back down the fourth (the close
-      // family's motion, never the delete step), sparkle a shade lower.
-      shimmerPad(ctx, out, { from: 262, to: 196, duration: 0.55, peak: 0.22 });
-      blip(ctx, out, { from: 784, to: 784, duration: 0.14, peak: 0.045, delay: 0.2 });
-      puff(ctx, out, { frequency: 700, q: 0.5, duration: 0.4, peak: 0.06, delay: 0.04 });
+      // Back to plain solve mode: the same shimmer settling from the
+      // octave to the fifth (the close family's glide), sparkles descending.
+      shimmerPad(ctx, out, { from: 523, to: 392, duration: 0.55, peak: 0.2 });
+      blip(ctx, out, { from: 1760, to: 1760, duration: 0.12, peak: 0.045, delay: 0.16 });
+      blip(ctx, out, { from: 1319, to: 1319, duration: 0.14, peak: 0.04, delay: 0.3 });
+      puff(ctx, out, { frequency: 2800, q: 0.6, duration: 0.3, peak: 0.045, delay: 0.05 });
       break;
     case "shuffle":
       // A card SLID onto the table: two brushes - a soft body and a lighter

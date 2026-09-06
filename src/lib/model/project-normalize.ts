@@ -30,7 +30,9 @@ export function normalizeLoadedProject(project: FactoryProject): FactoryProject 
                   // saved slotless would otherwise read as a card with no
                   // fluid slot and lose its fuel wire to the cross-form drop.
                   resynthesizePowerRecipes(
-                    normalizeProjectFuelProfiles(renameOpvTier(adoptSetupRules(project))),
+                    normalizeProjectFuelProfiles(
+                      renameOpvTier(adoptSetupRules(requireSolveForPool(project))),
+                    ),
                   ),
                 ),
               ),
@@ -411,4 +413,16 @@ function snapProjectToGrid(project: FactoryProject): FactoryProject {
         : undefined),
     })),
   };
+}
+
+/**
+ * Pool mode is the deeper solve mode: a plan that says pool without solve
+ * (hand-edited, or saved by a build where the rule did not exist yet)
+ * opens with solve mode on, exactly as the store keeps them.
+ */
+function requireSolveForPool(project: FactoryProject): FactoryProject {
+  if (project.poolMode && !project.solveMode) {
+    return { ...project, solveMode: true };
+  }
+  return project;
 }

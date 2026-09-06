@@ -7241,7 +7241,7 @@ const missingProductIds = (project: FactoryProject): string[] => {
 /**
  * The solve family's banner, in the notice stack with the dead loop's and
  * the clog lock's, wearing their exact anatomy (label, one line, Show me) in
- * the mode's own cyan. No dismiss: unlike those two this one is not an
+ * the active mode's color. No dismiss: unlike those two this one is not an
  * opinion to wave away - it clears itself the moment any amount or pin
  * lands, and until then it is the only explanation for a board of zeros.
  */
@@ -7255,6 +7255,7 @@ const SolveModeNotice = memo(function SolveModeNotice({
   const asking = useFactoryStore(
     (state) => state.project.solveMode === true && !hasAnySolveNumbers(state.project),
   );
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   const missingCount = useFactoryStore((state) =>
     state.project.solveMode === true && !hasAnySolveNumbers(state.project)
       ? missingProductIds(state.project).length
@@ -7264,18 +7265,24 @@ const SolveModeNotice = memo(function SolveModeNotice({
     return null;
   }
   return (
-    <div className="nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#9a6fd1] bg-[#241a2e] px-2 py-1.5 font-mono text-[12px] text-[#eee6f6] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]">
-      <span className="shrink-0 font-bold tracking-[0.5px] text-[#d9b8ff]">SOLVE MODE</span>
-      <span className="text-[#e0d3ec]">
+    <div className={`nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 px-2 py-1.5 font-mono text-[12px] ${poolMode
+      ? "border-[#6f9cff] bg-[#1a2233] text-[#d3dff4] shadow-[inset_2px_2px_0_#3e567d,inset_-2px_-2px_0_#101622,4px_4px_0_rgba(0,0,0,0.35)]"
+      : "border-[#9a6fd1] bg-[#241a2e] text-[#e0d3ec] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]"}`}>
+      <span className={`shrink-0 font-bold tracking-[0.5px] ${poolMode ? "text-[#adc7ff]" : "text-[#d9b8ff]"}`}>
+        {poolMode ? "POOL MODE" : "SOLVE MODE"}
+      </span>
+      <span>
         {missingCount > 0
-          ? `${missingCount} ${missingCount === 1 ? "product needs a number" : "products need numbers"} to solve for`
-          : "Nothing asks, so nothing runs: type a product amount or pin a machine count"}
+          ? `You must set a target for ${missingCount === 1 ? "1 product" : `${missingCount} products`}.`
+          : "You must set a target or pin a machine count."}
       </span>
       {missingCount > 0 ? (
         <button
           type="button"
           onClick={() => onShow(missingProductIds(useFactoryStore.getState().project))}
-          className="shrink-0 border border-[#9a6fd1] bg-[#3a2a52] px-2 py-0.5 font-bold text-[#ead9ff] hover:bg-[#4a3766]"
+          className={`shrink-0 border px-2 py-0.5 font-bold ${poolMode
+            ? "border-[#6f9cff] bg-[#273957] text-[#dce7ff] hover:bg-[#334b70]"
+            : "border-[#9a6fd1] bg-[#3a2a52] text-[#ead9ff] hover:bg-[#4a3766]"}`}
         >
           Show me
         </button>
@@ -7307,6 +7314,7 @@ const MODE_KEYS: Array<{
   label: string;
   setup: string;
   result: string;
+  details?: string[];
   note?: string;
   Icon: LucideIcon;
   ink: string;
@@ -7329,7 +7337,7 @@ const MODE_KEYS: Array<{
     mode: "solve",
     label: "Solve mode",
     setup: "Connect machines and set target production rates.",
-    result: "Machine counts required to meet those targets.",
+    result: "Required machine counts.",
     Icon: Sigma,
     // Violet, not the cyan it had: cyan and pool's blue read as one colour.
     ink: "text-[#c78bff]",
@@ -7340,8 +7348,9 @@ const MODE_KEYS: Array<{
     mode: "pool",
     label: "Pool mode",
     setup: "Select recipes and set target production rates.",
-    result: "Machine counts using shared resource pools. No wires required; inputs with no producer are imported automatically.",
-    note: "Use this mode for simple production planning, similar to traditional GTNH planners.",
+    result: "Required machine counts.",
+    details: ["Resources are shared without wires.", "Inputs with no producer are imported automatically."],
+    note: "For simple production calculations, as in traditional GTNH planners.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
     dim: "text-[#5273b8]",
@@ -7451,18 +7460,25 @@ const ModeKeys = memo(function ModeKeys() {
         dragX === undefined ? "" : "cursor-grabbing",
       ].join(" ")}
     >
-      {MODE_KEYS.map(({ mode: key, label, setup, result, note, Icon, ink, dim }, at) => (
+      {MODE_KEYS.map(({ mode: key, label, setup, result, details, note, Icon, ink, dim }, at) => (
         <MinecraftTooltip
           key={key}
           content={
-            <div className="w-[300px] max-w-[calc(100vw-44px)] space-y-2.5 text-sm leading-5 text-fg-subtle">
-              <div className={`font-semibold ${ink}`}>{label}</div>
+            <div className="w-[340px] max-w-[calc(100vw-44px)] space-y-3 text-sm leading-5 text-fg-subtle">
+              <div className={`text-base font-semibold leading-6 ${ink}`}>{label}</div>
               <p>
-                <strong className="font-semibold text-fg">Setup:</strong> {setup}
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-muted">Setup</span>
+                {setup}
               </p>
               <p>
-                <strong className="font-semibold text-fg">Calculates:</strong> {result}
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-muted">Calculates</span>
+                {result}
               </p>
+              {details && (
+                <ul className="list-disc space-y-1 pl-4 marker:text-fg-muted">
+                  {details.map((detail) => <li key={detail}>{detail}</li>)}
+                </ul>
+              )}
               {note && <p className="border-t border-line pt-2.5 text-fg-muted">{note}</p>}
             </div>
           }
@@ -7473,7 +7489,7 @@ const ModeKeys = memo(function ModeKeys() {
             aria-checked={mode === key}
             onClick={() => pick(key)}
             aria-label={label}
-            aria-description={`${setup} Calculates ${result.charAt(0).toLowerCase()}${result.slice(1)}${note ? ` ${note}` : ""}`}
+            aria-description={`${setup} Calculates ${result.charAt(0).toLowerCase()}${result.slice(1)}${details ? ` ${details.join(" ")}` : ""}${note ? ` ${note}` : ""}`}
             className={[
               "flex h-full items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-colors duration-200",
               TOOL_FACE_OFF,

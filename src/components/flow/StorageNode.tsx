@@ -285,7 +285,10 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   // buffer now). They stay on the board untouched - switching modes must
   // never delete anything - and read greyed and see-through while inert.
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  const inertInPool = poolMode && (role === "source" || role === "idle" || role === "buffer");
+  // Only a PRODUCT drawer is live in pool mode (Jack, 2026-09-06): the pool
+  // banks every surplus by itself, so byproduct and trash drawers change
+  // nothing a player can see on the board, and go grey with the sources.
+  const inertInPool = poolMode && role !== "product";
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);
   // Lit when a hovered port/label/drawer pulls this buffer into its flow scope.
   const isFlowScopeLit = useFactoryStore((state) =>
@@ -1052,6 +1055,10 @@ function DrainModeSwap({
   kind: FactoryStorage["kind"];
 }) {
   const setStorageDrainMode = useFactoryStore((state) => state.setStorageDrainMode);
+  // POOL MODE has one drawer kind, the product: byproduct and trash drawers
+  // are inert there (the pool banks every surplus by itself), so there is
+  // nothing to cycle to and the control is not shown.
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   // Always the cycle arrows: the button is the CONTROL, and the tile's word
   // and silhouette already say which state it is in.
   // POWER cannot be trashed - there is no bin for electricity - so its
@@ -1064,6 +1071,9 @@ function DrainModeSwap({
           ? "product"
           : "trash"
         : "product";
+  if (poolMode) {
+    return null;
+  }
 
   return (
     <button

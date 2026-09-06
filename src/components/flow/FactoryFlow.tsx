@@ -1718,6 +1718,8 @@ let publishedSolidCardIds = new Set<string>();
  * exists). Module state for the same reason as `activeDropTargets`.
  */
 let voidDropWillSpawn = false;
+/** Why a void release does nothing, for the ghost's reason card. */
+let voidDropReason = "Drawer already exists";
 
 /**
  * The exact drawer a void release would spawn, for the ghost to render with
@@ -4217,6 +4219,25 @@ export function FactoryFlow() {
         spawnSide,
         spawnHandleId,
       );
+      voidDropReason = "Drawer already exists";
+      // POOL MODE: no sources (the pool feeds every input), and ONE product
+      // drawer per resource - a second would only be the same ask twice.
+      if (project.poolMode) {
+        if (spawnSide === "input") {
+          voidDropWillSpawn = false;
+          voidDropReason = "Pool mode feeds inputs by itself";
+        } else if (
+          (project.storages ?? []).some(
+            (storage) =>
+              storage.kind === dragged.kind &&
+              storage.resourceId === dragged.id &&
+              getStorageRoles(project).get(storage.id) === "product",
+          )
+        ) {
+          voidDropWillSpawn = false;
+          voidDropReason = "You already have a product drawer for this";
+        }
+      }
       voidDropGhostStorage = {
         id: "__void-drop-ghost__",
         kind: dragged.kind,
@@ -10357,7 +10378,7 @@ function VoidDropGhost() {
             className="flex h-full w-full items-center justify-center rounded-[4px] border-2 border-dashed border-[#ef4444] p-1.5 text-center text-[11px] font-bold leading-tight text-[#ff9d9d]"
             style={{ background: "#0d1117" }}
           >
-            Drawer already exists
+            {voidDropReason}
           </div>
         )}
       </div>

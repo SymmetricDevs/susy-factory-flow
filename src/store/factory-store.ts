@@ -82,6 +82,7 @@ import type {
   ThroughputResult,
 } from "@/lib/model/types";
 import { nearestFreeSpot, type PlacementRect } from "@/components/flow/board-placement";
+import { getStorageRoles } from "@/lib/model/storage-role";
 import { collectPocketMembers, expandPocketSelection } from "@/lib/model/pocket-connections";
 import { paperForBoardId, pickBoardPaper } from "@/lib/model/board-paper";
 import type { BoardCamera } from "@/lib/designs/design-camera";
@@ -1875,6 +1876,20 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       if (state.project.poolMode && side === "input") {
         return state;
       }
+      // ...and one product drawer per resource: a drop that would make a
+      // second one makes nothing (the ghost said so before the release).
+      if (state.project.poolMode && side === "output") {
+        const roles = getStorageRoles(state.project);
+        const duplicate = (state.project.storages ?? []).some(
+          (storage) =>
+            storage.kind === resource.kind &&
+            storage.resourceId === resource.id &&
+            roles.get(storage.id) === "product",
+        );
+        if (duplicate) {
+          return state;
+        }
+      }
       const nodeIds = Array.isArray(nodeId) ? nodeId : [nodeId];
       // Whatever came out of the slot is what the buffer holds. A filled cell
       // makes a drawer of cells, counted in cells; it used to be rewritten into
@@ -2006,10 +2021,29 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   setStorageTarget: (storageId, targetPerSecond) => {
     set((state) => {
+      // Duplicate PRODUCT drawers of one resource (a board built in build
+      // mode, or two placed before pool mode refused a second) carry ONE
+      // ask: typing on any of them writes all of them, so the solve never
+      // reads two different amounts for the same thing.
+      const typed = (state.project.storages ?? []).find((storage) => storage.id === storageId);
+      const roles = getStorageRoles(state.project);
+      const twins = new Set(
+        typed
+          ? (state.project.storages ?? [])
+              .filter(
+                (storage) =>
+                  storage.kind === typed.kind &&
+                  storage.resourceId === typed.resourceId &&
+                  roles.get(storage.id) === "product",
+              )
+              .map((storage) => storage.id)
+          : [],
+      );
+      twins.add(storageId);
       const project = touchProject({
         ...state.project,
         storages: (state.project.storages ?? []).map((storage) =>
-          storage.id === storageId ? { ...storage, targetPerSecond } : storage,
+          twins.has(storage.id) ? { ...storage, targetPerSecond } : storage,
         ),
       });
 
@@ -2053,6 +2087,24 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   addPoolStorage: (resource, side) => {
     set((state) => {
+      // ONE product drawer per resource in pool mode: a second is the same
+      // ask twice. Asking again goes to the one that exists.
+      const roles = getStorageRoles(state.project);
+      const existing = (state.project.storages ?? []).find(
+        (storage) =>
+          storage.kind === resource.kind &&
+          storage.resourceId === resource.id &&
+          roles.get(storage.id) === "product",
+      );
+      if (existing) {
+        return {
+          boardFocusRequest: {
+            mode: "centre",
+            nodeIds: [existing.id],
+            token: (state.boardFocusRequest?.token ?? 0) + 1,
+          },
+        };
+      }
       const index = (state.project.storages ?? []).length;
       // Same magnet a recipe add obeys: never on top of anything.
       const position = snapPositionToGrid(

@@ -8,7 +8,8 @@ multiblock handlers, in Build, Solve, and Pool.
 ## 1. What we are trying to achieve
 
 A tooltip should identify the thing under the pointer, explain its current
-reading, and state a requirement when one prevents progress. It should be
+reading, state a requirement when one prevents progress, and show the relevant
+gestures in a compact action footer. It should be
 short enough to read without interrupting work on the board.
 
 Use literal technical language. Prefer resource names, rates, counts, and
@@ -30,6 +31,8 @@ wording and relevant fields by mode.
 - The bottom notice must use the current mode's name and color.
 - Required setup must be phrased as a requirement: “You must …”.
 - Restore the existing “Show me” button; do not expand it to “Show products”.
+- Make available actions discoverable with small mouse icons and key labels.
+- Keep action hints brief and specific to the hovered control and active mode.
 
 ### Proposed, not yet agreed
 
@@ -117,6 +120,10 @@ or unit to meet a word count. If a tooltip routinely needs more, move the
 extra explanation to an appropriate details surface rather than shrinking
 the font.
 
+The action footer has its own small budget: normally two to four compact
+entries, without explanatory sentences. Count equivalent mouse and keyboard
+gestures as one action. Do not add filler to reach a minimum number of entries.
+
 ### Short wording candidates
 
 | Current style | Proposed style |
@@ -131,6 +138,9 @@ the font.
 
 These replacements are conditional: “unconnected” is only correct when
 the connection is absent, not when a connected destination has stopped.
+
+“You must” belongs in the requirement text. Action hints name the gesture and
+result: “Left click / R · Recipes”, not “You must left click to see recipes”.
 
 ## 5. Visual structure
 
@@ -152,6 +162,10 @@ blue heading does not mean a resource is adequately supplied.
 For comparisons, prefer aligned label/value rows. For two independent rules,
 use two short bullets. Avoid inline bold labels followed by long paragraphs.
 Avoid italics for rates, requirements, or anything the player needs to scan.
+
+Put action hints last, below one subtle divider. Use small neutral mouse
+icons and keycaps; reserve color for meaningful mode/status information.
+The hints describe controls on the card, not clickable buttons in the tooltip.
 
 Typical width should be around 300–360px, clamped to the viewport. Expand only
 when a real field needs space. A multiblock is not automatically entitled to
@@ -519,12 +533,19 @@ type RecipeTooltipView = {
   rows: Array<{ label: string; value: string }>;
   reason?: string;
   requirement?: string;
+  actions: Array<{
+    gesture: string;
+    key?: string;
+    label: string;
+  }>;
 };
 ```
 
 This is a proposal, not an instruction to add a generalized UI framework.
 Use existing status/tone types rather than loose strings in actual code.
 Keep resource quantities structured until the final unit formatter.
+Use a small typed gesture set for actual action rendering. The example's
+strings describe the concept; do not build a free-form shortcut parser.
 
 Separate three responsibilities:
 
@@ -542,22 +563,151 @@ resource matching, or balance calculations to make a proposed sentence true.
 If a desired field is not available, record that gap and omit it until its
 meaning and source are established.
 
-## 12. Interaction and accessibility
+## 12. Action hints and interaction
 
-Existing tooltip panels are pointer-inert. Do not insert buttons into them
-without designing a different interaction. Keep actions on their owning
-controls. Plain instructions must agree with actual click/right-click/drag
-behavior in the active mode.
+### The minimum useful action footer
+
+Apply the simplest useful rule: show the gesture and its result, once. A
+tooltip should reveal hidden interactions without becoming an instruction
+manual. For a normal resource row, the proposed footer is:
+
+```text
+[left mouse]  Recipes  [R]    [right mouse]  Uses  [U]
+[left drag]   Connect         [left drag → empty space]  Drawer
+```
+
+Bracketed mouse descriptions above stand for small drawn icons, not literal
+UI text. Use a mouse outline with the relevant button highlighted; combine
+it with a short arrow for dragging. Key shortcuts use compact keycaps.
+Use neutral theme colors and the same icon weight as the rest of the UI.
+No emoji, animation, colored instruction tiles, or large legend.
+
+If an icon is not immediately clear at the actual rendered size, keep the
+short text label instead. The plain-text equivalent is:
+
+```text
+Left click / R · Recipes      Right click / U · Uses
+Drag · Connect               Drag to empty space · Drawer
+```
+
+This is an alternative presentation of the same actions, not a second block
+to put under the icon version. Icons should reduce text, not add decoding work.
+
+### Verified gesture matrix for ordinary resource rows
+
+The mapping below was checked against `usePortRowBrowse` in `RecipeNode.tsx`,
+`port-browse.ts`, the R/U listener and connection handling in `FactoryFlow.tsx`,
+and `addStorageForConnection` in `factory-store.ts`.
+
+| Hovered surface | Build | Solve | Pool |
+| --- | --- | --- | --- |
+| Input or output: left click / R | Recipes producing this resource | Same | Same |
+| Input or output: right click / U | Recipes consuming this resource | Same | Same |
+| Input or output: left drag to compatible port | Connect | Connect | Omit: manual wiring is disabled |
+| Input: left drag to empty space | Create connected drawer | Create connected drawer | Omit: no drawer is created |
+| Output: left drag to empty space | Create connected drawer | Create connected drawer | Create product drawer, when one does not already exist |
+
+“Recipes” always means recipes producing the hovered resource; “Uses” means
+recipes consuming it. These labels do not reverse on an input versus output.
+R and U act on the resource under the pointer, not a global selection.
+
+A drag's destination determines its result. Do not advertise “Drag · Drawer”
+without the empty-space qualifier. A compatible port/card drop connects in
+Build/Solve; an arbitrary drop is not a guaranteed drawer operation.
+
+In Pool, an existing product drawer for the resource prevents a duplicate
+from this gesture. Omit the creation hint in that case. If a disabled action
+needs explaining, use one brief reason in the existing drag feedback; do not
+fill the hover with a list of things the user cannot do.
+
+### Three concrete footer examples
+
+Append these to the relevant resource examples in section 7. They are not
+additional body paragraphs or a reason to repeat the rates.
+
+**Chemical Reactor input, Build or Solve**
+
+```text
+Left click / R · Recipes      Right click / U · Uses
+Drag · Connect               Drag to empty space · Drawer
+```
+
+**Chemical Reactor imported input, Pool**
+
+```text
+Left click / R · Recipes      Right click / U · Uses
+```
+
+**Chemical Reactor output, Pool, no existing product drawer**
+
+```text
+Left click / R · Recipes      Right click / U · Uses
+Drag to empty space · Product drawer
+```
+
+These footer differences apply to ordinary multiblock resource rows too.
+Machine-specific chemistry does not need a different gesture legend.
+
+### Other controls: advertise only their own actions
+
+| Surface | Candidate hint | Condition |
+| --- | --- | --- |
+| Calculated machine count | Left click · Pin count | Solve/Pool, not pinned |
+| Pinned machine count | Left click · Edit pin | Solve/Pool, pinned |
+| Pin editor | Clear · Unpin | While editing; this is not a keyboard shortcut |
+| Machine selector | Left click · Choose machine | Only on the actual picker trigger |
+| Configuration selector | Left click · Change setting | Only when enabled and supported |
+| Static machine summary | No action footer | No direct action on that hover target |
+| Status text | No generic action footer | Do not invent navigation or repair actions |
+
+The count interactions are already present. Verify each remaining control's
+actual handler before using the candidate label. A name, picture, or summary
+is not automatically the machine picker. Do not copy “Choose machine” to
+every machine-related hover just because a dropdown exists elsewhere.
+
+Do not label every plus/minus button “Click to increase/decrease” if the
+visible control already says that clearly. The high-value hints are hidden
+gestures, alternate mouse buttons, shortcuts, and destination-dependent drags.
+Keep the common Recipes/Uses hints stable on actionable resource rows; do
+not hide them merely because an experienced user may already know them.
+
+Do not add adaptive “seen once” suppression or a preference switch initially.
+Compare the first real examples, then remove hints that add no information.
+
+### Layout and behavior
+
+- One final footer, one divider, normally at most two rows on desktop.
+- Group equivalent gestures: Recipes gets one mouse icon and one R keycap.
+- Keep action words to one or two words where practical.
+- Keep the destination qualifier for drags, even if that entry must wrap.
+- Use readable secondary text, approximately 12–13px, rather than tiny print.
+- Wrap on narrow viewports; do not truncate a gesture or hide a shortcut.
+- Do not change the tooltip's border, background, or heading to advertise actions.
+- Do not add the action hints to the body as full sentences as well.
+
+Existing tooltip panels are pointer-inert. Keep them that way in this pass:
+the footer is a legend for the hovered surface, not a toolbar to click.
+The action hint data must use the same mode/capability conditions as the real
+interaction. Do not introduce another interpretation of what a drag can do.
+Where those conditions are not available cheaply, identify the data gap and
+resolve it without a new whole-board scan on each mouse movement.
+
+### Touch, keyboard, and accessible descriptions
+
+Mouse icons need accessible text such as “Left click: Recipes; shortcut R”.
+When equivalent text is already included, mark the icon decorative to avoid
+duplicate announcements. Do not encode the mouse button only by color.
 
 Keep a concise accessible description on controls whose native title is
-replaced by rich content. Do not encode essential meaning in color alone.
-Mode names and state labels must remain readable as text.
+replaced by rich content. Do not imply R/U work on a keyboard-focused control
+until that is implemented and verified; the current resource shortcuts use
+the pointer's location.
 
-Current hover behavior suppresses touch tooltips. How touch and keyboard
-users request the same details remains a design question. Do not overload
-long-press, which already has browse/context-menu behavior, in this pass.
-Do not claim the new text is universally accessible until those paths are
-verified.
+Touch resource rows currently use a browse menu on tap or held press, with
+drag handling separate. Do not advertise a desktop right click on touch.
+Current hover suppression means a tooltip footer alone does not solve touch
+discoverability. Keep the existing gestures; a persistent touch/keyboard
+details surface remains a separate design decision.
 
 ## 13. Review and test matrix
 
@@ -590,6 +740,11 @@ machine mechanics.
 - Preserve item/fluid units and selected concrete resource identity.
 - Curated effective stats must win where the calculation already uses them.
 - Mode changes must update tooltip data and notice color without a reload.
+- Left click/R and right click/U must map to producers and consumers on both sides.
+- Pool inputs must not advertise drawer creation or manual wiring.
+- Pool outputs must omit drawer creation when a product drawer already exists.
+- Drag hints must distinguish compatible targets from empty space.
+- Pinned and unpinned count controls must advertise the correct action.
 
 ### Visual checks
 
@@ -600,6 +755,9 @@ machine mechanics.
 - Bottom/right-edge placement remains in the viewport.
 - The panel uses the same gray and bevel as the canvas controls.
 - No overlapping native title and rich tooltip.
+- Action icons are recognizable, shortcuts legible, and drag qualifiers visible.
+- A static hover does not look clickable just because it has the shared panel style.
+- The action footer stays compact and wraps cleanly at narrow widths.
 - Ordinary hover does not rerender unrelated board geometry or reroute wires.
 
 Run the repository's typecheck and full Vitest suite for implementation
@@ -610,7 +768,8 @@ pin arbitrary CSS strings. Use screenshots for typography and panel layout.
 
 1. Finish the mode tooltip and no-target notice pass.
 2. Review these example layouts and choose the amount of numeric detail.
-3. Implement one Chemical Reactor input/output/state set across all modes.
+3. Implement one Chemical Reactor input/output/state set and its action footers
+   across all modes.
 4. Review real screenshots for normal, limited, and imported inputs.
 5. Add machine count and machine-header tooltips with effective stats.
 6. Apply the shared template to a compatible multiblock handler.
@@ -632,7 +791,10 @@ Do not use this document as a reason to ship a broad unreviewed rewrite.
 | Generic overclock tutorial? | Omit from the normal machine hover | Put a short formula in a separate details surface |
 | Unique multiblock prose? | Only for an actual supported mechanic | A dedicated explanation for every machine |
 | Main status wording? | Literal state plus resource/cause | Preserve existing status names but rewrite detail text |
+| Action hints? | Mouse icons plus short labels and R/U keycaps | Short text gestures if icons are unclear |
+| Obvious button actions? | Omit redundant instructions; retain hidden gestures | Show every available action |
 
 The first concrete review should be a Chemical Reactor's input, output, and
-machine-count tooltips in Build, Solve, and Pool. That is enough to establish
+machine-count tooltips in Build, Solve, and Pool, including their available
+actions. That is enough to establish
 the language and visual pattern before extending it across the site.

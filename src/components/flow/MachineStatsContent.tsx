@@ -318,12 +318,14 @@ function StatRow({ label, children }: { label: string; children: React.ReactNode
  * already show: what this exact machine changes (speed, power discount,
  * parallels, structure tuning) and how the simulator overclocks it.
  */
-export function MachineStatsContent({ recipe, handler, node, result }: {
+export function MachineStatsContent({ recipe, handler, node, result, title }: {
   recipe: Recipe; handler: MachineHandler; node: FactoryNode; result?: NodeThroughputResult;
+  /** The machine's real name at the card's tier, when it differs from the family label. */
+  title?: string;
 }) {
   const mode = useFactoryStore((state) => tooltipMode(state.project));
   if (getCropsNhStats(recipe)) {
     return <CropSourceStatsContent recipe={recipe} handler={handler} node={node} />;
   }
-  return <RecipeTooltip view={buildMachineTooltip(recipe, handler, node, mode, result)} />;
+  return <RecipeTooltip view={buildMachineTooltip(recipe, handler, node, mode, result, title)} />;
 }

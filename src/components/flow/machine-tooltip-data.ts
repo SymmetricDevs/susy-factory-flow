@@ -9,7 +9,7 @@ import type { RecipeTooltipView, TooltipMode } from "./recipe-tooltip-data";
 
 const number = (value: number) => value > 0 && value < 0.001 ? "<0.001" : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 
-export function buildMachineTooltip(recipe: Recipe, handler: MachineHandler, node: FactoryNode, mode: TooltipMode, result?: NodeThroughputResult): RecipeTooltipView {
+export function buildMachineTooltip(recipe: Recipe, handler: MachineHandler, node: FactoryNode, mode: TooltipMode, result?: NodeThroughputResult, title?: string): RecipeTooltipView {
   const selectedNode = { ...node, machineHandlerId: handler.id };
   const effective = applyMachineHandlerToRecipe(recipe, selectedNode);
   const stats = getOverclockedRecipeStats(recipe, selectedNode);
@@ -26,7 +26,7 @@ export function buildMachineTooltip(recipe: Recipe, handler: MachineHandler, nod
     ...(parallels > 1 ? [{ label: "Parallel operations", value: number(parallels) }] : []),
   ];
   return {
-    title: handler.label, subtitle: isMultiblockRecipe(effective) ? "Multiblock" : "Machine", mode, rows,
+    title: title ?? handler.label, subtitle: isMultiblockRecipe(effective) ? "Multiblock" : "Machine", mode, rows,
     reason: power && power.state !== "ok" ? describePowerStall(power) : undefined,
   };
 }

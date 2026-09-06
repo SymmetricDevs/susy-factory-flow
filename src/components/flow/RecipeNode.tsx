@@ -912,6 +912,14 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const previewMachineIcon =
     machineIconAtTier(machineIconEntries.get(previewHandler.id), projectNode.overclockTier) ??
     recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType);
+  // The machine's REAL name (Jack, 2026-09-06): the tier variant's own item
+  // name - "Advanced Centrifuge II", not the family word "Centrifuge" - and
+  // the map's machine for a one-family map. Generators, crops and custom
+  // rate cards name themselves.
+  const machineDisplayName =
+    !powerInfo && !isCropFarmNode && !isCustomRateNode && previewMachineIcon?.displayName
+      ? previewMachineIcon.displayName
+      : previewHandler.label;
   const hasPowerPicture = Boolean(
     powerArt ||
       powerMachineIcon?.iconPath ||
@@ -1337,6 +1345,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     handler={selectedMachineHandler}
                     node={projectNode}
                     result={result}
+                    title={machineDisplayName}
                   />
                 )
               }
@@ -1405,7 +1414,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                         // with its icon. Repeating its name in the title only
                         // ever made the card wider.
                         "Custom Rate"
-                      : (cropTitle ?? previewHandler.label)}
+                      : (cropTitle ?? machineDisplayName)}
                 </span>
                 {isCropFarmNode ? (
                   <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />

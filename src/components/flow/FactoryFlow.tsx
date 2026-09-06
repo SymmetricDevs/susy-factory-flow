@@ -7293,7 +7293,7 @@ const MODE_KEYS: Array<{
   {
     mode: "build",
     label: "Build mode",
-    title: "Build: you set the machines, the counts and the wires. The board reports what flows.",
+    title: "Plan a setup the way you would build it in game: place machines, set their counts, wire them up. The board shows what flows.",
     Icon: Blocks,
     ink: "text-[#f5b642]",
     dim: "text-[#b48a3b]",
@@ -7302,7 +7302,7 @@ const MODE_KEYS: Array<{
   {
     mode: "solve",
     label: "Solve mode",
-    title: "Solve: you set the machines and the wires and type what you want. The board counts the machines.",
+    title: "Place recipes, wire them, and type how much of something you want. The board works out how many of each machine that takes, down to the decimal.",
     Icon: Sigma,
     // Violet, not the cyan it had: cyan and pool's blue read as one colour.
     ink: "text-[#c78bff]",
@@ -7312,7 +7312,7 @@ const MODE_KEYS: Array<{
   {
     mode: "pool",
     label: "Pool mode",
-    title: "Pool: you set the machines and type what you want. The board counts, wires and imports for you.",
+    title: "Like solve, without the wires: everything pushes to and pulls from one shared pool, the way earlier GTNH planners worked. Type what you want, the board does the rest.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
     dim: "text-[#5273b8]",

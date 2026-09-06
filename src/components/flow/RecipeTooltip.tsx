@@ -1,24 +1,42 @@
 import type { ReactNode } from "react";
 import type { RecipeTooltipView, TooltipAction } from "./recipe-tooltip-data";
 
+const GESTURE_NAME: Record<TooltipAction["gesture"], string> = {
+  left: "Left click",
+  right: "Right click",
+  wheel: "Mouse wheel",
+  drag: "Drag",
+};
+
+/**
+ * One mouse, drawn at text height so the button it lights is legible at
+ * the size the panel is actually read at. Left and right fill their half
+ * of the top; wheel fills the wheel; drag adds the arrow under it.
+ */
+function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
+  return (
+    <svg aria-hidden="true" width="20" height="24" viewBox="0 0 20 24" fill="none" className="shrink-0 text-fg-muted">
+      <rect x="3" y="1" width="14" height="16" rx="6" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M10 1v7.5M3 8.5h14" stroke="currentColor" strokeWidth="1.4" />
+      {gesture === "left" && <path d="M4.2 7.7V6.6c0-2.4 1.8-4.1 4.6-4.5V7.7Z" fill="currentColor" />}
+      {gesture === "right" && <path d="M15.8 7.7V6.6c0-2.4-1.8-4.1-4.6-4.5V7.7Z" fill="currentColor" />}
+      {gesture === "wheel" && <rect x="8.5" y="3" width="3" height="4.5" rx="1.5" fill="currentColor" />}
+      {gesture === "drag" && <path d="M3 21h14m-3-2.5 3 2.5-3 2.5" stroke="currentColor" strokeWidth="1.4" />}
+    </svg>
+  );
+}
+
 /** Read-only gesture legend; actions remain on the hovered control. */
 export function TooltipActions({ actions }: { actions: readonly TooltipAction[] }) {
   if (!actions.length) return null;
   return (
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 border-t border-line pt-2 text-xs leading-4 text-fg-subtle" data-tooltip-actions="">
-      {actions.map(action => (
-        <span key={`${action.gesture}-${action.label}`} className="flex items-center gap-1.5">
-          <span role="img" aria-label={action.gesture === "left" ? "Left click" : action.gesture === "right" ? "Right click" : action.gesture === "wheel" ? "Mouse wheel" : "Left drag"}>
-            <svg aria-hidden="true" width="16" height="18" viewBox="0 0 18 24" fill="none" className="shrink-0 text-fg-muted">
-              <rect x="3" y="1" width="12" height="17" rx="5" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M9 1v8M3 9h12" stroke="currentColor" strokeWidth="1.2" />
-              {action.gesture !== "wheel" && <path d={action.gesture === "right" ? "M10 3c2 0 3 1 3 4h-3Z" : "M8 3C6 3 5 4 5 7h3Z"} fill="currentColor" />}
-              {action.gesture === "wheel" && <path d="M9 3v4" stroke="currentColor" strokeWidth="2.5" />}
-              {action.gesture === "drag" && <path d="M3 21h12m-3-2 3 2-3 2" stroke="currentColor" strokeWidth="1.2" />}
-            </svg>
+    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-line pt-2.5 text-fg-subtle" data-tooltip-actions="">
+      {actions.map((action) => (
+        <span key={`${action.gesture}-${action.label}`} className="flex items-center gap-2">
+          <span role="img" aria-label={GESTURE_NAME[action.gesture]}>
+            <MouseIcon gesture={action.gesture} />
           </span>
           <span>{action.label}</span>
-          {action.key && <kbd className="border border-line-strong bg-surface-sunken px-1 text-[11px] leading-4">{action.key}</kbd>}
         </span>
       ))}
     </div>
@@ -27,20 +45,22 @@ export function TooltipActions({ actions }: { actions: readonly TooltipAction[] 
 
 export function RecipeTooltip({ view, children }: { view: RecipeTooltipView; children?: ReactNode }) {
   const modeColor = view.mode === "pool" ? "text-[#6f9cff]" : view.mode === "solve" ? "text-[#c78bff]" : "text-[#f5b642]";
+  // ONE body size (14/20) everywhere but the heading; the panel is as wide
+  // as its longest line and no wider, capped so a paragraph still wraps.
   return (
-    <div className="w-[340px] max-w-[calc(100vw-44px)] text-sm leading-5 text-fg-subtle">
+    <div className="w-max min-w-[200px] max-w-[300px] text-sm leading-5 text-fg-subtle">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 break-words text-base font-semibold leading-6 text-fg">{view.title}</div>
-        {view.mode && <span className={`shrink-0 text-xs capitalize ${modeColor}`}>{view.mode}</span>}
+        {view.mode && <span className={`shrink-0 capitalize ${modeColor}`}>{view.mode}</span>}
       </div>
-      {(view.subtitle || view.status) && <div className="mt-0.5 flex flex-wrap justify-between gap-2 text-xs text-fg-muted">
+      {(view.subtitle || view.status) && <div className="flex flex-wrap justify-between gap-x-3 text-fg-muted">
         <span>{view.subtitle}</span>
         {view.status && <span className={view.status.tone === "warning" ? "text-amber-300" : view.status.tone === "good" ? "text-green-300" : "text-fg-muted"}>{view.status.label}</span>}
       </div>}
-      {view.rows.length > 0 && <dl className="mt-3 space-y-1">
-        {view.rows.map(row => <div key={row.label} className="flex items-baseline justify-between gap-4">
+      {view.rows.length > 0 && <dl className="mt-2 space-y-0.5">
+        {view.rows.map(row => <div key={row.label} className="flex items-baseline justify-between gap-5">
           <dt className="min-w-0 text-fg-muted">{row.label}</dt>
-          <dd className="text-right font-medium tabular-nums text-fg">{row.value}</dd>
+          <dd className="whitespace-nowrap text-right font-medium tabular-nums text-fg">{row.value}</dd>
         </div>)}
       </dl>}
       {view.reason && <p className="mt-2">{view.reason}</p>}

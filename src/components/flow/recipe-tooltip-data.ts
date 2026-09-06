@@ -11,7 +11,6 @@ export type TooltipTone = "neutral" | "good" | "warning";
 export interface TooltipAction {
   gesture: "left" | "right" | "drag" | "wheel";
   label: string;
-  key?: "R" | "U";
 }
 export interface RecipeTooltipView {
   title: string;
@@ -29,8 +28,8 @@ export function tooltipMode(project: Pick<FactoryProject, "poolMode" | "solveMod
 }
 
 const BROWSE_ACTIONS: readonly TooltipAction[] = [
-  { gesture: "left", label: "Recipes", key: "R" },
-  { gesture: "right", label: "Uses", key: "U" },
+  { gesture: "left", label: "Recipes" },
+  { gesture: "right", label: "Uses" },
 ];
 const contextCache = new WeakMap<FactoryProject, {
   products: Set<string>;
@@ -69,13 +68,10 @@ export function resourceTooltipActions(project: FactoryProject, port: RailPort):
   }
   if (project.poolMode) {
     return port.side === "output" && !context(project).products.has(`${port.kind}:${port.resourceId}`)
-      ? [...BROWSE_ACTIONS, { gesture: "drag", label: "To empty space: product drawer" }]
+      ? [...BROWSE_ACTIONS, { gesture: "drag", label: "Drag out for a product drawer" }]
       : BROWSE_ACTIONS;
   }
-  return [...BROWSE_ACTIONS,
-    { gesture: "drag", label: "To compatible port: connect" },
-    { gesture: "drag", label: "To empty space: drawer" },
-  ];
+  return [...BROWSE_ACTIONS, { gesture: "drag", label: "Drag to connect" }];
 }
 
 export function buildStatusTooltip(verdict: NodeVerdict, mode: TooltipMode): RecipeTooltipView {

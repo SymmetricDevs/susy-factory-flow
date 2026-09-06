@@ -35,7 +35,7 @@ describe("mode-aware resource tooltips", () => {
     expect(view.subtitle).toBe("Imported input");
     expect(view.rows[0]?.label).toBe("Imported");
     expect(view.requirement).toBeUndefined();
-    expect(view.actions?.map(a => a.key)).toEqual(["R", "U"]);
+    expect(view.actions?.map(a => a.label)).toEqual(["Recipes", "Uses"]);
     expect(JSON.stringify(view)).not.toMatch(/source drawer|pool:|pool-edge:/);
   });
   it("does not label locally produced pool resources as automatic imports", () => {
@@ -52,7 +52,7 @@ describe("mode-aware resource tooltips", () => {
     const { result, verdict } = calculated(p);
     const view = buildPortTooltip(p, result, "n", { ...port(), connected: false }, verdict);
     expect(view.requirement).toBe("You must connect this input.");
-    expect(view.actions?.map(a => a.label)).toContain("To empty space: drawer");
+    expect(view.actions?.map(a => a.label)).toContain("Drag to connect");
   });
   it("omits Pool product drawer creation when the resource already has one", () => {
     const p = pool();
@@ -118,7 +118,7 @@ describe("machine tooltip counts and effective statistics", () => {
     const view = buildMachineTooltip(multi, handler, { ...node, machineHandlerId: handler.id }, "build");
     const power = getNodePowerReport(multi, { ...node, machineHandlerId: handler.id });
     expect(view.subtitle).toBe("Multiblock");
-    expect(view.rows.find(r => r.label === "Draw per active machine")?.value).toContain(String(power.drawEuT));
+    expect(view.rows.find(r => r.label === "Draw per machine")?.value).toContain(String(power.drawEuT));
     expect(JSON.stringify(view)).not.toMatch(/Exact|Estimated|9999/);
   });
 });

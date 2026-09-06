@@ -21,8 +21,8 @@ export function buildMachineTooltip(recipe: Recipe, handler: MachineHandler, nod
     { label: mode === "build" ? "Installed machines" : node.solvePin ? "Pinned machines" : "Required machines", value: count === undefined ? "Unavailable" : number(count) },
     ...(power ? [{ label: "Configured tier", value: stats.tier }] : []),
     { label: "Time per operation", value: stats.durationTicks > 0 ? `${number(stats.durationTicks / 20)} s` : "Instant" },
-    ...(steam ? [{ label: "Steam per active machine", value: `${formatCompact(steam.drawSteamPerTick * 20)} L/s` }]
-      : power ? [{ label: "Draw per active machine", value: `${formatCompact(power.drawEuT)} EU/t` }] : []),
+    ...(steam ? [{ label: "Steam per machine", value: `${formatCompact(steam.drawSteamPerTick * 20)} L/s` }]
+      : power ? [{ label: "Draw per machine", value: `${formatCompact(power.drawEuT)} EU/t` }] : []),
     ...(parallels > 1 ? [{ label: "Parallel operations", value: number(parallels) }] : []),
   ];
   return {

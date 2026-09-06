@@ -161,6 +161,13 @@ export interface RuntimeCalculation {
 export interface MachineProfile {
   machineType: string;
   minimumTier: MachineTier | string;
+  /**
+   * The highest real machine in a singleblock family (a ZPM Elite Canning
+   * Machine II is the last Canning Machine there is). A tier above it is
+   * not a block, so the tier chip stops here and the run tier clamps to it.
+   * Absent on multiblocks, whose tier is their hatches.
+   */
+  maximumTier?: MachineTier | string;
   durationTicks?: number;
   eut?: number;
   maxParallel?: number;
@@ -229,6 +236,8 @@ export interface Recipe {
   category?: string;
   machineType: string;
   minimumTier: MachineTier | string;
+  /** The family's highest real machine, carried from the selected handler; see MachineProfile. */
+  maximumTier?: MachineTier | string;
   durationTicks: number;
   eut: number;
   inputs: RecipeInput[];

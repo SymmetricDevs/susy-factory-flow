@@ -328,6 +328,11 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
     if (variants.length > 1) {
       template.tierIcons = variants;
     }
+    // The HIGHEST real machine in a singleblock family. A tier above it is
+    // not a block that exists, so the card's tier chip stops there.
+    if (template.kind === "single" && variants.length > 0) {
+      template.maximumTier = variants[variants.length - 1].tier;
+    }
   }
 
   const primaryKey = normalizeLabel(machineType);
@@ -1027,6 +1032,7 @@ export function instantiateRecipeMachineHandlers(templates, recipe) {
       kind: template.kind,
       machineType: template.label,
       minimumTier: VOLTAGE_TIER_NAMES[tierIndex] ?? recipe.minimumTier,
+      ...(template.maximumTier ? { maximumTier: template.maximumTier } : {}),
     };
 
     if (Number.isFinite(template.durationMultiplier) && template.durationMultiplier !== 1) {

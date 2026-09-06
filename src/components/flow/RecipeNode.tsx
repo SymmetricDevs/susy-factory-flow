@@ -65,6 +65,7 @@ import {
   getSelectedMachineHandler,
   getCropsNhStats,
   getVoltageTierIndex,
+  getRecipeMaximumVoltageTier,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
   CROP_GAIN_STAT_CONTROL_ID,
@@ -712,6 +713,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       tierControl.current,
       tierControl.allowBelowMinimum ? undefined : tierControl.minimum,
       direction,
+      tierControl.maximum,
     );
     if (nextTier !== tierControl.current) {
       // The board's ONE sound for a voltage tier: the power unit dial's
@@ -3748,12 +3750,17 @@ function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
   // is what says an underpowered build won't start, not a silent clamp. A
   // singleblock is floored: a lower machine does not exist to be built.
   const allowBelowMinimum = isMultiblockRecipe(recipe);
+  // ...and CAPPED at the family's last real machine (Jack, 2026-09-06): a
+  // UV Canning Machine is not a block, so the chip cannot ask for one.
+  const maximum = allowBelowMinimum ? undefined : getRecipeMaximumVoltageTier(recipe);
   const resolved = resolveVoltageTier(node.overclockTier, minimum);
-  const current =
+  const floored =
     !allowBelowMinimum && getVoltageTierIndex(resolved) < getVoltageTierIndex(minimum)
       ? minimum
       : resolved;
-  return { minimum, current, allowBelowMinimum };
+  const current =
+    maximum && getVoltageTierIndex(floored) > getVoltageTierIndex(maximum) ? maximum : floored;
+  return { minimum, maximum, current, allowBelowMinimum };
 }
 
 function isTierDrivenOutputRecipe(recipe: Recipe) {
@@ -3761,13 +3768,16 @@ function isTierDrivenOutputRecipe(recipe: Recipe) {
   return normalizeSearch(recipeMap) === "tree growth simulator";
 }
 
-function getAdjacentTier(current: VoltageTier, floor: VoltageTier | undefined, direction: -1 | 1) {
+function getAdjacentTier(
+  current: VoltageTier,
+  floor: VoltageTier | undefined,
+  direction: -1 | 1,
+  ceiling?: VoltageTier,
+) {
   const currentIndex = getVoltageTierIndex(current);
   const floorIndex = floor ? getVoltageTierIndex(floor) : 0;
-  const nextIndex = Math.min(
-    GT_OVERCLOCK_TIERS.length - 1,
-    Math.max(floorIndex, currentIndex + direction),
-  );
+  const ceilingIndex = ceiling ? getVoltageTierIndex(ceiling) : GT_OVERCLOCK_TIERS.length - 1;
+  const nextIndex = Math.min(ceilingIndex, Math.max(floorIndex, currentIndex + direction));
   return GT_OVERCLOCK_TIERS[nextIndex]?.tier ?? current;
 }
 

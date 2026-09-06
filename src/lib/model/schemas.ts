@@ -147,6 +147,7 @@ export const runtimeCalculationSchema = z.object({
 export const machineProfileSchema = z.object({
   machineType: z.string().min(1),
   minimumTier: z.string().min(1),
+  maximumTier: z.string().min(1).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick").optional(),
   eut: z.number().min(0, "EU/t must be zero or positive").optional(),
   maxParallel: z.number().positive().optional(),
@@ -204,6 +205,7 @@ export const recipeSchema = z.object({
   category: z.string().min(1).optional(),
   machineType: z.string().min(1, "Machine type is required"),
   minimumTier: z.string().min(1, "Minimum tier is required"),
+  maximumTier: z.string().min(1).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick"),
   eut: z.number().min(0, "EU/t must be zero or positive"),
   inputs: z.array(recipeInputSchema),

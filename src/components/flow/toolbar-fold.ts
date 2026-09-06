@@ -21,18 +21,17 @@ import { useEffect, useState, type RefObject } from "react";
  * (280px). Each threshold is what the board needs to hold the row ABOVE it
  * once the previous fold has happened.
  */
-// Measured on the live board (2026-09-06) after the generator, custom rate
-// and crop farm spawners moved to the items column: the build row is the
-// undo pair, the rate keys and pool mode's product key (folded away while
-// that mode is off).
-const BUILD_ROW_WIDTH = 232;
-const BUILD_ROW_FOLDED_WIDTH = 124;
-// The three MODE keys (build, solve, pool) sit on a tray of their own where
-// the solve key and the rules key used to share one: one key more (32px
-// plus its 2px gap) and one more tray (12px of border and padding plus its
-// 4px gap), on both the unfolded and the folded row. Measured: 500.
-const PAINT_ROW_WIDTH = 500;
-const PAINT_ROW_FOLDED_WIDTH = 330;
+// Measured on the live board (2026-09-06) after the toolbar rework: the
+// build row is the undo pair, the rate keys and pool mode's product tray
+// (which slides away whole while that mode is off; 264 is with it out).
+const BUILD_ROW_WIDTH = 264;
+const BUILD_ROW_FOLDED_WIDTH = 132;
+// The right row: the mode switch's tray first, the paint tray, arrange,
+// the view tray (annotations and view options) and the bin last; mute and
+// the timelapse door left for Settings. Folded, everything but the paint
+// tray stays out (the trigger stands in for it).
+const PAINT_ROW_WIDTH = 432;
+const PAINT_ROW_FOLDED_WIDTH = 360;
 const SIDE_MARGINS = 24;
 const BREATH = 24;
 

@@ -130,10 +130,10 @@ export type BoardSoundKind =
   | "close" // a board window folds to its summary card
   | "adjust" // a setting on a card changed: machine count, drain pill, config
   | "sweep" // one sound for a bulk change (paste, arrange, import)
-  | "solveOn" // the board shifts into solve mode: a rising shimmer
+  | "solveOn" // the board shifts into solve mode: a relay engaging, short and dry
   | "solveOff" // and back to plan mode: the same shimmer, settling home
   | "buildOn" // back to build mode: a block set down, low and dry
-  | "poolOn" // the board pools its resources: a warm low swell with a bubble
+  | "poolOn" // the board pools its resources: a drop into still water
   | "poolOff" // (unused since the mode switch; kept for older callers)
   // The build timelapse's family (board-timelapse.ts): the same events as
   // place/connect/open, but SLID rather than set down - mostly brush, a
@@ -581,13 +581,13 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       blip(ctx, out, { from: 233, to: 311, duration: 0.28, peak: 0.2 });
       break;
     case "solveOn":
-      // Shifting INTO the other dimension: the pad swells and rises a
-      // fifth, two tiny sparkles drift up after it, and a high wash of air
-      // breathes over the top. Big change, quiet voice.
-      shimmerPad(ctx, out, { from: 262, to: 392, duration: 0.6, peak: 0.24 });
-      blip(ctx, out, { from: 1319, to: 1319, duration: 0.12, peak: 0.06, delay: 0.18 });
-      blip(ctx, out, { from: 1760, to: 1760, duration: 0.14, peak: 0.045, delay: 0.32 });
-      puff(ctx, out, { frequency: 3000, q: 0.6, duration: 0.35, peak: 0.06, delay: 0.05 });
+      // SOLVE: a relay engaging. A quick upward chirp with a click on it,
+      // then one clean tick a beat later - short and dry like the latch
+      // (build) and the plink (pool), so the three read as one family. The
+      // old swelling pad is gone: it was the only long sound of the three.
+      blip(ctx, out, { from: 1047, to: 1319, duration: 0.05, peak: 0.09 });
+      puff(ctx, out, { frequency: 2400, q: 2, duration: 0.04, peak: 0.1 });
+      blip(ctx, out, { from: 1568, to: 1568, duration: 0.06, peak: 0.06, delay: 0.09 });
       break;
     case "solveOff":
       // The same shimmer settling home: the pad glides back down the fifth

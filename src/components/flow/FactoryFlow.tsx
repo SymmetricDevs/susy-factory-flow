@@ -33,7 +33,6 @@ import {
   Ban,
   Box,
   Cable,
-  Clapperboard,
   Grid2x2,
   Ellipsis,
   Anchor,
@@ -51,13 +50,12 @@ import {
   MoveUpRight,
   Network,
   Paintbrush,
+  Pencil,
   Plus,
   Presentation,
   Redo2,
   Square,
   Trash2,
-  Volume2,
-  VolumeX,
   TriangleAlert,
   Type,
   Undo2,
@@ -6974,39 +6972,6 @@ function useFoldoutDismiss(
  * swatches keep their cyan ring alone: a selection mark there has to stand
  * against any hue, including this very grey.
  */
-/**
- * The corner mute: the same switch Settings' Sound section throws, one click
- * from the board. A slashed speaker means silent. Unmuting plays the little
- * settings tap so the answer is audible immediately; muting is, naturally,
- * its own confirmation.
- */
-function BoardMuteButton() {
-  const [muted, setMuted] = useState<boolean>(
-    () => typeof window !== "undefined" && !areBoardSoundsEnabled(),
-  );
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        const nextMuted = !muted;
-        setBoardSoundsEnabled(!nextMuted);
-        setMuted(nextMuted);
-        if (!nextMuted) {
-          playBoardSound("adjust");
-        }
-      }}
-      aria-pressed={muted}
-      className={[
-        "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-        muted ? TOOL_FACE_ON : TOOL_FACE_OFF,
-      ].join(" ")}
-      title={muted ? "Unmute sounds" : "Mute sounds"}
-      aria-label={muted ? "Unmute sounds" : "Mute sounds"}
-    >
-      {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-    </button>
-  );
-}
 
 const TOOL_FACE_ON = "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]";
 const TOOL_FACE_OFF =
@@ -7320,6 +7285,8 @@ const MODE_KEYS: Array<{
   title: string;
   Icon: LucideIcon;
   ink: string;
+  /** The pane of light that slides onto the engaged key: its colour, faint. */
+  glass: string;
 }> = [
   {
     mode: "build",
@@ -7327,6 +7294,7 @@ const MODE_KEYS: Array<{
     title: "Build: you set the machines, the counts and the wires. The board reports what flows.",
     Icon: Blocks,
     ink: "text-[#f5b642]",
+    glass: "rgba(245,182,66,0.16)",
   },
   {
     mode: "solve",
@@ -7334,6 +7302,7 @@ const MODE_KEYS: Array<{
     title: "Solve: you set the machines and the wires and type what you want. The board counts the machines.",
     Icon: Sigma,
     ink: "text-[#3fbdd3]",
+    glass: "rgba(63,189,211,0.16)",
   },
   {
     mode: "pool",
@@ -7341,44 +7310,123 @@ const MODE_KEYS: Array<{
     title: "Pool: you set the machines and type what you want. The board counts, wires and imports for you.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
+    glass: "rgba(111,156,255,0.18)",
   },
 ];
+
+/** One segment of the mode switch, in px: icon, word, and room to breathe. */
+const MODE_STEP = 96;
 
 const ModeKeys = memo(function ModeKeys() {
   const mode = useFactoryStore((state): BoardMode =>
     state.project.poolMode === true ? "pool" : state.project.solveMode === true ? "solve" : "build",
   );
   const setBoardMode = useFactoryStore((state) => state.setBoardMode);
+  const index = Math.max(0, MODE_KEYS.findIndex((entry) => entry.mode === mode));
+  const pick = useCallback(
+    (key: BoardMode) => {
+      const current = useFactoryStore.getState().project;
+      const now: BoardMode = current.poolMode ? "pool" : current.solveMode ? "solve" : "build";
+      if (key === now) {
+        return;
+      }
+      // Three separate things, three separate sounds: never a ladder that
+      // rises and falls with the direction of travel.
+      playBoardSound(key === "pool" ? "poolOn" : key === "solve" ? "solveOn" : "buildOn");
+      setBoardMode(key);
+    },
+    [setBoardMode],
+  );
+  // THREE JOINED KEYS with a pane of GLASS over the engaged one. The keys
+  // are the toolbar's own keys - same height, same face, same border,
+  // touching so they read as one control - each with its icon and its
+  // word. The glass is a lighter pane the width of one key that slides to
+  // the one you pick, and it follows the pointer while you drag it along
+  // the row; letting go drops it onto the nearest key and engages that
+  // mode. A plain click on a key still jumps the glass there.
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [dragX, setDragX] = useState<number | undefined>(undefined);
+  const xToIndex = (x: number) =>
+    Math.max(0, Math.min(MODE_KEYS.length - 1, Math.floor(x / MODE_STEP)));
+  const localX = (event: ReactPointerEvent<HTMLDivElement>) =>
+    event.clientX - (rowRef.current?.getBoundingClientRect().left ?? 0) - 2;
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !rowRef.current) {
+      return;
+    }
+    rowRef.current.setPointerCapture(event.pointerId);
+    setDragX(localX(event));
+  };
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragX !== undefined) {
+      setDragX(localX(event));
+    }
+  };
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragX === undefined) {
+      return;
+    }
+    const x = localX(event);
+    setDragX(undefined);
+    pick(MODE_KEYS[xToIndex(x)]!.mode);
+  };
+  const width = MODE_STEP * MODE_KEYS.length;
+  const glassLeft =
+    dragX === undefined
+      ? index * MODE_STEP
+      : Math.max(0, Math.min(width - MODE_STEP, dragX - MODE_STEP / 2));
+  const shown = dragX === undefined ? index : xToIndex(dragX);
   return (
-    <div className="flex items-center gap-0.5" role="radiogroup" aria-label="Board mode">
-      {MODE_KEYS.map(({ mode: key, label, title, Icon, ink }) => {
-        const on = mode === key;
-        return (
-          <button
-            key={key}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={() => {
-              if (on) {
-                return;
-              }
-              // Three separate things, three separate sounds: never a
-              // ladder that rises and falls with the direction of travel.
-              playBoardSound(key === "pool" ? "poolOn" : key === "solve" ? "solveOn" : "buildOn");
-              setBoardMode(key);
-            }}
-            className={[
-              "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-              on ? TOOL_FACE_ON : TOOL_FACE_OFF,
-            ].join(" ")}
-            title={title}
-            aria-label={label}
-          >
-            <Icon className={on ? `h-4 w-4 ${ink}` : "h-4 w-4"} />
-          </button>
-        );
-      })}
+    <div
+      ref={rowRef}
+      role="radiogroup"
+      aria-label="Board mode"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => setDragX(undefined)}
+      className={[
+        "pointer-events-auto relative z-10 flex h-8 touch-none select-none border-2 border-[var(--mc-15)]",
+        dragX === undefined ? "" : "cursor-grabbing",
+      ].join(" ")}
+    >
+      {MODE_KEYS.map(({ mode: key, label, title, Icon, ink }, at) => (
+        <button
+          key={key}
+          type="button"
+          role="radio"
+          aria-checked={mode === key}
+          onClick={() => pick(key)}
+          title={title}
+          aria-label={label}
+          className={[
+            "flex h-full items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-opacity duration-200",
+            TOOL_FACE_OFF,
+            at > 0 ? "border-l-2 border-[var(--mc-15)]" : "",
+            // Each key in its own colour always, quietly; the engaged one in full.
+            ink,
+            shown === at ? "opacity-100" : "opacity-55 hover:opacity-90",
+          ].join(" ")}
+          style={{ width: MODE_STEP }}
+        >
+          <Icon className="h-4 w-4" />
+          {label.replace(" mode", "").toUpperCase()}
+        </button>
+      ))}
+      {/* The glass: a faint pane of the engaged mode's colour, a hair
+          brighter along its top edge, and nothing else. It slides. */}
+      <span
+        aria-hidden
+        className={[
+          "pointer-events-none absolute top-0 h-full shadow-[inset_0_2px_0_rgba(255,255,255,0.18)] ease-out",
+          dragX === undefined ? "transition-[transform,background-color] duration-200" : "",
+        ].join(" ")}
+        style={{
+          width: MODE_STEP,
+          transform: `translateX(${glassLeft}px)`,
+          backgroundColor: MODE_KEYS[shown]!.glass,
+        }}
+      />
     </div>
   );
 });
@@ -7459,29 +7507,31 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
         aria-hidden={!on}
         className={[
           "overflow-hidden transition-[width] duration-500 ease-out",
-          on ? "w-[36px]" : "pointer-events-none w-0",
+          on ? "w-[44px]" : "pointer-events-none w-0",
         ].join(" ")}
       >
         <div
           className={[
-            "flex w-[36px] items-center pl-0.5 transition-transform duration-500 ease-out",
-            on ? "translate-x-0" : "-translate-x-[36px]",
+            "flex w-[44px] items-center transition-transform duration-500 ease-out",
+            on ? "translate-x-0" : "-translate-x-[44px]",
           ].join(" ")}
         >
-          <button
-            type="button"
-            onClick={() => setPicking((was) => !was)}
-            aria-pressed={picking}
-            tabIndex={on ? 0 : -1}
-            className={[
-              "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
-              picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
-            ].join(" ")}
-            title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
-            aria-label="Add a product drawer"
-          >
-            <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
-          </button>
+          <ToolTray>
+            <button
+              type="button"
+              onClick={() => setPicking((was) => !was)}
+              aria-pressed={picking}
+              tabIndex={on ? 0 : -1}
+              className={[
+                "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
+                picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
+              ].join(" ")}
+              title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
+              aria-label="Add a product drawer"
+            >
+              <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
+            </button>
+            </ToolTray>
         </div>
       </div>
       {picking ? (
@@ -7809,9 +7859,7 @@ const SourceToolbar = memo(function SourceToolbar({
           of the items column (2026-09-06, the tray ran out of room for the
           mode keys; `SpawnKeys`). What is left is pool mode's product key,
           which slides out only while that mode is on. */}
-      <ToolTray>
-        <PoolSpawnKeys />
-      </ToolTray>
+      <PoolSpawnKeys />
       </ToolGroup>
     </div>
   );
@@ -8637,18 +8685,20 @@ function AddImageButton({ onPlaceImage }: { onPlaceImage: (file: File) => Promis
         onClick={() => inputRef.current?.click()}
         disabled={busy}
         className={[
-          "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-          TOOL_FACE_OFF,
+          "flex items-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-1 pr-2 text-left text-white hover:bg-[var(--mc-61)]",
           busy ? "cursor-wait opacity-70" : "",
         ].join(" ")}
         title="Add an image"
         aria-label="Add an image"
       >
-        {busy ? (
-          <LoaderCircle className="h-4 w-4 animate-spin" />
-        ) : (
-          <ImagePlus className="h-4 w-4" />
-        )}
+        <span className="flex h-7 w-7 items-center justify-center">
+          {busy ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+          ) : (
+            <ImagePlus className="h-4 w-4" />
+          )}
+        </span>
+        <span className="whitespace-nowrap font-mono text-[11px] font-semibold">Add an image</span>
       </button>
     </>
   );
@@ -8681,70 +8731,6 @@ function ThemeSwatch({ theme }: { theme: CanvasTheme }) {
   );
 }
 
-/**
- * The player's door to the build timelapse: one button in the corner beside
- * the view options, two hand-tuned shows behind it (board-timelapse.ts).
- * Each preset applies its whole look for the run and hands the player's own
- * settings back when it ends; the dev menu remains the workbench where the
- * dials live.
- */
-const BoardTimelapseMenu = memo(function BoardTimelapseMenu() {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useFoldoutDismiss(open, rootRef, close);
-  const canPlay = useFactoryStore(
-    (state) => state.project.nodes.length + (state.project.storages?.length ?? 0) >= 2,
-  );
-
-  return (
-    <div ref={rootRef} className="pointer-events-auto relative flex">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-expanded={open}
-        className={[
-          "relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-          open ? TOOL_FACE_ON : TOOL_FACE_OFF,
-        ].join(" ")}
-        title="Watch it build"
-        aria-label="Watch it build"
-      >
-        <Clapperboard className="h-4 w-4" />
-      </button>
-      {open ? (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-30 flex w-[250px] max-w-[calc(100vw-24px)] flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
-          {BOARD_TIMELAPSE_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              disabled={!canPlay}
-              onClick={() => {
-                setOpen(false);
-                // Let the fold-out leave before the board empties for the
-                // first beat.
-                requestAnimationFrame(() => runBoardTimelapsePreset(preset));
-              }}
-              className="border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 text-left hover:bg-[var(--mc-61)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[var(--mc-49)]"
-            >
-              <span className="block text-[12px] font-semibold leading-tight text-white">
-                {preset.name}
-              </span>
-              <span className="mt-0.5 block text-[11px] leading-tight text-[var(--mc-ink)]">
-                {preset.line}
-              </span>
-            </button>
-          ))}
-          <div className="px-1 py-0.5 text-[11px] leading-tight text-[var(--mc-ink)]">
-            {canPlay
-              ? "Press Esc or click the board to stop it."
-              : "Needs at least two cards on the board."}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-});
 
 // Memoized because FactoryFlow re-renders every frame of a node drag; with
 // stable callbacks this menu renders only when the view or its open state
@@ -8764,6 +8750,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
   dockToggleWarning,
   open,
   onOpenChange,
+  arrange,
 }: {
   view: BoardView;
   onChange: (patch: Partial<BoardView>) => void;
@@ -8772,6 +8759,15 @@ const BoardViewMenu = memo(function BoardViewMenu({
   /** Held by the paint toolbar, which lifts the row's z while the sheet is out. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Auto-arrange, living in this sheet since 2026-09-06 (it was a key and a
+   * sheet of its own): the one setting, and the button that runs it.
+   */
+  arrange: {
+    tidyBoardInteriors: boolean;
+    onToggleTidyBoards: () => void;
+    onArrange: (options: { tidyBoardInteriors: boolean }) => void;
+  };
 }) {
   const {
     canvasPattern,
@@ -8958,6 +8954,53 @@ const BoardViewMenu = memo(function BoardViewMenu({
               </span>
             </button>
           ))}
+          {/* ARRANGE, at the foot of the sheet: the setting reads like the
+              toggles above it, and the button that runs it sits right under.
+              The arrange respects boards you drew by default; the setting is
+              where you say otherwise. */}
+          <div className="mt-1 border-t-2 border-[var(--mc-15)] pt-1">
+            <button
+              type="button"
+              onClick={arrange.onToggleTidyBoards}
+              aria-pressed={arrange.tidyBoardInteriors}
+              className={[
+                "flex w-full items-start gap-2 border-2 p-2 text-left",
+                arrange.tidyBoardInteriors
+                  ? `border-[var(--mc-good)] ${TOOL_FACE_ON}`
+                  : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
+              ].join(" ")}
+            >
+              <Network className="mt-[1px] h-4 w-4 shrink-0" />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-[12px] font-black uppercase">Rearrange inside boards</span>
+                  <span
+                    className={[
+                      "font-mono text-[10px] font-black tracking-[1px]",
+                      arrange.tidyBoardInteriors ? "text-[var(--mc-good)]" : "text-[var(--mc-ink-muted)]",
+                    ].join(" ")}
+                  >
+                    {arrange.tidyBoardInteriors ? "ON" : "OFF"}
+                  </span>
+                </span>
+                <span className="font-mono text-[11px] leading-snug opacity-80">
+                  On, every open board is laid out again too. Off, boards you drew are only placed.
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenChange(false);
+                arrange.onArrange({ tidyBoardInteriors: arrange.tidyBoardInteriors });
+              }}
+              className="mt-1 flex w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 font-mono text-[12px] font-black uppercase text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+              aria-label="Arrange the board"
+            >
+              <Network className="h-4 w-4" />
+              Arrange
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -9018,10 +9061,6 @@ const PaintToolbar = memo(function PaintToolbar({
   // Every fold-out on this row opens on CLICK and closes on outside click or
   // Escape, like the view sheet and the Setup Rules sheet. They used to open
   // on hover, and a pointer crossing the row quickly stacked one over another.
-  const [isPaletteOpen, setPaletteOpen] = useState(false);
-  const paletteRef = useRef<HTMLDivElement | null>(null);
-  const closePalette = useCallback(() => setPaletteOpen(false), []);
-  useFoldoutDismiss(isPaletteOpen, paletteRef, closePalette);
   // The draw tools live under ONE slot, Photoshop-style: the face wears the
   // last tool used, the menu under it holds all five with their names. The
   // face opens the menu, or cancels when a tool is armed; the menu picks.
@@ -9038,10 +9077,6 @@ const PaintToolbar = memo(function PaintToolbar({
   const [isViewMenuOpen, setViewMenuOpen] = useState(false);
   // The arrange sheet: one setting and the button that runs it. The setting
   // is remembered per browser; the default respects the boards you drew.
-  const [isArrangeMenuOpen, setArrangeMenuOpen] = useState(false);
-  const arrangeRef = useRef<HTMLDivElement | null>(null);
-  const closeArrangeMenu = useCallback(() => setArrangeMenuOpen(false), []);
-  useFoldoutDismiss(isArrangeMenuOpen, arrangeRef, closeArrangeMenu);
   const [tidyBoardInteriors, setTidyBoardInteriors] = useState(() => {
     try {
       return localStorage.getItem(ARRANGE_TIDY_BOARDS_KEY) === "1";
@@ -9064,277 +9099,10 @@ const PaintToolbar = memo(function PaintToolbar({
      on everything at once, so they live by the corner with the view button
      rather than among the card tools, OUTSIDE the fold group. Until the board
      is too narrow even for the folded row, when they fold in with the rest. */
-  const wholeBoardTrays = (
+  // The bin last of everything on the right (2026-09-06): it takes things
+  // OFF the board, so it stands past every tool that puts things on.
+  const binTray = (
     <>
-        {/* The three modes on a plate of their own: they change what the whole
-            board MEANS, and sharing a tray with arrange and mute read as one
-            more tool among tools. */}
-        <ToolTray helpAnchor="rules">
-          <ModeKeys />
-        </ToolTray>
-        <ToolTray>
-          {/* Auto-arrange opens a small sheet: one
-              setting saying whether boards you drew are opened up, and the
-              button that runs the arrange. The arrange respects boards by
-              default, so the setting is where you say otherwise. */}
-          <div ref={arrangeRef} className="pointer-events-auto flex">
-            <button
-              type="button"
-              onClick={() => setArrangeMenuOpen((was) => !was)}
-              aria-expanded={isArrangeMenuOpen}
-              className={[
-                "relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-                isArrangeMenuOpen ? TOOL_FACE_ON : TOOL_FACE_OFF,
-              ].join(" ")}
-              title="Auto-arrange"
-              aria-label="Auto-arrange the board"
-            >
-              <Network className="h-4 w-4" />
-            </button>
-            {isArrangeMenuOpen ? (
-              <div className="absolute right-0 top-[calc(100%+6px)] z-30 flex w-[300px] max-w-[calc(100vw-24px)] flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
-                <button
-                  type="button"
-                  onClick={onToggleTidyBoards}
-                  aria-pressed={tidyBoardInteriors}
-                  className={[
-                    "flex items-start gap-2 border-2 p-2 text-left",
-                    tidyBoardInteriors
-                      ? `border-[var(--mc-good)] ${TOOL_FACE_ON}`
-                      : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
-                  ].join(" ")}
-                >
-                  <span
-                    aria-hidden
-                    className={[
-                      "mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
-                      tidyBoardInteriors ? "bg-[var(--mc-good)]" : "bg-[var(--mc-24)]",
-                    ].join(" ")}
-                  >
-                    {tidyBoardInteriors ? (
-                      <Check className="h-3 w-3 text-[var(--mc-15)]" strokeWidth={4} />
-                    ) : null}
-                  </span>
-                  <span className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
-                    <span className="font-mono text-[12px] font-black uppercase">
-                      Rearrange inside boards
-                    </span>
-                    <span
-                      className={[
-                        "font-mono text-[10px] font-black tracking-[1px]",
-                        tidyBoardInteriors
-                          ? "text-[var(--mc-good)]"
-                          : "text-[var(--mc-ink-muted)]",
-                      ].join(" ")}
-                    >
-                      {tidyBoardInteriors ? "ON" : "OFF"}
-                    </span>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeArrangeMenu();
-                    onAutoArrange({ tidyBoardInteriors });
-                  }}
-                  className="flex items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 font-mono text-[12px] font-black uppercase text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-                  aria-label="Arrange the board"
-                >
-                  <Network className="h-4 w-4" />
-                  Arrange
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <BoardMuteButton />
-        </ToolTray>
-        {/* The corner slot: view options are one button and a sheet at every
-            width, reachable while the paint row is folded away on a phone. The
-            timelapse door lives beside it: also a way of looking, not a tool
-            that changes the plan. */}
-        <ToolTray helpAnchor="view">
-          <BoardTimelapseMenu />
-          <BoardViewMenu
-            view={view}
-            onChange={onViewChange}
-            dockToggleWarning={dockToggleWarning}
-            open={isViewMenuOpen}
-            onOpenChange={setViewMenuOpen}
-          />
-        </ToolTray>
-    </>
-  );
-
-  return (
-    <div
-      data-board-toolbar
-      className={[
-        "nodrag pointer-events-none absolute right-3 flex items-start gap-2",
-        shiftedDown ? "top-14" : "top-3",
-        // An open fold-out hangs below the row and can cross whatever toolbar
-        // sits beneath, which at the same z and later in the DOM would paint
-        // OVER it and take its clicks: the colours were once visible and
-        // unpickable. The row lifts above every other toolbar for as long as
-        // any of its fold-outs is out.
-        isPaletteOpen || isDrawMenuOpen || isViewMenuOpen || isArrangeMenuOpen
-          ? "z-40"
-          : "z-20",
-      ].join(" ")}
-    >
-      <ToolGroup
-        id="paint"
-        folded={folded}
-        openGroup={openGroup}
-        onToggle={onToggleGroup}
-        icon={Paintbrush}
-        label="paint and annotation tools"
-        side="right"
-      >
-      <ToolTray>
-      <div ref={paletteRef} className="flex items-start">
-      <div
-        className={[
-          // Nine across, two down: the whole palette reads in one glance.
-          // Absolute on every width — hanging below the row rather than
-          // sitting invisibly IN it, which used to keep a 296px empty layout
-          // box in the row (and would now paint 296px of empty plate). The
-          // paint root already lifts to z-40 while the palette is out.
-          "absolute right-0 grid gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
-          // On a phone it hangs two lines down — clear of the unfolded paint
-          // row on the line between — six across and three down.
-          folded ? "top-[6rem] grid-cols-6" : "top-[3rem] w-[296px] grid-cols-9",
-          isPaletteOpen
-            ? "pointer-events-auto translate-y-0 opacity-100"
-            : "pointer-events-none -translate-y-1 opacity-0",
-        ].join(" ")}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            onPaintModeChange(paintMode === null ? undefined : null);
-            setPaletteOpen(false);
-          }}
-          className={[
-            "flex h-7 w-7 items-center justify-center border-2 bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]",
-            paintMode === null ? "border-white ring-2 ring-cyan-300" : "border-[var(--mc-15)]",
-          ].join(" ")}
-          title="Erase colors"
-          aria-label="Erase colors"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-        {GT_NODE_COLOR_PALETTE.map((entry) => (
-          <button
-            key={entry.tag}
-            type="button"
-            onClick={() => {
-              onColorSelect(entry.tag);
-              setPaletteOpen(false);
-            }}
-            className={[
-              "h-7 w-7 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
-              activeColorTag === entry.tag
-                ? "border-white ring-2 ring-cyan-300"
-                : "border-[var(--mc-15)]",
-            ].join(" ")}
-            style={{ backgroundColor: entry.color.swatch }}
-            title={entry.tag}
-            aria-label={`Use ${entry.tag}`}
-          />
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => setPaletteOpen((open) => !open)}
-        // Help rings this row from the colour button to the bin: the anchor
-        // sits on the visible ends, not the wrapper, so the folded-away
-        // palette's empty layout box stays out of the ring.
-        data-help-anchor="paint"
-        className="pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]"
-        title={`Color: ${activeColorTag}`}
-        aria-label="Pick color"
-      >
-        <span
-          className="h-5 w-5 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
-          style={{ backgroundColor: activeColor.swatch }}
-        />
-      </button>
-      </div>
-      <button
-        type="button"
-        onClick={() =>
-          onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag)
-        }
-        className={[
-          "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-          paintMode !== undefined ? TOOL_FACE_ON : TOOL_FACE_OFF,
-        ].join(" ")}
-        title={paintMode !== undefined ? "Stop painting" : "Paint"}
-        aria-label={paintMode !== undefined ? "Stop painting" : "Paint nodes"}
-      >
-        {paintMode === null ? <X className="h-4 w-4" /> : <Paintbrush className="h-4 w-4" />}
-      </button>
-      <div ref={drawRef} className="relative flex items-start">
-        <div
-          className={[
-            // Hangs below the slot, right-aligned so it grows towards the
-            // middle of the screen, never off its edge.
-            "absolute right-0 top-[calc(100%+10px)] flex w-max flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
-            isDrawMenuOpen
-              ? "pointer-events-auto translate-y-0 opacity-100"
-              : "pointer-events-none -translate-y-1 opacity-0",
-          ].join(" ")}
-        >
-          {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => {
-                setLastDrawTool(kind);
-                onAnnotationToolChange(kind);
-                setDrawMenuOpen(false);
-              }}
-              aria-pressed={annotationTool === kind}
-              className={[
-                "flex items-center gap-2 border-2 p-1 pr-2 text-left",
-                annotationTool === kind
-                  ? "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
-                  : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
-              ].join(" ")}
-            >
-              <span className="flex h-7 w-7 items-center justify-center">
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
-                {label}
-              </span>
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            // Armed, the face is a cancel; otherwise it opens the menu.
-            if (annotationTool !== undefined) {
-              onAnnotationToolChange(undefined);
-              setDrawMenuOpen(false);
-              return;
-            }
-            setDrawMenuOpen((was) => !was);
-          }}
-          aria-expanded={isDrawMenuOpen}
-          className={[
-            "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-            annotationTool !== undefined ? TOOL_FACE_ON : TOOL_FACE_OFF,
-          ].join(" ")}
-          title={annotationTool !== undefined ? "Cancel" : "Draw tools"}
-          aria-label={annotationTool !== undefined ? "Cancel drawing" : "Draw tools"}
-        >
-          <FaceDrawIcon className="h-4 w-4" />
-        </button>
-      </div>
-      <AddImageButton onPlaceImage={onPlaceImage} />
-      </ToolTray>
       {/* The bin on a plate of its own: it takes things OFF the board, and it
           must never read as one more stamp in the row beside it. */}
       <ToolTray>
@@ -9353,10 +9121,212 @@ const PaintToolbar = memo(function PaintToolbar({
           <Trash2 className={isDeleteMode ? "h-4 w-4 text-red-500" : "h-4 w-4"} />
         </button>
       </ToolTray>
-      {foldAll ? wholeBoardTrays : null}
-      </ToolGroup>
-      {foldAll ? null : wholeBoardTrays}
+    </>
+  );
+
+  // The pencil and the view options share the last plate before the bin;
+  // both fold under the trigger on a narrow board or a phone.
+  const viewTray = (
+    <>
+        {/* The corner slot: view options are one button and a sheet at every
+            width, reachable while the paint row is folded away on a phone. The
+            timelapse door lives beside it: also a way of looking, not a tool
+            that changes the plan. */}
+        <ToolTray helpAnchor="view">
+          {/* THE PENCIL (2026-09-06): every way of marking the board in one
+              drop-down beside the view options - the annotation tools, paint
+              with its colours, and an image. The key itself is pressed while
+              a tool or paint is armed, and a click then cancels it. */}
+          <div ref={drawRef} className="relative flex items-start">
+            <div
+              className={[
+                "absolute right-0 top-[calc(100%+10px)] flex w-max flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
+                isDrawMenuOpen
+                  ? "pointer-events-auto translate-y-0 opacity-100"
+                  : "pointer-events-none -translate-y-1 opacity-0",
+              ].join(" ")}
+            >
+              {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => {
+                    setLastDrawTool(kind);
+                    onAnnotationToolChange(kind);
+                    setDrawMenuOpen(false);
+                  }}
+                  aria-pressed={annotationTool === kind}
+                  className={[
+                    "flex items-center gap-2 border-2 p-1 pr-2 text-left",
+                    annotationTool === kind
+                      ? "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
+                      : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
+                  ].join(" ")}
+                >
+                  <span className="flex h-7 w-7 items-center justify-center">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
+                    {label}
+                  </span>
+                </button>
+              ))}
+              <div className="my-0.5 border-t-2 border-[var(--mc-15)]" />
+              {/* Paint: the row arms the brush in the current colour; the
+                  swatches under it pick the colour AND arm it, the eraser
+                  arms erase. */}
+              <button
+                type="button"
+                onClick={() => {
+                  onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag);
+                  setDrawMenuOpen(false);
+                }}
+                aria-pressed={paintMode !== undefined}
+                className={[
+                  "flex items-center gap-2 border-2 p-1 pr-2 text-left",
+                  paintMode !== undefined
+                    ? "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
+                    : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
+                ].join(" ")}
+              >
+                <span className="flex h-7 w-7 items-center justify-center">
+                  {paintMode === null ? <X className="h-4 w-4" /> : <Paintbrush className="h-4 w-4" />}
+                </span>
+                <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
+                  {paintMode === null ? "Erasing colours" : "Paint cards"}
+                </span>
+                <span
+                  aria-hidden
+                  className="ml-auto h-4 w-4 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
+                  style={{ backgroundColor: activeColor.swatch }}
+                />
+              </button>
+              <div className="grid grid-cols-9 gap-1 px-1 pb-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPaintModeChange(null);
+                    setDrawMenuOpen(false);
+                  }}
+                  className={[
+                    "flex h-6 w-6 items-center justify-center border-2 bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]",
+                    paintMode === null ? "border-white ring-2 ring-cyan-300" : "border-[var(--mc-15)]",
+                  ].join(" ")}
+                  title="Erase colours"
+                  aria-label="Erase colours"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+                {GT_NODE_COLOR_PALETTE.map((entry) => (
+                  <button
+                    key={entry.tag}
+                    type="button"
+                    onClick={() => {
+                      onColorSelect(entry.tag);
+                      onPaintModeChange(entry.tag);
+                      setDrawMenuOpen(false);
+                    }}
+                    className={[
+                      "h-6 w-6 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
+                      activeColorTag === entry.tag && paintMode !== null
+                        ? "border-white ring-2 ring-cyan-300"
+                        : "border-[var(--mc-15)]",
+                    ].join(" ")}
+                    style={{ backgroundColor: entry.color.swatch }}
+                    title={`Paint ${entry.tag}`}
+                    aria-label={`Paint ${entry.tag}`}
+                  />
+                ))}
+              </div>
+              <div className="my-0.5 border-t-2 border-[var(--mc-15)]" />
+              <AddImageButton
+                onPlaceImage={async (file) => {
+                  setDrawMenuOpen(false);
+                  await onPlaceImage(file);
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (annotationTool !== undefined || paintMode !== undefined) {
+                  onAnnotationToolChange(undefined);
+                  onPaintModeChange(undefined);
+                  setDrawMenuOpen(false);
+                  return;
+                }
+                setDrawMenuOpen((was) => !was);
+              }}
+              aria-expanded={isDrawMenuOpen}
+              data-help-anchor="paint"
+              className={[
+                "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
+                annotationTool !== undefined || paintMode !== undefined ? TOOL_FACE_ON : TOOL_FACE_OFF,
+              ].join(" ")}
+              title={annotationTool !== undefined || paintMode !== undefined ? "Stop" : "Markup"}
+              aria-label={annotationTool !== undefined || paintMode !== undefined ? "Stop marking up" : "Markup tools"}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          </div>
+              <BoardViewMenu
+            view={view}
+            onChange={onViewChange}
+            dockToggleWarning={dockToggleWarning}
+            open={isViewMenuOpen}
+            onOpenChange={setViewMenuOpen}
+            arrange={{ tidyBoardInteriors, onToggleTidyBoards, onArrange: onAutoArrange }}
+          />
+        </ToolTray>
+    </>
+  );
+
+
+  return (
+    <>
+    {/* THE MODE SWITCH, top centre of the board on a plate of its own
+        (2026-09-06): it changes what the whole board means, so it stands
+        apart from both tool rows and never folds. */}
+    <div
+      data-board-toolbar-centre
+      className={[
+        "nodrag pointer-events-none absolute left-1/2 z-20 -translate-x-1/2",
+        shiftedDown ? "top-14" : "top-3",
+      ].join(" ")}
+    >
+      <ToolTray helpAnchor="rules">
+        <ModeKeys />
+      </ToolTray>
     </div>
+    <div
+      data-board-toolbar
+      className={[
+        "nodrag pointer-events-none absolute right-3 flex items-start gap-2",
+        shiftedDown ? "top-14" : "top-3",
+        // An open fold-out hangs below the row and can cross whatever toolbar
+        // sits beneath, which at the same z and later in the DOM would paint
+        // OVER it and take its clicks: the colours were once visible and
+        // unpickable. The row lifts above every other toolbar for as long as
+        // any of its fold-outs is out.
+        isDrawMenuOpen || isViewMenuOpen
+          ? "z-40"
+          : "z-20",
+      ].join(" ")}
+    >
+      <ToolGroup
+        id="paint"
+        folded={folded}
+        openGroup={openGroup}
+        onToggle={onToggleGroup}
+        icon={Pencil}
+        label="markup and view tools"
+        side="right"
+      >
+      {viewTray}
+      {binTray}
+      </ToolGroup>
+    </div>
+    </>
   );
 });
 

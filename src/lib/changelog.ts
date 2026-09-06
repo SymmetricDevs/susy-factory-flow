@@ -75,7 +75,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "One switch on the toolbar: Build reports what flows, Solve counts the machines, Pool also wires and imports for you.",
       "In Pool, nothing needs a wire: every resource is shared, anything nobody makes is imported and listed under Inputs.",
       "The setup rules sheet is gone; a filled cell and its fluid always wire together.",
-      "Solve and Pool no longer freeze the tab on a big plan.",
+      "A tidier toolbar: the generator, custom rate and crop farm keys now sit at the top of the items column, and mute and Watch it build live in Settings.",
     ],
   },
   {

@@ -11,6 +11,11 @@ import {
 import { isUpdatePopupEnabled, setUpdatePopupEnabled } from "@/lib/whats-new";
 import { areChipClicksInverted, setChipClicksInverted } from "@/lib/chip-clicks";
 import {
+  BOARD_TIMELAPSE_PRESETS,
+  runBoardTimelapsePreset,
+} from "@/components/flow/board-timelapse";
+import { useFactoryStore } from "@/store/factory-store";
+import {
   areBoardSoundsEnabled,
   getBoardSoundVolume,
   playBoardSound,
@@ -35,6 +40,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [invertedClicks, setInvertedClicks] = useState<boolean>(() => areChipClicksInverted());
   const [sounds, setSounds] = useState<boolean>(() => areBoardSoundsEnabled());
   const [volume, setVolume] = useState<number>(() => getBoardSoundVolume());
+  const canPlayTimelapse = useFactoryStore(
+    (state) => state.project.nodes.length + (state.project.storages?.length ?? 0) >= 2,
+  );
   // The preview thump fires when the drag SETTLES, not per input event: a
   // slider emits dozens of changes a second, and previewing each one had
   // the notes stealing each other into fragments while the repeat duck
@@ -236,6 +244,38 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 {Math.round(volume * 100)}%
               </span>
             </div>
+          </section>
+
+          <section className="mt-4">
+            <h3 className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-fg-muted">
+              Watch it build
+            </h3>
+            {/* The build timelapse's door, here since 2026-09-06 (it was a
+                key beside the view options). Each preset applies its whole
+                look for the run and hands your settings back when it ends.
+                The dialog closes first so the board has the screen. */}
+            {BOARD_TIMELAPSE_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                disabled={!canPlayTimelapse}
+                onClick={() => {
+                  onClose();
+                  requestAnimationFrame(() => runBoardTimelapsePreset(preset));
+                }}
+                className="mt-1 flex w-full items-center gap-3 rounded border border-line px-3 py-2.5 text-left hover:border-line-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line disabled:hover:bg-transparent"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base leading-tight text-fg">{preset.name}</span>
+                  <span className="mt-0.5 block text-xs text-fg-muted">{preset.line}</span>
+                </span>
+              </button>
+            ))}
+            <p className="px-1 pt-1.5 text-xs text-fg-muted">
+              {canPlayTimelapse
+                ? "Press Esc or click the board to stop it."
+                : "Needs at least two cards on the board."}
+            </p>
           </section>
 
           <section className="mt-4">

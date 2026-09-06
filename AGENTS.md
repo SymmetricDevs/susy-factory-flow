@@ -833,8 +833,22 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## The Three Modes (Build, Solve, Pool) And The Rules That Went
 
-- The board has THREE MODES on one switch (`ModeKeys` in FactoryFlow.tsx,
-  a tray of its own left of arrange and mute; `setBoardMode` in the store),
+- TOOLBAR LAYOUT since the rework (Jack, 2026-09-06): LEFT row = undo
+  pair, rate keys, pool mode's product tray (`PoolSpawnKeys`, the whole
+  tray slides in only while pool is on, so no empty plate shows). RIGHT
+  row, left to right = the MODE SWITCH tray, the paint tray (palette,
+  paint, image), arrange, the view tray (annotation tools drop-down, view
+  options), and the BIN last of everything. The mute key and the "Watch
+  it build" door left the board for the Settings dialog (Sound section,
+  a Watch it build section). The generator, custom rate and crop farm
+  spawners left the build tray for the top of the items column
+  (`SpawnKeys`, dressed like the columns' hide keys: no ground, plain
+  hover, no colour). Fold widths are MEASURED numbers in toolbar-fold.ts;
+  re-measure with a probe after touching either row.
+- The board has THREE MODES on one switch (`ModeKeys` in FactoryFlow.tsx:
+  three plated keys, the engaged one pressed, icons coloured in every
+  state, and a thin bar in the engaged mode's colour sliding along the
+  bottom edge; `setBoardMode` in the store),
   exactly one lit, each handing the planner more of the work (Jack,
   2026-09-06): BUILD - you set machines, counts and wires, the board
   reports what flows; SOLVE - you set machines and wires and type what

@@ -63,10 +63,10 @@ import {
   Type,
   Undo2,
   Check,
-  ArrowDownToLine,
-  ArrowUpFromLine,
+  Download,
   Sigma,
   SlidersHorizontal,
+  Upload,
   Waves,
   X,
   Zap,
@@ -7412,18 +7412,30 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
       setPicking(undefined);
     }
   }, [on]);
-  const key = (side: "source" | "drain", label: string, title: string, Icon: LucideIcon) => (
-    <div className="relative">
+  const key = (
+    side: "source" | "drain",
+    label: string,
+    title: string,
+    Icon: LucideIcon,
+    trailMs: number,
+  ) => (
+    <div
+      className={[
+        // The keys themselves travel: out from behind the crop farm key and
+        // up to full ink on the same clock the tray grows on, the second a
+        // beat behind the first, so the pair reads as one motion.
+        "relative transition-[transform,opacity] duration-500 ease-out",
+        on ? "translate-x-0 opacity-100" : "-translate-x-6 opacity-0",
+      ].join(" ")}
+      style={{ transitionDelay: on ? `${trailMs}ms` : "0ms" }}
+    >
       <button
         type="button"
         onClick={() => setPicking((was) => (was === side ? undefined : side))}
         aria-pressed={picking === side}
         tabIndex={on ? 0 : -1}
         className={[
-          // One motion with the tray growing beside it: the key slides out
-          // from under the crop farm and fades in over the same half second.
-          "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[#d98b3a] text-[#ffd9b3] transition-[transform,opacity] duration-500 ease-out hover:brightness-110",
-          on ? "translate-x-0 opacity-100" : "-translate-x-6 opacity-0",
+          "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[#d98b3a] text-[#ffd9b3] hover:brightness-110",
           picking === side
             ? "bg-[#8a5a2a] shadow-[inset_2px_2px_0_#3a2510]"
             : "bg-[#5d3d20] shadow-[inset_2px_2px_0_#9a6230,inset_-2px_-2px_0_#2b1d12]",
@@ -7456,8 +7468,8 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
         on ? "ml-0.5 w-[66px]" : "pointer-events-none ml-0 w-0",
       ].join(" ")}
     >
-      {key("source", "Add a source drawer", "Add a source drawer: the plan imports this", ArrowDownToLine)}
-      {key("drain", "Add a product drawer", "Add a product drawer: the plan makes this", ArrowUpFromLine)}
+      {key("source", "Add a source drawer", "Add a source drawer: the plan imports this", Download, 0)}
+      {key("drain", "Add a product drawer", "Add a product drawer: the plan makes this", Upload, 70)}
     </div>
   );
 });

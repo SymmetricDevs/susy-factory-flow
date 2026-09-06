@@ -7399,21 +7399,29 @@ const ModeKeys = memo(function ModeKeys() {
     pick(MODE_KEYS[xToIndex(x)]!.mode);
   };
   // The WHEEL walks the positions too, the way it walks every chip on the
-  // board: down is the next mode, up the one before, no wrap. One step per
-  // notch - a trackpad's stream of small deltas is gated by a short hold.
-  const wheelHoldRef = useRef(0);
+  // board: down is the next mode, up the one before, no wrap. Gated on
+  // DISTANCE, never time: a mouse notch is about 100 units and is one step
+  // however fast the notches come (a time gate swallowed the second of two
+  // quick ones), and a trackpad's small deltas add up to steps.
+  const wheelAccRef = useRef(0);
   const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    const now = performance.now();
-    if (now < wheelHoldRef.current || Math.abs(event.deltaY) < 1) {
+    const acc = wheelAccRef.current;
+    // A change of direction starts over: leftover from the other way must
+    // not make the first notch back a dead one.
+    wheelAccRef.current = (acc > 0) === (event.deltaY > 0) ? acc + event.deltaY : event.deltaY;
+    const NOTCH = 60;
+    let steps = Math.trunc(wheelAccRef.current / NOTCH);
+    if (steps === 0) {
       return;
     }
-    wheelHoldRef.current = now + 160;
+    wheelAccRef.current -= steps * NOTCH;
     const current = useFactoryStore.getState().project;
     const at = current.poolMode ? 2 : current.solveMode ? 1 : 0;
-    const next = Math.max(0, Math.min(MODE_KEYS.length - 1, at + (event.deltaY > 0 ? 1 : -1)));
+    const next = Math.max(0, Math.min(MODE_KEYS.length - 1, at + Math.sign(steps)));
     if (next !== at) {
       pick(MODE_KEYS[next]!.mode);
     }
+    steps = 0;
   };
   const width = MODE_STEP * MODE_KEYS.length;
   const glassLeft =

@@ -1826,9 +1826,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                               ...(machineParallelMultiplier > 1 && !parallelChipLifts
                                 ? ["auto"]
                                 : []),
-                              "minmax(84px,1fr)",
-                              // The circuit ends the row, square, in the corner
-                              // the machine count leaves free.
+                              // As wide as its count needs, no wider (Jack,
+                              // 2026-09-06): the cells pack left and the
+                              // footer's slack stays empty on the right.
+                              "minmax(84px,max-content)",
                               ...(programmedCircuit ? ["auto"] : []),
                             ].join(" "),
                       }}

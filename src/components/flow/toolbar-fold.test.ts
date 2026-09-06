@@ -8,13 +8,13 @@ describe("toolbarFoldFor", () => {
 
   it("folds the paint row first: a 1400px window with both columns open", () => {
     // 1400 - 344 - 332: the width that buried the paint tray under POWER.
-    // Since the three mode keys on their own tray (2026-09-06) the folded
-    // paint row is 330px, so this board folds the build row too: more
-    // folding, never a second line.
-    expect(toolbarFoldFor(722, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
-    expect(toolbarFoldFor(780, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
-    // 1366 - 676: the common laptop, where even the folded paint row crowds it.
-    expect(toolbarFoldFor(690, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
+    // With the spawners off the build row (2026-09-06, 232px) this board
+    // keeps the build row and folds only the paint row again.
+    expect(toolbarFoldFor(722, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
+    expect(toolbarFoldFor(600, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
+    // 1366 - 676: the common laptop. It used to fold the build row too; the
+    // narrower build row now fits beside the folded paint row there.
+    expect(toolbarFoldFor(690, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
   });
 
   it("folds the build row too when even the folded paint trigger crowds it", () => {

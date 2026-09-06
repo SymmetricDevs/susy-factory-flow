@@ -41,7 +41,6 @@ import {
   Focus,
   Tag,
   Gauge,
-  Sprout,
   Grid3x3,
   Grip,
   Hammer,
@@ -7520,9 +7519,6 @@ const SourceToolbar = memo(function SourceToolbar({
   /** A banner has the top line: step down one. */
   shiftedDown: boolean;
 }) {
-  const addCustomRateNode = useFactoryStore((state) => state.addCustomRateNode);
-  const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
-  const openPowerMenu = useFactoryStore((state) => state.openPowerMenu);
   const boardView = useBoardView();
   const rateUnit = useFactoryStore((state) => state.rateUnit);
   const setRateUnit = useFactoryStore((state) => state.setRateUnit);
@@ -7809,44 +7805,11 @@ const SourceToolbar = memo(function SourceToolbar({
         </div>
       </ToolTray>
       {/* ...while the plate on the right is the one that puts new cards down.
-          The crop farm spawner left this row (2026-08-27) for the recipe
-          book, and came back (2026-09-01): nobody found it in the book. The
-          trash can spawner went earlier (2026-08-23), to the drawer pill's
-          third position. */}
+          The generator, custom rate and crop farm spawners moved to the top
+          of the items column (2026-09-06, the tray ran out of room for the
+          mode keys; `SpawnKeys`). What is left is pool mode's product key,
+          which slides out only while that mode is on. */}
       <ToolTray>
-        {/* The generator catalog gets a plate that says so: power is a whole
-            wing of the game, not a little icon to hunt for. The bolt's own
-            amber on the toolbar's dark face, the word spelled out. */}
-        <button
-          type="button"
-          onClick={openPowerMenu}
-          className="pointer-events-auto relative z-10 flex h-8 items-center gap-1.5 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] px-2.5 font-mono text-[12px] font-black tracking-wide text-amber-400 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-          title="Place a generator"
-          aria-label="Place a generator"
-        >
-          <Zap className="h-4 w-4 fill-current" />
-          POWER
-        </button>
-        <button
-          type="button"
-          onClick={addCustomRateNode}
-          className="pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-          title="Add custom rate node"
-          aria-label="Add custom rate node"
-        >
-          <Gauge className="h-4 w-4" />
-        </button>
-        {/* The crop farm spawner, back on the tray (2026-09-01): farms DO
-            live in the recipe book, but nobody found them there. */}
-        <button
-          type="button"
-          onClick={addCropFarmNode}
-          className="pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-          title="Add crop farm"
-          aria-label="Add crop farm"
-        >
-          <Sprout className="h-4 w-4" />
-        </button>
         <PoolSpawnKeys />
       </ToolTray>
       </ToolGroup>

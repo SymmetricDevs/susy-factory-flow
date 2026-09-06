@@ -3,12 +3,11 @@
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronsDownUp,
-  ChevronsUpDown,
   Search,
   X,
   Zap,
 } from "lucide-react";
+import { SpawnKeys } from "@/components/SpawnKeys";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { PointerEvent, RefObject, WheelEvent } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
@@ -110,7 +109,6 @@ const RESOURCE_PAGER_HEIGHT = 31;
 /** One mouse notch is 100 on most platforms, so one notch is one page. */
 const RESOURCE_WHEEL_PAGE_DELTA = 80;
 /** Whether the filter block under the search box is folded away. */
-const RESOURCE_FILTERS_STORAGE_KEY = "gtnh-factory-flow.resource-filters.v1";
 /** The machine chips' multi-select: which maps' recipes the search shows. */
 const MAP_SELECTION_STORAGE_KEY = "gtnh-factory-flow.machine-map-selection.v1";
 
@@ -265,7 +263,6 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   // actually build. A typed query still ranks name relevance first server-side,
   // so the sort only decides the untyped list and ties.
   const [resourceSort, setResourceSort] = useState<ResourceSortMode>("popular");
-  const [filtersOpen, setFiltersOpen] = useState(true);
   const [resourceFilter, setResourceFilter] = useState<ResourceFilterMode>("all");
   // The machine chips' selection. Absent means everything is selected (the
   // default); "exclude" carries the unselected chips, "include" the selected
@@ -610,21 +607,6 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       selectedDatasetVersion,
     ],
   );
-
-  // The filter fold's saved state is applied after mount (deferred) so the SSR
-  // markup and first client render agree. Folded is the saved state, never the default,
-  // so nobody meets this column with its filters already hidden.
-  useEffect(() => {
-    if (window.localStorage.getItem(RESOURCE_FILTERS_STORAGE_KEY) === "folded") {
-      return deferStateUpdate(() => setFiltersOpen(false));
-    }
-    return undefined;
-  }, []);
-
-  const changeFiltersOpen = useCallback((open: boolean) => {
-    setFiltersOpen(open);
-    window.localStorage.setItem(RESOURCE_FILTERS_STORAGE_KEY, open ? "open" : "folded");
-  }, []);
 
   // Everything selected is the default; a trimmed selection is a saved
   // preference, applied deferred for the same SSR-agreement reason as the
@@ -1148,14 +1130,14 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
           // the controls and the recent shelf: nothing here scrolls, so a wheel
           // that did nothing was just a panel that felt broken.
           <div className="flex min-h-0 flex-1 flex-col" onWheel={handleResourceWheel}>
-        {/* The same card the board and setup shelves put their search and
-            filters in. Bare, this tab's controls read as a different kind of
-            thing from the other two, when they are the same thing. */}
-        <ControlsCard>
-          <div className="flex items-center gap-1.5">
-            {/* The way to fold this column away, inside the search row the way
-                the resource column keeps its own. On a phone it closes the
-                drawer. */}
+        {/* The cards that are not recipes - generator, custom rate, crop
+            farm - above the search, since this column is where things get
+            added from. They came off the board's build tray (2026-09-06). */}
+        <SpawnKeys
+          leading={
+            /* The way to fold this column away, at the start of the top row
+               (it used to sit in the search box). On a phone it closes the
+               drawer. */
             <button
               type="button"
               onClick={() => writeWorkspaceView({ leftPanelOpen: false })}
@@ -1164,6 +1146,13 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
             >
               <ChevronIcon direction="left" />
             </button>
+          }
+        />
+        {/* The same card the board and setup shelves put their search and
+            filters in. Bare, this tab's controls read as a different kind of
+            thing from the other two, when they are the same thing. */}
+        <ControlsCard>
+          <div className="flex items-center gap-1.5">
             {/* 16px text on a phone, deliberately: below that, iOS zooms the
                 whole page in the moment the field takes focus, and the way back
                 out is a pinch. */}
@@ -1196,24 +1185,6 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
                 </button>
               ) : null}
             </label>
-            {/* Folds everything below it away. Six filters and two dropdowns are
-                worth their space when you are narrowing a search down and worth
-                none of it when you are not, which on a phone is most of a screen
-                of results. */}
-            <button
-              type="button"
-              onClick={() => changeFiltersOpen(!filtersOpen)}
-              aria-expanded={filtersOpen}
-              title={filtersOpen ? "Hide the filters" : "Show the filters"}
-              aria-label={filtersOpen ? "Hide the filters" : "Show the filters"}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] border border-neutral-700 bg-[#17191d] text-neutral-400 hover:text-neutral-200"
-            >
-              {filtersOpen ? (
-                <ChevronsDownUp className="h-4 w-4" />
-              ) : (
-                <ChevronsUpDown className="h-4 w-4" />
-              )}
-            </button>
           </div>
 
           {/* What the search had to do to find anything. Only ever shown when it
@@ -1232,10 +1203,10 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
           {/* One question, six answers, one of them on at a time. There is no
               "fluids a bee makes" to ask for, so there is no second row to pair
               this with; the view toggle sits with the search box it belongs to. */}
-          {/* Two rows of three rather than six across: the column has no room to
-              print "Fluids" and "Plants" six abreast, and squeezing them was how
-              the labels started clipping. Still one group with one answer on. */}
-          <div className={filtersOpen ? "mt-1 grid grid-cols-3 gap-1" : "hidden"}>
+          {/* Four across, two rows, always shown (the fold-away key and the
+              mod filter went on 2026-09-06): the six filters, then the sort
+              across the last two cells so the grid closes square. */}
+          <div className="mt-1 grid grid-cols-4 gap-1">
             {RESOURCE_FILTER_CHOICES.map((choice) => (
               <button
                 key={choice.mode}
@@ -1253,29 +1224,12 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
                 {choice.label}
               </button>
             ))}
-          </div>
-
-          <div className={filtersOpen ? "mt-1 grid grid-cols-2 gap-1" : "hidden"}>
-            <select
-              value={resourceMod}
-              onChange={(event) => setResourceMod(event.target.value)}
-              title="Filter by mod"
-              aria-label="Filter by mod"
-              className="h-6 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-[11px] text-neutral-100 outline-none"
-            >
-              <option value="">All mods</option>
-              {displayedMods.map((mod) => (
-                <option key={mod.id} value={mod.id}>
-                  {mod.id} ({mod.count})
-                </option>
-              ))}
-            </select>
             <select
               value={resourceSort}
               onChange={(event) => setResourceSort(event.target.value as ResourceSortMode)}
               title="Sort results"
               aria-label="Sort results"
-              className="h-6 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-[11px] text-neutral-100 outline-none"
+              className="col-span-2 h-6 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-[11px] text-neutral-100 outline-none"
             >
               <option value="popular">Most popular</option>
               <option value="relevance">Best match</option>

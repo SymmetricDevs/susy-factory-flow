@@ -1603,6 +1603,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             art={powerArt}
             icon={powerMachineIcon ?? previewMachineIcon}
             tint={cropStructureArt ? "#4f8c33" : powerInfo ? undefined : "#8a8f99"}
+            // Which handler and tier the art was picked for, for probes.
+            pickedFor={`${previewHandler.id}@${projectNode.overclockTier}:${machineIconEntries.get(previewHandler.id)?.tiers?.length ?? 0}`}
           />
         ) : null}
         {/* The card body. No paint of its own: the window behind it is
@@ -2636,17 +2638,22 @@ function PowerStructureWindow({
   art,
   icon,
   tint = "#d99a2b",
+  pickedFor,
 }: {
   art?: string;
   icon?: { id: string; displayName?: string; iconPath?: string; dominantColor?: string };
   /** The colour behind the render: power amber, crop green, machine grey. */
   tint?: string;
+  /** Handler id, tier and variant count the art was picked for (probes read it). */
+  pickedFor?: string;
 }) {
   if (!art && !icon?.iconPath) {
     return null;
   }
   return (
     <div
+      data-machine-picture={art ?? icon?.id}
+      data-picked-for={pickedFor}
       className="box-border mb-2 flex h-[112px] w-full items-center justify-center overflow-hidden border-2 border-[var(--mc-47)] p-1 shadow-[inset_2px_2px_0_rgba(0,0,0,0.3),inset_-2px_-2px_0_rgba(255,255,255,0.04)]"
       style={{ backgroundColor: `color-mix(in srgb, var(--mc-33) 92%, ${tint} 8%)` }}
     >

@@ -133,6 +133,7 @@ import { CropPickerMenu } from "./CropPickerMenu";
 import {
   MachineMenu,
   machineArtPixels,
+  orderMachineHandlers,
 } from "./MachinePicker";
 import { NodeGlanceText, glanceTileStyle } from "./NodeGlance";
 import { isWiringConnection, wasRecentWireDrop } from "./connection-drag";
@@ -865,6 +866,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // now that they offer by hand, Crop Manager and Industrial Farm it is the
   // only thing standing between the card and its machines.
   const hasMachinePicker = machineHandlers.length > 1;
+  const hasMachineMenu = hasMachinePicker && !calmMode;
+  const cycleMachineHandler = (direction: -1 | 1) => {
+    const ordered = orderMachineHandlers(machineHandlers);
+    const index = Math.max(0, ordered.findIndex((handler) => handler.id === selectedMachineHandler.id));
+    const next = ordered[(index + direction + ordered.length) % ordered.length];
+    if (next && next.id !== selectedMachineHandler.id) {
+      updateMachineHandler(next.id);
+    }
+  };
   const machineIcons = useMachineHandlerIcons();
   // The machine's own art, when the dataset ships it. Crop farms and custom
   // rate nodes have no machine to show.
@@ -1340,16 +1350,29 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   the narrow card; those numbers live in the hover and the
                   footer. */}
               <div
-                role={isCropFarmNode ? "button" : undefined}
-                tabIndex={isCropFarmNode ? 0 : undefined}
+                role={isCropFarmNode || hasMachineMenu ? "button" : undefined}
+                tabIndex={isCropFarmNode || hasMachineMenu ? 0 : undefined}
                 onClick={
                   isCropFarmNode
                     ? (event) => {
                         event.stopPropagation();
                         setCropMenuOpen((open) => !open);
                       }
-                    : undefined
+                    : hasMachineMenu
+                      ? (event) => {
+                          event.stopPropagation();
+                          setCompareOpen((open) => !open);
+                        }
+                      : undefined
                 }
+                // The wheel walks the machines in the menu's own order, the
+                // way the tier chip walks tiers; the hover stays put for it.
+                onWheel={hasMachineMenu ? (event) => {
+                  event.stopPropagation();
+                  cycleMachineHandler(event.deltaY < 0 ? -1 : 1);
+                } : undefined}
+                data-machine-menu-toggle={hasMachineMenu ? "" : undefined}
+                data-tooltip-wheel-steps={hasMachineMenu ? "" : undefined}
                 className={[
                   // 13px: long GT machine names must read fully instead of
                   // getting chopped by the narrow card.
@@ -1358,33 +1381,24 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   // the picker chevron floats on the right without shifting it.
                   isCropFarmNode
                     ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
-                    : hasMachinePicker && !calmMode
-                      ? "relative pl-6 pr-2"
+                    : hasMachineMenu
+                      ? "nodrag nowheel relative cursor-pointer pl-6 pr-2 hover:brightness-110"
                       : "px-2",
                 ].join(" ")}
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
                 title={isCropFarmNode ? "Pick a crop" : undefined}
               >
-                {hasMachinePicker && !calmMode ? (
-                  // The machine switch: a chevron at the bar's left opens the
-                  // list of every machine that runs this recipe (MachineMenu).
-                  <button
-                    type="button"
-                    data-machine-menu-toggle
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setCompareOpen((open) => !open);
-                    }}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    aria-label="Choose machine"
-                    aria-haspopup="listbox"
-                    aria-expanded={isCompareOpen}
-                    className="nodrag absolute left-0 top-0 flex h-full w-5 items-center justify-center hover:bg-white/10"
-                  >
-                    <ChevronDown
-                      className={["h-3 w-3 transition-transform", isCompareOpen ? "rotate-180" : ""].join(" ")}
-                    />
-                  </button>
+                {hasMachineMenu ? (
+                  // The bar IS the machine switch: click anywhere on it for
+                  // the list, wheel to step through. The chevron is only the
+                  // sign that it opens.
+                  <ChevronDown
+                    aria-hidden
+                    className={[
+                      "pointer-events-none absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 transition-transform",
+                      isCompareOpen ? "rotate-180" : "",
+                    ].join(" ")}
+                  />
                 ) : null}
                 <span className="mx-auto min-w-0 truncate">
                   {isCropFarmPlaceholder

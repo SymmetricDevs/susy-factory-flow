@@ -189,17 +189,22 @@ export function MachineMenu({
   // The menu PORTALS to the body, like the crop and hatch menus: inside the
   // card it would sit in the node layer, under the marching-dash canvas and
   // every higher card. Fixed and in screen pixels, so it reads the same at
-  // every zoom. Measured once from the name bar on open; a board pan closes
-  // it through the click-away.
+  // every zoom. It hangs under the name bar and is exactly as wide as the
+  // card's window, so its edges line up with the card's; measured once on
+  // open, and a board pan closes it through the click-away.
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [anchorAt, setAnchorAt] = useState<{ left: number; top: number }>();
+  const [anchorAt, setAnchorAt] = useState<{ left: number; top: number; width: number }>();
   useEffect(() => {
-    const parent = anchorRef.current?.parentElement;
-    if (parent) {
-      const rect = parent.getBoundingClientRect();
+    const bar = anchorRef.current?.parentElement;
+    const card = anchorRef.current?.closest("[data-node-glance-root]");
+    if (bar && card) {
+      const barRect = bar.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      const width = Math.max(320, Math.round(cardRect.width));
       setAnchorAt({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 412)),
-        top: Math.min(rect.bottom + 2, window.innerHeight - 120),
+        left: Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8)),
+        top: Math.min(Math.round(barRect.bottom) + 4, window.innerHeight - 120),
+        width,
       });
     }
   }, []);
@@ -248,8 +253,8 @@ export function MachineMenu({
       ref={rootRef}
       role="listbox"
       aria-label="Machine"
-      className="nodrag nowheel z-[300] max-h-[400px] w-[400px] overflow-y-auto overflow-x-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1.5 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
-      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top }}
+      className="nodrag nowheel z-[300] max-h-[400px] overflow-y-auto overflow-x-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1.5 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
+      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, width: anchorAt.width }}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}

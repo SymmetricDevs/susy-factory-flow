@@ -45,6 +45,17 @@ const SYNC_SOLVE_LIMIT = 220;
  */
 const SLOW_SOLVE_MS = 150;
 const CROSS_FORM_SYNC_LIMIT = 100;
+/**
+ * SOLVE MODE is a different animal on the homegrown simplex: its LP is
+ * six dense solves over every machine and wire at once, and pool mode
+ * (which rides on solve mode) adds a pool drawer per resource on top.
+ * Measured on a 102-card community plan (2026-09-05): plan mode 7s, solve
+ * mode 43s, solve plus pool 128s on the simplex - and 0.3s, 44ms and 46ms
+ * on HiGHS, which only the worker loads. Nothing that size may run here.
+ * Forty nodes-plus-wires is a handful of machines; past it the tab would
+ * freeze for as long as the first slow solve took to teach the rule below.
+ */
+const SOLVE_MODE_SYNC_LIMIT = 40;
 
 let lastSolveDurationMs: number | undefined;
 
@@ -76,7 +87,8 @@ export function solveBooks(project: FactoryProject): ThroughputResult {
   const expectSlow =
     size > SYNC_SOLVE_LIMIT ||
     (lastSolveDurationMs !== undefined && lastSolveDurationMs > SLOW_SOLVE_MS) ||
-    (size > CROSS_FORM_SYNC_LIMIT && project.edges.some((edge) => edge.crossForm));
+    (size > CROSS_FORM_SYNC_LIMIT && project.edges.some((edge) => edge.crossForm)) ||
+    ((project.solveMode === true || project.poolMode === true) && size > SOLVE_MODE_SYNC_LIMIT);
   if (!expectSlow || !workerAvailable()) {
     const started = performance.now();
     const result = calculateThroughput(project);

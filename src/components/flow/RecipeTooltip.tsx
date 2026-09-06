@@ -65,6 +65,9 @@ export function RecipeTooltip({ view, children }: { view: RecipeTooltipView; chi
         </div>)}
       </dl>}
       {view.reason && <p className="mt-2">{view.reason}</p>}
+      {view.bullets && view.bullets.length > 0 && <ul className="mt-2 space-y-0.5">
+        {view.bullets.map((line) => <li key={line} className="flex gap-2"><span aria-hidden className="shrink-0 text-fg-muted">•</span><span>{line}</span></li>)}
+      </ul>}
       {view.requirement && <p className="mt-2 text-fg">{view.requirement}</p>}
       {children}
       {view.actions && <TooltipActions actions={view.actions} />}

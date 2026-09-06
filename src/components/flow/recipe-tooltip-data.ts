@@ -19,6 +19,8 @@ export interface RecipeTooltipView {
   status?: { label: string; tone: TooltipTone };
   rows: Array<{ label: string; value: string }>;
   reason?: string;
+  /** Short lines in order, cause before consequence before what to do. */
+  bullets?: readonly string[];
   requirement?: string;
   actions?: readonly TooltipAction[];
 }
@@ -123,7 +125,7 @@ export function buildPortTooltip(
   }
   const ctx = context(project);
   if (mode !== "build" && !ctx.hasTargets) {
-    return { ...view, status: { label: "No target", tone: "neutral" }, requirement: "You must set a target or pin a machine count." };
+    return { ...view, status: { label: "No target", tone: "neutral" }, requirement: "Set at least one product rate or machine count." };
   }
   const nodeResult = result?.nodes[nodeId];
   if (!nodeResult) return { ...view, reason: "Calculation unavailable." };

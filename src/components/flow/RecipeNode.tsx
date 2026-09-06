@@ -1802,7 +1802,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   <>
                     <div
                       className={[
-                        "grid min-w-0 items-center gap-1",
+                        // justify-start: auto tracks would otherwise stretch
+                        // into the footer's free space; the cells pack left.
+                        "grid min-w-0 items-center justify-start gap-1",
                         isCropProductionNode ? CROP_CONFIG_PANEL_WIDTH_CLASS : "",
                       ].join(" ")}
                       // Every cell sizes to its content except MACHINES, which
@@ -1830,7 +1832,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                               // 2026-09-06): the cells pack left and the
                               // footer's slack stays empty on the right.
                               "minmax(84px,max-content)",
-                              ...(programmedCircuit ? ["auto"] : []),
+                              // A spacer track, then the circuit in the last
+                              // one: the chip ends the row in the right corner.
+                              ...(programmedCircuit ? ["1fr", "auto"] : []),
                             ].join(" "),
                       }}
                     >
@@ -1911,7 +1915,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                             />
                           )}
                           {programmedCircuit ? (
-                            <CircuitChip circuit={programmedCircuit} />
+                            <span className="flex self-stretch" style={{ gridColumn: "-2 / -1" }}>
+                              <CircuitChip circuit={programmedCircuit} />
+                            </span>
                           ) : null}
                         </>
                       ) : null}

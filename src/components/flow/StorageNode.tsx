@@ -20,6 +20,8 @@ import { FLUID_ICON_SCALE, fluidArtPixels, ResourceIcon } from "@/components/nei
 import { NodeGlanceIcon } from "./NodeGlance";
 import { isWiringConnection } from "./connection-drag";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { RecipeTooltip } from "./RecipeTooltip";
+import { buildBufferKeyTooltip, buildDrainKeyTooltip, buildStorageTooltip, buildTargetTooltip } from "./storage-tooltip-data";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useBoardView } from "./board-view";
 import { MotionNumberText } from "./board-motion";
@@ -91,42 +93,34 @@ export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
  */
 const ROLE_PRESENTATION: Record<
   StorageRole,
-  { word: string; boundary: boolean; line: string }
+  { word: string; boundary: boolean }
 > = {
   source: {
     word: "SOURCE",
     boundary: true,
-    line: "Never runs out. Counts as an import.",
   },
   product: {
     word: "PRODUCT",
     boundary: true,
-    line: "Pulls its machine flat out. The plan's output.",
   },
   byproduct: {
     word: "BYPRODUCT",
     boundary: true,
-    line: "Catches what is left over. Asks for nothing.",
   },
   trash: {
     word: "TRASH",
     boundary: true,
-    line: "Voids what arrives. Asks for nothing.",
   },
   buffer: {
     word: "BUFFER",
     boundary: false,
-    line: "Passes on what is pulled. Extra piles up here.",
   },
   idle: {
     word: "STORAGE",
     boundary: false,
-    line: "Unwired. Feed it, draw from it, or both.",
   },
 };
 
-/** The strict-buffer line, swapped in for ROLE_PRESENTATION.buffer.line. */
-const STRICT_BUFFER_LINE = "Passes on what is pulled. Extra backs up the machine.";
 
 /**
  * Each job's colour, borrowed from the side panel's sections so board and
@@ -846,6 +840,7 @@ function TargetLine({
       // tile draws, wrapped only to be clickable (z-40, over the wire
       // handles that blanket the well at z-30). Unreachable overrides the
       // line's own green with red from outside.
+      <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result)} />}>
       <div
         role="button"
         tabIndex={0}
@@ -862,11 +857,6 @@ function TargetLine({
         }}
         onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
-        title={
-          unreachable
-            ? "No chain on the board can make this much at any machine count. Click to change it."
-            : "Make at least this much. Click to type an amount; shorthand like 2.5k works."
-        }
         aria-label="Required amount"
         className={[
           "nodrag group/target relative z-40 flex cursor-pointer justify-center hover:brightness-125",
@@ -900,6 +890,7 @@ function TargetLine({
           />
         </div>
       </div>
+      </MinecraftTooltip>
     );
   }
 
@@ -1017,23 +1008,20 @@ function BufferModeSwap({ storageId, strict }: { storageId: string; strict: bool
   const Icon = strict ? ArrowLeftRight : ArrowDownToLine;
 
   return (
+    <MinecraftTooltip content={() => <RecipeTooltip view={buildBufferKeyTooltip(strict)} />}>
     <button
       type="button"
       onClick={(event) => {
         event.stopPropagation();
         updateStorage(storageId, { bufferMode: strict ? "overflow" : "strict" });
       }}
-      title={
-        strict
-          ? "Strict: extra backs up the machine. Click to let it pile up here."
-          : "Overflow: extra piles up here. Click to back it up the machine instead."
-      }
       aria-label={strict ? "Switch to overflow" : "Switch to strict"}
       aria-pressed={strict}
       className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
     >
       <Icon aria-hidden className="h-2.5 w-2.5" />
     </button>
+    </MinecraftTooltip>
   );
 }
 
@@ -1076,26 +1064,19 @@ function DrainModeSwap({
   }
 
   return (
+    <MinecraftTooltip content={() => <RecipeTooltip view={buildDrainKeyTooltip(role, next)} />}>
     <button
       type="button"
       onClick={(event) => {
         event.stopPropagation();
         setStorageDrainMode(storageId, next);
       }}
-      title={
-        role === "product"
-          ? "Product: pulls the machine flat out. Click to make it a byproduct."
-          : role === "byproduct"
-            ? kind === "power"
-              ? "Byproduct: catches what is left over. Click to make it a product."
-              : "Byproduct: catches what is left over. Click to make it a trash bin."
-            : "Trash: voids what arrives. Click to make it a product."
-      }
       aria-label={`Switch to ${next}`}
       className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
     >
       <ArrowLeftRight aria-hidden className="h-2.5 w-2.5" />
     </button>
+    </MinecraftTooltip>
   );
 }
 
@@ -1111,59 +1092,7 @@ function DrainModeSwap({
  */
 function renderStorageHoverContent(storage: FactoryStorage, role: StorageRole): ReactNode {
   const { project, lastResult } = useFactoryStore.getState();
-  let inTotal = 0;
-  let outTotal = 0;
-  for (const edge of project.edges) {
-    const rate = lastResult?.edges[edge.id]?.transferredPerSecond ?? 0;
-    if (edge.target === storage.id) {
-      inTotal += rate;
-    } else if (edge.source === storage.id) {
-      outTotal += rate;
-    }
-  }
-  const net = inTotal - outTotal;
-  const presentation = ROLE_PRESENTATION[role];
-  const strict = role === "buffer" && isStrictBuffer(storage);
-  const rate = (value: number) => formatSlotRate(value, storage.kind);
-
-  // The three figures never wrap mid-number: the box grows to hold them, and
-  // past its cap the NUMBERS give up size instead - same rule as the tile.
-  const inLabel = `In ${rate(inTotal)}`;
-  const outLabel = `Out ${rate(outTotal)}`;
-  const netLabel = `${net >= 0 ? "+" : ""}${rate(net)}`;
-  const rateLength = inLabel.length + outLabel.length + netLabel.length;
-  const rateSize = rateLength <= 34 ? "text-[12px]" : rateLength <= 44 ? "text-[11px]" : "text-[10px]";
-
-  return (
-    <div className="w-max min-w-56 max-w-80">
-      <div className="text-[13px] font-semibold text-white">
-        {storage.displayName ?? storage.resourceId}
-        <span className="ml-1.5 text-[11px] font-bold text-slate-400">
-          {strict ? "STRICT" : presentation.word}
-        </span>
-      </div>
-      <p className="mt-0.5 text-[11px] leading-4 text-slate-300">
-        {strict ? STRICT_BUFFER_LINE : presentation.line}
-      </p>
-      <div
-        className={[
-          "mt-1.5 flex items-baseline justify-between gap-3 border-t border-white/15 pt-1 text-slate-300",
-          rateSize,
-        ].join(" ")}
-      >
-        <span className="whitespace-nowrap">{inLabel}</span>
-        <span className="whitespace-nowrap">{outLabel}</span>
-        <span
-          className={[
-            "whitespace-nowrap font-semibold tabular-nums",
-            net > 0.005 ? "text-emerald-300" : net < -0.005 ? "text-red-300" : "text-slate-200",
-          ].join(" ")}
-        >
-          {netLabel}
-        </span>
-      </div>
-    </div>
-  );
+  return <RecipeTooltip view={buildStorageTooltip(project, lastResult, storage, role)} />;
 }
 
 function storageMatchesSearch(storage: FactoryStorage, query: string) {

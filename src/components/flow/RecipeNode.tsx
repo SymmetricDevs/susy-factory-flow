@@ -920,6 +920,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     !powerInfo && !isCropFarmNode && !isCustomRateNode && previewMachineIcon?.displayName
       ? previewMachineIcon.displayName
       : previewHandler.label;
+  const titleRef = useFitTitle(machineDisplayName);
   const hasPowerPicture = Boolean(
     powerArt ||
       powerMachineIcon?.iconPath ||
@@ -1380,15 +1381,17 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 data-machine-menu-toggle={hasMachineMenu ? "" : undefined}
                 data-tooltip-wheel-steps={hasMachineMenu ? "" : undefined}
                 className={[
-                  // 13px: long GT machine names must read fully instead of
-                  // getting chopped by the narrow card.
+                  // 13px, shrunk by measurement (useFitTitle) as far as 9px
+                  // when the name would not fit: the real tier names
+                  // ("Advanced Chemical Reactor III") read whole before the
+                  // bar has to truncate them.
                   "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[13px] leading-[18px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
                   // Symmetric padding keeps the crop name in the true middle;
                   // the picker chevron floats on the right without shifting it.
                   isCropFarmNode
                     ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
                     : hasMachineMenu
-                      ? "nodrag nowheel relative cursor-pointer pl-6 pr-2 hover:brightness-110"
+                      ? "nodrag nowheel relative cursor-pointer pl-4 pr-1.5 hover:brightness-110"
                       : "px-2",
                 ].join(" ")}
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
@@ -1401,12 +1404,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   <ChevronDown
                     aria-hidden
                     className={[
-                      "pointer-events-none absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 transition-transform",
+                      "pointer-events-none absolute left-0.5 top-1/2 h-3 w-3 -translate-y-1/2 transition-transform",
                       isCompareOpen ? "rotate-180" : "",
                     ].join(" ")}
                   />
                 ) : null}
-                <span className="mx-auto min-w-0 truncate">
+                {/* flex-1 rather than mx-auto: the fit measures this span's
+                    width against its text, and a shrink-wrapped span moves
+                    with the text it is measuring. */}
+                <span ref={titleRef} className="min-w-0 flex-1 truncate text-center">
                   {isCropFarmPlaceholder
                     ? "Pick a crop..."
                     : isCustomRateNode
@@ -2439,6 +2445,35 @@ function UsageStat({
 function VerdictHoverContent({ verdict }: { verdict: NodeVerdict; isCustomRate: boolean }) {
   const mode = useFactoryStore((state) => tooltipMode(state.project));
   return <RecipeTooltip view={buildStatusTooltip(verdict, mode)} />;
+}
+
+/**
+ * Fits the name bar's text: 13px when it fits, otherwise scaled down by the
+ * measured overflow, never below 9px (past that the bar truncates as
+ * before). Measured once per name and once per bar resize, off the render
+ * path; nothing here runs per frame.
+ */
+function useFitTitle(name: string) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const fit = () => {
+      // Step down a point at a time until it fits: at most five layouts,
+      // and the span's own width moves as it shrinks, which a one-shot
+      // ratio misjudged.
+      element.style.fontSize = "";
+      for (let size = 13; size > 9 && element.scrollWidth > element.clientWidth; size -= 1) {
+        element.style.fontSize = `${size - 1}px`;
+      }
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [name]);
+  return ref;
 }
 
 /**

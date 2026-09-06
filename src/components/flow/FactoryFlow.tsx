@@ -80,6 +80,7 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
   FLOW_IMAGE_EXPORT_COMPLETE_EVENT,
@@ -7397,6 +7398,23 @@ const ModeKeys = memo(function ModeKeys() {
     setDragX(undefined);
     pick(MODE_KEYS[xToIndex(x)]!.mode);
   };
+  // The WHEEL walks the positions too, the way it walks every chip on the
+  // board: down is the next mode, up the one before, no wrap. One step per
+  // notch - a trackpad's stream of small deltas is gated by a short hold.
+  const wheelHoldRef = useRef(0);
+  const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const now = performance.now();
+    if (now < wheelHoldRef.current || Math.abs(event.deltaY) < 1) {
+      return;
+    }
+    wheelHoldRef.current = now + 160;
+    const current = useFactoryStore.getState().project;
+    const at = current.poolMode ? 2 : current.solveMode ? 1 : 0;
+    const next = Math.max(0, Math.min(MODE_KEYS.length - 1, at + (event.deltaY > 0 ? 1 : -1)));
+    if (next !== at) {
+      pick(MODE_KEYS[next]!.mode);
+    }
+  };
   const width = MODE_STEP * MODE_KEYS.length;
   const glassLeft =
     dragX === undefined
@@ -7412,6 +7430,7 @@ const ModeKeys = memo(function ModeKeys() {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setDragX(undefined)}
+      onWheel={onWheel}
       className={[
         "pointer-events-auto relative z-10 flex h-8 touch-none select-none border-2 border-[var(--mc-15)]",
         dragX === undefined ? "" : "cursor-grabbing",

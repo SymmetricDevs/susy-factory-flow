@@ -2734,6 +2734,9 @@ function PortRail({
   ports: RailPort[];
   pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
 }) {
+  // Solve and pool have no couplings, so the output rail is a chip wide
+  // like the input rail, and the arrow between them sits in the middle.
+  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
   if (ports.length === 0) {
     return null;
   }
@@ -2750,7 +2753,7 @@ function PortRail({
         // left, and a truncated name plus a hover beats a board you can't fit.
         // The output rail is chip (140) + 2px gap + the coupling (34, in
         // globals.css) — anything wider and the couplings hang off the card.
-        isInput ? PORT_CHIP_WIDTH_CLASS : "w-[176px]",
+        isInput || solveMode ? PORT_CHIP_WIDTH_CLASS : "w-[176px]",
       ].join(" ")}
     >
       {ports.map((port) =>

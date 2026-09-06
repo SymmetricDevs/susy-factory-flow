@@ -1,6 +1,6 @@
 # Recipe and machine tooltip design
 
-Status: proposal for discussion, not a specification to implement wholesale.
+Status: implemented for ordinary recipe cards on 2026-09-06 (`recipe-tooltip-data.ts`, `machine-tooltip-data.ts`, `RecipeTooltip.tsx`); the sections below are the design it follows.
 Date: 2026-09-06.
 Scope: ordinary recipe cards first, including Chemical Reactor recipes and
 multiblock handlers, in Build, Solve, and Pool.

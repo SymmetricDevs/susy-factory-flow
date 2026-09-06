@@ -74,8 +74,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "One switch on the toolbar: Build reports what flows, Solve counts the machines, Pool also wires and imports for you.",
       "In Pool, nothing needs a wire: every resource is shared, anything nobody makes is imported and listed under Inputs.",
-      "The setup rules sheet is gone; a filled cell and its fluid always wire together.",
-      "A tidier toolbar: the generator, custom rate and crop farm keys now sit at the top of the items column, and mute and Watch it build live in Settings.",
+      "The setup rules sheet is gone, a filled cell and its fluid always wire together, and the generator, custom rate and crop farm keys moved to the top of the items column.",
+      "Card tooltips now state rates, requirements and the gestures on offer: left click or R for recipes, right click or U for uses, drag to connect.",
     ],
   },
   {

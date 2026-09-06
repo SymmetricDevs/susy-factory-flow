@@ -156,6 +156,9 @@ import { getPowerMachineIcon, type PowerMachineIcon } from "@/lib/power/planner-
 import type { PowerSelectSetting } from "@/lib/power/types";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { useWorkspaceView } from "@/lib/workspace-view";
+import { RecipeTooltip } from "./RecipeTooltip";
+import { buildConfigTooltip } from "./machine-tooltip-data";
+import { buildPortTooltip, buildDemandTooltip, buildStatusTooltip, buildCountTooltip, tooltipMode } from "./recipe-tooltip-data";
 import { MachineStatsContent } from "./MachineStatsContent";
 import {
   fluidArtPixels,
@@ -174,12 +177,8 @@ import {
   type NodeVerdict,
   type RailPort,
 } from "./node-verdict";
-import { describeDeathSpiral } from "./death-spiral";
-import { describeClogLockForNode } from "./clog-lock";
 import {
   edgeTouchesResource,
-  explainPlug,
-  explainPort,
   formatPct,
   formatPortRate,
   formatSlotRate,
@@ -190,7 +189,6 @@ import {
   formatEnergyPerUnitParts,
   ENERGY_UNIT_TEXT,
   formatTimes,
-  type PortStory,
 } from "./flow-explainers";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import {
@@ -798,6 +796,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const machineConfigPanel =
     visibleMachineConfigControls.length > 0 ? (
       <MachineConfigControlPanel
+        recipe={recipe}
+        node={projectNode}
         controls={visibleMachineConfigControls}
         trailing={parallelPanelTile}
         onPreview={(controlId, key) =>
@@ -1368,7 +1368,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           ) : null}
           <div className="relative min-w-0">
             <MinecraftTooltip
-              content={
+              content={() =>
                 isCropFarmPlaceholder ? (
                   "Click to pick a crop"
                 ) : isCustomRateNode ? (
@@ -1389,6 +1389,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     recipe={recipe}
                     handler={selectedMachineHandler}
                     node={projectNode}
+                    result={result}
                   />
                 )
               }
@@ -1542,6 +1543,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 // an exotic's amp badge), fused left of the tier. CLICK to
                 // type any count; wheel or right-click walks the ladder
                 // (counts, then the exotic families).
+                <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Energy supply", rows: powerReport ? [{ label: "Supply per machine", value: formatCompact(powerReport.poolEuT) + " EU/t" }] : [], actions: [{ gesture: "left", label: "Edit count" }, { gesture: "right", label: "Previous supply" }, { gesture: "wheel", label: "Adjust supply" }] }} />}>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -1577,7 +1579,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     <Zap className="h-3.5 w-3.5" style={{ color: tierColor.text }} />
                   )}
                 </button>
+                </MinecraftTooltip>
               ) : null}
+              <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Voltage tier", rows: [{ label: "Configured tier", value: tierControl.current }], actions: [{ gesture: "left", label: "Increase" }, { gesture: "right", label: "Decrease" }, { gesture: "wheel", label: "Adjust tier" }] }} />}>
               <button
                 type="button"
                 onClick={(event) => {
@@ -1607,11 +1611,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   color: tierColor.text,
                   textShadow: `1px 1px 0 ${tierColor.shadow}`,
                 }}
-                title={powerReport ? undefined : `Tier ${tierControl.current}`}
                 aria-label={`Tier ${tierControl.current}`}
               >
                 {tierControl.current}
               </button>
+              </MinecraftTooltip>
             </div>
             </MinecraftTooltip>
             </div>
@@ -1866,7 +1870,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                           {solveMode ? (
                             <SolvedMachinesStat
                               label={isCropProductionNode ? "Seeds" : "Machines"}
-                              needed={result?.theoreticalMachinesRequired ?? 0}
+                              needed={result?.theoreticalMachinesRequired}
                               pinned={projectNode.solvePin}
                               onPin={(solvePin) => updateNode(projectNode.id, { solvePin })}
                             />
@@ -1926,7 +1930,7 @@ function CircuitChip({ circuit }: { circuit: RecipeProgrammedCircuit }) {
   const { setting, resource } = circuit;
   return (
     <MinecraftTooltip
-      label={setting ? `Circuit set to ${setting}` : "No circuit setting for this recipe"}
+      content={() => <RecipeTooltip view={{ title: "Programmed circuit", rows: setting ? [{ label: "Required setting", value: String(setting) }] : [], reason: setting ? "Not consumed." : "No circuit setting required." }} />}
     >
       <div
         aria-label={setting ? `Programmed circuit ${setting}` : "No circuit setting"}
@@ -2376,18 +2380,15 @@ function UsageStat({
     <MinecraftTooltip
       content={
         stalled && powerStall ? (
-          // The power story replaces the flow story outright: whatever the
-          // wires would say, nothing moves until the power fits.
-          <div className="w-60">
-            <div className="text-[13px] font-semibold text-white">
-              {powerStall.state === "under-powered"
-                ? "The hatches can't carry it"
-                : "The recipe is above this tier"}
-            </div>
-            <div className="mt-0.5 text-[11px] leading-4 text-slate-300">
-              {describePowerStall(powerStall)}
-            </div>
-          </div>
+          // The power restriction replaces the flow reading outright: whatever
+          // the wires would say, nothing runs until the power fits.
+          <RecipeTooltip
+            view={{
+              title: powerStall.state === "under-powered" ? "Insufficient energy supply" : "Tier too low for recipe",
+              rows: [],
+              reason: describePowerStall(powerStall),
+            }}
+          />
         ) : (
           <VerdictHoverContent verdict={verdict} isCustomRate={isCustomRate} />
         )
@@ -2450,191 +2451,10 @@ function UsageStat({
  * the culprit's OWN machine count, then the ladder — what caps this next and
  * where it lands once today's wall is gone.
  */
-function VerdictHoverContent({
-  verdict,
-  isCustomRate,
-}: {
-  verdict: NodeVerdict;
-  isCustomRate: boolean;
-}) {
-  // In pool mode a bare input means nothing on the board makes it, not
-  // that a wire is missing: the sentence has to say so.
-  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  const title = verdictHoverTitle(verdict, isCustomRate, poolMode);
-  const detail = verdictHoverDetail(verdict, isCustomRate, poolMode);
-
-  // Two lines: what this card is doing, and why it reads that way. Nothing
-  // else. This used to carry a fix note and a four-rung ladder of what caps
-  // the card next, which is a briefing rather than a hover - by the time you
-  // have read it you have forgotten what you pointed at. The marks on the card
-  // already say where to act; the hover only has to name the state.
-  return (
-    <div className="w-60">
-      <div className="text-[13px] font-semibold text-white">{title}</div>
-      {detail ? <div className="mt-0.5 text-[11px] leading-4 text-slate-300">{detail}</div> : null}
-    </div>
-  );
+function VerdictHoverContent({ verdict }: { verdict: NodeVerdict; isCustomRate: boolean }) {
+  const mode = useFactoryStore((state) => tooltipMode(state.project));
+  return <RecipeTooltip view={buildStatusTooltip(verdict, mode)} />;
 }
-
-/**
- * The unwired card names the slots, because that IS the whole story: every
- * one of them is a wire you have not drawn yet, and the card has already
- * marked them. Counts rather than a list once there are more than a couple,
- * so a twelve-slot multiblock does not write a paragraph.
- */
-function unwiredTitle(verdict: NodeVerdict, poolMode = false): string {
-  const inputs = verdict.bare?.inputs ?? [];
-  const outputs = verdict.bare?.outputs ?? [];
-  const total = inputs.length + outputs.length;
-  if (poolMode) {
-    // Only inputs can be bare here: every output has its pool.
-    return inputs.length === 1
-      ? `Nothing makes ${inputs[0]!.displayName}`
-      : `Nothing makes ${inputs.length} of its inputs`;
-  }
-  if (total === 0) {
-    return "Nothing is wired to it";
-  }
-  if (total === 1) {
-    const only = inputs[0] ?? outputs[0]!;
-    return inputs.length === 1
-      ? `Nothing supplies the ${only.displayName}`
-      : `Nothing takes the ${only.displayName}`;
-  }
-  return `${total} slots have no wire`;
-}
-
-function unwiredDetail(verdict: NodeVerdict, poolMode = false): string {
-  const inputs = verdict.bare?.inputs ?? [];
-  const outputs = verdict.bare?.outputs ?? [];
-  const name = (list: typeof inputs) =>
-    list.length <= 2 ? list.map((entry) => entry.displayName).join(" and ") : `${list.length} of them`;
-
-  if (poolMode) {
-    return `No machine on the board makes ${name(inputs)}, and no source drawer declares it. Add a machine that makes it, or a source drawer from the pool mode bar.`;
-  }
-
-  const parts: string[] = [];
-  if (inputs.length > 0) {
-    parts.push(`nothing supplies ${name(inputs)}`);
-  }
-  if (outputs.length > 0) {
-    parts.push(`nothing takes ${name(outputs)}`);
-  }
-  const marked = parts.join(", and ");
-  return `A machine runs on what arrives and stops when what it makes has nowhere to go, so ${marked}. Wire each marked slot to a machine, or to a SOURCE or DRAIN drawer to say you handle that end yourself.`;
-}
-
-function verdictHoverTitle(verdict: NodeVerdict, isCustomRate: boolean, poolMode = false): string {
-  switch (verdict.kind) {
-    case "starved":
-      return `Short on ${verdict.binding?.displayName ?? "an input"}`;
-    case "blocked":
-      return `Waiting on ${verdict.binding?.displayName ?? "an input"}`;
-    case "bottleneck":
-      return isCustomRate ? "Asked for more than the dialed rate" : "Asked for more than it makes";
-    case "clogged":
-      return `Nowhere to put the ${verdict.clog?.displayName ?? "spare output"}`;
-    case "dead-loop":
-      return verdict.spiral ? describeDeathSpiral(verdict.spiral).title : "Stuck in a loop";
-    case "clog-lock":
-      return verdict.clogLock && verdict.clogLockNodeId
-        ? describeClogLockForNode(verdict.clogLock, verdict.clogLockNodeId).title
-        : "Choking on a surplus";
-    case "demand-set":
-      return verdict.pct <= 0.05 ? "Nothing draws from this yet" : "Makes only what gets taken";
-    case "paced":
-      return "Runs at the speed of the machines around it";
-    case "balanced":
-      return isCustomRate ? "Dialed rate met exactly" : "Full speed, all asks met";
-    case "unwired":
-      return isCustomRate ? "No wires on this dial" : unwiredTitle(verdict, poolMode);
-    case "off":
-      return "Disabled";
-    case "no-recipe":
-      return "No recipe";
-  }
-}
-
-function verdictHoverDetail(
-  verdict: NodeVerdict,
-  isCustomRate: boolean,
-  poolMode = false,
-): string | undefined {
-  switch (verdict.kind) {
-    case "starved":
-    case "blocked": {
-      const binding = verdict.binding;
-      if (!binding) {
-        return undefined;
-      }
-      // One sentence of numbers, one of consequence. The guard in
-      // deriveNodeVerdict promises supplied < needed here, so the numbers
-      // can never argue with the word above them.
-      const supplied = formatSlotRate(binding.suppliedPerSecond, binding.kind);
-      const needed = formatSlotRate(binding.neededPerSecond, binding.kind);
-      const tied = binding.tiedWithNames?.length
-        ? ` Tied with ${binding.tiedWithNames.join(", ")}.`
-        : "";
-      const cost =
-        verdict.kind === "starved"
-          ? " Nothing it feeds goes short."
-          : " The machines it feeds go short because of it.";
-      return `Gets ${supplied} of the ${needed} it could eat.${cost}${tied}`;
-    }
-    case "bottleneck": {
-      const deficit = verdict.deficit;
-      if (!deficit) {
-        return undefined;
-      }
-      const missing = formatSlotRate(deficit.missingPerSecond, deficit.kind);
-      return `${missing} short on ${deficit.displayName}. More machines here would cover it.`;
-    }
-    case "clogged": {
-      const clog = verdict.clog;
-      if (!clog) {
-        return undefined;
-      }
-      const spare = formatSlotRate(clog.surplusPerSecond, clog.kind);
-      if (clog.stoppedTakerName) {
-        return `Nothing takes the ${clog.displayName}: ${clog.stoppedTakerName} has stopped. Its own card says why.`;
-      }
-      if (clog.heldTakerName) {
-        return `The spare ${spare} of ${clog.displayName} has nowhere to go: ${clog.heldTakerName} cannot take more at ${formatPct(clog.heldTakerPct ?? 0)}%. Its own card says why. More machines here would not help.`;
-      }
-      if (clog.takenPerSecond <= 0.0005) {
-        return `Nothing takes the ${clog.displayName}. A machine cannot run with a full output.`;
-      }
-      return `The spare ${spare} of ${clog.displayName} has nowhere to go. That holds it at ${formatPct(verdict.pct)}%.`;
-    }
-    case "dead-loop": {
-      if (!verdict.spiral) {
-        return undefined;
-      }
-      const story = describeDeathSpiral(verdict.spiral);
-      return `${story.short} ${story.fix}`;
-    }
-    case "clog-lock": {
-      if (!verdict.clogLock || !verdict.clogLockNodeId) {
-        return undefined;
-      }
-      return describeClogLockForNode(verdict.clogLock, verdict.clogLockNodeId).detail;
-    }
-    case "demand-set":
-      return "The machines it feeds are not taking more, so it does not make more. Nothing here needs fixing.";
-    case "paced":
-      return "Its ingredients arrive and its outputs move. Nothing here needs fixing.";
-    case "balanced":
-      return isCustomRate ? undefined : "Fed, full, and everything it makes gets taken.";
-    case "unwired":
-      return isCustomRate
-        ? "This dial does nothing until something is wired to it."
-        : unwiredDetail(verdict, poolMode);
-    default:
-      return undefined;
-  }
-}
-
 
 /**
  * A block that is always a whole number of grid cells tall, and always tall
@@ -2777,6 +2597,7 @@ function PortRail({
  */
 function FreePortRow({ port }: { port: RailPort }) {
   return (
+    <MinecraftTooltip content={() => <RecipeTooltip view={{ title: port.displayName, subtitle: "Free input", rows: [], reason: "No supply connection required." }} />}>
     <div
       className="flow-port relative flex h-[40px] w-full flex-none items-center gap-1 px-0.5 py-0 opacity-60"
       data-free-input="true"
@@ -2804,6 +2625,7 @@ function FreePortRow({ port }: { port: RailPort }) {
         </span>
       </span>
     </div>
+    </MinecraftTooltip>
   );
 }
 
@@ -3652,7 +3474,9 @@ export function PortChip({
           data-resource-handle="true"
           data-resource-node-id={nodeId}
           data-resource-handle-id={port.handleId}
-          title={`${isInput ? "Input" : "Output"}: ${port.displayName}. Click for what makes it, right click for what uses it (R and U do the same), drag to wire`}
+          // No native title: GlobalTitleTooltip would stamp the handle as a
+          // tooltip STOP and the rich port panel would yield to it.
+          aria-label={`${isInput ? "Input" : "Output"}: ${port.displayName}. Left click or R for recipes, right click or U for uses, drag to connect`}
           className={[
             "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
             "!rounded-none !border-0 !bg-transparent !opacity-0",
@@ -3835,187 +3659,14 @@ function CustomRatePanel({
   );
 }
 
-const STORY_TONE_TEXT: Record<PortStory["tone"], string> = {
-  red: "text-red-300",
-  amber: "text-amber-300",
-  gold: "text-yellow-200/80",
-  green: "text-emerald-300",
-  steel: "text-slate-300",
-  dim: "text-slate-400",
-};
-
-const STORY_TONE_FILL: Record<PortStory["tone"], string> = {
-  red: "#e05252",
-  amber: "#e0a63a",
-  gold: "#b0aa66",
-  green: "#3fbf6f",
-  steel: "#8aa0b8",
-  dim: "#5a6a80",
-};
-
-const STORY_ACTION_TEXT: Record<"fix" | "fine" | "note", string> = {
-  fix: "text-amber-300",
-  fine: "text-emerald-300",
-  note: "text-slate-300",
-};
-
-/**
- * The port hover panel — the big explainer: a thicker copy of the port's bar
- * with the same landmarks, the honest numbers, the per-line list, then the
- * plain answer to "why is it like this" and what to do. All copy comes from
- * explainPort; styles ride inline so no stale stylesheet chunk can mute the
- * teaching surface.
- */
 function renderPortHoverContent(port: RailPort, nodeId: string) {
-  if (port.nameplatePerSecond <= 1e-9 && port.currentPerSecond <= 1e-9) {
-    return undefined;
-  }
-
   const { project, lastResult } = useFactoryStore.getState();
   const verdict = deriveNodeVerdict(project, lastResult, nodeId);
-  const story = explainPort(project, lastResult, nodeId, port, verdict);
-
-  const nameplate = port.nameplatePerSecond;
-  const fillPct = nameplate > 1e-9 ? Math.min(port.currentPerSecond / nameplate, 1) * 100 : 0;
-  const couldPct = nameplate > 1e-9 ? Math.min(port.couldPerSecond / nameplate, 1) * 100 : 0;
-  const ghostPct = Math.max(0, couldPct - fillPct);
-  const wantRatio = nameplate > 1e-9 ? port.wantedPerSecond / nameplate : 0;
-  const caretPct =
-    port.wantedPerSecond > 1e-9 ? Math.min(Math.max(wantRatio, 0), 1) * 100 : undefined;
-  const hasBurst = wantRatio > 1.005;
-  const fillColor = STORY_TONE_FILL[story.tone];
-
-  return (
-    <div className="w-64">
-      <div className="flex items-baseline gap-2">
-        <span className="min-w-0 truncate text-[13px] font-semibold text-white">
-          {port.displayName}
-        </span>
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-          {port.side === "input" ? "Input" : "Output"}
-        </span>
-        <span
-          className={[
-            "ml-auto shrink-0 text-[10px] font-black tracking-wide",
-            STORY_TONE_TEXT[story.tone],
-          ].join(" ")}
-        >
-          {story.stateWord}
-        </span>
-      </div>
-
-      {!port.unsupplied ? (
-        <div className={["mt-2 flex items-center gap-1", caretPct !== undefined ? "mb-2" : "mb-1"].join(" ")}>
-          <div
-            className="relative h-[9px] flex-1"
-            style={{
-              background: "#101826",
-              border: "1px solid #2c3a52",
-              borderRightWidth: hasBurst ? 2 : 1,
-              borderRightColor: hasBurst ? "rgba(255,255,255,0.9)" : "#2c3a52",
-            }}
-          >
-            <i
-              className="absolute bottom-0 left-0 top-0 block"
-              style={{ width: `${fillPct}%`, background: fillColor }}
-            />
-            {ghostPct > 1 ? (
-              <s
-                className="absolute bottom-0 top-0 block"
-                style={{
-                  left: `${fillPct}%`,
-                  width: `${ghostPct}%`,
-                  background:
-                    "repeating-linear-gradient(45deg, rgba(220,228,245,0.35) 0 1.5px, transparent 1.5px 3px)",
-                }}
-              />
-            ) : null}
-            {caretPct !== undefined ? (
-              <u
-                className="absolute block"
-                style={{
-                  left: `${caretPct}%`,
-                  top: "100%",
-                  marginTop: 1,
-                  width: 0,
-                  height: 0,
-                  borderLeft: "4px solid transparent",
-                  borderRight: "4px solid transparent",
-                  borderBottom: "5px solid #f5c542",
-                  transform: "translateX(-4px)",
-                }}
-              />
-            ) : null}
-          </div>
-          {hasBurst ? (
-            <em className="shrink-0 border border-dashed border-amber-400/70 bg-amber-400/20 px-1 text-[9px] font-black not-italic leading-[13px] text-amber-300">
-              {formatTimes(wantRatio)}
-            </em>
-          ) : null}
-        </div>
-      ) : null}
-
-      <StoryBody story={story} />
-    </div>
-  );
+  return <RecipeTooltip view={buildPortTooltip(project, lastResult, nodeId, port, verdict)} />;
 }
 
-/**
- * The whole body of a port or plug hover: one sentence.
- *
- * It used to be a table of rates, then a list of every line plugged in with
- * the far machine's own speed beside it, then an arrowed instruction. The
- * numbers are already on the port, the lines are already on the board, and the
- * marks already say where to act.
- */
-function StoryBody({ story }: { story: PortStory }) {
-  return (
-    <div className="mt-1.5 border-t border-white/15 pt-1.5 text-[12px] leading-snug text-slate-200">
-      {story.lines.map((line, index) => (
-        <p key={index} className="mb-1 last:mb-0">
-          {line}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-/**
- * The plug hover — the asker's story at full length: who is plugged in, what
- * they ask, what they get, and the fix. The covered bar rides the asker's
- * own frame: full = the ask is covered.
- */
-function renderPlugHoverContent(port: RailPort, nodeId: string) {
-  const { project, lastResult } = useFactoryStore.getState();
-  const story = explainPlug(project, lastResult, nodeId, port);
-  if (!story) {
-    return undefined;
-  }
-  const plug = port.plug!;
-
-  return (
-    <div className="w-64">
-      <div className="flex items-baseline gap-2">
-        <span className="min-w-0 truncate text-[13px] font-semibold text-white">
-          {port.displayName}
-        </span>
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-          Plug
-        </span>
-        <span
-          className={[
-            "ml-auto shrink-0 text-[10px] font-black tracking-wide",
-            STORY_TONE_TEXT[story.tone],
-          ].join(" ")}
-        >
-          {story.stateWord}
-          {plug.timesShort !== undefined ? ` ${formatTimes(plug.timesShort)}` : ""}
-        </span>
-      </div>
-
-      <StoryBody story={story} />
-    </div>
-  );
+function renderPlugHoverContent(port: RailPort, _nodeId: string) {
+  return <RecipeTooltip view={buildDemandTooltip(port)} />;
 }
 
 function recipeContainsSearchResource(recipe: Recipe, query: string) {
@@ -4358,11 +4009,15 @@ function configTierHint(
 }
 
 function MachineConfigControlPanel({
+  recipe,
+  node,
   controls,
   onSelect,
   onPreview,
   trailing,
 }: {
+  recipe: Recipe;
+  node: FactoryNode;
   controls: MachineConfigTierControl[];
   onSelect: (controlId: string, nextTier: string) => void;
   /** Hovering an option shows the node as if it were picked. */
@@ -4419,7 +4074,7 @@ function MachineConfigControlPanel({
                   onPreview ? (key) => onPreview(control.id, key) : undefined
                 }
                 disabled={control.tiers.length <= 1}
-                title={`${control.label}: ${control.current.label}`}
+                tooltipContent={() => <RecipeTooltip view={buildConfigTooltip(recipe, node, control)} />}
                 ariaLabel={control.label}
                 className="flex-1"
               />
@@ -4439,6 +4094,7 @@ function MachineConfigControlPanel({
  */
 function ConfigParallelTile({ value }: { value: string }) {
   return (
+    <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Parallel operations", rows: [{ label: "Configured multiplier", value }], reason: "Applied by the selected machine configuration." }} />}>
     <div className="min-w-0">
       <span className="mb-0.5 block text-[12px] font-bold uppercase leading-[14px] text-[var(--mc-ink-muted)]">
         Parallel
@@ -4447,6 +4103,7 @@ function ConfigParallelTile({ value }: { value: string }) {
         ×{value}
       </span>
     </div>
+    </MinecraftTooltip>
   );
 }
 
@@ -5596,20 +5253,13 @@ function SolvedMachinesStat({
   onPin,
 }: {
   label: string;
-  needed: number;
+  needed: number | undefined;
   pinned: number | undefined;
   onPin: (machines: number | undefined) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const isPinned = pinned !== undefined && pinned > 0;
-  const whole = Math.ceil(needed - 0.000001);
-  const pct = whole > 0 ? Math.round((needed / whole) * 100) : 0;
-  const title = isPinned
-    ? `Pinned: exactly ${formatSolvedMachines(pinned)} run and the line solves around them. Click to change; empty unpins.`
-    : needed <= 0.0000005
-      ? "No product amount needs this machine. Click to pin a count and solve the line around it."
-      : `Build ${whole} and run at ${pct}%. Click to pin a count instead.`;
   const commit = () => {
     setEditing(false);
     if (draft.trim() === "") {
@@ -5622,8 +5272,8 @@ function SolvedMachinesStat({
     }
   };
   return (
+    <MinecraftTooltip content={() => <RecipeTooltip view={{ ...buildCountTooltip(needed, pinned), ...(editing ? { actions: [], reason: "Clear the field to unpin." } : {}) }} />} >
     <div
-      title={title}
       className="min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
     >
       {/* The label stays MACHINES either way - it never stops being one.
@@ -5670,12 +5320,12 @@ function SolvedMachinesStat({
               "truncate font-medium tabular-nums underline decoration-dotted decoration-[1.5px] underline-offset-[3px]",
               isPinned
                 ? "text-[#ffd257]"
-                : needed <= 0.0000005
+                : (needed ?? 0) <= 0.0000005
                   ? "text-[var(--mc-ink-muted)]"
                   : "",
             ].join(" ")}
           >
-            {!isPinned && needed > 0.0000005 && needed < 0.0005 ? (
+            {!isPinned && needed !== undefined && needed > 0.0000005 && needed < 0.0005 ? (
               // A sliver below the finest printable step: a quiet small
               // grey < in place of the × so it reads "less than 0.001".
               <>
@@ -5683,7 +5333,7 @@ function SolvedMachinesStat({
                 0.001
               </>
             ) : (
-              <>×{formatSolvedMachines(isPinned ? pinned : needed)}</>
+              <>×{needed === undefined && !isPinned ? "—" : formatSolvedMachines(isPinned ? pinned : needed ?? 0)}</>
             )}
           </span>
           <Pencil
@@ -5693,6 +5343,7 @@ function SolvedMachinesStat({
         </button>
       )}
     </div>
+    </MinecraftTooltip>
   );
 }
 
@@ -5831,27 +5482,14 @@ function SteamStat({
 
   return (
     <MinecraftTooltip
-      content={
-        <div className="w-60 space-y-1">
-          <div className="text-[13px] font-semibold text-white">Burns steam, not EU</div>
-          <div className="text-[11px] leading-4 text-slate-300">
-            {report.isMultiblock ? (
-              <>
-                One machine burns {formatCompact(perMachine)} L/s at full speed:{" "}
-                {formatCompact(report.singleDrawSteamPerTick)} L/t per recipe across{" "}
-                {report.parallels} parallels.
-              </>
-            ) : (
-              <>One machine burns {formatCompact(perMachine)} L/s while running.</>
-            )}
-          </div>
-          <div className="text-[11px] leading-4 text-slate-300">
-            {report.highPressure
-              ? "High pressure builds run twice as fast and burn twice the steam."
-              : "A high pressure build runs twice as fast and burns twice the steam."}
-          </div>
-        </div>
-      }
+      content={() => <RecipeTooltip view={{
+        title: "Steam",
+        rows: [
+          { label: "Draw per active machine", value: formatCompact(perMachine) + " L/s" },
+          { label: average ? "Card average" : "Card peak", value: formatCompact(drawLitresPerSecond) + " L/s" },
+          ...(report.parallels > 1 ? [{ label: "Parallel operations", value: String(report.parallels) }] : []),
+        ],
+      }} />}
     >
       <div className="min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
         <div className="truncate text-[11px] uppercase leading-[13px] text-[var(--mc-ink-muted)]">
@@ -5874,410 +5512,27 @@ function SteamStat({
 }
 
 /** A tier's name in its own paint, for the power story's diagram rows. */
-function StoryTierChip({ tier }: { tier: NodePowerReport["tier"] }) {
-  const color = GT_TIER_COLORS[tier];
-  return (
-    <span
-      className="inline-block border px-1 text-[10px] font-bold leading-[14px]"
-      style={{
-        backgroundColor: color.background,
-        borderColor: color.border,
-        color: color.text,
-        textShadow: `1px 1px 0 ${color.shadow}`,
-      }}
-    >
-      {tier}
-    </span>
-  );
-}
 
-/**
- * One beat of the power story, boxed but never titled: the grouping alone
- * says "new thought", so the fact lines inside stay bare.
- */
-function StoryCard({ children }: { children: ReactNode }) {
-  return <div className="space-y-1 border border-white/10 bg-white/[0.04] px-2 py-1.5">{children}</div>;
-}
 
-/** Slots the spend bar can lerp between; comfortably past GT's tier count. */
-const SPEND_BAR_SLOTS = 17;
-/** The bar's content width in px, for judging whether a label fits. */
-const SPEND_BAR_WIDTH_PX = 364;
-
-/**
- * The budget as a bar, spent left to right, TO SCALE: the track's full width
- * is the supply from the line above, the first slice is the recipe's own
- * draw, and each overclock is the slice of budget it cost — so every later
- * overclock is visibly ~3× wider than everything before it, which is the
- * whole exponential mechanic drawn as widths. Whatever the slices leave
- * unspent is the hatched SPARE tail (labeled when it has the room): budget
- * held but too little for the next step, whose price the line hanging under
- * the bar's right end names.
- *
- * Slices are inscribed where room allows — "recipe" on the first, the speed
- * reached (×2, ×4 …) on each overclock — cyan for perfect steps, amber for
- * regular ones.
- *
- * The drawing lerps on the board's value-motion clock, like any other
- * number: a fresh hover mounts it settled, and a tier or hatch click made
- * while the panel is held up eases every boundary to its new fraction of
- * the new budget. The lerped vector is the cumulative spend at each slot,
- * padded to a fixed length so gained and lost slices grow and shrink
- * smoothly; labels snap to the target shape and are revealed by their
- * growing slices.
- */
-function StoryOverclockBar({
-  perfectSteps,
-  normalSteps,
-  perfectSpeedFactor,
-  perfectEuFactor,
-  batchEuT,
-  poolEuT,
-}: {
-  perfectSteps: number;
-  normalSteps: number;
-  perfectSpeedFactor: number;
-  perfectEuFactor: number;
-  /** One batch's un-overclocked draw: the bar's first slice. */
-  batchEuT: number;
-  /** The supply: the track's full width. */
-  poolEuT: number;
+function PowerStoryContent({ report, utilization, machines = 1 }: {
+  report: NodePowerReport; utilization?: number; machines?: number;
 }) {
-  const { valueMotion } = useBoardMotion();
-  const taken = perfectSteps + normalSteps;
-  // Draw and speed once `steps` overclocks are bought: perfect steps first.
-  const cumulativeEuT = (steps: number) =>
-    batchEuT *
-    perfectEuFactor ** Math.min(steps, perfectSteps) *
-    4 ** Math.max(0, steps - perfectSteps);
-  const speedAfter = (steps: number) =>
-    perfectSpeedFactor ** Math.min(steps, perfectSteps) * 2 ** Math.max(0, steps - perfectSteps);
-  const fractions = useMotionValues(
-    Array.from({ length: SPEND_BAR_SLOTS }, (_, slot) =>
-      Math.min(1, cumulativeEuT(Math.min(slot, taken)) / poolEuT),
-    ),
-    valueMotion,
-  );
-  if (!(Number.isFinite(poolEuT) && poolEuT > 0)) {
-    return null;
-  }
-  const spareEuT = Math.max(0, poolEuT - cumulativeEuT(taken));
-  const sparePx = (1 - fractions[SPEND_BAR_SLOTS - 1]) * SPEND_BAR_WIDTH_PX;
+  const mode = useFactoryStore((state) => tooltipMode(state.project));
+  const peak = report.drawEuT * machines;
+  return <RecipeTooltip view={{
+    title: "Power", mode,
+    rows: [
+      { label: "Configured tier", value: report.tier },
+      { label: "Supply per machine", value: `${formatCompact(report.poolEuT)} EU/t` },
+      { label: "Draw per active machine", value: `${formatCompact(report.drawEuT)} EU/t` },
+      { label: "Card peak", value: `${formatCompact(peak)} EU/t` },
+      ...(utilization === undefined ? [] : [{ label: "Card average", value: `${formatCompact(peak * Math.min(1, Math.max(0, utilization)))} EU/t` }]),
+      ...(report.parallels > 1 ? [{ label: "Parallel operations", value: String(report.parallels) }] : []),
+      { label: "Overclock steps", value: String(report.overclockSteps) },
+    ],
+    reason: report.state === "ok" ? undefined : describePowerStall(report),
 
-  return (
-    <div aria-hidden>
-      <div className="relative h-4 border border-slate-600">
-      {Array.from({ length: SPEND_BAR_SLOTS }, (_, slot) => {
-        const startPct = (slot === 0 ? 0 : fractions[slot - 1]) * 100;
-        const widthPct = fractions[slot] * 100 - startPct;
-        if (widthPct <= 0.15) {
-          return null;
-        }
-        const widthPx = (widthPct / 100) * SPEND_BAR_WIDTH_PX;
-        const kind = slot === 0 ? "recipe" : slot <= perfectSteps ? "perfect" : "normal";
-        const label =
-          slot === 0
-            ? widthPx >= 48
-              ? "recipe"
-              : undefined
-            : slot <= taken && widthPx >= 26
-              ? `×${trimFactor(speedAfter(slot))}`
-              : undefined;
-        return (
-          <div
-            key={slot}
-            className={[
-              "absolute inset-y-0 overflow-hidden",
-              kind === "recipe"
-                ? "bg-slate-400/50"
-                : kind === "perfect"
-                  ? "bg-cyan-400/60"
-                  : "bg-amber-300/60",
-            ].join(" ")}
-            style={{ left: `${startPct}%`, width: `calc(${widthPct}% - 1px)` }}
-          >
-            {label ? (
-              <span className="absolute inset-0 flex items-center justify-center whitespace-nowrap text-[10px] leading-none text-white [text-shadow:1px_1px_0_rgba(0,0,0,0.8)]">
-                {label}
-              </span>
-            ) : null}
-          </div>
-        );
-      })}
-      {/* The unspent tail, hatched so it reads as budget deliberately held —
-          too little for the next step, whose price hangs right under it. */}
-      <span
-        className="absolute inset-y-0 right-0"
-        style={{
-          left: `${fractions[SPEND_BAR_SLOTS - 1] * 100}%`,
-          backgroundImage:
-            "repeating-linear-gradient(135deg, rgba(148,163,184,0.3) 0 2px, transparent 2px 6px)",
-        }}
-      />
-        {sparePx >= 64 ? (
-          <span
-            className="absolute inset-y-0 right-0 flex items-center justify-center whitespace-nowrap text-[10px] leading-none text-slate-400"
-            style={{ left: `${fractions[SPEND_BAR_SLOTS - 1] * 100}%` }}
-          >
-            spare {formatCompact(spareEuT)}
-          </span>
-        ) : null}
-      </div>
-      {/* The axis, named: the whole track is exactly the budget from the
-          balance card, zero at the left. Without these two figures the
-          range read as arbitrary. */}
-      <div className="flex justify-between text-[9px] leading-3 text-slate-500">
-        <span>0</span>
-        <span>{formatCompact(poolEuT)} EU/t</span>
-      </div>
-    </div>
-  );
-}
-
-function trimFactor(value: number): string {
-  return Number.isInteger(value)
-    ? String(value)
-    : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
-
-/** Usage as the card's own percent: one decimal only while a whole number
- * would round a running machine down to a flat 0%. */
-function usagePctText(usage: number): string {
-  const pct = usage * 100;
-  return pct > 0 && pct < 0.5 ? formatRate(pct, 1) : formatPct(pct);
-}
-
-/**
- * THE power tooltip, one panel shared by every power surface on the card:
- * the hatch chip, the tier chip, and the footer's POWER cell all say this,
- * so wherever the hover lands the language is the same.
- *
- * One title — "Overclocking", what the whole panel is about — then three
- * little CARDS, unlabeled, in the order the game spends
- * the supply: the balance (what the build gets you to spend), the recipe and
- * where you're at (its cost, the parallels paid first, and the spend drawn
- * as a bar to scale — StoryOverclockBar), and the outcome (what it runs at,
- * with the next overclock's price as the last word). Everything here is
- * EU/t — never seconds, which no other surface on the card speaks — and the
- * whole-node total stays off it: the footer cells under the cursor already
- * say it. Usage closes the outcome, once: the peak figure is what the
- * machine draws while running, and a machine running part of the time
- * averages peak times usage. The bar is drawn only when the arithmetic
- * reproduces the real draw — runtime-ladder machines, whose step kinds the
- * game never exported, get the honest count alone.
- */
-function PowerStoryContent({
-  report,
-  utilization,
-  machines = 1,
-}: {
-  report: NodePowerReport;
-  /** The solve's usage for this card, when one is known: 0..1+. */
-  utilization?: number;
-  /** Machine count times node parallel: what the POWER cell multiplies by.
-   * The story is told per machine, so the outcome names both figures or the
-   * conclusion contradicts the cell under the cursor. */
-  machines?: number;
-}) {
-  const stall = describePowerStall(report);
-  const usage =
-    utilization === undefined ? undefined : Math.min(1, Math.max(0, utilization));
-  const cardPeakEuT = report.drawEuT * machines;
-  const perRunEuT = report.parallels > 0 ? report.drawEuT / report.parallels : report.drawEuT;
-  const normalSteps = Math.max(0, report.overclockSteps - report.perfectOverclockSteps);
-  const expectedEuT =
-    report.singleDrawEuT *
-    report.perfectEuFactor ** report.perfectOverclockSteps *
-    4 ** normalSteps;
-  const ladderHonest =
-    report.overclockSteps === 0 ||
-    Math.abs(expectedEuT - perRunEuT) <= Math.max(2, perRunEuT * 0.02);
-  // "perfect" is the standard ×4/×4 deal; a machine with its own factors
-  // (arc electrodes and kin) is called by the honest generic word instead.
-  const perfectWord =
-    report.perfectSpeedFactor === 4 && report.perfectEuFactor === 4 ? "perfect" : "machine";
-
-  const batchEuT = report.singleDrawEuT * report.parallels;
-  // How many times over the budget covers one batch, said the way a player
-  // would: whole numbers once it's big, one decimal while it's close.
-  const powerRatio = report.poolEuT / Math.max(1, batchEuT);
-  const ratioText =
-    powerRatio >= 9.95 ? String(Math.round(powerRatio)) : trimFactor(Math.round(powerRatio * 10) / 10);
-  // What the untaken step would bill, the way the game bills it: whole
-  // powers of four over the batch draw, floored at 32 ("treat ULV as LV").
-  const nextStepEuT = Math.max(batchEuT, 32) * 4 ** (report.overclockSteps + 1);
-  const nextSpeedLabel = trimFactor(
-    report.perfectSpeedFactor ** report.perfectOverclockSteps * 2 ** (normalSteps + 1),
-  );
-
-  return (
-    <div className="w-96 space-y-1.5 text-[12px] leading-4 text-slate-200">
-      {/* The one title the panel keeps: what ALL of this is about. */}
-      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
-        Overclocking
-      </div>
-      {/* The balance. The nowrap keeps a line break from stranding the
-          figure's unit on its own line. */}
-      <StoryCard>
-        <div>
-          {report.isMultiblock ? (
-            <>
-              {report.hatchTypeLabel ? (
-                <>
-                  A <StoryTierChip tier={report.tier} /> {report.hatchTypeLabel} gets you
-                </>
-              ) : (
-                <>
-                  {report.hatches}× <StoryTierChip tier={report.tier} /> energy{" "}
-                  {report.hatches === 1 ? "hatch gets" : "hatches get"} you
-                </>
-              )}{" "}
-              <span className="whitespace-nowrap">
-                <span className="font-bold">{formatCompact(report.poolEuT)} EU/t</span>
-              </span>{" "}
-              to spend
-              {report.amps > 1 ? ` (${formatCompact(report.amps)} A)` : ""}
-            </>
-          ) : (
-            <>
-              <StoryTierChip tier={report.tier} /> machine gets you{" "}
-              <span className="whitespace-nowrap">
-                <span className="font-bold">{formatCompact(report.poolEuT)} EU/t</span>
-              </span>{" "}
-              to spend{report.amps > 1 ? ` (${report.amps} A)` : ""}
-            </>
-          )}
-        </div>
-      </StoryCard>
-
-      {/* The recipe, and where you're at. */}
-      <StoryCard>
-        {report.parallels > 1 ? (
-          <div>
-            ×{report.parallels} recipes at once,{" "}
-            <span className="whitespace-nowrap">
-              {formatCompact(report.singleDrawEuT)} EU/t each
-            </span>
-            :{" "}
-            <span className="whitespace-nowrap">
-              <span className="font-bold">{formatCompact(batchEuT)} EU/t</span>
-            </span>
-          </div>
-        ) : (
-          <div>
-            <StoryTierChip tier={report.minimumTier} /> recipe:{" "}
-            <span className="whitespace-nowrap">
-              <span className="font-bold">{formatCompact(report.singleDrawEuT)} EU/t</span>
-            </span>
-          </div>
-        )}
-        {ladderHonest ? (
-          <StoryOverclockBar
-            perfectSteps={report.perfectOverclockSteps}
-            normalSteps={normalSteps}
-            perfectSpeedFactor={report.perfectSpeedFactor}
-            perfectEuFactor={report.perfectEuFactor}
-            batchEuT={batchEuT}
-            poolEuT={report.poolEuT}
-          />
-        ) : null}
-        {/* The deal, spelled out: the ratio, the count it buys, and what
-            this machine's KIND of overclock trades — regular pays ×4 power
-            for only ×2 speed, perfect gets the full ×4 back. The kind is the
-            machine's own nature (only the heat machines ever mix the two,
-            when spare coil heat upgrades the first steps), so the sentence
-            states it as a fact about the machine, in its slices' colour. */}
-        {ladderHonest && Number.isFinite(report.poolEuT) && report.poolEuT > 0 ? (
-          <div className="text-[11px] leading-4 text-slate-400">
-            You have <span className="text-slate-200">{ratioText}×</span> the power this recipe
-            needs.{" "}
-            {report.overclockSteps > 0 ? (
-              <>
-                Each whole ×4 of that buys an overclock, so {report.overclockSteps} fire
-                {report.overclockSteps === 1 ? "s" : ""}.{" "}
-                {report.perfectOverclockSteps > 0 && normalSteps > 0 ? (
-                  <>
-                    The first {report.perfectOverclockSteps === 1 ? "is" : `${report.perfectOverclockSteps} are`}{" "}
-                    <span className="text-cyan-300">
-                      {perfectWord}: ×{trimFactor(report.perfectEuFactor)} power buys the full ×
-                      {trimFactor(report.perfectSpeedFactor)} speed
-                    </span>
-                    ; the rest {normalSteps === 1 ? "is" : "are"}{" "}
-                    <span className="text-amber-300">regular: ×4 power buys only ×2 speed</span>.
-                  </>
-                ) : report.perfectOverclockSteps > 0 ? (
-                  <span className="text-cyan-300">
-                    {perfectWord === "perfect"
-                      ? "This machine overclocks perfectly: every ×4 power buys the full ×4 speed, no energy wasted."
-                      : `This machine overclocks its own way: ×${trimFactor(report.perfectEuFactor)} power buys ×${trimFactor(report.perfectSpeedFactor)} speed.`}
-                  </span>
-                ) : (
-                  <span className="text-amber-300">
-                    This machine&apos;s overclocks are regular: ×4 power buys only ×2 speed.
-                  </span>
-                )}
-              </>
-            ) : (
-              <>An overclock takes a whole ×4, so none fire yet.</>
-            )}
-          </div>
-        ) : null}
-      </StoryCard>
-
-      {/* The outcome, plainly: what it all lands at, then the next rung's
-          price. No tier chip opening the card — the conclusion is a number,
-          not a tier. */}
-      <StoryCard>
-        <div>
-          {machines > 1 ? (
-            <>
-              So at peak each machine runs at{" "}
-              <span className="whitespace-nowrap">{formatCompact(report.drawEuT)} EU/t</span>:{" "}
-              <span className="whitespace-nowrap">
-                <span className="font-bold">{formatCompact(cardPeakEuT)} EU/t</span>
-              </span>{" "}
-              across {machines}
-            </>
-          ) : (
-            <>
-              So at peak it runs at{" "}
-              <span className="whitespace-nowrap">
-                <span className="font-bold">{formatCompact(report.drawEuT)} EU/t</span>
-              </span>
-            </>
-          )}
-          {!ladderHonest
-            ? ` (${report.overclockSteps} overclock${report.overclockSteps === 1 ? "" : "s"})`
-            : ""}
-          .
-        </div>
-        {ladderHonest ? (
-          <div className="text-[11px] text-slate-400">
-            {nextStepEuT > report.poolEuT ? (
-              <>
-                The next overclock (×{nextSpeedLabel} speed) would take{" "}
-                <span className="whitespace-nowrap">{formatCompact(nextStepEuT)} EU/t</span>.
-              </>
-            ) : (
-              <>More power won&apos;t buy another overclock here.</>
-            )}
-          </div>
-        ) : null}
-        {usage !== undefined && usage < 0.995 ? (
-          <div className="text-[11px] text-slate-400">
-            Because {machines > 1 ? "the machines run" : "the machine runs"} at{" "}
-            {usagePctText(usage)}%, the average draw is{" "}
-            <span className="whitespace-nowrap">
-              {formatCompact(cardPeakEuT * usage)} EU/t
-            </span>
-            .
-          </div>
-        ) : null}
-      </StoryCard>
-
-      {stall ? <div className="font-bold text-red-400">{stall}</div> : null}
-    </div>
-  );
+  }} />;
 }
 
 function MachineCountStat({
@@ -6355,6 +5610,7 @@ function MachineCountStat({
         >
           <Minus className="h-3 w-3" />
         </button>
+        <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Installed " + label.toLowerCase(), rows: [{ label: "Count", value: String(machineCount) }], actions: [{ gesture: "left", label: "Edit count" }, { gesture: "wheel", label: "Adjust count" }] }} />}>
         <input
           value={draft}
           onChange={(event) => {
@@ -6371,9 +5627,9 @@ function MachineCountStat({
           onClick={(event) => event.stopPropagation()}
           inputMode="numeric"
           aria-label={`${label} count`}
-          title={`Edit ${label.toLowerCase()} count`}
           className="nodrag h-[21px] w-0 min-w-0 flex-1 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-center text-[14px] font-medium leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] focus:ring-1 focus:ring-cyan-400"
         />
+        </MinecraftTooltip>
         <button
           type="button"
           onClick={(event) => {

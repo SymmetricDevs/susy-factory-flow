@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Search } from "lucide-react";
+import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 
 export interface MinecraftSelectOption {
   key: string;
@@ -26,6 +27,7 @@ export function MinecraftSelect({
   onPreview,
   searchable = false,
   wideMenu = false,
+  tooltipContent,
 }: {
   value: string;
   options: MinecraftSelectOption[];
@@ -40,6 +42,7 @@ export function MinecraftSelect({
   searchable?: boolean;
   /** Let the open list outgrow the control for long option labels. */
   wideMenu?: boolean;
+  tooltipContent?: ReactNode | (() => ReactNode);
 }) {
   const [isOpen, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -79,6 +82,7 @@ export function MinecraftSelect({
 
   return (
     <div ref={rootRef} className={["relative min-w-0", className].join(" ")}>
+      <MinecraftTooltip content={tooltipContent}>
       <button
         type="button"
         disabled={disabled}
@@ -93,7 +97,7 @@ export function MinecraftSelect({
             setOpen(false);
           }
         }}
-        title={title}
+        title={tooltipContent ? undefined : title}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -104,6 +108,7 @@ export function MinecraftSelect({
         <span className="min-w-0 flex-1 truncate text-left">{current?.label ?? value}</span>
         {disabled ? null : <ChevronDown className="h-3 w-3 shrink-0" />}
       </button>
+      </MinecraftTooltip>
       {isOpen ? (
         <div
           role="listbox"

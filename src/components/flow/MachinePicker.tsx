@@ -5,6 +5,8 @@ import { useStore } from "@xyflow/react";
 import type { MachineHandler, MachineTier, Recipe } from "@/lib/model/types";
 import { applyMachineHandlerToRecipe, formatRate, isSteamMachineHandler } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
+import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { RecipeTooltip } from "./RecipeTooltip";
 import { GT_TIER_COLORS } from "./tier-colors";
 import type { MachineHandlerIcon } from "./machine-icons";
 
@@ -287,6 +289,7 @@ export function MachineTabStrip({
           // The 40px slot is the grid unit; the tab inside it is free to be
           // whatever height reads best.
           <span key={handler.id} className="flex h-[40px] items-end">
+          <MinecraftTooltip content={() => <RecipeTooltip view={{ title: handler.label, rows: [], reason: active ? "Selected machine." : "Previewing this machine. Select to apply.", actions: active ? [] : [{ gesture: "left", label: "Select machine" }] }} />}>
           <button
             type="button"
             // Preview is pointer-only (focus used to flash it around clicks)
@@ -299,7 +302,6 @@ export function MachineTabStrip({
               onSelect(handler.id);
             }}
             onPointerDown={(event) => event.stopPropagation()}
-            title={handler.label}
             aria-label={`Use ${handler.label}`}
             aria-pressed={active}
             className={[
@@ -334,6 +336,7 @@ export function MachineTabStrip({
               </span>
             )}
           </button>
+          </MinecraftTooltip>
           </span>
         );
       })}

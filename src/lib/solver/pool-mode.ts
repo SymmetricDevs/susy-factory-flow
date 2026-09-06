@@ -1,6 +1,7 @@
 import { isRecipeInputConsumed, makeResourceKey } from "../model/resources";
 import { applyRecipeInputOverrides } from "../model/recipe-input-overrides";
 import { applyMachineHandlerToRecipe } from "../model/recipe-rules";
+import { poolSideOf } from "../model/storage-role";
 import type { FactoryProject, FactoryStorage, ResourceKey, ResourceKind } from "../model/types";
 import { getRuntimeCalculationOutputs } from "./runtime-calculation";
 
@@ -17,14 +18,14 @@ import { getRuntimeCalculationOutputs } from "./runtime-calculation";
  * Per resource key, exactly one hidden drawer (`pool:<key>`):
  *
  * - every enabled machine OUTPUT of that resource wires INTO it, and every
- *   consumed machine INPUT wires OUT of it - even slots the player has
- *   wired by hand, so a hand-drawn wire and the pool share the same rules
- *   as a wired slot under free inputs (the wire is served first; the
- *   books' recycle-before-import stage does that);
- * - a player's unwired SOURCE drawer (`poolSide: "source"`) of that
- *   resource wires into it too: that is the plan's declared import;
- * - a player's unwired DRAIN drawer (`poolSide: "drain"`) wires out of it:
- *   the plan's declared product, byproduct or trash.
+ *   consumed machine INPUT wires OUT of it. The wires the player drew are
+ *   DROPPED (Jack, 2026-09-05): they mean nothing in this mode, the board
+ *   fades them out, and they come back untouched when the mode goes off;
+ * - a player's SOURCE drawer of that resource wires into it too: the
+ *   plan's declared import. A drawer's side is `poolSide` when set, else
+ *   what its (now ignored) wires said it was for - see `poolSideOf`;
+ * - a player's DRAIN drawer wires out of it: the plan's declared product,
+ *   byproduct or trash.
  *
  * Roles then fall out of the wiring the way they do everywhere else. A pool
  * with feeders and takers is an overflow BUFFER, which passes on what its
@@ -142,21 +143,21 @@ export function expandPool(project: FactoryProject): PoolExpansion {
   }
 
   for (const storage of project.storages ?? []) {
-    // A drawer with wires of its own already has a job; only the loose
-    // ones declare a side. (A hand-wired drawer's machine end is pooled
-    // through the machine's own port above.)
-    if (wiredIn.has(storage.id) || wiredOut.has(storage.id)) {
-      continue;
-    }
-    if (storage.poolSide === "source") {
+    // WIRES DO NOT EXIST in pool mode, but the ones drawn before the switch
+    // still say what a drawer was for (poolSideOf): fed only, a product;
+    // drawn only, a source. A declared side wins; a buffer has no side.
+    const side = poolSideOf(storage, wiredIn.has(storage.id), wiredOut.has(storage.id));
+    if (side === "source") {
       poolFor(storage.kind, storage.resourceId).feeders.push({ id: storage.id, storage: true });
-    } else if (storage.poolSide === "drain") {
+    } else if (side === "drain") {
       poolFor(storage.kind, storage.resourceId).takers.push({ id: storage.id, storage: true });
     }
   }
 
   const storages: FactoryStorage[] = [...(project.storages ?? [])];
-  const edges = [...project.edges];
+  // The drawn wires are dropped whole: the pool is the only carrier here,
+  // and a wire kept beside it would be a second route saying the same thing.
+  const edges: FactoryProject["edges"] = [];
   const hiddenStorageIds: string[] = [];
   const hiddenEdgeIds: string[] = [];
   const keys = [...pools.keys()].sort();

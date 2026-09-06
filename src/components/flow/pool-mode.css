@@ -1,0 +1,19 @@
+/*
+ * POOL MODE: wires do not exist. The board keeps the edges in the plan (they
+ * come back untouched when the mode goes off) but the three layers that draw
+ * them - the wire SVG, the rate labels, and the marching-dash canvas - fade
+ * out together and stop answering the pointer. Imported by FactoryFlow.tsx
+ * beside the class it sets (factory-flow-board--pool).
+ */
+.factory-flow-board .react-flow__edges,
+.factory-flow-board .react-flow__edgelabel-renderer,
+.factory-flow-board .wire-dash-canvas {
+  transition: opacity 600ms ease;
+}
+
+.factory-flow-board--pool .react-flow__edges,
+.factory-flow-board--pool .react-flow__edgelabel-renderer,
+.factory-flow-board--pool .wire-dash-canvas {
+  opacity: 0;
+  pointer-events: none;
+}

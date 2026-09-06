@@ -88,19 +88,41 @@ export function storageRoleFor(
 ): StorageRole {
   const drainRole = (): StorageRole =>
     storage.drainMode === "byproduct" ? "byproduct" : storage.drainMode === "trash" ? "trash" : "product";
+  if (poolMode) {
+    const side = poolSideOf(storage, fed, drawn);
+    return side === "source" ? "source" : side === "drain" ? drainRole() : "idle";
+  }
   if (fed) {
     return drawn ? "buffer" : drainRole();
   }
   if (drawn) {
     return "source";
   }
-  if (poolMode && storage.poolSide === "source") {
+  return "idle";
+}
+
+/**
+ * Which side of the POOL a drawer sits on. Wires do not exist in pool mode,
+ * but the ones the player drew before switching still say what the drawer
+ * was FOR: fed only, it was a drain (a product); drawn only, a source. A
+ * declared `poolSide` wins. A buffer (both) or a drawer with neither has no
+ * side - the pool is the buffer now - and stays idle.
+ */
+export function poolSideOf(
+  storage: Pick<FactoryStorage, "poolSide">,
+  fed: boolean,
+  drawn: boolean,
+): "source" | "drain" | undefined {
+  if (storage.poolSide) {
+    return storage.poolSide;
+  }
+  if (fed && !drawn) {
+    return "drain";
+  }
+  if (drawn && !fed) {
     return "source";
   }
-  if (poolMode && storage.poolSide === "drain") {
-    return drainRole();
-  }
-  return "idle";
+  return undefined;
 }
 
 /**

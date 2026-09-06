@@ -1894,6 +1894,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
             : position,
         ),
         pocketId: anchorFrame ? anchorOwner : undefined,
+        // POOL MODE has no wires: dragging off a port into space still makes
+        // the drawer, and the side of the port it came off IS the declaration
+        // (off an output: the plan makes this; off an input: it imports this).
+        poolSide: state.project.poolMode ? (side === "output" ? "drain" : "source") : undefined,
       };
       let project: FactoryProject = {
         ...state.project,
@@ -1925,7 +1929,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       // member behind it; the drawer must buffer them all, not just one.
       let wired = 0;
       let conflicted = false;
-      for (const anchorId of nodeIds) {
+      // No wire in pool mode: the drawer's poolSide above is the whole link.
+      for (const anchorId of state.project.poolMode ? [] : nodeIds) {
         const edge =
           side === "output"
             ? buildEdgeBetweenNodes(project, anchorId, storage.id, selectedResource)

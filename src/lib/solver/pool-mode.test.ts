@@ -186,4 +186,41 @@ describe("pool mode", () => {
     expect(result.nodes["c"]!.theoreticalMachinesRequired).toBeCloseTo(4, 3);
     expect(result.nodes["q"]!.theoreticalMachinesRequired).toBeCloseTo(2, 3);
   });
+
+  it("ignores drawn wires: the pool is the only carrier", () => {
+    // A wire that would starve the second crusher on a wired board (the
+    // quarry wired to c1 alone) means nothing here: both drink from the pool.
+    const proj = project({
+      recipes: RECIPES,
+      nodes: [node("q", "quarry"), node("c1", "crush"), node("c2", "crush")],
+      edges: [{ id: "w", source: "q", target: "c1", resourceKind: "item", resourceId: "cobble" }],
+    });
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    expect(result.nodes["c1"]!.utilization).toBeCloseTo(1, 4);
+    expect(result.nodes["c2"]!.utilization).toBeCloseTo(1, 4);
+    expect(result.edges["w"]).toBeUndefined();
+    expect(getPoolProject(proj).edges.every((edge) => edge.id.startsWith("pool-edge:"))).toBe(true);
+  });
+
+  it("reads a drawer's old wires as its side: fed was a product, drawn was a source", () => {
+    const proj = project({
+      recipes: RECIPES,
+      nodes: [node("s", "smelt")],
+      storages: [drawer("sand-in", "sand"), drawer("glass-out", "glass"), drawer("tank", "glass")],
+      edges: [
+        { id: "w1", source: "sand-in", target: "s", resourceKind: "item", resourceId: "sand" },
+        { id: "w2", source: "s", target: "glass-out", resourceKind: "item", resourceId: "glass" },
+        // A buffer (fed and drawn) has no side: the pool is the buffer now.
+        { id: "w3", source: "s", target: "tank", resourceKind: "item", resourceId: "glass" },
+        { id: "w4", source: "tank", target: "s", resourceKind: "item", resourceId: "glass" },
+      ],
+    });
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    expect(result.nodes["s"]!.utilization).toBeCloseTo(1, 4);
+    const roles = getStorageRoles(proj);
+    expect(roles.get("sand-in")).toBe("source");
+    expect(roles.get("glass-out")).toBe("product");
+    expect(roles.get("tank")).toBe("idle");
+    expect(result.storages["glass-out"]!.producedPerSecond).toBeCloseTo(1, 4);
+  });
 });

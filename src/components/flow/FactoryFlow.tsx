@@ -106,6 +106,7 @@ import { queryRecipeDatasetResources } from "@/lib/datasets/browser-loader";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets/remote";
 import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
 import { ItemPickerPopover } from "@/components/ItemPickerPopover";
+import "./pool-mode.css";
 import {
   getEffectiveNodeRecipe,
   isPocketId,
@@ -2175,6 +2176,8 @@ export function FactoryFlow() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [isNodeDragging, setNodeDragging] = useState(false);
+  // Pool mode: the wire layers fade out (pool-mode.css, factory-flow-board--pool).
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   const [annotationTool, setAnnotationTool] = useState<BoardDrawTool | undefined>(undefined);
   // Shared by the brush and the annotation tools: the last colour picked in
   // the palette is what a new box/arrow/note is created with. Blue to start:
@@ -3987,6 +3990,11 @@ export function FactoryFlow() {
   const handleConnect = useCallback(
     (connection: Connection) => {
       connectCompletedRef.current = true;
+      // Pool mode has no wires: a port-to-port drag lands nothing. (A drag
+      // into empty space still makes a drawer, whose side is the link.)
+      if (useFactoryStore.getState().project.poolMode) {
+        return;
+      }
       if (connection.source && connection.target) {
         const sourceHandle = parseResourceHandleId(connection.sourceHandle);
         const targetHandle = parseResourceHandleId(connection.targetHandle);
@@ -6151,6 +6159,7 @@ export function FactoryFlow() {
         // of sight.
         "factory-flow-board relative h-full min-h-[480px] compact:min-h-0 overflow-hidden border-x border-line bg-canvas",
         isNodeDragging ? "factory-flow-board--dragging" : "",
+        poolMode ? "factory-flow-board--pool" : "",
         paintCursor ? "factory-flow-board--painting" : "",
         annotationTool ? "factory-flow-board--annotating" : "",
         isDeleteMode ? "factory-flow-board--deleting" : "",
@@ -8337,7 +8346,7 @@ const EdgePulseCanvas = memo(function EdgePulseCanvas({
   return (
     <canvas
       ref={setCanvas}
-      className="pointer-events-none absolute left-0 top-0 h-full w-full"
+      className="wire-dash-canvas pointer-events-none absolute left-0 top-0 h-full w-full"
       style={{ zIndex: 5 }}
     />
   );

@@ -1,0 +1,335 @@
+"use client";
+
+import { Minus, Plus } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import type { MachineConfigTierControl } from "@/lib/model/recipe-rules";
+import type { MachineConfigTierOption, ResourceAmount } from "@/lib/model/types";
+import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { ResourceIcon } from "@/components/nei/ResourceIcon";
+
+/**
+ * ONE TILE GRAMMAR for a card's machine settings (docs/config-tiles-prd.md).
+ *
+ * A setting is a captioned tile with a value and one gesture: minus and
+ * plus step a ladder, a toggle is a two-rung ladder, a count also types on
+ * click. The wheel steps. Right click (or a held press) on a ladder opens
+ * the full list to jump. A face - the rung's own item, bare - sits in the
+ * well only when EVERY rung of the ladder has one; otherwise the value text
+ * carries the whole meaning. No letters stand in for missing art.
+ *
+ * The chrome is the crop card's SEEDS tile exactly, so every card's settings
+ * read as one family.
+ */
+
+export const SETTING_TILE_CLASS =
+  "nodrag nowheel min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 pb-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]";
+export const SETTING_TILE_CAPTION_CLASS =
+  "flex items-center gap-1 truncate text-[11px] uppercase leading-[13px] text-[var(--mc-ink-muted)]";
+export const SETTING_TILE_BUTTON_CLASS =
+  "nodrag flex h-5 w-3.5 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] enabled:hover:bg-[var(--mc-100)] enabled:active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)] disabled:opacity-35";
+const SETTING_TILE_WELL_CLASS =
+  "flex h-5 w-0 min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden whitespace-nowrap border border-[var(--mc-47)] bg-[var(--mc-85)] px-0.5 text-center text-[11px] font-medium leading-[18px] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)]";
+
+/** One tile is a caption line over a 20px control row: two grid cells. */
+export const SETTING_TILE_HEIGHT_PX = 40;
+
+/**
+ * The caption: the setting's short name in the game's own word. The
+ * dataset's labels carry the noun's family ("Heating Coil", "Pipe Casing");
+ * the tile keeps the word a player says.
+ */
+const CAPTIONS: Record<string, string> = {
+  heatingCoil: "Coil",
+  pipeCasing: "Casing",
+  solenoidCoil: "Solenoid",
+  arcElectrode: "Electrode",
+  preciseCasing: "Casing",
+  cuttingSawblade: "Sawblade",
+  fluxElectromagnet: "Magnet",
+  laserSource: "Laser",
+  "structure-tower-height": "Height",
+  steamPressure: "Pressure",
+};
+
+export function settingCaption(control: Pick<MachineConfigTierControl, "id" | "label">): string {
+  return CAPTIONS[control.id] ?? control.label;
+}
+
+/**
+ * The value: the rung's own name and nothing more. "Kanthal", not "Kanthal
+ * Coil Block"; "High", not "High Pressure"; "256A", not "256A Laser".
+ */
+const VALUE_TRIMS: Array<[RegExp, string]> = [
+  [/\s+Coil Block$/i, ""],
+  [/\s+Pipe Casing$/i, ""],
+  [/\s+Solenoid Superconductor Coil$/i, ""],
+  [/\s+Laser$/i, ""],
+  [/\s+Pressure$/i, ""],
+  [/^Tower Height\s+/i, ""],
+  [/\s+Parallels?( per Voltage Tier)?$/i, ""],
+  [/\s+Field Restriction Coil$/i, ""],
+];
+
+export function settingValueLabel(option: Pick<MachineConfigTierOption, "label">): string {
+  let label = option.label;
+  for (const [pattern, replacement] of VALUE_TRIMS) {
+    label = label.replace(pattern, replacement);
+  }
+  return label.trim() || option.label;
+}
+
+function hasArt(resource: ResourceAmount | undefined): boolean {
+  return Boolean(resource && (resource.iconPath || resource.iconAtlas));
+}
+
+/** The face rule: a well only when every rung has an item to show. */
+export function controlHasFaces(control: MachineConfigTierControl): boolean {
+  return control.tiers.length > 0 && control.tiers.every((tier) => hasArt(tier.resource ?? control.resource));
+}
+
+function Face({ resource }: { resource: ResourceAmount }) {
+  return (
+    <ResourceIcon
+      resource={{ ...resource, amount: 1, chance: undefined }}
+      bare
+      tooltip={false}
+      showAmount={false}
+      showConsumedState={false}
+      className="!h-4 !w-4 shrink-0"
+    />
+  );
+}
+
+export function SettingTile({
+  caption,
+  value,
+  face,
+  canStepDown,
+  canStepUp,
+  onStep,
+  onList,
+  onType,
+  disabled = false,
+  help,
+  captionMark,
+}: {
+  caption: string;
+  value: string;
+  /** The current rung's item, only when the whole ladder has faces. */
+  face?: ResourceAmount;
+  canStepDown: boolean;
+  canStepUp: boolean;
+  onStep: (direction: -1 | 1) => void;
+  /** Right click or held press: open the full list. Ladders only. */
+  onList?: (anchor: DOMRect) => void;
+  /** Click on the value types a number. Counts only. */
+  onType?: () => void;
+  disabled?: boolean;
+  /** The hover: the shared panel's rows for this setting. */
+  help?: ReactNode | (() => ReactNode);
+  /** A small mark before the caption (the crop pips). */
+  captionMark?: ReactNode;
+}) {
+  const wellRef = useRef<HTMLSpanElement>(null);
+  const pressTimer = useRef<number | undefined>(undefined);
+  const openList = () => {
+    const rect = wellRef.current?.getBoundingClientRect();
+    if (rect && onList) onList(rect);
+  };
+  const tile = (
+    <div
+      className={[SETTING_TILE_CLASS, disabled ? "opacity-35" : ""].join(" ")}
+      onWheel={(event) => {
+        event.stopPropagation();
+        if (disabled) return;
+        onStep(event.deltaY < 0 ? 1 : -1);
+      }}
+      onContextMenu={(event) => {
+        if (!onList || disabled) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openList();
+      }}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (!onList || disabled || event.pointerType === "mouse") return;
+        pressTimer.current = window.setTimeout(openList, 450);
+      }}
+      onPointerUp={() => window.clearTimeout(pressTimer.current)}
+      onPointerCancel={() => window.clearTimeout(pressTimer.current)}
+    >
+      <div className={SETTING_TILE_CAPTION_CLASS}>
+        {captionMark}
+        <span className="min-w-0 truncate">{caption}</span>
+      </div>
+      <div className="flex min-w-0 items-center gap-0.5">
+        <button
+          type="button"
+          className={SETTING_TILE_BUTTON_CLASS}
+          disabled={disabled || !canStepDown}
+          onClick={(event) => {
+            event.stopPropagation();
+            onStep(-1);
+          }}
+          aria-label={`Previous ${caption}`}
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <span
+          ref={wellRef}
+          className={[SETTING_TILE_WELL_CLASS, onType && !disabled ? "cursor-text" : ""].join(" ")}
+          onClick={
+            onType && !disabled
+              ? (event) => {
+                  event.stopPropagation();
+                  onType();
+                }
+              : undefined
+          }
+          title={value}
+        >
+          {face ? <Face resource={face} /> : null}
+          <span className="min-w-0 truncate">{value}</span>
+        </span>
+        <button
+          type="button"
+          className={SETTING_TILE_BUTTON_CLASS}
+          disabled={disabled || !canStepUp}
+          onClick={(event) => {
+            event.stopPropagation();
+            onStep(1);
+          }}
+          aria-label={`Next ${caption}`}
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+  return help ? <MinecraftTooltip content={help}>{tile}</MinecraftTooltip> : tile;
+}
+
+/**
+ * The full list behind a ladder, for the long jump a fourteen-rung coil
+ * needs: a fixed panel under the tile's well, one row per rung with its
+ * face and name, the current rung marked. Escape, a click outside or a
+ * pick closes it.
+ */
+export function SettingListMenu({
+  anchor,
+  rows,
+  currentKey,
+  onPick,
+  onClose,
+}: {
+  anchor: DOMRect;
+  rows: Array<{ key: string; label: string; face?: ResourceAmount; hint?: string }>;
+  currentKey: string;
+  onPick: (key: string) => void;
+  onClose: () => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [onClose]);
+  if (typeof document === "undefined") return null;
+  const width = 240;
+  const left = Math.max(8, Math.min(anchor.left + anchor.width / 2 - width / 2, window.innerWidth - width - 8));
+  const below = anchor.bottom + 4;
+  const above = window.innerHeight - anchor.top + 4;
+  const fitsBelow = window.innerHeight - below >= Math.min(320, rows.length * 28 + 12);
+  return createPortal(
+    <div
+      ref={rootRef}
+      role="listbox"
+      className="nodrag nowheel fixed z-[300] max-h-[320px] overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
+      style={{ left, width, ...(fitsBelow ? { top: below } : { bottom: above }) }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
+    >
+      {rows.map((row) => (
+        <button
+          key={row.key}
+          type="button"
+          role="option"
+          aria-selected={row.key === currentKey}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPick(row.key);
+          }}
+          className={[
+            "flex h-7 w-full items-center gap-2 px-2 text-left text-[12px] leading-4",
+            row.key === currentKey ? "bg-[var(--mc-71)] text-white" : "text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white",
+          ].join(" ")}
+        >
+          {row.face ? <Face resource={row.face} /> : null}
+          <span className="min-w-0 flex-1 truncate">{row.label}</span>
+          {row.hint ? <span className="shrink-0 text-[10px] text-[var(--mc-ink-muted)]">{row.hint}</span> : null}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  );
+}
+
+/** A tile over a ladder of tier options: the shape most machine settings take. */
+export function LadderTile({
+  control,
+  onSelect,
+  help,
+}: {
+  control: MachineConfigTierControl;
+  onSelect: (key: string) => void;
+  help?: ReactNode | (() => ReactNode);
+}) {
+  const [listAt, setListAt] = useState<DOMRect | undefined>();
+  const index = Math.max(0, control.tiers.findIndex((tier) => tier.key === control.current.key));
+  const faces = controlHasFaces(control);
+  const step = (direction: -1 | 1) => {
+    const next = control.tiers[Math.max(0, Math.min(control.tiers.length - 1, index + direction))];
+    if (next && next.key !== control.current.key) onSelect(next.key);
+  };
+  return (
+    <>
+      <SettingTile
+        caption={settingCaption(control)}
+        value={settingValueLabel(control.current)}
+        face={faces ? (control.current.resource ?? control.resource) : undefined}
+        canStepDown={index > 0}
+        canStepUp={index < control.tiers.length - 1}
+        onStep={step}
+        onList={control.tiers.length > 2 ? setListAt : undefined}
+        disabled={control.tiers.length <= 1}
+        help={help}
+      />
+      {listAt ? (
+        <SettingListMenu
+          anchor={listAt}
+          rows={control.tiers.map((tier) => ({
+            key: tier.key,
+            label: settingValueLabel(tier),
+            face: faces ? (tier.resource ?? control.resource) : undefined,
+          }))}
+          currentKey={control.current.key}
+          onPick={(key) => {
+            setListAt(undefined);
+            onSelect(key);
+          }}
+          onClose={() => setListAt(undefined)}
+        />
+      ) : null}
+    </>
+  );
+}

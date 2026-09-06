@@ -127,7 +127,7 @@ import {
   getRecipeProgrammedCircuit,
   type RecipeProgrammedCircuit,
 } from "@/lib/model/programmed-circuit";
-import { BOARD_GRID, CONFIG_PANEL_ROW_HEIGHT, RECIPE_NODE_WIDTH } from "@/lib/board-grid";
+import { BOARD_GRID, RECIPE_NODE_WIDTH } from "@/lib/board-grid";
 import { CropPickerMenu } from "./CropPickerMenu";
 import {
   MachineMenu,
@@ -146,6 +146,7 @@ import { isEchoOfTouch } from "@/lib/pointer-kind";
 import { machineIconAtTier, useMachineHandlerIconEntries, useMachineHandlerIcons, useRecipeMapIcons, type MachineHandlerIcon } from "./machine-icons";
 import { useRenderedHandles } from "./use-rendered-handles";
 import { MinecraftSelect } from "./MinecraftSelect";
+import { LadderTile, SETTING_TILE_HEIGHT_PX } from "./SettingTile";
 import { PowerConfigPanel } from "./PowerConfigPanel";
 import { getPowerSource } from "@/lib/power/registry";
 import { getPowerStructureArt } from "@/lib/power/structure-art";
@@ -484,7 +485,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       cropProductionControls,
       cropTierControl,
       cropTitle,
-      cropSeedResource,
       isCropFarmNode,
       isCropFarmPlaceholder,
       isCustomRateNode,
@@ -529,7 +529,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     cropProductionControls,
     cropTierControl,
     cropTitle,
-    cropSeedResource,
     isCropFarmNode,
     isCropFarmPlaceholder,
     isCustomRateNode,
@@ -794,20 +793,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     ...beeFrameControls,
     ...statsMachineConfigControls,
   ];
-  const parallelPanelTile =
-    parallelChipLifts && visibleMachineConfigControls.length > 0 ? (
-      <ConfigParallelTile value={formatMachineParallelMultiplier(machineParallelMultiplier)} />
-    ) : undefined;
+  // The parallel count is a FACT of the chosen casing, not a setting: it
+  // never sits among the tiles (docs/config-tiles-prd.md). The footer's
+  // Parallel stat or its slim line under the footer carries it.
   const machineConfigPanel =
     visibleMachineConfigControls.length > 0 ? (
       <MachineConfigControlPanel
         recipe={recipe}
         node={projectNode}
         controls={visibleMachineConfigControls}
-        trailing={parallelPanelTile}
-        onPreview={(controlId, key) =>
-          setPreviewConfigTier(key === undefined ? undefined : { controlId, key })
-        }
         onSelect={(controlId, nextTier) => {
           setPreviewConfigTier(undefined);
           if (controlId === "heatingCoil") {
@@ -1776,7 +1770,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   </div>
                 ) : (
                   <>
-                    {parallelChipLifts && !parallelPanelTile ? (
+                    {parallelChipLifts ? (
                       // No config panel to ride in: the lifted parallel chip
                       // gets its own slim line, packed right, not a full row
                       // of tiles. See parallelChipLifts.
@@ -3963,169 +3957,39 @@ function getTreeGrowthSimulatorSlotTiers(control: MachineConfigTierControl) {
  * pair — the class list is scanned at build time, so a computed size string
  * would silently produce no CSS at all.
  */
-function ConfigTierIcon({
-  resource,
-  sizeClass,
-}: {
-  resource: ResourceAmount;
-  sizeClass: string;
-}) {
-  if (!resource.iconPath && !resource.iconAtlas) {
-    return (
-      <span className="flex items-center justify-center whitespace-nowrap px-1 text-center text-[11px] font-black leading-none text-white [text-shadow:1px_1px_0_#000]">
-        {shortConfigLabel(resource)}
-      </span>
-    );
-  }
-  return (
-    <ResourceIcon
-      resource={{ ...resource, amount: 1, chance: undefined }}
-      bare
-      tooltip={false}
-      showAmount={false}
-      showConsumedState={false}
-      // No pixel size: ResourceIcon's zoom-and-clip crops the sprite's own
-      // transparent padding, so the block fills its square instead of
-      // floating in the middle of one.
-      className={`shrink-0 ${sizeClass}`}
-    />
-  );
-}
-
-/**
- * What picking this option would change, against the one selected now. The
- * card's rates come from the solver, so they cannot move on hover without a
- * solve per mouse move; this says the same thing honestly and instantly.
- */
-function configTierHint(
-  option: MachineConfigTierOption,
-  current: MachineConfigTierOption,
-): string | undefined {
-  const parts: string[] = [];
-  const ratio = (next: number | undefined, now: number | undefined) => {
-    const a = next ?? 1;
-    const b = now ?? 1;
-    return b === 0 ? undefined : a / b;
-  };
-  // A smaller duration multiplier is a faster machine, so speed inverts.
-  const speed = ratio(current.durationMultiplier, option.durationMultiplier);
-  if (speed !== undefined && Math.abs(speed - 1) > 0.005) {
-    parts.push(`${formatTimes(speed)} speed`);
-  }
-  const parallel = ratio(option.parallelMultiplier, current.parallelMultiplier);
-  if (parallel !== undefined && Math.abs(parallel - 1) > 0.005) {
-    parts.push(`${formatTimes(parallel)} parallel`);
-  }
-  const output = ratio(option.outputMultiplier, current.outputMultiplier);
-  if (output !== undefined && Math.abs(output - 1) > 0.005) {
-    parts.push(`${formatTimes(output)} output`);
-  }
-  const eut = ratio(option.eutMultiplier, current.eutMultiplier);
-  if (eut !== undefined && Math.abs(eut - 1) > 0.005) {
-    parts.push(`${formatTimes(eut)} EU/t`);
-  }
-  return parts.slice(0, 2).join(" · ") || undefined;
-}
-
 function MachineConfigControlPanel({
   recipe,
   node,
   controls,
   onSelect,
-  onPreview,
-  trailing,
 }: {
   recipe: Recipe;
   node: FactoryNode;
   controls: MachineConfigTierControl[];
   onSelect: (controlId: string, nextTier: string) => void;
-  /** Hovering an option shows the node as if it were picked. */
-  onPreview?: (controlId: string, tierKey: string | undefined) => void;
-  /** An extra read-only tile sharing the grid — the ×N parallel count. */
-  trailing?: ReactNode;
 }) {
   if (controls.length === 0) {
     return null;
   }
-
-  // Two controls per row. The panel's border-2 and px-1 leave 328px of
-  // content width, so the column minimum must clear 2 × 160 + 4 gap = 324:
-  // at the old 168 the auto-fit grid only ever found room for ONE column and
-  // every knob quietly took a full row of its own.
-  const rows = Math.ceil((controls.length + (trailing ? 1 : 0)) / 2);
+  // Two tiles per row on the card's width, the crop card's grammar
+  // (SettingTile): caption over a stepped well, faces only where every rung
+  // has one, the full list on right click. No dropdowns, no grey band.
+  const rows = Math.ceil(controls.length / 2);
   return (
-    <GridBlock
-      className="nodrag border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
-      minCells={(rows * CONFIG_PANEL_ROW_HEIGHT) / BOARD_GRID}
-    >
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] items-center gap-x-1 gap-y-1">
+    <GridBlock className="nodrag" minCells={(rows * SETTING_TILE_HEIGHT_PX) / BOARD_GRID}>
+      <div className="grid grid-cols-2 gap-1">
         {controls.map((control) => (
-          <label key={control.id} className="min-w-0">
-            <span className="mb-0.5 block text-[12px] font-bold uppercase leading-[14px] text-[var(--mc-ink-muted)]">
-              {control.label}
-            </span>
-            <span className="flex min-w-0 items-center gap-1">
-              {/* A square the block fills, not a wide box with a small block
-                  adrift in it. */}
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden border border-[var(--mc-33)] bg-[var(--mc-55)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]">
-                <ConfigTierIcon
-                  resource={control.current.resource ?? control.resource}
-                  sizeClass="!h-[26px] !w-[26px]"
-                />
-              </span>
-              <MinecraftSelect
-                value={control.current.key}
-                // Every option carries its own block, so the list is a row of
-                // casings rather than a list of names to translate.
-                options={control.tiers.map((tier) => ({
-                  key: tier.key,
-                  label: tier.label,
-                  hint: configTierHint(tier, control.current),
-                  icon: (
-                    <ConfigTierIcon
-                      resource={tier.resource ?? control.resource}
-                      sizeClass="!h-[28px] !w-[28px]"
-                    />
-                  ),
-                }))}
-                onSelect={(key) => onSelect(control.id, key)}
-                onPreview={
-                  onPreview ? (key) => onPreview(control.id, key) : undefined
-                }
-                disabled={control.tiers.length <= 1}
-                tooltipContent={() => <RecipeTooltip view={buildConfigTooltip(recipe, node, control)} />}
-                ariaLabel={control.label}
-                className="flex-1"
-              />
-            </span>
-          </label>
+          <LadderTile
+            key={control.id}
+            control={control}
+            onSelect={(key) => onSelect(control.id, key)}
+            help={() => <RecipeTooltip view={buildConfigTooltip(recipe, node, control)} />}
+          />
         ))}
-        {trailing}
       </div>
     </GridBlock>
   );
 }
-
-/**
- * The machine's ×N parallel count as a config-panel tile, shaped like the
- * knobs beside it (label over a row-high box) so it shares their grid row
- * instead of spending a line of its own under the footer.
- */
-function ConfigParallelTile({ value }: { value: string }) {
-  return (
-    <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Parallel operations", rows: [{ label: "Configured multiplier", value }], reason: "Applied by the selected machine configuration." }} />}>
-    <div className="min-w-0">
-      <span className="mb-0.5 block text-[12px] font-bold uppercase leading-[14px] text-[var(--mc-ink-muted)]">
-        Parallel
-      </span>
-      <span className="flex h-7 min-w-0 items-center border border-[var(--mc-47)] bg-[var(--mc-85)] px-1.5 font-medium tabular-nums shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)]">
-        ×{value}
-      </span>
-    </div>
-    </MinecraftTooltip>
-  );
-}
-
 
 function PassiveProductionConfigPanel({
   className = "",
@@ -5171,24 +5035,6 @@ function cropControlHelp(recipe: Recipe, controlId: string): ReactNode {
   }
 }
 
-function shortConfigLabel(resource: ResourceAmount) {
-  const label = resource.displayName ?? resource.id;
-  if (/^\d+(\/\d+)*$/.test(label)) {
-    // A number is already short, and initialling it ate digits: a slice count
-    // of "55" came out as "5".
-    return label;
-  }
-  if (label.length <= 4) {
-    return label.toUpperCase();
-  }
-  return label
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 4)
-    .toUpperCase();
-}
 
 function formatMachineParallelMultiplier(multiplier: number) {
   return Number.isInteger(multiplier)

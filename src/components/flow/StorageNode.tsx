@@ -358,7 +358,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         // Inert: mostly grey with a trace of its own colour, and nothing on
         // it takes the pointer - no port to drag off, no pill - while the
         // card itself still drags (the events fall through to the node).
-        inertInPool ? "opacity-40 grayscale-[0.75] [&>*]:pointer-events-none" : "",
+        // Only the WIRE HANDLES go dead: the card still selects, deletes and
+        // drags. Blanking every child also swallowed the delete tool.
+        inertInPool ? "opacity-40 grayscale-[0.75] [&_[data-resource-handle]]:pointer-events-none" : "",
       ].join(" ")}
       style={paintCursor ? { cursor: paintCursor } : undefined}
     >

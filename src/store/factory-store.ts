@@ -1869,6 +1869,12 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   addStorageForConnection: (resource, nodeId, side, position, handleId) => {
     set((state) => {
+      // Pool mode feeds every input itself: a source drawer would do nothing,
+      // so a drop in the void off an input makes nothing. (The input handles
+      // refuse the drag too; this is the belt to that brace.)
+      if (state.project.poolMode && side === "input") {
+        return state;
+      }
       const nodeIds = Array.isArray(nodeId) ? nodeId : [nodeId];
       // Whatever came out of the slot is what the buffer holds. A filled cell
       // makes a drawer of cells, counted in cells; it used to be rewritten into

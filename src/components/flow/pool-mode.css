@@ -17,3 +17,13 @@
   opacity: 0;
   pointer-events: none;
 }
+
+/*
+ * No drag starts from an INPUT port in pool mode: the pool feeds every
+ * input, so a wire dragged off one had nowhere to go but the void, where it
+ * spawned a source drawer that does nothing here. Output ports keep their
+ * drag: a drop in the void off an output is how a product drawer is made.
+ */
+.factory-flow-board--pool .react-flow__handle.target {
+  pointer-events: none !important;
+}

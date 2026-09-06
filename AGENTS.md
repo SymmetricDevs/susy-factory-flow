@@ -898,11 +898,16 @@ Working notes for future agents on GTNH Factory Flow.
   the loose-wire rule's hidden free Tank per direction - only FROM a side
   something real feeds, so a form nobody makes still imports instead of
   two tanks feeding each other.
-- Chrome: the pool key is the third of the `ModeKeys` (Waves icon, lit in
-  the brighter blue `#a8e8ff`; solve lights `#3fbdd3`), `PoolModeAura`
-  (the solve cyan taken whiter, half strength, REPLACES the solve aura
-  while on), sound `poolOn` (water: a low swell with two rising bubbles).
-  The wire layers fade under `factory-flow-board--pool` (pool-mode.css).
+- Chrome: the pool key is the third of the `ModeKeys` (Waves icon). Each
+  lit key has its own colour and nothing else changes: build gold
+  `#f5b642`, solve cyan `#3fbdd3`, pool blue `#6f9cff` (the product key on
+  the build tray lights the same blue while its picker is open). There is
+  NO room light for any mode (Jack, 2026-09-06; the solve and pool auras
+  were removed). Sounds: `buildOn` a latch (tick, then a wooden knock),
+  `solveOn` the shimmer, `poolOn` a drop into water (a bent-up plink and
+  its echo, all high and glassy - the low-swell version "sounded like a
+  fart" and must not come back). The wire layers fade under
+  `factory-flow-board--pool` (pool-mode.css).
   `src/lib/solver/pool-mode.test.ts` is the exam.
 
 ## Verification

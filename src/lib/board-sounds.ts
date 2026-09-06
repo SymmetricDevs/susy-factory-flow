@@ -599,23 +599,24 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       puff(ctx, out, { frequency: 2200, q: 0.6, duration: 0.3, peak: 0.05, delay: 0.05 });
       break;
     case "buildOn":
-      // BUILD: a block set down on the table. One dry brush for the body,
-      // a low tap for weight, no pad and no sparkle - the mode where you
-      // do the work yourself sounds like a hand doing it. Nothing in it
-      // rises or falls, so it is not a rung on the other two.
-      puff(ctx, out, { frequency: 520, q: 0.8, duration: 0.14, peak: 0.24 });
-      blip(ctx, out, { from: 147, to: 147, duration: 0.12, peak: 0.12, delay: 0.02 });
-      puff(ctx, out, { frequency: 1400, q: 1.5, duration: 0.05, peak: 0.08, delay: 0.05 });
+      // BUILD: a latch. A crisp high tick, then a wooden knock a beat
+      // later - two distinct hits with a gap you can hear, the sound of a
+      // catch closing, nothing like a brush or a pad. Nothing in it rises
+      // or falls, so it is not a rung on the other two.
+      blip(ctx, out, { from: 2200, to: 2200, duration: 0.03, peak: 0.1 });
+      puff(ctx, out, { frequency: 3200, q: 3, duration: 0.03, peak: 0.08 });
+      puff(ctx, out, { frequency: 320, q: 3, duration: 0.09, peak: 0.22, delay: 0.09 });
+      blip(ctx, out, { from: 262, to: 262, duration: 0.07, peak: 0.1, delay: 0.09 });
       break;
     case "poolOn":
-      // POOL: water. A warm LOW swell (an octave under the solve shimmer,
-      // rising a fourth) under two round bubbles that each start low and
-      // lift, and a soft wash of air like a surface settling. Its own
-      // material, not the solve shimmer moved up a step.
-      shimmerPad(ctx, out, { from: 131, to: 175, duration: 0.65, peak: 0.24 });
-      blip(ctx, out, { from: 440, to: 660, duration: 0.11, peak: 0.07, delay: 0.14 });
-      blip(ctx, out, { from: 523, to: 784, duration: 0.11, peak: 0.055, delay: 0.3 });
-      puff(ctx, out, { frequency: 700, q: 0.5, duration: 0.5, peak: 0.07, delay: 0.06 });
+      // POOL: a drop into still water. One bright plink (a high sine that
+      // bends UP, the way a droplet rings) and its echo a beat later, a
+      // fifth down, over a short bright splash - all high and glassy,
+      // nothing below middle C. Its own material, not a pad.
+      blip(ctx, out, { from: 1568, to: 2093, duration: 0.09, peak: 0.09 });
+      puff(ctx, out, { frequency: 4200, q: 1.2, duration: 0.07, peak: 0.07, delay: 0.01 });
+      blip(ctx, out, { from: 1047, to: 1397, duration: 0.11, peak: 0.06, delay: 0.17 });
+      puff(ctx, out, { frequency: 2600, q: 1.5, duration: 0.09, peak: 0.04, delay: 0.18 });
       break;
     case "poolOff":
       // Unused since the mode switch; the pool swell settling, kept so an

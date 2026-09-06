@@ -6412,8 +6412,6 @@ export function FactoryFlow() {
         aria-hidden
         className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_60px_10px_rgba(0,0,0,0.35)]"
       />
-      <SolveModeAura />
-      <PoolModeAura />
       <SolvingBooksOverlay />
       <PaintToolbar
         paintMode={nodeColorPaintMode}
@@ -7235,32 +7233,6 @@ function playRateDial(unit: RateUnit, step: number): void {
  * question around: product drawers take a typed amount and every card reads
  * the machine count those amounts require. One pressed-face button, no sheet.
  */
-/**
- * The other dimension's light: while solve mode is on, the room's edges
- * carry a quiet cyan glow over the black vignette, breathing in and out
- * with the toggle. Screen-space and landmark-free like the vignette above
- * it, always rendered so the fade runs both ways, never a pointer target.
- */
-const SolveModeAura = memo(function SolveModeAura() {
-  // The pool light REPLACES this one while pool mode is on: two room
-  // lights stacked read as one twice too strong.
-  const on = useFactoryStore(
-    (state) => state.project.solveMode === true && state.project.poolMode !== true,
-  );
-  return (
-    <div
-      aria-hidden
-      className={[
-        "pointer-events-none absolute inset-0 z-10 transition-opacity duration-700",
-        on ? "opacity-100" : "opacity-0",
-      ].join(" ")}
-      style={{
-        boxShadow:
-          "inset 0 0 90px 6px rgba(34,211,238,0.08), inset 0 0 14px 1px rgba(34,211,238,0.11)",
-      }}
-    />
-  );
-});
 
 /**
  * The solver's one open question, asked out loud: solve mode with no number
@@ -7325,28 +7297,6 @@ const SolveModeNotice = memo(function SolveModeNotice({
   );
 });
 
-/**
- * Pool mode's light: the same screen-space room edge as the solve aura, in
- * the solve cyan taken brighter and whiter - the deeper mode's sparkle -
- * and at half the solve light's strength. It takes over from the solve
- * aura while it is on, so the room never wears two lights at once.
- */
-const PoolModeAura = memo(function PoolModeAura() {
-  const on = useFactoryStore((state) => state.project.poolMode === true);
-  return (
-    <div
-      aria-hidden
-      className={[
-        "pointer-events-none absolute inset-0 z-10 transition-opacity duration-700",
-        on ? "opacity-100" : "opacity-0",
-      ].join(" ")}
-      style={{
-        boxShadow:
-          "inset 0 0 90px 6px rgba(168,232,255,0.08), inset 0 0 14px 1px rgba(168,232,255,0.11)",
-      }}
-    />
-  );
-});
 
 /**
  * The board's three modes on one switch, exactly one lit. Each step hands
@@ -7377,7 +7327,7 @@ const MODE_KEYS: Array<{
     label: "Build mode",
     title: "Build: you set the machines, the counts and the wires. The board reports what flows.",
     Icon: Blocks,
-    ink: "text-[var(--mc-ink)]",
+    ink: "text-[#f5b642]",
   },
   {
     mode: "solve",
@@ -7391,7 +7341,7 @@ const MODE_KEYS: Array<{
     label: "Pool mode",
     title: "Pool: you set the machines and type what you want. The board counts, wires and imports for you.",
     Icon: Waves,
-    ink: "text-[#a8e8ff]",
+    ink: "text-[#6f9cff]",
   },
 ];
 
@@ -7531,7 +7481,7 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
             title="Add a product drawer: the plan makes this, and a typed amount here is what it solves for"
             aria-label="Add a product drawer"
           >
-            <Upload className={picking ? "h-4 w-4 text-[#a8e8ff]" : "h-4 w-4"} />
+            <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
           </button>
         </div>
       </div>

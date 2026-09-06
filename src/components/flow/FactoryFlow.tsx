@@ -9353,7 +9353,10 @@ function EdgeRateLabelText({ data }: { data: EdgeLabelInput | undefined }) {
   useRateDisplayUnits();
   const { flowing, ratio } = getEdgeRateLabelValues(data);
   const unit = data ? edgeUnit(data) : "/s";
-  const hasRatio = ratio !== undefined;
+  // SOLVE and POOL: every line carries exactly what its taker asked, so
+  // the ratio would read 100% on every label. The rate alone.
+  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
+  const hasRatio = ratio !== undefined && !solveMode;
   return (
     <MotionNumberText
       values={hasRatio ? [flowing, ratio] : [flowing]}

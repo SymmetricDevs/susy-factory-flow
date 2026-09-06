@@ -3079,6 +3079,9 @@ export function OutputSocketRow({
   pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
 }) {
   const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
+  // SOLVE and POOL cover every asker by construction: the coupling's
+  // percent is always 100, so the socket stays blank.
+  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
   return (
     <div
       className="relative flex items-stretch"
@@ -3092,15 +3095,17 @@ export function OutputSocketRow({
       onPointerLeave={() => setHoveredFlowScope(undefined)}
     >
       <PortChip nodeId={nodeId} port={port} pending={pending} plugRow />
-      {port.plug ? (
+      {port.plug && !solveMode ? (
         <PlugBlock nodeId={nodeId} port={port} />
       ) : (
         <MinecraftTooltip
           label={
-            port.nameplatePerSecond <= 0
+            solveMode
+              ? "Every taker is covered: the machines are sized to what is asked."
+              : port.nameplatePerSecond <= 0
               ? "Empty socket: nothing plugged in."
               : port.boundaryFree
-                ? "Free outputs is on, so this leaves the setup."
+                ? "Pool mode banks the surplus by itself."
                 : "Nothing takes this, so it backs up and the machine stops. Wire it to a machine that wants it, a DRAIN drawer, or a trash can."
           }
         >
@@ -3110,7 +3115,7 @@ export function OutputSocketRow({
               With FREE OUTPUTS on it is true again, so the mark comes off. */}
           <span className="flow-socket-empty nodrag">
             <PlugDragHandle nodeId={nodeId} port={port} />
-            {port.nameplatePerSecond > 0 && !port.boundaryFree ? (
+            {port.nameplatePerSecond > 0 && !port.boundaryFree && !solveMode ? (
               <span className="text-[7px] font-black leading-3 tracking-[0.5px] text-[var(--verdict-unwired-ink)]">
                 NO TAKER
               </span>
@@ -3364,7 +3369,12 @@ export function PortChip({
   plugRow?: boolean;
 }) {
   const isInput = port.side === "input";
-  const { calmMode } = useBoardView();
+  const { calmMode: calmView } = useBoardView();
+  // SOLVE and POOL: every fed port is at nameplate by construction, so the
+  // bar and the want marks would say the same thing on every card. The
+  // port shows its name and its rate, the calm presentation.
+  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
+  const calmMode = calmView || solveMode;
   const browseResource = useFactoryStore((state) => state.browseResource);
   const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
   const isFlowScopeLit = useFactoryStore((state) =>

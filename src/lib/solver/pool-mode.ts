@@ -188,9 +188,11 @@ export function expandPool(project: FactoryProject): PoolExpansion {
     }
     const seenOut = new Set<ResourceKey>();
     for (const output of outputs) {
-      // EU is not pooled: unbanked power dissipates in game, and the power
-      // sector already has its own wires and drawers for it.
-      if ((output.amount ?? 0) <= 0 || output.kind === "power") {
+      // EU pools like anything else (a generator's EU port feeds it, an EU
+      // drawer or a machine's EU port drinks from it) - the only special
+      // rule is at pool creation below: unbanked power dissipates in game,
+      // so an EU pool exists only when something both feeds and drinks it.
+      if ((output.amount ?? 0) <= 0) {
         continue;
       }
       const key = makeResourceKey(output.kind, output.id);
@@ -300,6 +302,12 @@ export function expandPool(project: FactoryProject): PoolExpansion {
     // imports that resource, and the books list it under INPUTS at the
     // rate the takers drink. That is the deeper-solve reading (Jack,
     // 2026-09-05): you pin amounts and counts, the plan does the rest.
+    // EU is the exception both ways: the plan never imports power from
+    // nowhere (a generator has to be on the board), and unbanked power
+    // dissipates in game, so an EU pool with nobody drinking is no product.
+    if (pool.kind === "power" && (pool.feeders.length === 0 || pool.takers.length === 0)) {
+      continue;
+    }
     let poolId = `${POOL_STORAGE_PREFIX}${key}`;
     while (storageIds.has(poolId)) {
       poolId = `${poolId}:`;

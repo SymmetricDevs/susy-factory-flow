@@ -205,6 +205,39 @@ describe("pool mode", () => {
     expect(result.externalInputs.find((entry) => entry.resourceId === "cobble")?.deficitPerSecond).toBeCloseTo(1e7, 0);
   });
 
+  it("pools EU from a generator to an EU drawer, and never imports it", () => {
+    // Jack's benzene line (2026-09-06): a Gas Turbine and an EU product
+    // drawer asking 200/t read "no chain can make it" because EU outputs
+    // were left out of the pool. Power pools like anything else, with one
+    // rule: an EU pool exists only when something feeds AND drinks it.
+    const gen = {
+      ...recipe("turbine", [["fuel", 1]], []),
+      outputs: [{ kind: "power" as const, id: "eu", amount: 100 }],
+    };
+    const proj = project({
+      recipes: [gen],
+      nodes: [node("g", "turbine")],
+      storages: [
+        { id: "eu-out", kind: "power", resourceId: "eu", position: { x: 0, y: 0 }, poolSide: "drain", targetPerSecond: 200 },
+      ],
+      solveMode: true,
+    });
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    expect(result.storages["eu-out"]!.targetUnreachable).toBeFalsy();
+    expect(result.storages["eu-out"]!.producedPerSecond).toBeCloseTo(200, 3);
+    expect(result.nodes["g"]!.theoreticalMachinesRequired).toBeCloseTo(2, 3);
+    // No generator: the EU is not imported from nowhere.
+    const bare = project({
+      recipes: [recipe("eat", [], [["x", 1]])],
+      nodes: [node("e", "eat")],
+      storages: [
+        { id: "eu-out", kind: "power", resourceId: "eu", position: { x: 0, y: 0 }, poolSide: "drain", targetPerSecond: 200 },
+      ],
+      solveMode: true,
+    });
+    expect(expandPool(bare).hiddenStorageIds.some((id) => id.includes("power:eu"))).toBe(false);
+  });
+
   it("ignores drawn wires: the pool is the only carrier", () => {
     // A wire that would starve the second crusher on a wired board (the
     // quarry wired to c1 alone) means nothing here: both drink from the pool.

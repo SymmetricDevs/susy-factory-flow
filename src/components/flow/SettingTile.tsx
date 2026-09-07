@@ -104,14 +104,20 @@ export function controlHasFaces(control: MachineConfigTierControl): boolean {
 
 function Face({ resource }: { resource: ResourceAmount }) {
   return (
-    <ResourceIcon
-      resource={{ ...resource, amount: 1, chance: undefined }}
-      bare
-      tooltip={false}
-      showAmount={false}
-      showConsumedState={false}
-      className="!h-4 !w-4 shrink-0"
-    />
+    // The well's full height, cropped like a port chip's icon: item sprites
+    // ship with transparent padding, so the box clips a 1.5x zoom to put
+    // the art edge to edge. No `alternatives`: the blue plus that marks an
+    // oredict slot means nothing on a coil (Jack, 2026-09-06).
+    <span className="relative flex h-[18px] w-[18px] shrink-0 items-center justify-center overflow-hidden">
+      <ResourceIcon
+        resource={{ ...resource, amount: 1, chance: undefined, alternatives: undefined }}
+        bare
+        tooltip={false}
+        showAmount={false}
+        showConsumedState={false}
+        className="!h-[18px] !w-[18px] origin-center scale-150"
+      />
+    </span>
   );
 }
 

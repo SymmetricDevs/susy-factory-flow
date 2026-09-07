@@ -623,7 +623,14 @@ export function heatmapRamp(panel: string): Record<string, string> {
 function sectorRamp(hue: string, amount: number): Record<string, string> {
   const stops: Record<string, string> = {};
   for (const [token, neutral] of Object.entries(GT_NODE_RAMPS.gray)) {
-    stops[token] = mixHex(neutral, hue, amount);
+    const step = Number(token.slice("--mc-".length));
+    // Mixing every stop toward one hue flattens the relief - the wells and
+    // tiles sank into the face ("like looking through glass"). So the stops
+    // below the face take half the tint and a push toward black, and the
+    // stops above it a push toward white, which keeps the parts distinct.
+    const tinted = mixHex(neutral, hue, step < 78 ? amount * 0.5 : amount);
+    stops[token] =
+      step < 78 ? mixHex(tinted, "#000000", 0.12) : step > 78 ? mixHex(tinted, "#ffffff", 0.06) : tinted;
   }
   return stops;
 }

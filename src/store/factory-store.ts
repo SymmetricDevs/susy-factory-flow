@@ -1180,6 +1180,12 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         }
       }
       for (const output of effectiveRecipe.outputs) {
+        // The EU output slot (power became a resource in v2.45) is the
+        // generator's product, and the EU condition below already asks for
+        // it: pushing the slot too showed "EU" and "Power (EU)" side by side.
+        if (output.kind === "power") {
+          continue;
+        }
         push("makes", output);
       }
       // A generator's product IS power: refactoring one asks for other

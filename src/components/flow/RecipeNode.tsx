@@ -3,6 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
   memo,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -213,6 +214,9 @@ import { MotionNumberText, useBoardMotion, useMotionValues } from "./board-motio
 import { getPaintBrushCursor } from "./paint-cursor";
 import { GT_TIER_COLORS } from "./tier-colors";
 import { playBoardSound, suppressBoardSound } from "@/lib/board-sounds";
+import { fetchRecipeTwins, recipeMayHaveTwins, type RecipeTwin } from "@/lib/datasets/recipe-twins";
+import { getRecipeDatasetRecipe } from "@/lib/datasets/browser-loader";
+import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets/remote";
 
 // Full width so the crop config panel and stat grid line up with the recipe
 // canvas edge instead of forcing their own wider box.
@@ -292,6 +296,14 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const duplicateNode = useFactoryStore((state) => state.duplicateNode);
   const beginRecipeRefactor = useFactoryStore((state) => state.beginRecipeRefactor);
+  const refactorNodeWithRecipe = useFactoryStore((state) => state.refactorNodeWithRecipe);
+  const beginRecipeAdd = useFactoryStore((state) => state.beginRecipeAdd);
+  const resolveRecipeAdd = useFactoryStore((state) => state.resolveRecipeAdd);
+  const failRecipeAdd = useFactoryStore((state) => state.failRecipeAdd);
+  const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
+  const selectedDatasetVersion = useFactoryStore((state) =>
+    state.datasetManifest?.versions.find((entry) => entry.id === state.selectedDatasetVersionId),
+  );
   const updateNode = useFactoryStore((state) => state.updateNode);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
@@ -903,7 +915,67 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // now that they offer by hand, Crop Manager and Industrial Farm it is the
   // only thing standing between the card and its machines.
   const hasMachinePicker = machineHandlers.length > 1;
-  const hasMachineMenu = hasMachinePicker && !calmMode;
+  // The card's TWINS (Jack, 2026-09-07): other recipes taking and making
+  // exactly this, listed under the machines in the same menu. They are
+  // fetched when the menu opens, or when the pointer first rests on the
+  // name bar, so a one-machine card can learn whether it has any before it
+  // has to decide on a chevron: with none it looks exactly as it always did.
+  const mayHaveTwins = useMemo(
+    () => recipeMayHaveTwins(recipe, projectNode),
+    [recipe, projectNode.recipeInputOverrides],
+  );
+  // The answer is keyed by the question (recipe, its slot picks, the
+  // dataset) so a stale answer never shows under a new recipe; until the
+  // answer for the current key lands, the list is loading.
+  const twinsKey = `${selectedDatasetVersion?.id ?? ""}|${recipe.id}|${JSON.stringify(projectNode.recipeInputOverrides ?? null)}`;
+  const [twinsAnswer, setTwinsAnswer] = useState<{ key: string; value: RecipeTwin[] | "error" }>();
+  const [twinsWanted, setTwinsWanted] = useState(false);
+  useEffect(() => {
+    if (
+      !(isCompareOpen || twinsWanted) ||
+      !mayHaveTwins ||
+      !selectedDatasetVersion ||
+      twinsAnswer?.key === twinsKey
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    fetchRecipeTwins(selectedDatasetVersion, recipe, projectNode, { signal: controller.signal })
+      .then((rows) => {
+        if (!controller.signal.aborted) setTwinsAnswer({ key: twinsKey, value: rows });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setTwinsAnswer({ key: twinsKey, value: "error" });
+      });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- twinsKey names everything the question depends on
+  }, [isCompareOpen, twinsWanted, mayHaveTwins, twinsKey, selectedDatasetVersion, twinsAnswer?.key]);
+  const twins: RecipeTwin[] | undefined =
+    twinsAnswer?.key === twinsKey && Array.isArray(twinsAnswer.value) ? twinsAnswer.value : undefined;
+  const hasTwins = (twins?.length ?? 0) > 0;
+  const useTwin = (twin: RecipeTwin) => {
+    setCompareOpenState(false);
+    setPreviewHandlerId(undefined);
+    if (!selectedDatasetVersion) {
+      return;
+    }
+    // The swap is the refactor's landing, with the same chip over the board
+    // while the full recipe loads and the same apology when it cannot.
+    const pendingId = beginRecipeAdd(twin.recipe.name);
+    void getRecipeDatasetRecipe(
+      datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+      selectedDatasetVersion,
+      twin.recipe.id,
+    )
+      .then((full) => {
+        refactorNodeWithRecipe(projectNode.id, full, { machineHandlerId: twin.handler.id });
+        resolveRecipeAdd(pendingId);
+      })
+      .catch((error: unknown) => {
+        failRecipeAdd(pendingId, error instanceof Error ? error.message : "The recipe could not be loaded.");
+      });
+  };
+  const hasMachineMenu = (hasMachinePicker || hasTwins) && !calmMode;
   const cycleMachineHandler = (direction: -1 | 1) => {
     const ordered = orderMachineHandlers(machineHandlers);
     const index = Math.max(0, ordered.findIndex((handler) => handler.id === selectedMachineHandler.id));
@@ -1436,12 +1508,13 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 }
                 // The wheel walks the machines in the menu's own order, the
                 // way the tier chip walks tiers; the hover stays put for it.
-                onWheel={hasMachineMenu ? (event) => {
+                onWheel={hasMachinePicker && !calmMode ? (event) => {
                   event.stopPropagation();
                   cycleMachineHandler(event.deltaY < 0 ? -1 : 1);
                 } : undefined}
+                onPointerEnter={mayHaveTwins && !twins ? () => setTwinsWanted(true) : undefined}
                 data-machine-menu-toggle={hasMachineMenu ? "" : undefined}
-                data-tooltip-wheel-steps={hasMachineMenu ? "" : undefined}
+                data-tooltip-wheel-steps={hasMachinePicker && !calmMode ? "" : undefined}
                 className={[
                   // 13px, shrunk by measurement (useFitTitle) as far as 9px
                   // when the name would not fit: the real tier names
@@ -1481,7 +1554,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 </span>
               </div>
             </MinecraftTooltip>
-            {hasMachinePicker && isCompareOpen && !calmMode ? (
+            {hasMachineMenu && isCompareOpen ? (
               <MachineMenu
                 recipe={recipe}
                 node={projectNode}
@@ -1491,6 +1564,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 onHover={setPreviewHandlerId}
                 onUse={updateMachineHandler}
                 onClose={() => setCompareOpen(false)}
+                twins={twins}
+                mapIcons={recipeMapIcons}
+                onUseTwin={useTwin}
               />
             ) : null}
           </div>

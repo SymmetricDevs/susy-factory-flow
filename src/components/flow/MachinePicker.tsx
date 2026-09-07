@@ -7,6 +7,7 @@ import { getNodeSteamReport } from "@/lib/solver/power-report";
 import { applyMachineHandlerToRecipe, formatRate, isSteamMachineHandler } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import type { MachineHandlerIcon } from "./machine-icons";
+import type { RecipeTwin } from "@/lib/datasets/recipe-twins";
 
 /**
  * The machine switcher: one list under the card's name bar, opened by the
@@ -149,8 +150,10 @@ function formatCompact(value: number): string {
 /* ------------------------------------------------------------------ */
 
 /** The panel's scroll cap, and one row's height, for placing it before it exists. */
-const MENU_MAX_HEIGHT = 400;
-const MENU_ROW_HEIGHT = 30;
+// Sized a third up from the card's own 13px (Jack, 2026-09-07): the menu is
+// screen-fixed while the card is zoomed, and at 13px it read too small.
+const MENU_MAX_HEIGHT = 520;
+const MENU_ROW_HEIGHT = 40;
 
 const TIER_ORDER = ["NONE", "ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UMV", "UXV", "MAX"];
 const tierRank = (tier: string | undefined) => {
@@ -178,6 +181,9 @@ export function MachineMenu({
   onHover,
   onUse,
   onClose,
+  twins,
+  mapIcons,
+  onUseTwin,
 }: {
   recipe: Recipe;
   /** The card's node: a steam machine's litres are read at its settings. */
@@ -188,6 +194,16 @@ export function MachineMenu({
   onHover: (handlerId: string | undefined) => void;
   onUse: (handlerId: string) => void;
   onClose: () => void;
+  /**
+   * The card's TWINS: other recipes taking and making exactly what this one
+   * does, one row per machine, under the recipe's own machines. The section
+   * exists only when there are some (Jack, 2026-09-07): none, still loading
+   * or failed all read as the plain machine list.
+   */
+  twins?: RecipeTwin[];
+  /** Recipe map -> the map's machine, the face for a twin whose handler has no family icon. */
+  mapIcons?: ReadonlyMap<string, MachineHandlerIcon>;
+  onUseTwin?: (twin: RecipeTwin) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   // The menu PORTALS to the body, like the crop and hatch menus: inside the
@@ -199,26 +215,55 @@ export function MachineMenu({
   // otherwise. Measured once on open; a board pan closes it through the
   // click-away.
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number }>();
+  const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number }>();
   useEffect(() => {
     const bar = anchorRef.current?.parentElement;
     const card = anchorRef.current?.closest("[data-node-glance-root]");
     if (bar && card) {
       const barRect = bar.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const width = Math.max(320, Math.round(cardRect.width));
+      const width = Math.max(480, Math.round(cardRect.width));
       const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
       // The list's height before it exists: one row per machine, capped
       // where the panel starts scrolling.
-      const estimated = Math.min(MENU_MAX_HEIGHT, handlers.length * MENU_ROW_HEIGHT + 16);
-      const above = Math.round(cardRect.top) - 4 - estimated >= 8;
+      // The twins section is counted as a header and a few rows before it
+      // has loaded, so a menu that opens below the card has room to grow.
+      const twinRows = twins && twins.length > 0 ? 1 + Math.min(3, twins.length) : 0;
+      const estimated = Math.min(MENU_MAX_HEIGHT, (handlers.length + twinRows) * MENU_ROW_HEIGHT + 16);
+      const roomAbove = Math.round(cardRect.top) - 4 - 8;
+      const above = roomAbove >= estimated;
+      const top = Math.min(Math.round(barRect.bottom) + 4, window.innerHeight - 120);
+      // The list may grow after it opens (the twins land later), so its
+      // height is capped to the room on the side it chose: it scrolls
+      // rather than running off the window.
+      const maxHeight = Math.max(160, Math.min(MENU_MAX_HEIGHT, above ? roomAbove : window.innerHeight - top - 8));
       setAnchorAt(
         above
-          ? { left, width, bottom: window.innerHeight - Math.round(cardRect.top) + 4 }
-          : { left, width, top: Math.min(Math.round(barRect.bottom) + 4, window.innerHeight - 120) },
+          ? { left, width, maxHeight, bottom: window.innerHeight - Math.round(cardRect.top) + 4 }
+          : { left, width, maxHeight, top },
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- measured once on open; the twins' arrival must not re-anchor an open menu
   }, [handlers.length]);
+  const twinRows = useMemo(
+    () =>
+      twins
+        ? twins.map((twin) => {
+            const twinRecipe = twin.recipe as unknown as Recipe;
+            const stats = getHandlerRecipeStats(twinRecipe, twin.handler);
+            const steam = stats.steam
+              ? getNodeSteamReport(twinRecipe, { ...node, machineHandlerId: twin.handler.id })
+              : undefined;
+            const power: { value: string; unit: string } = steam
+              ? { value: formatCompact(steam.drawSteamPerTick * 20).replace(/\.0$/, ""), unit: "L/s" }
+              : stats.eut > 0
+                ? { value: formatCompact(stats.eut), unit: "EU/t" }
+                : { value: "none", unit: "" };
+            return { twin, stats, power };
+          })
+        : [],
+    [node, twins],
+  );
   const rows = useMemo(
     () =>
       orderMachineHandlers(handlers).map((handler) => {
@@ -264,8 +309,8 @@ export function MachineMenu({
       ref={rootRef}
       role="listbox"
       aria-label="Machine"
-      className="nodrag nowheel z-[300] max-h-[400px] overflow-y-auto overflow-x-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1.5 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
-      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, bottom: anchorAt.bottom, width: anchorAt.width }}
+      className="nodrag nowheel z-[300] overflow-y-auto overflow-x-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1.5 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
+      style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, bottom: anchorAt.bottom, width: anchorAt.width, maxHeight: anchorAt.maxHeight }}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
@@ -286,13 +331,13 @@ export function MachineMenu({
               onUse(handler.id);
             }}
             className={[
-              "grid w-full items-center gap-x-4 px-3 py-1.5 text-left text-[13px] leading-[18px]",
+              "grid w-full items-center gap-x-4 px-3 py-2 text-left text-[17px] leading-[24px]",
               active ? "bg-[var(--mc-71)] text-white" : "text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white",
             ].join(" ")}
-            style={{ gridTemplateColumns: "28px minmax(0,1fr) 52px 84px" }}
+            style={{ gridTemplateColumns: "36px minmax(0,1fr) 72px 112px" }}
           >
             {/* Bare art, no slot chrome: the list is a menu, not a crafting grid. */}
-            <span className="flex h-7 w-7 items-center justify-center">
+            <span className="flex h-9 w-9 items-center justify-center">
               {icon ? (
                 <ResourceIcon
                   resource={{ ...icon, amount: 1 }}
@@ -300,8 +345,8 @@ export function MachineMenu({
                   bare
                   showAmount={false}
                   tooltip={false}
-                  className="!h-7 !w-7"
-                  iconPixelSize={machineArtPixels(28)}
+                  className="!h-9 !w-9"
+                  iconPixelSize={machineArtPixels(36)}
                 />
               ) : null}
             </span>
@@ -311,6 +356,59 @@ export function MachineMenu({
           </button>
         );
       })}
+      {twinRows.length > 0 ? (
+        <>
+          {/* The twins section: other recipes with exactly these inputs and
+              outputs, one row per machine. Same grid as the machines above,
+              so the figures line up; a muted map name after the machine when
+              the two differ (Auto Workbench running a Shaped Crafting
+              recipe). Everything here is a swap of the whole recipe. */}
+          <div className="mx-3 mt-1.5 border-t-2 border-[var(--mc-33)] pt-2 text-[13px] uppercase tracking-wide text-[var(--mc-ink-muted)]">
+            Other recipes that take and make the same items
+          </div>
+          {twinRows.map(({ twin, stats, power }) => {
+              const icon = iconsById.get(twin.handler.id) ?? mapIcons?.get(twin.recipe.recipeMap);
+              const showMap = twin.recipe.recipeMap !== twin.handler.label;
+              return (
+                <button
+                  key={`${twin.recipe.id}:${twin.handler.id}`}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  onMouseEnter={() => onHover(undefined)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onUseTwin?.(twin);
+                  }}
+                  className="grid w-full items-center gap-x-4 px-3 py-2 text-left text-[17px] leading-[24px] text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white"
+                  style={{ gridTemplateColumns: "36px minmax(0,1fr) 72px 112px" }}
+                >
+                  <span className="flex h-9 w-9 items-center justify-center">
+                    {icon ? (
+                      <ResourceIcon
+                        resource={{ ...icon, amount: 1 }}
+                        size="sm"
+                        bare
+                        showAmount={false}
+                        tooltip={false}
+                        className="!h-9 !w-9"
+                        iconPixelSize={machineArtPixels(36)}
+                      />
+                    ) : null}
+                  </span>
+                  <span className="min-w-0 truncate">
+                    {twin.handler.label}
+                    {showMap ? (
+                      <span className="ml-2 text-[13px] text-[var(--mc-ink-muted)]">{twin.recipe.recipeMap}</span>
+                    ) : null}
+                  </span>
+                  <Figure value={formatSeconds(stats.seconds)} unit="s" />
+                  <Figure value={power.value} unit={power.unit} dim={power.unit === ""} />
+                </button>
+              );
+            })}
+        </>
+      ) : null}
     </div>
   ) : null;
 
@@ -327,7 +425,7 @@ function Figure({ value, unit, dim }: { value: string; unit: string; dim?: boole
   return (
     <span className={["whitespace-nowrap text-right tabular-nums", dim ? "text-[var(--mc-ink-muted)]" : ""].join(" ")}>
       {value}
-      {unit ? <span className="ml-0.5 text-[9px] text-[var(--mc-ink-muted)]">{unit}</span> : null}
+      {unit ? <span className="ml-0.5 text-[12px] text-[var(--mc-ink-muted)]">{unit}</span> : null}
     </span>
   );
 }

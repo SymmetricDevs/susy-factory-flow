@@ -108,11 +108,11 @@ interface HelpCard {
    and a row that wraps costs a whole line of the column's budget. */
 
 const BUILD: HelpCard = {
-  title: "Build tools",
+  title: "History and units",
   rows: [
-    { icon: Undo2, text: "Undo and redo" },
-    { chip: "/s", text: "*Rate unit*: click or wheel it" },
-    { chip: "EU/t", text: "*Power unit*: EU/t or amps" },
+    { icon: Undo2, text: "Undo or redo changes" },
+    { chip: "/s", text: "Click or scroll to change *rate units*" },
+    { chip: "EU/t", text: "Display power in *EU/t or amps*" },
   ],
 };
 
@@ -120,146 +120,150 @@ const BUILD: HelpCard = {
 const BUILD_MODE: HelpCard = {
   title: "Build",
   rows: [
-    { chip: "BUILD", tone: "build", text: "You set *counts* and *wires*" },
-    { text: "Board reports flow and speed" },
-    { text: "Cards say why: starved, clogged" },
+    { chip: "BUILD", tone: "build", text: "Set machine *counts and connections*" },
+    { text: "View calculated production rates" },
+    { text: "Card status identifies flow limits" },
   ],
 };
 
 const SOLVE_MODE: HelpCard = {
   title: "Solve",
   rows: [
-    { chip: "SOLVE", tone: "solve", text: "You set *wires* and a *target*" },
-    { text: "Board sets machine counts" },
-    { text: "Target: drawer rate or pinned count" },
-    { text: "Big plans solve in the background" },
+    { chip: "SOLVE", tone: "solve", text: "Connect machines and set a *target*" },
+    { text: "Machine counts are calculated" },
+    { text: "Set a drawer rate or pin a count" },
   ],
 };
 
 const POOL_MODE: HelpCard = {
   title: "Pool",
   rows: [
-    { chip: "POOL", tone: "pool", text: "You set *recipes* and a *target*" },
-    { text: "No wires: one pool per resource" },
-    { text: "Missing inputs are imported" },
-    { text: "Surplus is output" },
-    { chip: "+", tone: "pool", text: "Add a product drawer, set its rate" },
-    { text: "Only product drawers count" },
+    { chip: "POOL", tone: "pool", text: "Select recipes and set a *target*" },
+    { text: "Machine counts are calculated" },
+    { text: "Resources are shared automatically" },
+    { text: "Inputs with no producer are imported" },
+    { text: "Surplus is listed under outputs" },
+    { chip: "+", tone: "pool", text: "Add a product drawer and set its rate" },
+    { text: "Source and buffer drawers are ignored" },
   ],
 };
 
 const TOOLS: HelpCard = {
   title: "Board tools",
   rows: [
-    { icon: Pencil, text: "*Markup*: draw, paint, image" },
-    { icon: Square, text: "Board, box, arrow, note" },
-    { icon: Paintbrush, text: "Pick a colour, *paint* cards" },
-    { icon: ImagePlus, text: "Add an image, or paste one" },
-    { icon: Eye, text: "*View*: paper, wires, motion" },
-    { icon: Network, text: "*Arrange*: in view options" },
-    { icon: Trash2, text: "*Bin*: click things to delete" },
-    { icon: Volume2, text: "Mute, *watch it build*: Settings" },
+    { icon: Pencil, text: "*Markup*: add annotations" },
+    { icon: Square, text: "Add boards, shapes and notes" },
+    { icon: Paintbrush, text: "*Paint*: colour cards" },
+    { icon: ImagePlus, text: "Insert or paste an image" },
+    { icon: Eye, text: "*View*: display settings" },
+    { icon: Network, text: "*Arrange*: automatic layout" },
+    { icon: Trash2, text: "*Bin*: select objects to delete" },
+    { icon: Volume2, text: "Sound and playback in *Settings*" },
   ],
 };
 
 const FRAMING: HelpCard = {
-  title: "Framing",
+  title: "Viewport",
   rows: [
-    { icon: Focus, text: "Fit the plan on screen" },
-    { text: "Zoomed out, cards can show:" },
-    { icon: Box, text: "Their machine" },
-    { icon: Gauge, text: "How hard they run" },
-    { icon: TriangleAlert, text: "Why: starved, clogged..." },
-    { icon: Zap, text: "Power draw and tier" },
+    { icon: Focus, text: "Fit the entire plan in view" },
+    { text: "Card display at low zoom:" },
+    { icon: Box, text: "Machine type" },
+    { icon: Gauge, text: "Utilization" },
+    { icon: TriangleAlert, text: "Operating status" },
+    { icon: Zap, text: "Power and voltage tier" },
   ],
 };
 
 const ON_A_CARD: HelpCard = {
-  title: "On a card",
+  title: "Machine controls",
   rows: [
-    { text: "*Name bar*: machine list" },
-    { chip: "LV", text: "*Tier*: click up, right click down" },
-    { chip: "2×", text: "*Hatches*: click to type a count" },
-    { chip: "8", text: "*Count*: type, wheel, Shift ×100" },
-    { icon: RefreshCw, text: "*Refactor*: swap the recipe" },
-    { text: "Hover the name for its *stats*" },
-    { text: "Knobs: *coils*, tools, parallels" },
+    { text: "*Name*: select a machine" },
+    { chip: "LV", text: "*Tier*: click to raise; right-click to lower" },
+    { chip: "2×", text: "Click to enter the *hatch count*" },
+    { chip: "8", text: "*Count*: type or scroll; Shift steps by 100" },
+    { icon: RefreshCw, text: "*Refactor*: select a replacement recipe" },
+    { text: "Hover the name for *statistics*" },
+    { text: "Set coils, tools and parallels" },
   ],
 };
 
 const DRAWERS: HelpCard = {
   title: "Drawers and tanks",
   rows: [
-    { chip: "SOURCE", tone: "need", text: "Never runs out. An input." },
-    { chip: "PRODUCT", tone: "product", text: "Pulls flat out. Cycles:" },
-    { chip: "BYPRODUCT", tone: "output", text: "Takes what is left over" },
-    { chip: "TRASH", tone: "internal", text: "Voids what arrives" },
-    { chip: "BUFFER", tone: "fine", text: "Pass-through, or *strict*" },
-    { text: "Solve, Pool: type *amounts*" },
+    { chip: "SOURCE", tone: "need", text: "Unlimited external supply" },
+    { chip: "PRODUCT", tone: "product", text: "Requests maximum production" },
+    { chip: "BYPRODUCT", tone: "output", text: "Collects surplus production" },
+    { chip: "TRASH", tone: "internal", text: "Discards incoming resources" },
+    { chip: "BUFFER", tone: "fine", text: "Stores surplus; *strict* blocks surplus" },
+    { text: "Click the role to cycle output modes" },
+    { text: "Solve or Pool: enter a *target rate*" },
   ],
 };
 
 const BOARDS: HelpCard = {
   title: "Board windows",
   rows: [
-    { chip: "Ctrl+G", text: "Wrap a selection in a *board*" },
-    { text: "Drag the bar: all moves" },
-    { text: "Drop cards in or out" },
-    { text: "*Fold* it to a summary card" },
-    { text: "*Dump*: frame goes, cards stay" },
-    { text: "Paper: *colour* and ruling" },
+    { chip: "Ctrl+G", text: "Group selected cards in a *board*" },
+    { text: "Drag the title bar to move the group" },
+    { text: "Move cards into or out of the frame" },
+    { text: "*Minimize*: display a group summary" },
+    { text: "*Dump*: remove the frame, keep the cards" },
+    { text: "Set the board background and grid" },
   ],
 };
 
 const LEFT_COLUMN: HelpCard = {
-  title: "The left column",
+  title: "Resource browser and library",
   rows: [
-    { icon: Zap, text: "*Generator*, custom rate, farm" },
-    { icon: Search, text: "*Items*: search, filters, sorts" },
-    { text: "Left click makes, right uses" },
-    { icon: Library, text: "*Library* (tab strip): designs, boards, setups" },
+    { icon: Zap, text: "Add a generator, custom rate or crop farm" },
+    { icon: Search, text: "*Items*: search, filter and sort resources" },
+    { text: "Click for production; right-click for uses" },
+    { icon: Library, text: "*Library*: saved designs, boards and setups" },
   ],
 };
 
 const RECIPE_SEARCH: HelpCard = {
   title: "Recipe search",
   rows: [
-    { text: "Opens from any item or port" },
-    { chip: "ALL", text: "Takes and makes: *any, all, only*" },
-    { text: "Machine chips filter the maps" },
-    { chip: "/s", text: "Read amounts as rates or *EU*" },
-    { mouse: "right", text: "Right click a chip to *add it*" },
-    { text: "Card refactor: swap *in place*" },
+    { text: "Click a resource to find recipes" },
+    { text: "Takes: inputs. Makes: outputs." },
+    { chip: "ANY", text: "Match at least one selected resource" },
+    { chip: "ALL", text: "Match every selected resource" },
+    { chip: "ONLY", text: "Match selected resources, with no extras" },
+    { text: "Toggle machine buttons to filter results" },
+    { chip: "/s", text: "Choose quantities, rates or energy units" },
+    { mouse: "right", text: "Right-click a result for *Add to board*" },
+    { text: "*Refactor* keeps compatible connections" },
   ],
 };
 
 const PLAN_TOTALS: HelpCard = {
   title: "Inputs and outputs",
   rows: [
-    { chip: "INPUTS", tone: "need", text: "Bring this in yourself" },
-    { chip: "OUTPUTS", tone: "output", text: "Leaves the plan" },
-    { chip: "INTERNAL", tone: "internal", text: "Made and used here" },
-    { chip: "RAW/NET", text: "Raw, or the net balance" },
-    { text: "Hover a row to light it" },
+    { chip: "INPUTS", tone: "need", text: "Required external supply" },
+    { chip: "OUTPUTS", tone: "output", text: "Resources exported from the plan" },
+    { chip: "INTERNAL", tone: "internal", text: "Resources produced and consumed within the plan" },
+    { chip: "RAW/NET", text: "Total flows or net resource balance" },
+    { text: "Hover a row to highlight its resources" },
   ],
 };
 
 const MACHINES: HelpCard = {
   title: "Machines",
   rows: [
-    { icon: Store, text: "What to build, by tier" },
-    { chip: "PEAK/AVG", text: "EU at full, or as run" },
-    { chip: "USED", text: "Ledger, with generators" },
-    { mouse: "left", text: "Click a row: go to it" },
+    { icon: Store, text: "Required machines grouped by tier" },
+    { chip: "PEAK/AVG", text: "Full-load or actual power consumption" },
+    { chip: "USED", text: "Power usage and generation breakdown" },
+    { mouse: "left", text: "Click a row to locate its machines" },
   ],
 };
 
 const PLAN_CARD: HelpCard = {
-  title: "Plan card",
+  title: "Plan details",
   rows: [
-    { text: "This plan's *icon, name and blurb*" },
-    { icon: Share2, text: "Sharing posts them as its face" },
-    { icon: RotateCcw, text: "A setup you opened can *reset*" },
+    { text: "Edit the plan *icon, name and description*" },
+    { icon: Share2, text: "These details appear in the shared setup" },
+    { icon: RotateCcw, text: "*Reset*: restore the opened setup" },
   ],
 };
 
@@ -268,42 +272,42 @@ const PLAN_CARD: HelpCard = {
  * their first explanation.
  */
 const NOTICES: HelpCard = {
-  title: "Bottom notices",
+  title: "Plan diagnostics",
   rows: [
-    { chip: "NOT WIRED UP", tone: "fine", text: "Slots still to wire" },
-    { chip: "DEAD LOOP", tone: "bottleneck", text: "A ring starving to *0%*" },
-    { chip: "CLOG LOCK", tone: "clogged", text: "Jam: add *a drawer*" },
-    { chip: "SOLVE MODE", tone: "solve", text: "Needs a *rate* or count" },
-    { chip: "POOL MODE", tone: "pool", text: "Same" },
+    { chip: "NOT WIRED UP", tone: "fine", text: "Unconnected input or output slots" },
+    { chip: "DEAD LOOP", tone: "bottleneck", text: "A resource cycle has no sustained flow" },
+    { chip: "CLOG LOCK", tone: "clogged", text: "Blocked surplus stops a resource cycle" },
+    { chip: "SOLVE MODE", tone: "solve", text: "Set a target rate or pin a machine count" },
+    { chip: "POOL MODE", tone: "pool", text: "Set a target rate or pin a machine count" },
   ],
 };
 
 /** The gestures no button reveals. */
 const MOVES: HelpCard = {
-  title: "Mouse and keys",
+  title: "Mouse and keyboard",
   rows: [
-    { mouse: "left", text: "Drag a slot to *wire it*" },
-    { mouse: "left", text: "Drop on empty: *a drawer*" },
-    { mouse: "left", text: "Click or R: *what makes it*" },
-    { mouse: "right", text: "Right click or U: *its uses*" },
-    { chip: "Shift", text: "Box-select, or add one" },
-    { chip: "Ctrl+C/V", text: "Copy and paste cards" },
-    { chip: "Del", text: "Delete; *Esc* drops a tool" },
-    { chip: "WASD", text: "Pan; the wheel zooms" },
-    { chip: "Ctrl+G", text: "Wrap it in *a board*" },
+    { mouse: "left", text: "Drag between compatible slots to connect" },
+    { mouse: "left", text: "Drag a slot to empty space to add a drawer" },
+    { mouse: "left", text: "Resource click or R: production recipes" },
+    { mouse: "right", text: "Resource right-click or U: recipes using it" },
+    { chip: "Shift", text: "Drag to box-select; click to extend selection" },
+    { chip: "Ctrl+C/V", text: "Copy or paste selected cards" },
+    { chip: "Del", text: "Delete selected objects; *Esc* cancels a tool" },
+    { chip: "WASD", text: "Pan the viewport; scroll to zoom" },
+    { chip: "Ctrl+G", text: "Group selected cards in a board" },
   ],
 };
 
 /** The same reminder for a finger: the compact world has no hover and no
  * right button, and telling a phone to right click is worse than nothing. */
 const TOUCH_MOVES: HelpCard = {
-  title: "Touch moves",
+  title: "Touch controls",
   rows: [
-    { text: "Drag from a slot to *wire it*" },
-    { text: "Hold a port row: *make it or use it*" },
-    { text: "Tap a card first, *then* drag to move it" },
-    { text: "Double tap to *zoom*; tap and slide to keep zooming" },
-    { text: "Swipe in from either side for the *panels*" },
+    { text: "Drag between compatible slots to connect" },
+    { text: "Hold a resource row to browse production or uses" },
+    { text: "Tap to select a card, then drag to move it" },
+    { text: "Double-tap to zoom; hold the second tap and slide to adjust" },
+    { text: "Swipe inward from a screen edge to open a side panel" },
   ],
 };
 
@@ -677,7 +681,7 @@ function HelpSheet({ onClose }: { onClose: () => void }) {
         style={{ borderBottom: `1px solid ${GLANCE_LINE}` }}
       >
         <span className="text-[12px] font-black uppercase tracking-[0.14em] text-[#aebccd]">
-          What everything does
+          Board help
         </span>
         <button
           type="button"
@@ -707,7 +711,7 @@ function HelpSheet({ onClose }: { onClose: () => void }) {
  * and that spread sits a band of small desktop windows where the spread
  * collapses into a pile of overlapping cards. Those windows get this
  * instead: every card in one column beside the button, scrollable, still
- * opened by hover and closed by leaving. Same content, no pointing.
+ * opened by hover and closed by leaving. Set a target rate or pin a machine count content, no pointing.
  */
 function HelpHoverPanel({
   measured,

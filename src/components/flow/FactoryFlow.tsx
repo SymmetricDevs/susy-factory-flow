@@ -4344,11 +4344,15 @@ export function FactoryFlow() {
         getNodeCardHandleAtPosition(project, clientPosition, draggedResource),
       ].filter((candidate): candidate is ResolvedResourceHandle => Boolean(candidate));
 
-      const targetHandle = draggedResource
-        ? (candidates.find((candidate) =>
-            isUsableDropTarget(project, draggedResource, candidate),
-          ) ?? candidates[0])
-        : candidates[0];
+      // POOL MODE has no wires, so no card is ever a target: the only thing
+      // a drag can do is make a product drawer, wherever it is let go.
+      const targetHandle = project.poolMode
+        ? undefined
+        : draggedResource
+          ? (candidates.find((candidate) =>
+              isUsableDropTarget(project, draggedResource, candidate),
+            ) ?? candidates[0])
+          : candidates[0];
 
       if (connectCompletedRef.current) {
         return;
@@ -10230,13 +10234,24 @@ function ResourceConnectionLine({
   // when it will do nothing (this port's drawer already exists). Over a
   // refusing card it goes red, agreeing with the card's own wash.
   const overSolidCard = !snap && isPointOverSolidCard(toX, toY);
-  const verdict = snap
-    ? "connect"
-    : connectionStatus === "invalid" || overSolidCard
-      ? "refuse"
-      : voidDropWillSpawn
-        ? "spawn"
-        : "dead";
+  // POOL MODE: nothing connects, so there is no pipe to promise one. A drag
+  // whose release will make a product drawer draws NO line at all - the
+  // ghost drawer riding the pointer is the whole story - and one whose
+  // release will do nothing draws the red dashed line, so the reason card
+  // under it reads as "I see what you are trying, and here is why not".
+  const poolMode = useFactoryStore.getState().project.poolMode === true;
+  if (poolMode && voidDropWillSpawn) {
+    return <g className="react-flow__connection" />;
+  }
+  const verdict = poolMode
+    ? "dead"
+    : snap
+      ? "connect"
+      : connectionStatus === "invalid" || overSolidCard
+        ? "refuse"
+        : voidDropWillSpawn
+          ? "spawn"
+          : "dead";
   // Snapped is GREEN and solid - "this will connect" - with white marching
   // dots running toward the caught slot; a spawnable void is green dashed;
   // refusals and dead voids are red. A snap whose release would DELETE the
@@ -10377,7 +10392,10 @@ function VoidDropGhost() {
         paintDoomedEdge(doomed?.id);
       }
       lastSnapKeyRef.current = snapKey;
-      const elsewhere = snap || isPointOverSolidCard(point.x, point.y);
+      // Pool mode: the ghost shows everywhere, since nothing else can
+      // happen on release wherever the pointer is.
+      const poolMode = useFactoryStore.getState().project.poolMode === true;
+      const elsewhere = !poolMode && (snap || isPointOverSolidCard(point.x, point.y));
       ghost.style.display = elsewhere ? "none" : "";
       // Both cards sit CENTERED on the pointer - the drawer preview because
       // that is exactly where a release puts it, the reason card because an
@@ -13281,6 +13299,16 @@ function paintNodeDropFit(
   const selector = onlyUnpainted
     ? ".react-flow__node:not([data-drop-fit])"
     : ".react-flow__node";
+
+  // POOL MODE: nothing connects, so no card washes green or red - a green
+  // card promised a wire that could not happen. Every card reads "none",
+  // which also leaves the snap map empty so the pipe never jumps to a slot.
+  if (project.poolMode) {
+    for (const element of document.querySelectorAll<HTMLElement>(selector)) {
+      element.dataset.dropFit = "none";
+    }
+    return;
+  }
 
   for (const element of document.querySelectorAll<HTMLElement>(selector)) {
     const id = element.dataset.id;

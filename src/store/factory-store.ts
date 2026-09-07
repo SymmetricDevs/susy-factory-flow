@@ -1919,6 +1919,16 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
             computeBoardLevelView(state.project).openBoards,
           ).find((frame) => frame.id === anchorOwner)
         : undefined;
+      // Pool mode lets go anywhere, cards included, since nothing else can
+      // happen on release: the drawer takes the nearest clear floor instead
+      // of landing on whatever was under the pointer.
+      const landing = state.project.poolMode
+        ? nearestFreeSpot(
+            { ...position, width: STORAGE_NODE_WIDTH, height: STORAGE_NODE_HEIGHT },
+            projectBlockerRects(state.project),
+            BOARD_GRID,
+          )
+        : position;
       const storage: FactoryStorage = {
         id: createId("storage"),
         kind: storageResource.kind,
@@ -1929,8 +1939,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         dominantColor: storageResource.dominantColor ?? storageResource.iconAtlas?.dominantColor,
         position: snapPositionToGrid(
           anchorFrame
-            ? { x: position.x - anchorFrame.x, y: position.y - anchorFrame.y }
-            : position,
+            ? { x: landing.x - anchorFrame.x, y: landing.y - anchorFrame.y }
+            : landing,
         ),
         pocketId: anchorFrame ? anchorOwner : undefined,
         // POOL MODE has no wires: dragging off a port into space still makes

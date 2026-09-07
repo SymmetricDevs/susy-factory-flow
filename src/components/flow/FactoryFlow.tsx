@@ -7485,6 +7485,9 @@ const ModeKeys = memo(function ModeKeys() {
                   width={640}
                   draggable={false}
                   className="mx-auto block w-[300px] max-w-full select-none"
+                  // Well desaturated and a touch dimmer (Jack, 2026-09-07):
+                  // full colour shouted next to the tooltip's grey text.
+                  style={{ filter: "saturate(0.45) brightness(0.88)" }}
                 />
               </div>
             </div>

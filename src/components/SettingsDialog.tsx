@@ -9,7 +9,6 @@ import {
   type AppFontId,
 } from "@/lib/app-font";
 import { isUpdatePopupEnabled, setUpdatePopupEnabled } from "@/lib/whats-new";
-import { areChipClicksInverted, setChipClicksInverted } from "@/lib/chip-clicks";
 import {
   BOARD_TIMELAPSE_PRESETS,
   runBoardTimelapsePreset,
@@ -26,10 +25,9 @@ import {
 /**
  * The planner's settings, in one small sheet.
  *
- * One section so far: the font. Each option's name is rendered IN that font,
- * which is the whole preview - a picker that describes typefaces in words was
- * never going to beat showing them. A click applies immediately, to the page
- * behind the dialog included, so choosing is looking rather than committing.
+ * The font is one dropdown that renders in the chosen face, which is the
+ * whole preview. A pick applies immediately, to the page behind
+ * the dialog included, so choosing is looking rather than committing.
  *
  * Owned by AppHeader the same way the share dialog is, so the compact menu can
  * close behind it without unmounting it.
@@ -37,7 +35,6 @@ import {
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [font, setFont] = useState<AppFontId>(() => getStoredAppFont());
   const [updatePopup, setUpdatePopup] = useState<boolean>(() => isUpdatePopupEnabled());
-  const [invertedClicks, setInvertedClicks] = useState<boolean>(() => areChipClicksInverted());
   const [sounds, setSounds] = useState<boolean>(() => areBoardSoundsEnabled());
   const [volume, setVolume] = useState<number>(() => getBoardSoundVolume());
   const canPlayTimelapse = useFactoryStore(
@@ -94,48 +91,26 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 compact:p-3">
-          <section role="radiogroup" aria-label="Font">
-            <h3 className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-fg-muted">
-              Font
-            </h3>
-            <div className="flex flex-col gap-1">
-              {APP_FONTS.map((option) => {
-                const isSelected = option.id === font;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    onClick={() => chooseFont(option.id)}
-                    className={[
-                      "flex items-center gap-3 rounded border px-3 py-2.5 text-left",
-                      isSelected
-                        ? "border-cyan-600 bg-cyan-500/10"
-                        : "border-line hover:border-line-strong hover:bg-surface-raised",
-                    ].join(" ")}
-                  >
-                    <span className="min-w-0 flex-1">
-                      {/* The name IS the preview: it renders in the font it names. */}
-                      <span
-                        className="block truncate text-base leading-tight text-fg"
-                        style={{ fontFamily: option.stack }}
-                      >
-                        {option.label}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-fg-muted">{option.blurb}</span>
-                    </span>
-                    <Check
-                      aria-hidden
-                      className={[
-                        "h-4 w-4 shrink-0",
-                        isSelected ? "text-cyan-400" : "invisible",
-                      ].join(" ")}
-                    />
-                  </button>
-                );
-              })}
-            </div>
+          <section>
+            <label className="flex items-center gap-3 px-1">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-fg-muted">Font</span>
+              {/* One dropdown (Jack, 2026-09-07): the list of previewed cards
+                  took the whole sheet for a choice made once. The select
+                  itself renders in the chosen font, which is preview enough. */}
+              <select
+                aria-label="Font"
+                value={font}
+                onChange={(event) => chooseFont(event.target.value as AppFontId)}
+                className="min-w-0 flex-1 rounded border border-line bg-surface-raised px-2 py-1.5 text-base text-fg hover:border-line-strong"
+                style={{ fontFamily: APP_FONTS.find((option) => option.id === font)?.stack }}
+              >
+                {APP_FONTS.map((option) => (
+                  <option key={option.id} value={option.id} style={{ fontFamily: option.stack }}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </section>
 
           <section className="mt-4">
@@ -278,41 +253,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </p>
           </section>
 
-          <section className="mt-4">
-            <h3 className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-fg-muted">
-              Controls
-            </h3>
-            <button
-              type="button"
-              onClick={() => {
-                const next = !invertedClicks;
-                setChipClicksInverted(next);
-                setInvertedClicks(next);
-              }}
-              aria-pressed={invertedClicks}
-              className={[
-                "flex w-full items-center gap-3 rounded border px-3 py-2.5 text-left",
-                invertedClicks
-                  ? "border-cyan-600 bg-cyan-500/10"
-                  : "border-line hover:border-line-strong hover:bg-surface-raised",
-              ].join(" ")}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block text-base leading-tight text-fg">Swap chip clicks</span>
-                <span className="mt-0.5 block text-xs text-fg-muted">
-                  On, clicking a power chip steps it and shift-click opens the dropdown. Off,
-                  clicking opens the dropdown and shift-click steps. Right click always steps back.
-                </span>
-              </span>
-              <Check
-                aria-hidden
-                className={[
-                  "h-4 w-4 shrink-0",
-                  invertedClicks ? "text-cyan-400" : "invisible",
-                ].join(" ")}
-              />
-            </button>
-          </section>
         </div>
       </div>
     </div>

@@ -378,21 +378,32 @@ Working notes for future agents on GTNH Factory Flow.
   as before: `active` is per browser SESSION (a reload leaves you on the tab
   you were on), `open` and `showOnStartup` are permanent.
 - The help sheet (`BoardHelp.tsx`) is a COMPUTED layout: every card is
-  `CARD_W` wide and cards live in flex columns hung from one ring each
-  (board-left under the build toolbar, board-right under the tool row and
-  over the framing dock, the corner stack over the "?", the browser cards
-  inside the browser column, the legend cards - inputs and outputs, machines,
-  drawers, board windows, notices - over the inspector; the corner stack ends
-  in the plan card, arrowed down at the plan bar; since 2026-09-06 a MODE
-  column - Build, Solve, Pool, one terse card each - hangs under the centre
-  mode switch, and when there is no room for it between the other columns
-  the layout reports `fits: false` and the one-column hover panel is shown
-  instead). Do not go back to per-card offsets. Copy is terse engineering
-  text, no quips (Jack, 2026-09-06). The glance layer only shows while the paint row is unfolded
-  (`compact={isCompact || toolbarFold.paint}`), so with both columns open
-  it needs a window about 1560px wide; narrower windows get the one-column
-  hover panel, phones the full-screen sheet. `help-probe.local.mjs`
-  (size, output, which panel to close) screenshots it.
+  `CARD_W` (280) wide and cards live in flex columns hung from one ring
+  each. Since 2026-09-07 (Jack's rapid-fire pass): board-left under the
+  build toolbar (Units and history); the CENTRE under the mode switch,
+  ONE "Build, Solve, Pool" card, never three; board-right under the tool
+  row (Board tools) and over the framing dock (Viewport); the corner stack
+  over the "?" (Mouse and keyboard, Plan details, arrowed down at the plan
+  bar); TWO FOOT lanes along the board's bottom middle between those
+  (Machine controls + Board windows, Drawers and tanks + Plan diagnostics -
+  the legends live on the board, never over the inspector); the browser
+  column leads with a LIBRARY card arrowed across the seam at the Library
+  pill, then Resources, then Recipe search; the inspector carries Inputs
+  and outputs at its top and Machines over the machine list (anchor
+  `machines` on MachineShoppingList, under the totals when the list is
+  empty). The drawer rows wear the board's own silhouettes in its tints
+  (`DrawerShapeGlyph`), not word chips. Fallbacks in `layoutGlance`: no
+  room for a centre lane beside the build column takes the build lane and
+  sends Units to the corner stack; no foot lane hangs the foot cards under
+  the centre; and estimated stacks that would land on each other report
+  `fits: false`. Do not go back to per-card offsets. Copy is terse
+  engineering text, no quips (Jack, 2026-09-06). The spread only shows
+  from 1920x1080 CSS px (`GLANCE_MIN_VW/VH`, so browser zoom counts
+  by itself; Jack, 2026-09-07: under 1080p it crams, switch to the panel
+  liberally); smaller windows get the one-column hover panel, phones the
+  full-screen sheet. `compact` is `isCompact` ALONE - the paint fold
+  no longer flips a desktop window into the phone sheet.
+  `help-fit-probe.local.mjs <WxH> <out.png>` screenshots it.
 - Each design tab remembers its own camera:
   `src/lib/designs/design-camera.ts`, localStorage keyed by design id. It is
   deliberately NOT part of the plan - a shared setup carries positions and view

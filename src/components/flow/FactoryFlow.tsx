@@ -6449,7 +6449,9 @@ export function FactoryFlow() {
       />
       {/* The help layer rings the toolbars; with the paint row folded away
           there is nothing to ring, so it becomes the sheet, as on a phone. */}
-      <BoardHelp compact={isCompact || toolbarFold.paint} />
+      {/* Compact only: a desktop window narrow enough to fold the paint row
+          still hovers the panel or the spread, never the phone sheet. */}
+      <BoardHelp compact={isCompact} />
       {/* Toggled from the dev menu (shift-click the version chip). Sits above
           the help button; see PerfHud.tsx. */}
       <PerfHud />

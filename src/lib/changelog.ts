@@ -77,6 +77,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The setup rules sheet is gone and a filled cell and its fluid always wire together.",
       "A chevron by the card's name opens the machine list, every card wears its machine's picture, and tooltips state rates, requirements and the gestures on offer.",
       "A shorter top bar: share, import and export sit under one key, the version chip opens the release notes, and the generator, custom rate and crop farm keys moved to the top of the items column.",
+      "The board's ? help points at the Library, the mode switch and the machine list, and draws each drawer as its own shape.",
     ],
   },
   {

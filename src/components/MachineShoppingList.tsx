@@ -448,7 +448,10 @@ export function MachineShoppingList() {
   ) : null;
 
   return (
-    <div className="flex min-h-0 shrink-0 basis-[40%] flex-col border-t-2 border-[var(--mc-47)]">
+    <div
+      data-help-anchor="machines"
+      className="flex min-h-0 shrink-0 basis-[40%] flex-col border-t-2 border-[var(--mc-47)]"
+    >
       <div className="border-b border-[var(--mc-47)] bg-[var(--mc-71)] px-2 py-1">
         <div className="flex w-full items-center gap-2">
           <span className="text-sm font-bold uppercase tracking-wider">Machines</span>

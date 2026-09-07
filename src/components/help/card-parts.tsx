@@ -42,10 +42,50 @@ export interface GlanceRow {
   chip?: string;
   /** Draws a mouse with that button lit. */
   mouse?: GlanceMouse;
+  /** Draws a drawer's silhouette in its board tint. */
+  shape?: GlanceDrawerShape;
   /** Colours the chip. Only worth it where the app is colour-coded too. */
   tone?: GlanceTone;
   /** `*Words between asterisks*` come out lit. */
   text: string;
+}
+
+export type GlanceDrawerShape = "source" | "product" | "byproduct" | "trash" | "buffer";
+
+/** The drawer tints from StorageNode's ROLE_TINTS, so the legend and the
+ * board agree on what red, green and steel mean. */
+const DRAWER_SHAPE_TINTS: Record<GlanceDrawerShape, string> = {
+  source: "#ef4444",
+  product: "#10b981",
+  byproduct: "#10b981",
+  trash: "#8a93a6",
+  buffer: "#8a93a6",
+};
+
+/**
+ * A drawer's silhouette at chip size, the same cuts globals.css makes on
+ * the 100x80 tile: product the plain crate, source the rounded one,
+ * byproduct the shield (square shoulders, tapered base), trash the bin
+ * (sides tapering to a narrower foot), buffer the hexagon.
+ */
+export function DrawerShapeGlyph({ shape }: { shape: GlanceDrawerShape }) {
+  const tint = DRAWER_SHAPE_TINTS[shape];
+  const common = { fill: `${tint}3d`, stroke: tint, strokeWidth: 1.5, strokeLinejoin: "round" as const };
+  return (
+    <svg viewBox="0 0 24 18" className="h-4 w-[21px] shrink-0" aria-hidden>
+      {shape === "source" ? (
+        <rect x="1" y="1" width="22" height="16" rx="4" {...common} />
+      ) : shape === "product" ? (
+        <rect x="1" y="1" width="22" height="16" {...common} />
+      ) : shape === "byproduct" ? (
+        <polygon points="1,1 23,1 23,12 18,17 6,17 1,12" {...common} />
+      ) : shape === "trash" ? (
+        <polygon points="1,1 23,1 19,17 5,17" {...common} />
+      ) : (
+        <polygon points="5,1 19,1 23,9 19,17 5,17 1,9" {...common} />
+      )}
+    </svg>
+  );
 }
 
 export const GLANCE_ACCENT = "#22d3ee";
@@ -152,7 +192,7 @@ export function GlanceRows({
     <ul
       className={[
         "grid grid-cols-[auto_1fr] items-start",
-        dense ? "gap-x-2 gap-y-1.5" : "gap-x-2.5 gap-y-2",
+        dense ? "gap-x-2 gap-y-1" : "gap-x-2.5 gap-y-2",
       ].join(" ")}
     >
       {rows.map((row) => (
@@ -181,6 +221,8 @@ function GlanceRowLine({
       >
         {row.mouse ? (
           <MouseGlyph kind={row.mouse} color={accent} />
+        ) : row.shape ? (
+          <DrawerShapeGlyph shape={row.shape} />
         ) : Icon ? (
           <Icon className={dense ? "h-3.5 w-3.5" : "h-4 w-4"} style={{ color: accent }} />
         ) : row.chip ? (
@@ -199,7 +241,7 @@ function GlanceRowLine({
       <span
         className={[
           "text-[#c3cedb]",
-          dense ? "text-[12px] leading-[1.4]" : "text-[13px] leading-[1.45]",
+          dense ? "text-[11px] leading-[1.35]" : "text-[13px] leading-[1.45]",
         ].join(" ")}
       >
         {splitEmphasis(row.text).map((piece, index) =>
@@ -222,7 +264,7 @@ export function GlanceTitle({ children, dense = false }: { children: string; den
     <p
       className={[
         "font-bold leading-tight text-white",
-        dense ? "text-[14px]" : "text-[18px]",
+        dense ? "text-[13px]" : "text-[18px]",
       ].join(" ")}
     >
       {children}

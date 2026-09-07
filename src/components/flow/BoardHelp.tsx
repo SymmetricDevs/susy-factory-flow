@@ -67,7 +67,7 @@ type Measured = {
 };
 
 /** Every glance card's width. Rows are written to fit it. */
-const CARD_W = 320;
+const CARD_W = 280;
 /** Between stacked cards in one column. */
 const CARD_GAP = 14;
 /** Card edge to ring edge: room for the arrow to read as an arrow. */
@@ -78,14 +78,16 @@ const ARROW_STEM = 3;
 /** Long enough to cross the gap from the button to the cards over it. */
 const HIDE_GRACE_MS = 160;
 /**
- * The smallest window the spread-out glance layout fits: below either of
- * these its columns overlap or spill off the screen, so hover falls back to
- * the one-column panel instead. Checked against screenshots with both
- * columns open (`help-probe.local.mjs` at 1440x920, 1600x1000, 1920x1080):
- * at 1440x920 the left board column has about 30px to spare.
+ * The smallest window the spread-out glance layout is shown in: 1080p at
+ * 100% zoom. Under it the cards cram and overlap, and the one-column panel
+ * reads better (Jack, 2026-09-07). These are CSS pixels, so browser zoom
+ * counts by itself: a 1080p window at 125% reports 1536x864 and gets the
+ * panel. `layoutGlance` still reports `fits: false` when its stacks would
+ * land on each other, which catches a wide window with both side columns
+ * open. `help-fit-probe.local.mjs <WxH> <out.png>` screenshots it.
  */
-const GLANCE_MIN_VW = 1440;
-const GLANCE_MIN_VH = 920;
+const GLANCE_MIN_VW = 1920;
+const GLANCE_MIN_VH = 1080;
 
 /**
  * The sheet's own accent: one soft blue-grey.
@@ -108,9 +110,9 @@ interface HelpCard {
 const BUILD: HelpCard = {
   title: "Units and history",
   rows: [
-    { icon: Undo2, text: "Undo / redo" },
-    { chip: "/s", text: "Rate units" },
-    { chip: "EU/t", text: "Power units" },
+    { icon: Undo2, text: "*Undo / redo* changes" },
+    { chip: "/s", text: "Change the *rate unit*" },
+    { chip: "EU/t", text: "Show power in *EU/t or amps*" },
   ],
 };
 
@@ -118,131 +120,147 @@ const BUILD: HelpCard = {
 const BUILD_MODE: HelpCard = {
   title: "Build",
   rows: [
-    { text: "Set counts and connections" },
-    { text: "Read production rates" },
+    { text: "Place *recipes* and connect their slots" },
+    { text: "Set *machine counts*; read actual rates" },
+    { text: "Hover a status for *flow limits*" },
   ],
 };
 
 const SOLVE_MODE: HelpCard = {
   title: "Solve",
   rows: [
-    { text: "Set connections and targets" },
-    { text: "Calculate machine counts" },
+    { text: "Connect recipes and set a *target*" },
+    { text: "*Machine counts* are calculated" },
+    { text: "Target: *drawer rate* or *pinned count*" },
   ],
 };
 
 const POOL_MODE: HelpCard = {
   title: "Pool",
   rows: [
-    { text: "Set recipes and targets" },
-    { text: "Automatic counts and supply" },
-    { chip: "+", text: "Add product target" },
+    { text: "Choose recipes and set a *target*" },
+    { text: "Counts and resource flow are *automatic*" },
+    { text: "Inputs with no producer are *imported*" },
+    { chip: "+", tone: "pool", text: "Add a *product drawer*; set its rate" },
   ],
 };
 
 const TOOLS: HelpCard = {
   title: "Board tools",
   rows: [
-    { icon: Pencil, text: "Annotations" },
-    { icon: Paintbrush, text: "Card colour" },
-    { icon: ImagePlus, text: "Insert image" },
-    { icon: Eye, text: "Display options" },
-    { icon: Network, text: "Auto-arrange" },
-    { icon: Trash2, text: "Delete tool" },
+    { icon: Pencil, text: "*Markup*: boards, shapes and notes" },
+    { icon: Paintbrush, text: "*Paint*: apply colour to cards" },
+    { icon: ImagePlus, text: "*Image*: insert or paste" },
+    { icon: Eye, text: "*View*: background and wire display" },
+    { icon: Network, text: "*Arrange*: automatic card layout" },
+    { icon: Trash2, text: "*Bin*: click objects to delete" },
   ],
 };
 
 const FRAMING: HelpCard = {
   title: "Viewport",
   rows: [
-    { icon: Focus, text: "Fit plan" },
-    { icon: Box, text: "Machine icons" },
-    { icon: Gauge, text: "Utilization" },
-    { icon: TriangleAlert, text: "Status" },
-    { icon: Zap, text: "Power and tier" },
+    { icon: Focus, text: "*Fit* the plan on screen" },
+    { text: "When zoomed out, show:" },
+    { icon: Box, text: "*Machine* icons" },
+    { icon: Gauge, text: "*Utilization*: running capacity" },
+    { icon: TriangleAlert, text: "*Status*: what limits production" },
+    { icon: Zap, text: "*Power* consumption and tier" },
   ],
 };
 
 const ON_A_CARD: HelpCard = {
   title: "Machine controls",
   rows: [
-    { text: "Name: select machine" },
-    { chip: "LV", text: "Click: up; right-click: down" },
-    { chip: "2×", text: "Hatch count" },
-    { chip: "8", text: "Machine count" },
-    { icon: RefreshCw, text: "Replace recipe" },
-    { text: "Hover name: statistics" },
+    { text: "Click the *name* to change machine" },
+    { chip: "LV", text: "*Tier*: click up, right-click down" },
+    { chip: "2×", text: "Click to edit *hatch count*" },
+    { chip: "8", text: "*Count*: type or scroll" },
+    { icon: RefreshCw, text: "*Refactor*: choose another recipe" },
+    { text: "Hover the name for *machine stats*" },
+    { text: "Config slots: *coils, tools, parallels*" },
   ],
 };
 
 const DRAWERS: HelpCard = {
   title: "Drawers and tanks",
   rows: [
-    { chip: "SOURCE", tone: "need", text: "Unlimited supply" },
-    { chip: "PRODUCT", tone: "product", text: "Production demand" },
-    { chip: "BYPRODUCT", tone: "output", text: "Collect surplus" },
-    { chip: "TRASH", tone: "internal", text: "Discard" },
-    { chip: "BUFFER", tone: "fine", text: "Store surplus" },
+    { shape: "source", text: "*Source*: unlimited external supply" },
+    { shape: "product", text: "*Product*: requests full production" },
+    { shape: "byproduct", text: "*Byproduct*: collects only surplus" },
+    { shape: "trash", text: "*Trash*: discards all arrivals" },
+    { shape: "buffer", text: "*Buffer*: pass-through and storage" },
   ],
 };
 
 const BOARDS: HelpCard = {
   title: "Board windows",
   rows: [
-    { chip: "Ctrl+G", text: "Group selection" },
-    { text: "Title bar: move group" },
-    { text: "Minimize: summary" },
-    { text: "Dump: ungroup" },
+    { chip: "Ctrl+G", text: "Group selection in a *board*" },
+    { text: "Drag *title bar*: move group" },
+    { text: "*Minimize*: show a flow summary" },
+    { text: "*Dump*: remove frame only" },
   ],
 };
 
 const LEFT_COLUMN: HelpCard = {
   title: "Resources",
   rows: [
-    { icon: Zap, text: "Generators and sources" },
-    { icon: Search, text: "Search resources" },
-    { icon: Library, text: "Saved plans" },
+    { icon: Zap, text: "Add *generators, custom rates, farms*" },
+    { icon: Search, text: "Find *items and fluids*" },
+    { mouse: "left", text: "Click a resource: *recipes that make it*" },
+    { mouse: "right", text: "Right-click: *recipes that use it*" },
+  ],
+};
+
+/** The Library pill at the head of the tab strip, ringed and arrowed. */
+const LIBRARY: HelpCard = {
+  title: "Library",
+  rows: [
+    { icon: Library, text: "Your *designs*, in folders" },
+    { text: "*Community setups*: open in a new tab" },
+    { text: "Favorites, saved and *posted* setups" },
   ],
 };
 
 const RECIPE_SEARCH: HelpCard = {
   title: "Recipe search",
   rows: [
-    { text: "Takes: inputs; Makes: outputs" },
-    { chip: "ANY", text: "At least one" },
-    { chip: "ALL", text: "All selected" },
-    { chip: "ONLY", text: "No extras" },
-    { text: "Machine buttons: filter" },
-    { text: "Right-click result: add" },
+    { text: "*Takes* filters inputs; *Makes* outputs" },
+    { chip: "ANY", text: "Match at least one resource" },
+    { chip: "ALL", text: "Match all; extras allowed" },
+    { chip: "ONLY", text: "Match all; no extras" },
+    { text: "*Machine buttons* filter results" },
+    { mouse: "right", text: "Result menu: *Add to board*" },
   ],
 };
 
 const PLAN_TOTALS: HelpCard = {
   title: "Inputs and outputs",
   rows: [
-    { chip: "INPUTS", text: "External supply" },
-    { chip: "OUTPUTS", text: "Exports" },
-    { chip: "INTERNAL", text: "Produced and used" },
-    { chip: "RAW/NET", text: "Total / balance" },
+    { chip: "INPUTS", tone: "need", text: "Required external supply" },
+    { chip: "OUTPUTS", tone: "output", text: "Resources leaving the plan" },
+    { chip: "INTERNAL", tone: "internal", text: "Made and used in the plan" },
+    { chip: "RAW/NET", text: "Total flows / net balance" },
   ],
 };
 
 const MACHINES: HelpCard = {
   title: "Machines",
   rows: [
-    { icon: Store, text: "Machine counts by tier" },
-    { chip: "PEAK/AVG", text: "Full / actual power" },
-    { chip: "USED", text: "Power breakdown" },
-    { text: "Click row: locate" },
+    { icon: Store, text: "Required *machines by tier*" },
+    { chip: "PEAK/AVG", text: "Full-load / actual power" },
+    { chip: "USED", text: "Power use and generation" },
+    { mouse: "left", text: "Click a row to *locate machines*" },
   ],
 };
 
 const PLAN_CARD: HelpCard = {
   title: "Plan details",
   rows: [
-    { text: "Name, icon and description" },
-    { icon: Share2, text: "Share setup" },
-    { icon: RotateCcw, text: "Reset setup" },
+    { text: "Edit the *name, icon and description*" },
+    { icon: Share2, text: "*Share* the setup and its details" },
+    { icon: RotateCcw, text: "*Reset* to the opened setup" },
   ],
 };
 
@@ -253,11 +271,11 @@ const PLAN_CARD: HelpCard = {
 const NOTICES: HelpCard = {
   title: "Plan diagnostics",
   rows: [
-    { chip: "NOT WIRED UP", tone: "fine", text: "Unconnected slots" },
-    { chip: "DEAD LOOP", tone: "bottleneck", text: "Cycle without supply" },
-    { chip: "CLOG LOCK", tone: "clogged", text: "Blocked surplus" },
-    { chip: "SOLVE MODE", tone: "solve", text: "Target required" },
-    { chip: "POOL MODE", tone: "pool", text: "Target required" },
+    { chip: "NOT WIRED UP", tone: "fine", text: "Slots need connections" },
+    { chip: "DEAD LOOP", tone: "bottleneck", text: "Cycle supply deficit" },
+    { chip: "CLOG LOCK", tone: "clogged", text: "Surplus blocks a cycle" },
+    { chip: "SOLVE MODE", tone: "solve", text: "Set rate / pin count" },
+    { chip: "POOL MODE", tone: "pool", text: "Add a product target" },
   ],
 };
 
@@ -265,16 +283,15 @@ const NOTICES: HelpCard = {
 const MOVES: HelpCard = {
   title: "Mouse and keyboard",
   rows: [
-    { text: "Drag slot: connect" },
-    { text: "Drag slot to canvas: drawer" },
-    { chip: "R", text: "Find production recipes" },
-    { chip: "U", text: "Find uses" },
-    { chip: "Shift", text: "Extend selection" },
-    { chip: "Ctrl+C/V", text: "Copy / paste" },
-    { chip: "Del", text: "Delete selection" },
-    { chip: "Esc", text: "Cancel tool" },
-    { chip: "WASD", text: "Pan" },
-    { text: "Scroll: zoom" },
+    { mouse: "left", text: "Drag between slots to *connect*" },
+    { mouse: "left", text: "Drag slot to empty space: *drawer*" },
+    { chip: "R / U", text: "Hover a port: find *makes / uses*" },
+    { chip: "Shift", text: "Drag to *box-select*; click to add" },
+    { chip: "Ctrl+C/V", text: "*Copy / paste* selected cards" },
+    { chip: "Del", text: "*Delete* selection" },
+    { chip: "Esc", text: "*Cancel* the active tool" },
+    { chip: "WASD", text: "*Pan* the canvas" },
+    { mouse: "scroll", text: "Scroll the canvas to *zoom*" },
   ],
 };
 
@@ -283,20 +300,38 @@ const MOVES: HelpCard = {
 const TOUCH_MOVES: HelpCard = {
   title: "Touch controls",
   rows: [
-    { text: "Drag slot: connect" },
-    { text: "Hold resource: recipes" },
-    { text: "Tap card, then drag: move" },
-    { text: "Double-tap: zoom" },
-    { text: "Swipe from edge: panels" },
+    { text: "Drag between slots to *connect*" },
+    { text: "Hold a resource for *makes / uses*" },
+    { text: "Tap a card, then drag to *move*" },
+    { text: "Double-tap to *zoom*" },
+    { text: "Swipe from an edge to open a *panel*" },
   ],
 };
 
 /** The mode stack, in the order the switch reads. */
 const MODES: HelpCard[] = [BUILD_MODE, SOLVE_MODE, POOL_MODE];
 
+/**
+ * The three modes as ONE card for the spread, hung right under the switch.
+ * Three cards took 400px of the centre column; this takes half, which is
+ * what lets the drawer, board and notice legends stand under it at 920px.
+ */
+const MODES_CARD: HelpCard = {
+  title: "Build, Solve, Pool",
+  rows: [
+    { text: "*Build*: you set counts and wires" },
+    { text: "The board reports what flows" },
+    { text: "*Solve*: you wire and set a target" },
+    { text: "Machine counts are calculated" },
+    { text: "*Pool*: pick recipes, set a target" },
+    { text: "Counts, wires and imports are automatic" },
+  ],
+};
+
 /** Every card, in reading order, for the one-column formats. */
 const LINEAR: HelpCard[] = [
   ...MODES,
+  LIBRARY,
   BUILD,
   TOOLS,
   FRAMING,
@@ -378,26 +413,63 @@ type GlanceLayout = {
   rings: HelpRect[];
   columns: Column[];
   arrows: Arrow[];
-  /** False when the mode column has no room between the others: the
-   * caller shows the one-column panel instead of overlapping cards. */
+  /** False when the board is too small for the spread without cards
+   * landing on each other: the caller shows the one-column panel. */
   fits: boolean;
 };
+
+/** About how tall a card renders at CARD_W: title, rows, the wrapped ones
+ * twice. Only used to keep stacks off each other before anything is drawn. */
+function estimateCardHeight(card: HelpCard): number {
+  const charsPerLine = 32;
+  const rows = card.rows.reduce(
+    (sum, row) => sum + 4 + 15 * Math.max(1, Math.ceil(row.text.length / charsPerLine)),
+    0,
+  );
+  return 48 + rows;
+}
+
+function estimateStackHeight(cards: HelpCard[]): number {
+  return (
+    cards.reduce((sum, card) => sum + estimateCardHeight(card), 0) + CARD_GAP * (cards.length - 1)
+  );
+}
+
+/** A stack's estimated box, for the overlap check. */
+type Box = { left: number; top: number; bottom: number };
+
+function boxesOverlap(a: Box, b: Box): boolean {
+  return (
+    a.left < b.left + CARD_W + CARD_GAP &&
+    b.left < a.left + CARD_W + CARD_GAP &&
+    a.top < b.bottom + CARD_GAP &&
+    b.top < a.bottom + CARD_GAP
+  );
+}
 
 /**
  * Where everything goes, from the measured rings.
  *
- * Board-left hangs under the build toolbar; the corner stack grows up from
- * the "?" and its bottom card points down at the plan bar; board-right hangs
- * under the tool row and a second board-right stack sits over the framing
- * dock; the browser cards sit inside the browser column; the legend cards
- * sit over the inspector. A closed panel takes its own cards with it
- * (nothing to explain) and the legend column moves onto the board's extra
- * width.
+ * Board-left hangs under the build toolbar; the CENTRE hangs under the mode
+ * switch with the modes card and the machine-card controls; the LEGENDS
+ * (drawers, board windows, notices) stand along the board's foot between
+ * the corner stack and the framing dock, in as many lanes as fit; the
+ * corner stack grows up from the "?" and its bottom card points down at the
+ * plan bar; board-right hangs under the tool row and a second board-right
+ * stack sits over the framing dock; the browser cards sit inside the
+ * browser column, the Library card first with an arrow across to the
+ * Library pill; the inspector's totals card sits over its top and its
+ * machines card over the machine list. A closed panel takes its own cards
+ * with it. When the foot has no lane the legends hang under the centre;
+ * when the centre has no lane of its own it takes the build toolbar's and
+ * the Units card joins the corner stack. Stacks that would then land on
+ * each other report `fits: false`.
  */
 function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
   const rings: HelpRect[] = [];
   const columns: Column[] = [];
   const arrows: Arrow[] = [];
+  const boxes: Box[] = [];
 
   const build = rects.build;
   const toolRow = unionRects(rects.paint, rects.view);
@@ -405,44 +477,93 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
   const dock = rects.glance;
   const browser = rects.browser;
   const inspector = rects.inspector;
+  const machineList = rects.machines;
   const planBar = rects["plan-card"];
+  const libraryPill = rects.library;
 
   // The x the whole right side is hung from: the tool row's right edge,
   // which is also the framing dock's.
   const rightEdge = toolRow?.right ?? dock?.right ?? vw - 12;
+  const rightColumnLeft = rightEdge - CARD_W;
+  const buildLeft = build?.left ?? 12;
+  const switchCentre = modeSwitch ? (modeSwitch.left + modeSwitch.right) / 2 : undefined;
 
-  // The legend's left edge when it has to sit on the board (no inspector):
-  // the mode column may not run into it either.
-  const legendOnBoardLeft = rightEdge - CARD_W - CARD_GAP - CARD_W;
-  const rightColumnsLeft = inspector ? rightEdge - CARD_W : legendOnBoardLeft;
+  // THE CENTRE lane wants to sit under the switch; it may start no further
+  // left than the build column's right edge (WIDE) or, failing that, the
+  // build toolbar's own left (NARROW), and must end clear of the
+  // board-right column.
+  const laneRightLimit = rightColumnLeft - CARD_GAP - CARD_W;
+  const wideLeft =
+    switchCentre !== undefined
+      ? clamp(switchCentre - CARD_W / 2, buildLeft + CARD_W + CARD_GAP, laneRightLimit)
+      : undefined;
+  const wide =
+    wideLeft !== undefined &&
+    wideLeft >= buildLeft + CARD_W + CARD_GAP &&
+    wideLeft <= laneRightLimit;
+  const narrowLeft =
+    switchCentre !== undefined
+      ? clamp(switchCentre - CARD_W / 2, buildLeft, laneRightLimit)
+      : undefined;
+  const narrow =
+    !wide && narrowLeft !== undefined && narrowLeft >= buildLeft && narrowLeft <= laneRightLimit;
+  const centreLeft = wide ? wideLeft : narrow ? narrowLeft : undefined;
+  const centreTop = modeSwitch ? padRect(modeSwitch).bottom + CALLOUT_GAP : 0;
+  const centreCards = [MODES_CARD];
 
-  // THE MODE STACK hangs under the switch, top centre, and needs a third
-  // column between the build column and whatever hangs on the right. When
-  // there is no room the whole spread is abandoned for the one-column panel
-  // (`fits`), which is what any narrower window gets anyway.
-  const leftColumnRight = (build?.left ?? 12) + CARD_W;
-  const modeColumnLeft = modeSwitch
-    ? clamp(
-        (modeSwitch.left + modeSwitch.right) / 2 - CARD_W / 2,
-        leftColumnRight + CARD_GAP,
-        rightColumnsLeft - CARD_GAP - CARD_W,
-      )
-    : undefined;
-  const modeColumnFits =
-    modeSwitch !== undefined &&
-    modeColumnLeft !== undefined &&
-    modeColumnLeft >= leftColumnRight + CARD_GAP &&
-    modeColumnLeft + CARD_W + CARD_GAP <= rightColumnsLeft;
+  // THE FOOT: two lanes between the corner stack and the dock stack, hung
+  // from the plan bar: the machine-card controls and the legends (drawers,
+  // board windows, notices), balanced by height. One lane stacks all four;
+  // no lane at all hangs them under the centre.
+  const footCards = [ON_A_CARD, DRAWERS, BOARDS, NOTICES];
+  const footBottom = planBar ? padRect(planBar).top - CALLOUT_GAP : vh - 12;
+  const footLeftLimit = (button ? button.left + CARD_W : buildLeft) + CARD_GAP;
+  const footRightLimit = (dock ? dock.right - CARD_W : rightColumnLeft) - CARD_GAP;
+  const footLanes = Math.max(
+    0,
+    Math.min(2, Math.floor((footRightLimit - footLeftLimit + CARD_GAP) / (CARD_W + CARD_GAP))),
+  );
+  const footStacks: HelpCard[][] =
+    footLanes === 2
+      ? [
+          [ON_A_CARD, BOARDS],
+          [DRAWERS, NOTICES],
+        ]
+      : footLanes === 1
+        ? [footCards]
+        : [];
+  if (footLanes === 0 && centreLeft !== undefined) {
+    centreCards.push(...footCards);
+  }
+  const footWidth = footStacks.length * CARD_W + (footStacks.length - 1) * CARD_GAP;
+  const footLeft = clamp(
+    (footLeftLimit + footRightLimit) / 2 - footWidth / 2,
+    footLeftLimit,
+    Math.max(footLeftLimit, footRightLimit - footWidth),
+  );
 
-  if (build) {
+  // NARROW puts the centre lane over the build toolbar's lane, so the Units
+  // card moves to the corner stack.
+  const cornerCards = [...(narrow ? [BUILD] : []), MOVES, PLAN_CARD];
+
+  if (build && !narrow) {
     const ring = padRect(build);
     rings.push(build);
     const top = ring.bottom + CALLOUT_GAP;
+    // No browser column means no place for the Library card; it sits here,
+    // under the pill it describes. No centre lane at all means the centre
+    // cards stack here too.
+    const cards = [
+      ...(browser ? [] : [LIBRARY]),
+      BUILD,
+      ...(modeSwitch && centreLeft === undefined ? centreCards : []),
+    ];
     columns.push({
       key: "board-left",
       style: { left: build.left, top, width: CARD_W },
-      cards: [BUILD],
+      cards,
     });
+    boxes.push({ left: build.left, top, bottom: top + estimateStackHeight(cards) });
     const x = clamp((ring.left + ring.right) / 2, build.left + 24, build.left + CARD_W - 24);
     arrows.push({ points: [{ x, y: top }, { x, y: ring.bottom }] });
   }
@@ -450,32 +571,43 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
   if (modeSwitch) {
     const ring = padRect(modeSwitch);
     rings.push(modeSwitch);
-    if (modeColumnFits && modeColumnLeft !== undefined) {
-      const top = ring.bottom + CALLOUT_GAP;
+    if (centreLeft !== undefined) {
       columns.push({
-        key: "modes",
-        style: { left: modeColumnLeft, top, width: CARD_W },
-        cards: MODES,
+        key: "centre",
+        style: { left: centreLeft, top: centreTop, width: CARD_W },
+        cards: centreCards,
       });
-      const x = clamp(
-        (ring.left + ring.right) / 2,
-        modeColumnLeft + 24,
-        modeColumnLeft + CARD_W - 24,
-      );
-      arrows.push({ points: [{ x, y: top }, { x, y: ring.bottom }] });
+      boxes.push({
+        left: centreLeft,
+        top: centreTop,
+        bottom: centreTop + estimateStackHeight(centreCards),
+      });
+      const x = clamp((ring.left + ring.right) / 2, centreLeft + 24, centreLeft + CARD_W - 24);
+      arrows.push({ points: [{ x, y: centreTop }, { x, y: ring.bottom }] });
     }
   }
+
+  footStacks.forEach((cards, index) => {
+    const left = footLeft + index * (CARD_W + CARD_GAP);
+    columns.push({
+      key: `foot-${index}`,
+      style: { left, bottom: vh - footBottom, width: CARD_W },
+      cards,
+    });
+    boxes.push({ left, top: footBottom - estimateStackHeight(cards), bottom: footBottom });
+  });
 
   if (toolRow) {
     const ring = padRect(toolRow);
     rings.push(toolRow);
     const top = ring.bottom + CALLOUT_GAP;
-    const left = rightEdge - CARD_W;
+    const left = rightColumnLeft;
     columns.push({
       key: "board-right",
       style: { left, top, width: CARD_W },
-      cards: [TOOLS, ON_A_CARD],
+      cards: [TOOLS],
     });
+    boxes.push({ left, top, bottom: top + estimateStackHeight([TOOLS]) });
     const x = clamp((ring.left + ring.right) / 2, left + 24, left + CARD_W - 24);
     arrows.push({ points: [{ x, y: top }, { x, y: ring.bottom }] });
   }
@@ -490,6 +622,7 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
       style: { left, bottom: vh - bottom, width: CARD_W },
       cards: [FRAMING],
     });
+    boxes.push({ left, top: bottom - estimateStackHeight([FRAMING]), bottom });
     const x = clamp((ring.left + ring.right) / 2, left + 24, left + CARD_W - 24);
     arrows.push({ points: [{ x, y: bottom }, { x, y: ring.top }] });
   }
@@ -499,8 +632,9 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
     columns.push({
       key: "corner",
       style: { left: button.left, bottom: vh - bottom, width: CARD_W },
-      cards: [MOVES, PLAN_CARD],
+      cards: cornerCards,
     });
+    boxes.push({ left: button.left, top: bottom - estimateStackHeight(cornerCards), bottom });
     if (planBar && planBar.top > bottom + ARROW_HEAD) {
       // The plan bar runs the whole width of the board's foot, so the arrow
       // drops from the stack's bottom card wherever it clears the button.
@@ -513,31 +647,57 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
 
   if (browser) {
     rings.push(browser);
+    const left = browser.left + 12;
+    // The Library card leads, level with the pill it points at: the pill
+    // sits just past the column's right edge, so the arrow runs straight
+    // across the seam into it.
+    const pill = libraryPill && libraryPill.left >= browser.right ? libraryPill : undefined;
+    const top = pill ? Math.max(browser.top + 8, pill.top - 6) : browser.top + 80;
     columns.push({
       key: "browser",
-      style: { left: browser.left + 12, top: browser.top + 80, width: CARD_W },
-      cards: [LEFT_COLUMN, RECIPE_SEARCH],
+      style: { left, top, width: CARD_W },
+      cards: [LIBRARY, LEFT_COLUMN, RECIPE_SEARCH],
     });
+    if (pill) {
+      const ring = padRect(pill);
+      rings.push(pill);
+      const y = clamp((pill.top + pill.bottom) / 2, top + 12, top + 40);
+      arrows.push({ points: [{ x: left + CARD_W, y }, { x: ring.left, y }] });
+    }
   }
 
-  // The legend: over the inspector when it is open, else on the board's
-  // extra width, left of the board-right column.
-  const legendLeft = inspector
-    ? inspector.left + Math.max(6, (inspector.right - inspector.left - CARD_W) / 2)
-    : rightEdge - CARD_W - CARD_GAP - CARD_W;
-  const legendCards = inspector
-    ? [PLAN_TOTALS, MACHINES, DRAWERS, BOARDS, NOTICES]
-    : [DRAWERS, BOARDS, NOTICES];
-  const legendTop = inspector
-    ? inspector.top + 12
-    : (toolRow ? padRect(toolRow).bottom : 80) + CALLOUT_GAP;
-  columns.push({
-    key: "legend",
-    style: { left: legendLeft, top: legendTop, width: CARD_W },
-    cards: legendCards,
-  });
+  if (inspector) {
+    const left = inspector.left + Math.max(6, (inspector.right - inspector.left - CARD_W) / 2);
+    columns.push({
+      key: "inspector",
+      style: { left, top: inspector.top + 12, width: CARD_W },
+      // No machine list on the board yet: its card waits under the totals.
+      cards: machineList ? [PLAN_TOTALS] : [PLAN_TOTALS, MACHINES],
+    });
+    if (machineList) {
+      // Over the machine list itself, hung from its head.
+      rings.push(machineList);
+      columns.push({
+        key: "inspector-machines",
+        style: { left, top: machineList.top + 10, width: CARD_W },
+        cards: [MACHINES],
+      });
+    }
+  }
 
-  return { rings, columns, arrows, fits: modeSwitch === undefined || modeColumnFits };
+  // Stacks that land on each other mean the board is too small for the
+  // spread; the one-column panel shows instead.
+  let fits = true;
+  for (let i = 0; i < boxes.length && fits; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      if (boxesOverlap(boxes[i], boxes[j])) {
+        fits = false;
+        break;
+      }
+    }
+  }
+
+  return { rings, columns, arrows, fits };
 }
 
 /** The arrow's segments as 3px bars, and its head as a border triangle. */
@@ -845,10 +1005,7 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   // desktop windows; they hover the one-column panel instead. Decided per
   // open, so resizing simply changes what the next hover shows.
   const fitsGlance =
-    measured !== undefined &&
-    measured.vw >= GLANCE_MIN_VW &&
-    measured.vh >= GLANCE_MIN_VH &&
-    layoutGlance(measured).fits;
+    measured !== undefined && measured.vw >= GLANCE_MIN_VW && measured.vh >= GLANCE_MIN_VH;
 
   return (
     <div

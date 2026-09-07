@@ -85,8 +85,25 @@ const MACHINE_STRUCTURE_ART_IDS = new Set([
   "volcanus",
 ]);
 
+/**
+ * Recipe-map handlers whose machine is a power source with a render already
+ * (a generator placed as a RECIPE card, off the fuel maps, rather than as a
+ * power card): the handler id spelled the long way, the render's id short.
+ */
+const MACHINE_TO_POWER_ART: Record<string, string> = {
+  "high-temperature-gas-reactor": "htgr",
+  "liquid-fluoride-thorium-reactor": "lftr",
+  "thorium-high-temperature-reactor": "thtr",
+};
+
 export function getMachineStructureArt(handlerId: string | undefined): string | undefined {
-  return handlerId && MACHINE_STRUCTURE_ART_IDS.has(handlerId)
-    ? `/power-art/${handlerId}.png`
-    : undefined;
+  if (!handlerId) {
+    return undefined;
+  }
+  if (MACHINE_STRUCTURE_ART_IDS.has(handlerId)) {
+    return `/power-art/${handlerId}.png`;
+  }
+  // A power source's render serves its recipe-card handler too (the Large
+  // Naquadah Reactor, the boilers, the heat exchangers share their ids).
+  return getPowerStructureArt(MACHINE_TO_POWER_ART[handlerId] ?? handlerId);
 }

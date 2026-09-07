@@ -30,11 +30,21 @@ export const SETTING_TILE_CAPTION_CLASS =
   "flex items-center gap-1 truncate text-[11px] uppercase leading-[13px] text-[var(--mc-ink-muted)]";
 export const SETTING_TILE_BUTTON_CLASS =
   "nodrag flex h-5 w-3.5 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] enabled:hover:bg-[var(--mc-100)] enabled:active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)] disabled:opacity-35";
+// The value in the well is set like the footer's REASON word (13px bold), so
+// "8x" on a parallel tile and "FULL" in the footer read as the same ink.
 const SETTING_TILE_WELL_CLASS =
-  "flex h-5 w-0 min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden whitespace-nowrap border border-[var(--mc-47)] bg-[var(--mc-85)] px-0.5 text-center text-[11px] font-medium leading-[18px] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)]";
+  "flex h-5 w-0 min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden whitespace-nowrap border border-[var(--mc-47)] bg-[var(--mc-85)] px-0.5 text-center text-[13px] font-bold leading-[18px] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)]";
 
 /** One tile is a caption line over a 20px control row: two grid cells. */
 export const SETTING_TILE_HEIGHT_PX = 40;
+/**
+ * The narrowest a tile is allowed: two 14px steppers, a well with room for a
+ * short value, and the frame. Captions and values truncate past it, so a
+ * panel packs as many tiles across as this lets it (RecipeNode's config grid).
+ */
+export const SETTING_TILE_MIN_WIDTH_PX = 96;
+/** The gap between tiles in that grid (Tailwind gap-1). */
+export const SETTING_TILE_GAP_PX = 4;
 /** Past this many rungs a ladder is picked from a searchable list, not stepped. */
 export const STEPPER_MAX_RUNGS = 6;
 

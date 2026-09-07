@@ -128,7 +128,7 @@ import {
   getRecipeProgrammedCircuit,
   type RecipeProgrammedCircuit,
 } from "@/lib/model/programmed-circuit";
-import { BOARD_GRID, RECIPE_NODE_WIDTH } from "@/lib/board-grid";
+import { BOARD_GRID, RECIPE_NODE_WIDTH, RECIPE_RAIL_AREA_WIDTH } from "@/lib/board-grid";
 import { CropPickerMenu } from "./CropPickerMenu";
 import {
   MachineMenu,
@@ -147,7 +147,13 @@ import { isEchoOfTouch } from "@/lib/pointer-kind";
 import { machineIconAtTier, useMachineHandlerIconEntries, useMachineHandlerIcons, useRecipeMapIcons, type MachineHandlerIcon } from "./machine-icons";
 import { useRenderedHandles } from "./use-rendered-handles";
 import { MinecraftSelect } from "./MinecraftSelect";
-import { FactTile, LadderTile, SETTING_TILE_HEIGHT_PX } from "./SettingTile";
+import {
+  FactTile,
+  LadderTile,
+  SETTING_TILE_GAP_PX,
+  SETTING_TILE_HEIGHT_PX,
+  SETTING_TILE_MIN_WIDTH_PX,
+} from "./SettingTile";
 import { PowerConfigPanel } from "./PowerConfigPanel";
 import { getPowerSource } from "@/lib/power/registry";
 import { getMachineStructureArt, getPowerStructureArt } from "@/lib/power/structure-art";
@@ -1763,6 +1769,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           !isCustomRatePlaceholder &&
           (!calmMode || !isCustomRateNode) ? (
             <GridBlock minCells={3} align="end" className="min-w-0">
+            {/* ONE hairline, ABOVE the knobs (Jack, 2026-09-06): the ports
+                are one thing, everything under this line - settings and the
+                stat footer - is one tiled block. The rule used to sit
+                between the knobs and the stats, which cut that block in two. */}
+            <div className="min-w-0 border-t border-[var(--mc-56)] pt-[6px]">
               {/* A power card's knobs: fuel, tier, rotor, boost - written
                   through setPowerSetting so the owned recipe follows. */}
               {!calmMode && powerInfo ? (
@@ -1783,7 +1794,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 // it. It used to paint itself with the raw tag colour, which
                 // left the bottom of a painted card a different shade from
                 // the rest of it.
-                className="min-w-0 border-t border-[var(--mc-56)] pb-[6px] pt-[6px] text-[14px] leading-5 text-[var(--mc-ink)]"
+                className="min-w-0 pb-[6px] pt-1 text-[14px] leading-5 text-[var(--mc-ink)]"
               >
                 {calmMode ? (
                   /* Pure presentation: the count as one large line, centred,
@@ -1934,6 +1945,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   </>
                 )}
               </div>
+            </div>
             </GridBlock>
           ) : null}
         </div>
@@ -4026,13 +4038,23 @@ function MachineConfigControlPanel({
   if (controls.length === 0 && facts.length === 0) {
     return null;
   }
-  // Two tiles per row on the card's width, the crop card's grammar
-  // (SettingTile): settings first, facts after, one grid. Faces only where
-  // every rung has one; short ladders step, long ones drop down.
-  const rows = Math.ceil((controls.length + facts.length) / 2);
+  // As many tiles per row as FIT (Jack, 2026-09-06): a tile needs only
+  // SETTING_TILE_MIN_WIDTH_PX (its two steppers and a short well; captions
+  // and values truncate), so four sit across the rail area and the panel
+  // stays one row for most machines. Settings first, facts after, one grid.
+  // The row count is computed from the same numbers the CSS uses, so the
+  // grid block below charges for exactly the rows the browser will lay.
+  const perRow = Math.max(
+    1,
+    Math.floor((RECIPE_RAIL_AREA_WIDTH + SETTING_TILE_GAP_PX) / (SETTING_TILE_MIN_WIDTH_PX + SETTING_TILE_GAP_PX)),
+  );
+  const rows = Math.ceil((controls.length + facts.length) / perRow);
   return (
     <GridBlock className="nodrag" minCells={(rows * SETTING_TILE_HEIGHT_PX) / BOARD_GRID}>
-      <div className="grid grid-cols-2 gap-1">
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${SETTING_TILE_MIN_WIDTH_PX}px, 1fr))` }}
+      >
         {controls.map((control) => (
           <LadderTile
             key={control.id}

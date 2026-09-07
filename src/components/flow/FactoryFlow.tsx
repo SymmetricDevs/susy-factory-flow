@@ -10234,12 +10234,25 @@ function ResourceConnectionLine({
   // when it will do nothing (this port's drawer already exists). Over a
   // refusing card it goes red, agreeing with the card's own wash.
   const overSolidCard = !snap && isPointOverSolidCard(toX, toY);
-  // POOL MODE: nothing connects, so there is never a pipe - a line is the
-  // picture of a wire, and neither thing a drag can do here is one. The
-  // ghost drawer riding the pointer says a release makes a product; the
-  // reason card in its place says why a release makes nothing.
+  // POOL MODE: nothing connects, so the line carries no verdict - the ghost
+  // drawer says a release makes a product, the reason card says why one
+  // makes nothing. The hand still wants a thread from the port to what it
+  // is holding (no line at all read as broken, Jack 2026-09-06), so a faint
+  // neutral dashed one runs there, well under the ghost.
   if (useFactoryStore.getState().project.poolMode) {
-    return <g className="react-flow__connection" />;
+    return (
+      <g className="react-flow__connection">
+        <path
+          d={edgePath}
+          fill="none"
+          stroke="#c8ced8"
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeDasharray="6 8"
+          opacity={0.22}
+        />
+      </g>
+    );
   }
   const verdict = snap
     ? "connect"

@@ -18,9 +18,8 @@ import {
   Undo2,
   Zap,
 } from "lucide-react";
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Fragment, memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { helpColumnsFit } from "./help-layout";
 import {
   GLANCE_CARD_CLASS,
   GLANCE_LINE,
@@ -742,30 +741,8 @@ function HelpGlanceSheet({
 }) {
   const { button } = measured;
   const { rings, columns, arrows } = layoutGlance(measured);
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const [overflow, setOverflow] = useState(false);
-
-  useLayoutEffect(() => {
-    const sheet = sheetRef.current;
-    if (!sheet || overflow) return;
-    const stacks = Array.from(sheet.querySelectorAll<HTMLElement>("[data-help-column]"));
-    const check = () => {
-      if (!helpColumnsFit(stacks.map((stack) => stack.getBoundingClientRect()), window.innerWidth, window.innerHeight)) {
-        setOverflow(true);
-      }
-    };
-    check();
-    const observer = new ResizeObserver(check);
-    stacks.forEach((stack) => observer.observe(stack));
-    return () => observer.disconnect();
-  }, [measured, overflow]);
-
-  if (overflow) {
-    return <HelpHoverPanel measured={measured} onEnter={onEnter} onLeave={onLeave} />;
-  }
   return (
     <div
-      ref={sheetRef}
       className="pointer-events-none fixed inset-0 z-[120] font-mono"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
@@ -790,7 +767,6 @@ function HelpGlanceSheet({
       {columns.map((column) => (
         <div
           key={column.key}
-          data-help-column={column.key}
           className="absolute flex flex-col"
           style={{ ...column.style, gap: CARD_GAP }}
         >
@@ -841,12 +817,6 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
     hideTimerRef.current = window.setTimeout(() => setMeasured(undefined), HIDE_GRACE_MS);
   }, []);
   useEffect(() => () => window.clearTimeout(hideTimerRef.current), []);
-  const isHoverOpen = measured !== undefined;
-  useEffect(() => {
-    if (!isHoverOpen) return;
-    window.addEventListener("resize", show);
-    return () => window.removeEventListener("resize", show);
-  }, [isHoverOpen, show]);
 
   if (compact) {
     return (

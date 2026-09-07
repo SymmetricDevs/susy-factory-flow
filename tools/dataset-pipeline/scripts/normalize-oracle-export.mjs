@@ -271,6 +271,31 @@ function normalizeGregtech(domain) {
     }
   }
   setRecipeMapIcon(TANK_MACHINE_TYPE, tankIconFallback);
+  overrideTankRecipeMapIcon();
+}
+
+/**
+ * The Tank's face is the Low Voltage Fluid Tank, named simply "Fluid Tank"
+ * (Jack, 2026-09-07): a card names itself after its map's machine, and the
+ * empty cell it wore before made every Tank card read "Empty Cell". The cell
+ * face above stays as the fallback for an export with no fluid tank item.
+ */
+function overrideTankRecipeMapIcon() {
+  const tank = [...resources.values()].find(
+    (resource) => resource.kind === "item" && resource.displayName === "Low Voltage Fluid Tank",
+  );
+  if (!recipeMaps.has(TANK_MACHINE_TYPE) || !tank?.iconPath) {
+    return;
+  }
+  recipeMapIcons.set(TANK_MACHINE_TYPE, {
+    kind: tank.kind,
+    id: tank.id,
+    amount: 1,
+    displayName: "Fluid Tank",
+    iconPath: tank.iconPath,
+    dominantColor: tank.dominantColor,
+    modId: tank.modId,
+  });
 }
 
 /**

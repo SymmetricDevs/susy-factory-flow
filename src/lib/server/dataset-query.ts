@@ -255,6 +255,49 @@ const SYNTHESIZED_HANDLER_FACES: Array<{
   { familyId: CROP_HARVESTER_INDUSTRIAL_FARM_ID, displayNames: ["Industrial Farm"] },
 ];
 
+/**
+ * The Tank map (the planner's free canner, synthesized by the pipeline) used
+ * to wear the plain empty cell as its face, and a card names itself after its
+ * map's machine, so every Tank card read "Empty Cell". Published datasets
+ * still carry that face; swap in the Low Voltage Fluid Tank, called simply
+ * "Fluid Tank" (Jack, 2026-09-07), at load so the card, its picture and the
+ * search chip all agree without a dataset rebuild.
+ */
+const TANK_RECIPE_MAP = "Tank";
+const TANK_MAP_FACE_ITEM_NAMES = ["Low Voltage Fluid Tank"];
+const TANK_MAP_FACE_DISPLAY_NAME = "Fluid Tank";
+
+export function withTankMapFace(
+  catalog: Pick<LoadedRecipeIndex, "resources" | "recipeMapIcons">,
+): RecipeMapIconEntry[] | undefined {
+  const icons = catalog.recipeMapIcons;
+  if (!icons?.some((entry) => entry.recipeMap === TANK_RECIPE_MAP)) {
+    return icons;
+  }
+  const byName = new Map(catalog.resources.map((resource) => [resource.displayName, resource] as const));
+  const face = TANK_MAP_FACE_ITEM_NAMES.map((name) => byName.get(name)).find(Boolean);
+  if (!face) {
+    return icons;
+  }
+  return icons.map((entry) =>
+    entry.recipeMap === TANK_RECIPE_MAP
+      ? {
+          recipeMap: TANK_RECIPE_MAP,
+          resource: {
+            kind: face.kind,
+            id: face.id,
+            displayName: TANK_MAP_FACE_DISPLAY_NAME,
+            iconPath: face.iconPath,
+            iconAtlas: face.iconAtlas,
+            dominantColor: face.dominantColor,
+            modId: face.modId,
+            amount: 1,
+          },
+        }
+      : entry,
+  );
+}
+
 function withSynthesizedHandlerIcons(catalog: LoadedRecipeIndex): MachineHandlerIconEntry[] {
   const icons = [...(catalog.machineHandlerIcons ?? [])];
   const byName = new Map(catalog.resources.map((resource) => [resource.displayName, resource] as const));
@@ -1646,6 +1689,7 @@ async function loadCatalog(versionId: string): Promise<LoadedRecipeIndex> {
     const loaded = {
       ...catalog,
       version,
+      recipeMapIcons: withTankMapFace(catalog),
     };
     loadedCatalogs.set(cacheKey, loaded);
     return loaded;

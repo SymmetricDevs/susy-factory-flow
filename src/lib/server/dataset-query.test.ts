@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildTextSearchIndex, queryTextSearchIndex } from "@/lib/search";
 import { matchSearchTokens, parseSearchQuery } from "@/lib/search";
-import { getChoiceAlternativesByKey, getWildcardResource } from "./dataset-query";
+import { getChoiceAlternativesByKey, getWildcardResource, withTankMapFace } from "./dataset-query";
 
 describe("dataset query text search", () => {
   it("matches substrings inside tokens without matching across token boundaries", () => {
@@ -129,5 +129,36 @@ describe("a placeholder that sits in two groups", () => {
       ?.map((entry) => entry.displayName);
 
     expect(offered).toEqual(["Electronic Circuit", "Integrated Logic Circuit"]);
+  });
+});
+
+describe("the Tank map's face", () => {
+  const cell = { kind: "item" as const, id: "ic2:itemcellempty", displayName: "Empty Cell", iconPath: "cell.png" };
+  const lvTank = {
+    kind: "item" as const,
+    id: "gregtech:gt.blockmachines@818",
+    displayName: "Low Voltage Fluid Tank",
+    iconPath: "tank.png",
+    dominantColor: "#abc",
+    modId: "gregtech",
+  };
+
+  it("wears the Low Voltage Fluid Tank, called Fluid Tank", () => {
+    const icons = withTankMapFace({
+      resources: [cell, lvTank] as never,
+      recipeMapIcons: [{ recipeMap: "Tank", resource: cell }, { recipeMap: "Canner", resource: cell }],
+    });
+    expect(icons?.find((entry) => entry.recipeMap === "Tank")?.resource).toMatchObject({
+      id: lvTank.id,
+      displayName: "Fluid Tank",
+      iconPath: "tank.png",
+      modId: "gregtech",
+    });
+    expect(icons?.find((entry) => entry.recipeMap === "Canner")?.resource).toEqual(cell);
+  });
+
+  it("keeps the cell when the dataset has no fluid tank item", () => {
+    const icons = [{ recipeMap: "Tank", resource: cell }];
+    expect(withTankMapFace({ resources: [cell] as never, recipeMapIcons: icons })).toBe(icons);
   });
 });

@@ -1,10 +1,10 @@
 "use client";
 
 import { Settings } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { OPEN_SHARE_DIALOG_EVENT } from "@/lib/setups-tab";
 import { useIsCompactViewport } from "@/lib/compact-view";
-import { unseenEntries } from "@/lib/whats-new";
+import { markVersionSeenAndNotify, subscribeToVersionSeen, unseenEntries } from "@/lib/whats-new";
 import { APP_VERSION } from "@/lib/version";
 import { AccountMenu } from "./community/AccountMenu";
 import { SharePlanDialog } from "./community/SharePlanDialog";
@@ -15,8 +15,14 @@ import { ExportImageDialog } from "./export/ExportImageDialog";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { DevMenu } from "./DevMenu";
 import { SettingsDialog } from "./SettingsDialog";
-import { HeaderLinks, ReportBugButton, SupportButton, WhatsNewButton } from "./HeaderLinks";
+import { HeaderLinks, ReportBugButton, SupportButton } from "./HeaderLinks";
 import { WhatsNewPreview } from "./WhatsNewPreview";
+
+/**
+ * The pack picker's switch. See the note where it renders; flip this back to
+ * true when there is more than one pack to pick from.
+ */
+export const SHOW_PACK_PICKER = false;
 
 interface AppHeaderProps {
   onLoadDatasetVersion: (versionId: string) => void;
@@ -29,10 +35,18 @@ interface AppHeaderProps {
  */
 export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   const [isChangelogOpen, setChangelogOpen] = useState(false);
+  // The unread dot, on the version chip now that the What's new button is
+  // gone. It comes from localStorage, which a server render does not have,
+  // so the server snapshot is "nothing unread".
+  const hasUnread = useSyncExternalStore(
+    subscribeToVersionSeen,
+    () => unseenEntries().length > 0,
+    () => false,
+  );
   // Captured at the moment of the click, because opening the notes marks them
   // read: without this the divider would have nothing above it.
   const [unseenVersions, setUnseenVersions] = useState<Set<string>>();
-  // Shift-click the What's new button. See WhatsNewPreview.
+  // The update-popup preview, reached from the dev menu. See WhatsNewPreview.
   const [isPreviewOpen, setPreviewOpen] = useState(false);
   // Shift-click the version chip. See DevMenu.
   const [isDevMenuOpen, setDevMenuOpen] = useState(false);
@@ -72,14 +86,24 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
               setDevMenuOpen(true);
               return;
             }
+            // Read what is unseen BEFORE stamping, or the dialog opens with
+            // nothing above its divider. Opening it IS reading it, so the dot
+            // goes now rather than on close.
             setUnseenVersions(new Set(unseenEntries().map((entry) => entry.version)));
+            markVersionSeenAndNotify();
             setChangelogOpen(true);
           }}
           title="What's new"
           aria-label={`Version ${APP_VERSION}: see what's new`}
-          className="shrink-0 rounded border border-line px-1 py-px text-[10px] font-semibold leading-none text-fg-muted tabular-nums hover:border-cyan-600 hover:text-cyan-500"
+          className="relative shrink-0 rounded border border-line px-1 py-px text-[10px] font-semibold leading-none text-fg-muted tabular-nums hover:border-cyan-600 hover:text-cyan-500"
         >
           v{APP_VERSION}
+          {hasUnread ? (
+            <span
+              aria-label="Unread release notes"
+              className="absolute -right-1 -top-1 h-2 w-2 rounded-full border border-surface bg-cyan-400"
+            />
+          ) : null}
         </button>
         {/* The pack picker rides up here beside the app version rather than at
             the head of the browser column. Two versions that are easy to
@@ -87,7 +111,13 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             gets a whole row of its height back. On a phone it moves once more,
             into the menu: it is the widest control on the bar and the one people
             touch least. */}
-        {isCompact ? null : (
+        {/* PINNED (Jack, 2026-09-06): the pack picker is off the bar while
+            2.9 is the only pack there is. A dropdown with one option is a
+            question nobody can answer. AppIdentity and the header's
+            `onLoadDatasetVersion` prop stay wired so it can come back the
+            day a second pack ships; the compact menu's Pack section is
+            pinned the same way in AppMenu. */}
+        {isCompact || !SHOW_PACK_PICKER ? null : (
           <>
             <span className="ml-3 h-5 w-px bg-line" aria-hidden />
             <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
@@ -140,13 +170,9 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             <Settings className="h-3.5 w-3.5" />
           </button>
           <SupportButton />
-          <WhatsNewButton
-            onClick={(unseen) => {
-              setUnseenVersions(unseen);
-              setChangelogOpen(true);
-            }}
-            onDevPreview={() => setPreviewOpen(true)}
-          />
+          {/* No What's new button up here since 2026-09-06: the version chip
+              at the other end of the bar opens the same notes and wears the
+              unread dot, and the bar was two labelled buttons too wide. */}
           <ReportBugButton />
           <AccountMenu />
         </div>

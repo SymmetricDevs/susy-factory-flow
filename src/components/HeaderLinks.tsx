@@ -1,14 +1,8 @@
 "use client";
 
-import { Bug, Compass, Heart, Library, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Bug, Compass, Heart, Library } from "lucide-react";
 import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
 import { openWelcomeTab } from "@/lib/welcome/welcome-tab";
-import {
-  markVersionSeenAndNotify,
-  subscribeToVersionSeen,
-  unseenEntries,
-} from "@/lib/whats-new";
 import { APP_VERSION } from "@/lib/version";
 
 const GITHUB_URL = "https://github.com/jackwrichards/gtnh-factory-flow";
@@ -38,10 +32,9 @@ const BUG_REPORT_URL = `${GITHUB_URL}/issues/new?template=bug_report.yml&version
 )}`;
 
 /**
- * Source and chat, sitting in the header beside the board actions.
- *
- * The bug report used to be a third icon here and read as one more thing to
- * ignore. It carries its own label now and sits further right, on its own.
+ * Source and chat, sitting in the header beside the board actions. The bug
+ * report is not one of these squares: it sits at the far right in its own
+ * red so it is still the one thing on the bar that stands out.
  */
 export function HeaderLinks() {
   return (
@@ -70,71 +63,9 @@ export function HeaderLinks() {
 }
 
 /**
- * What's new, as a WORD rather than an icon, sitting immediately left of the
- * bug report.
- *
- * It was a glyph beside the compass for about an hour and that was the wrong
- * call: an unlabelled star in a row of unlabelled squares is one more thing to
- * ignore, and this is the control that tells somebody the rules of the board
- * changed under them. The two labelled buttons now read as a pair - here is
- * what we changed, here is where to complain about it.
- */
-export function WhatsNewButton({
-  onClick,
-  onDevPreview,
-}: {
-  /** Handed what was unread at the moment of the click, for the divider. */
-  onClick: (unseenVersions: Set<string>) => void;
-  /** Shift-click: the hidden update-popup preview. See WhatsNewPreview. */
-  onDevPreview: () => void;
-}) {
-  const [unread, setUnread] = useState(false);
-
-  // After mount: it reads localStorage, which a server render does not have.
-  useEffect(() => {
-    setUnread(unseenEntries().length > 0);
-    return subscribeToVersionSeen(() => setUnread(false));
-  }, []);
-
-  return (
-    <button
-      type="button"
-      onClick={(event) => {
-        if (event.shiftKey) {
-          onDevPreview();
-          return;
-        }
-        // Read what is unseen BEFORE stamping, or the dialog opens with
-        // nothing above its divider - the click would have erased the very
-        // thing the line is drawn around.
-        const unseenNow = new Set(unseenEntries().map((entry) => entry.version));
-        // Opening it IS reading it, so the dot goes now rather than when the
-        // dialog is closed - otherwise anyone who reads and then presses
-        // Escape gets the dot back and learns to distrust it.
-        markVersionSeenAndNotify();
-        onClick(unseenNow);
-      }}
-      title="What's new"
-      aria-label="What's new in the planner"
-      className="relative inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-cyan-700 bg-cyan-950 px-2 text-xs font-semibold text-cyan-300 hover:border-cyan-500 hover:bg-cyan-900 hover:text-cyan-200 snug:w-7 snug:justify-center snug:px-0"
-    >
-      <Sparkles className="h-3.5 w-3.5" aria-hidden />
-      <span className="snug:hidden">What&apos;s new</span>
-      {/* The quiet half of the system: a release that does not warrant a
-          dialog still gets noticed, without anything being put in the way. */}
-      {unread ? (
-        <span
-          aria-label="Unread release notes"
-          className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-surface bg-cyan-400"
-        />
-      ) : null}
-    </button>
-  );
-}
-
-/**
- * Reporting a bug is the one thing here worth interrupting someone for, so it
- * is the only header control that carries a colour and a word.
+ * Reporting a bug keeps its red so it is still the one control that stands
+ * out, but it lost its word (Jack, 2026-09-06): the bar was too wide, and the
+ * tooltip says the rest.
  */
 export function ReportBugButton() {
   return (
@@ -144,10 +75,9 @@ export function ReportBugButton() {
       rel="noreferrer noopener"
       title="Report a bug"
       aria-label="Report a bug"
-      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-red-800 bg-red-950 px-2 text-xs font-semibold text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200 snug:w-7 snug:justify-center snug:px-0"
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-red-800 bg-red-950 text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200"
     >
       <Bug className="h-3.5 w-3.5" aria-hidden />
-      <span className="snug:hidden">Report Bug</span>
     </a>
   );
 }

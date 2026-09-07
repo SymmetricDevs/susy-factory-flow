@@ -349,33 +349,17 @@ export function BoardActions({
             and having them in two places at once only made the header look
             like the authoritative pair. Clean board is a whole-plan action that
             was one slip away from the import button; it lives in the menu. */}
-        {/* Share wears its word, alone on the bar in doing so: it was buried
-            in the Setups tab and people could not find it. Same dialog as the
-            shelf's own button. */}
-        {onShare ? (
-          <button
-            type="button"
-            onClick={onShare}
-            disabled={!canShare}
-            title={shareTitle}
-            className="inline-flex h-7 items-center gap-1 rounded border border-line-strong bg-surface px-1.5 text-xs font-medium text-fg-subtle hover:border-emerald-600 hover:text-emerald-500 disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            Share
-          </button>
-        ) : null}
-        <ToolbarButton
-          icon={Upload}
-          label="Import plan"
-          disabled={isProjectImporting}
-          onClick={() => projectInputRef.current?.click()}
-        />
+        {/* ONE plan menu since 2026-09-06: share, import and the exports
+            all live behind the one key. Share and import used to be their
+            own buttons on the bar; the bar was too wide and this is the
+            corner where a menu is expected. Share is also on the plan's own
+            identity drawer, so it is never more than a click away. */}
         <div ref={exportMenuRef} className="relative">
           <button
             type="button"
             onClick={() => setExportMenuOpen((isOpen) => !isOpen)}
-            title="Export plan"
-            aria-label="Export plan"
+            title="Plan: share, import, export"
+            aria-label="Plan menu: share, import, export"
             aria-expanded={isExportMenuOpen}
             aria-busy={pendingExport ? true : undefined}
             disabled={Boolean(pendingExport)}
@@ -390,6 +374,28 @@ export function BoardActions({
           </button>
           {isExportMenuOpen ? (
             <div className="absolute right-0 top-8 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+              {onShare ? (
+                <ExportMenuItem
+                  icon={Share2}
+                  label="Share this setup"
+                  title={shareTitle}
+                  disabled={!canShare}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    onShare();
+                  }}
+                />
+              ) : null}
+              <ExportMenuItem
+                icon={Upload}
+                label="Import a plan..."
+                disabled={isProjectImporting}
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  projectInputRef.current?.click();
+                }}
+              />
+              <div className="my-1 border-t border-line-strong" />
               <ExportMenuItem
                 icon={diagnosticsState === "copied" ? Check : ClipboardList}
                 label={diagnosticsLabel}
@@ -878,45 +884,26 @@ function carryNodeOntoMigratedRecipe(
 function ExportMenuItem({
   icon: Icon,
   label,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-fg-subtle hover:bg-surface-sunken"
-    >
-      <Icon className="h-4 w-4" />
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function ToolbarButton({
-  icon: Icon,
-  label,
+  title,
   disabled = false,
   onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  title?: string;
   disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
+      disabled={disabled}
+      title={title}
+      className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-fg-subtle hover:bg-surface-sunken disabled:cursor-not-allowed disabled:text-fg-muted"
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
     </button>
   );
 }

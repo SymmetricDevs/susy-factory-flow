@@ -1,9 +1,8 @@
 "use client";
 
-import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import type { FactoryNode, MachineHandler, Recipe } from "@/lib/model/types";
 import { getNodeSteamReport } from "@/lib/solver/power-report";
 import { applyMachineHandlerToRecipe, formatRate, isSteamMachineHandler } from "@/lib/model";
@@ -222,27 +221,32 @@ export function MachineMenu({
     const bar = anchorRef.current?.parentElement;
     const card = anchorRef.current?.closest("[data-node-glance-root]");
     if (bar && card) {
+      // Real px throughout (rects, innerWidth); the menu box wears ui-zoom,
+      // so the numbers are divided by the scale where the style reads them.
+      const scale = getUiScale();
       const barRect = bar.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const width = Math.max(480, Math.round(cardRect.width));
+      const width = Math.max(480 * scale, Math.round(cardRect.width));
       const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
       // The list's height before it exists: one row per machine, capped
       // where the panel starts scrolling.
       // The twins section is counted as a header and a few rows before it
       // has loaded, so a menu that opens below the card has room to grow.
       const twinRows = twins && twins.length > 0 ? 1 + Math.min(3, twins.length) : 0;
-      const estimated = Math.min(MENU_MAX_HEIGHT, (handlers.length + twinRows) * MENU_ROW_HEIGHT + 16);
+      const estimated = Math.min(MENU_MAX_HEIGHT, (handlers.length + twinRows) * MENU_ROW_HEIGHT + 16) * scale;
       const roomAbove = Math.round(cardRect.top) - 4 - 8;
       const above = roomAbove >= estimated;
       const top = Math.min(Math.round(barRect.bottom) + 4, window.innerHeight - 120);
       // The list may grow after it opens (the twins land later), so its
       // height is capped to the room on the side it chose: it scrolls
       // rather than running off the window.
-      const maxHeight = Math.max(160, Math.min(MENU_MAX_HEIGHT, above ? roomAbove : window.innerHeight - top - 8));
+      const maxHeight = Math.max(160 * scale, Math.min(MENU_MAX_HEIGHT * scale, above ? roomAbove : window.innerHeight - top - 8));
+      // Real px -> shell px: the box is zoomed, so its fixed offsets are too.
+      const shell = (px: number) => px / scale;
       setAnchorAt(
         above
-          ? { left, width, maxHeight, bottom: window.innerHeight - Math.round(cardRect.top) + 4 }
-          : { left, width, maxHeight, top },
+          ? { left: shell(left), width: shell(width), maxHeight: shell(maxHeight), bottom: shell(window.innerHeight - Math.round(cardRect.top) + 4) }
+          : { left: shell(left), width: shell(width), maxHeight: shell(maxHeight), top: shell(top) },
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- measured once on open; the twins' arrival must not re-anchor an open menu
@@ -286,22 +290,32 @@ export function MachineMenu({
     [handlers, node, recipe],
   );
 
-  // The one dropdown rule (use-dropdown-dismiss.ts): press outside, Escape,
-  // wheel, scroll, a board pan, or the mouse drifting away. The name bar
-  // manages its own toggle, so a press on it is left alone.
-  useDropdownDismiss(true, {
-    refs: [rootRef],
-    onClose,
-    insideSelector: "[data-machine-menu-toggle]",
-    fade: true,
-  });
+  // Anywhere outside, or Escape, closes it. Capture phase so canvas handlers
+  // that stop propagation cannot swallow the click; the chevron manages its
+  // own toggle, so a click on it is left alone.
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest?.("[data-machine-menu-toggle]")) return;
+      if (!rootRef.current?.contains(event.target as Node)) onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [onClose]);
 
   const menu = anchorAt ? (
     <div
       ref={rootRef}
       role="listbox"
       aria-label="Machine"
-      className="nodrag nowheel z-[300] overflow-y-auto overflow-x-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1.5 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
+      className="ui-zoom nodrag nowheel z-[300] overflow-y-auto overflow-x-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1.5 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
       style={{ position: "fixed", left: anchorAt.left, top: anchorAt.top, bottom: anchorAt.bottom, width: anchorAt.width, maxHeight: anchorAt.maxHeight }}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}

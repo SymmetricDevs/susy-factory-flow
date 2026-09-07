@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { FLUID_ICON_SCALE, ResourceIcon } from "@/components/nei/ResourceIcon";
 import { TierBadge, type VoltageTier } from "@/components/shelf-cards";
 import { normalizeBlueprintTags } from "@/lib/blueprints/types";
@@ -570,15 +571,18 @@ export function TagEditor({
     return null;
   }
 
+  // Shell pixels: a body portal wearing .ui-zoom positions in shell pixels, so
+  // the real-pixel anchor and window are divided by the interface scale.
+  const scale = getUiScale();
   return createPortal(
     <div
       ref={boxRef}
       style={{
-        left: Math.min(left, window.innerWidth - 260 - 8),
-        top: Math.min(top, window.innerHeight - 120),
+        left: Math.min(left / scale, window.innerWidth / scale - 260 - 8),
+        top: Math.min(top / scale, window.innerHeight / scale - 120),
         width: 260,
       }}
-      className="fixed z-[100] flex flex-wrap items-center gap-1 border border-[var(--mc-33)] bg-[var(--mc-61)] p-1.5 shadow-lg"
+      className="ui-zoom fixed z-[100] flex flex-wrap items-center gap-1 border border-[var(--mc-33)] bg-[var(--mc-61)] p-1.5 shadow-lg"
     >
       {draft.map((tag) => (
         <button

@@ -5,6 +5,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { Compass, Library } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { openDesigns, type DesignFolder } from "@/lib/designs/design-library";
 import type { EntryIcon } from "@/lib/model/types";
 import { FLUID_ICON_SCALE, ResourceIcon } from "./nei/ResourceIcon";
@@ -212,7 +213,9 @@ export function DesignTabs() {
       }
       event.preventDefault();
       // Line-mode deltas (some mice on Firefox) arrive in rows, not pixels.
-      const pixels = event.deltaMode === 1 ? delta * 16 : delta;
+      // Wheel deltas are real pixels and scrollLeft is shell pixels: divided
+      // by the interface scale so a notch moves the same strip of tabs.
+      const pixels = (event.deltaMode === 1 ? delta * 16 : delta) / getUiScale();
       const maxScroll = scroller.scrollWidth - scroller.clientWidth;
 
       if (pos === undefined) {
@@ -283,6 +286,10 @@ export function DesignTabs() {
     let trackWidth = 0;
     let lastClientX = startClientX;
     let frame = 0;
+    // The geometry below is measured in real pixels (rects and clientX) and
+    // written back as translate, which is shell pixels: divided by the
+    // interface scale at the two write sites.
+    const scale = getUiScale();
 
     const trackX = (clientX: number) => clientX - track.getBoundingClientRect().left;
 
@@ -304,7 +311,7 @@ export function DesignTabs() {
         -(dragged.mid - reach),
         Math.min(trackWidth - (dragged.mid + reach), trackX(lastClientX) - startTrackX),
       );
-      dragged.el.style.transform = `translateX(${dx}px)`;
+      dragged.el.style.transform = `translateX(${dx / scale}px)`;
 
       // Where the held pill sits, against RESTING midpoints — the DOM never
       // reorders mid-drag, so they stay true. A neighbour yields as soon as
@@ -333,7 +340,7 @@ export function DesignTabs() {
             : position < startIndex && position >= targetIndex
               ? step
               : 0;
-        slot.el.style.transform = shift ? `translateX(${shift}px)` : "";
+        slot.el.style.transform = shift ? `translateX(${shift / scale}px)` : "";
       });
     };
 
@@ -628,7 +635,9 @@ export function DesignTabs() {
                       setOpenMenu({
                         id: design.id,
                         name: design.name,
-                        left: Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8),
+                        // Real pixels; the menu portal converts to shell
+                        // pixels, so the shell-pixel width is scaled here.
+                        left: Math.min(rect.left, window.innerWidth - MENU_WIDTH * getUiScale() - 8),
                         top: rect.bottom + 4,
                       });
                     }}
@@ -786,8 +795,10 @@ function DesignMenu({
       ref={menuRef}
       role="menu"
       aria-label={`Design options for ${menu.name}`}
-      style={{ left: menu.left, top: menu.top, width: MENU_WIDTH }}
-      className="fixed z-[100] overflow-hidden rounded border border-line bg-surface-raised shadow-lg"
+      // A body portal wearing .ui-zoom positions in shell pixels: the
+      // real-pixel anchor is divided by the interface scale.
+      style={{ left: menu.left / getUiScale(), top: menu.top / getUiScale(), width: MENU_WIDTH }}
+      className="ui-zoom fixed z-[100] overflow-hidden rounded border border-line bg-surface-raised shadow-lg"
     >
       <MenuItem label="Rename" onClick={onRename} />
       <MenuItem label="Duplicate" onClick={onDuplicate} />

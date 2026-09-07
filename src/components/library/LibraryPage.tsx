@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { useCommunityUser } from "@/components/community/auth";
 import { IconPicker, iconSuggestionsFromStats } from "@/components/IconPicker";
 import { formatRelativeDate } from "@/components/shelf-cards";
@@ -947,11 +948,14 @@ function DragGhost({ drag }: { drag: TileDrag }) {
   if (typeof document === "undefined") {
     return null;
   }
+  // Shell pixels: a body portal wearing .ui-zoom positions in shell pixels, so
+  // the real-pixel pointer is divided by the interface scale.
+  const scale = getUiScale();
   return createPortal(
     <div
       aria-hidden
-      style={{ left: drag.x + 14, top: drag.y + 10 }}
-      className="pointer-events-none fixed z-[120] flex max-w-[240px] items-center gap-2 border-2 border-[var(--mc-61)] bg-[var(--mc-47)] px-2 py-1.5 text-[var(--mc-ink)] shadow-[0_8px_0_rgba(0,0,0,0.5)]"
+      style={{ left: drag.x / scale + 14, top: drag.y / scale + 10 }}
+      className="ui-zoom pointer-events-none fixed z-[120] flex max-w-[240px] items-center gap-2 border-2 border-[var(--mc-61)] bg-[var(--mc-47)] px-2 py-1.5 text-[var(--mc-ink)] shadow-[0_8px_0_rgba(0,0,0,0.5)]"
     >
       <Face icon={drag.icon} size={28} />
       <span className="min-w-0 truncate text-[12px] font-bold">{drag.name}</span>

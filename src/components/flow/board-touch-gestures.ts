@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
 import { isCompactViewport } from "@/lib/compact-view";
 import { readWorkspaceViewSnapshot } from "@/lib/workspace-view";
-import { BOARD_MAX_ZOOM, BOARD_MIN_ZOOM } from "./board-camera";
+import { BOARD_MIN_ZOOM, boardMaxZoom } from "./board-camera";
 import { getPanelPull, type PanelSide } from "./panel-pull";
 
 /**
@@ -113,7 +113,7 @@ export function useBoardTouchGestures({
       if (!instance) {
         return;
       }
-      const next = Math.min(BOARD_MAX_ZOOM, Math.max(BOARD_MIN_ZOOM, zoom));
+      const next = Math.min(boardMaxZoom(), Math.max(BOARD_MIN_ZOOM, zoom));
       const ratio = next / from.zoom;
       void instance.setViewport(
         {

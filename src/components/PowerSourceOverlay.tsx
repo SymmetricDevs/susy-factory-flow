@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, Search, X, Zap } from "lucide-react";
 import { useIsCompactViewport } from "@/lib/compact-view";
+import { getUiScale } from "@/lib/ui-scale";
 import { useWorkspaceView } from "@/lib/workspace-view";
 import { getPowerMachineIcon } from "@/lib/power/planner-data";
 import {
@@ -107,7 +108,9 @@ export function PowerSourceOverlay() {
   return createPortal(
     <div
       className={[
-        "pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/70",
+        // ui-zoom: a body portal is outside the zoomed shell, so the picker
+        // zooms itself; the viewport it is laid out in is read in shell px.
+        "ui-zoom pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/70",
         compact ? "z-[90]" : "z-50",
         layout.sheet ? "" : "px-3 py-2",
       ].join(" ")}
@@ -403,20 +406,23 @@ interface PickerViewport {
   height: number;
 }
 
+/** In SHELL px: the picker draws zoomed, so the window is measured in its units. */
 function readPickerViewport(): PickerViewport {
   if (typeof window === "undefined") {
     return { sheet: false, leftInset: PICKER_RAIL_LEFT, width: 960, height: 760 };
   }
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
+  const scale = getUiScale();
+  const viewportWidth = window.innerWidth / scale;
+  const viewportHeight = window.innerHeight / scale;
   if (viewportWidth < PICKER_SHEET_BELOW) {
     return { sheet: true, leftInset: 0, width: viewportWidth, height: viewportHeight };
   }
   // A closed item panel UNMOUNTS the aside and leaves the rail, so absence
   // means the rail's width, not the panel's.
   const browser = document.querySelector('aside[data-help-anchor="browser"]');
+  // Real px -> shell px.
   const leftInset = browser
-    ? Math.round(browser.getBoundingClientRect().width)
+    ? Math.round(browser.getBoundingClientRect().width / scale)
     : PICKER_RAIL_LEFT;
   return {
     sheet: false,

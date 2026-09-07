@@ -4,6 +4,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { Zap } from "lucide-react";
 import {
   ENERGY_HATCH_TYPES,
@@ -101,8 +102,13 @@ function MenuShell({
   // Prefer opening UPWARD (the card stays visible for the hover-preview),
   // but flip downward when the chip is too close to the top of the screen -
   // a menu must never run off the viewport. Height caps to the chosen side.
-  const spaceAbove = anchor.top - 16;
-  const spaceBelow = window.innerHeight - anchor.bottom - 16;
+  // The anchor rect and the window are real px; width and maxHeight are
+  // shell px, and so are the fixed offsets of this zoomed box. Everything is
+  // brought to shell px here.
+  const scale = getUiScale();
+  const shell = (px: number) => px / scale;
+  const spaceAbove = shell(anchor.top) - 16;
+  const spaceBelow = shell(window.innerHeight - anchor.bottom) - 16;
   const opensUp = spaceAbove >= Math.min(maxHeight, 260) || spaceAbove >= spaceBelow;
 
   return createPortal(
@@ -110,17 +116,17 @@ function MenuShell({
       ref={panelRef}
       // "nowheel" stops React Flow from zooming the canvas when scrolling the
       // list: its native wheel handler runs before React's synthetic one.
-      className="nodrag nowheel fixed z-[9999] flex flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className="ui-zoom nodrag nowheel fixed z-[9999] flex flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       style={{
         width,
-        left: Math.max(8, Math.min(anchor.x - width, window.innerWidth - width - 8)),
+        left: Math.max(8, Math.min(shell(anchor.x) - width, shell(window.innerWidth) - width - 8)),
         ...(opensUp
           ? {
-              bottom: window.innerHeight - anchor.top + 4,
+              bottom: shell(window.innerHeight - anchor.top) + 4,
               maxHeight: Math.min(maxHeight, spaceAbove),
             }
           : {
-              top: anchor.bottom + 4,
+              top: shell(anchor.bottom) + 4,
               maxHeight: Math.min(maxHeight, spaceBelow),
             }),
       }}

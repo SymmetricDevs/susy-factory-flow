@@ -469,7 +469,8 @@ function BoardNodeComponent({
         align="end"
         style={{ zIndex: 30 }}
       >
-        <div ref={paletteRef} className="nodrag flex w-[340px] flex-col gap-1 border-2 border-[#8d6fd1] bg-[#241b33] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+        {/* ui-zoom: the toolbar portal lives inside .react-flow, which is unzoomed. */}
+        <div ref={paletteRef} className="ui-zoom nodrag flex w-[340px] flex-col gap-1 border-2 border-[#8d6fd1] bg-[#241b33] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
         <div className="flex flex-wrap gap-1">
           <button
             type="button"

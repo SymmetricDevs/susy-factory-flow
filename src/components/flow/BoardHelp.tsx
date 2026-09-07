@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Fragment, memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import {
   GLANCE_CARD_CLASS,
   GLANCE_LINE,
@@ -348,8 +349,13 @@ const LINEAR: HelpCard[] = [
 
 /* ------------------------------------------------------------------ */
 
-function toHelpRect(rect: DOMRect): HelpRect {
-  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+/**
+ * Real px (a DOMRect) to shell px: every sheet below wears ui-zoom, so its
+ * offsets, the card widths and the window size all live in shell px, and the
+ * one conversion is here and in `show` for the window itself.
+ */
+function toHelpRect(rect: DOMRect, scale = getUiScale()): HelpRect {
+  return { left: rect.left / scale, top: rect.top / scale, right: rect.right / scale, bottom: rect.bottom / scale };
 }
 
 function unionRects(...rects: Array<HelpRect | undefined>): HelpRect | undefined {
@@ -815,7 +821,7 @@ const HELP_BUTTON_CLASS =
  */
 function HelpSheet({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-[#101419] font-mono text-[#dbe3ec]">
+    <div className="ui-zoom fixed inset-0 z-[120] flex flex-col bg-[#101419] font-mono text-[#dbe3ec]">
       <div
         className="flex h-11 shrink-0 items-center justify-between px-3"
         style={{ borderBottom: `1px solid ${GLANCE_LINE}` }}
@@ -867,7 +873,7 @@ function HelpHoverPanel({
   const anchorLeft = button ? button.left : 12;
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-[120] font-mono"
+      className="ui-zoom pointer-events-none fixed inset-0 z-[120] font-mono"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -903,7 +909,7 @@ function HelpGlanceSheet({
   const { rings, columns, arrows } = layoutGlance(measured);
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-[120] font-mono"
+      className="ui-zoom pointer-events-none fixed inset-0 z-[120] font-mono"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -965,11 +971,14 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   const show = useCallback(() => {
     window.clearTimeout(hideTimerRef.current);
     const buttonRect = buttonRef.current?.getBoundingClientRect();
+    // Shell px, like the rects: at 130% a 1920 window is 1477 wide here, so
+    // it gets the hover panel, the same as browser zoom gave it.
+    const scale = getUiScale();
     setMeasured({
       rects: measureAnchors(),
       button: buttonRect ? toHelpRect(buttonRect) : undefined,
-      vw: window.innerWidth,
-      vh: window.innerHeight,
+      vw: window.innerWidth / scale,
+      vh: window.innerHeight / scale,
     });
   }, []);
   const scheduleHide = useCallback(() => {

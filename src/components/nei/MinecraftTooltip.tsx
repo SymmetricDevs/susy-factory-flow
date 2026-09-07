@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { isTouchPointer } from "@/lib/pointer-kind";
 import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
@@ -79,9 +80,13 @@ export function MinecraftTooltip({
     (pointerX: number, pointerY: number) => {
       const panelWidth = panelRef.current?.offsetWidth ?? (hasContent ? 340 : 320);
       const panelHeight = panelRef.current?.offsetHeight ?? (hasContent ? 240 : 80);
+      // Shell pixels throughout: the panel is a body portal wearing .ui-zoom,
+      // so its left/top and offset size are shell pixels, and the pointer and
+      // window (real pixels) are divided by the interface scale (ui-scale.ts).
+      const scale = getUiScale();
       return {
-        x: Math.max(4, Math.min(pointerX + 12, window.innerWidth - panelWidth - 8)),
-        y: Math.max(4, Math.min(pointerY + 12, window.innerHeight - panelHeight - 8)),
+        x: Math.max(4, Math.min(pointerX / scale + 12, window.innerWidth / scale - panelWidth - 8)),
+        y: Math.max(4, Math.min(pointerY / scale + 12, window.innerHeight / scale - panelHeight - 8)),
       };
     },
     [hasContent],
@@ -264,7 +269,7 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip="true"
-                className={`${TOOLTIP_PANEL_CLASS} max-w-[640px] px-3 py-2.5`}
+                className={`${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
                 style={{ left: position.x, top: position.y }}
               >
                 {typeof content === "function" ? content() : content}
@@ -280,7 +285,7 @@ export function MinecraftTooltip({
                 // of its own. Asking for max-content makes the panel state its
                 // real width; the pointer clamp above reads that width back and
                 // walks it inside the edge.
-                className={`${TOOLTIP_PANEL_CLASS} w-max max-w-[420px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
+                className={`${TOOLTIP_PANEL_CLASS} ui-zoom w-max max-w-[420px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
                 style={{ left: position.x, top: position.y }}
               >
                 {lines.map((line, index) => (

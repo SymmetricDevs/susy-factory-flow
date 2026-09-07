@@ -132,7 +132,7 @@ export function ChangelogDialog({
         aria-modal="true"
         aria-label="What's new in GTNH Planner"
         className={[
-          "flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-surface compact:max-h-[92vh]",
+          "flex max-h-[calc(88*var(--ui-vh))] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-surface compact:max-h-[calc(92*var(--ui-vh))]",
           isInterrupt
             ? "border-2 border-cyan-600/70 shadow-[0_0_0_1px_rgba(0,0,0,0.6),0_24px_70px_rgba(0,0,0,0.75)]"
             : "border border-line-strong shadow-2xl",

@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
 import { isEditableKeyboardTarget } from "./keyboard";
 import { readBoardMotionSnapshot } from "./board-motion";
-import { BOARD_MAX_ZOOM, BOARD_MIN_ZOOM } from "./board-camera";
+import { BOARD_MIN_ZOOM, boardMaxZoom } from "./board-camera";
 
 /**
  * The camera under the hand: eased wheel zoom, a slight glide after a pan,
@@ -86,7 +86,7 @@ const PAN_KEY_VECTORS: Record<string, readonly [number, number]> = {
 const ZOOM_IN_CODES = new Set(["PageUp", "Equal", "NumpadAdd"]);
 const ZOOM_OUT_CODES = new Set(["PageDown", "Minus", "NumpadSubtract"]);
 
-const clampZoom = (zoom: number) => Math.min(BOARD_MAX_ZOOM, Math.max(BOARD_MIN_ZOOM, zoom));
+const clampZoom = (zoom: number) => Math.min(boardMaxZoom(), Math.max(BOARD_MIN_ZOOM, zoom));
 
 export function useBoardCameraControls({
   boardRef,

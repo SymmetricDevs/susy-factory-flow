@@ -1,5 +1,6 @@
 "use client";
 
+import { getUiScale } from "@/lib/ui-scale";
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
 import { useLayoutEffect, useRef, useState } from "react";
@@ -40,9 +41,11 @@ export function ItemPickerPopover({
       return;
     }
     const margin = 8;
+    // Real px in, shell px out: the shift is a translate inside the zoomed shell.
+    const scale = getUiScale();
     const rect = root.getBoundingClientRect();
-    const overRight = rect.right - (window.innerWidth - margin);
-    const overLeft = margin - rect.left;
+    const overRight = (rect.right - (window.innerWidth - margin)) / scale;
+    const overLeft = (margin - rect.left) / scale;
     if (overRight > 0) {
       setShift((current) => current - overRight);
     } else if (overLeft > 0) {
@@ -79,7 +82,7 @@ export function ItemPickerPopover({
         // pointer-events-auto: the board's toolbars are pointer-events-none
         // layers and the picker inherits that; nowheel/nodrag keep the wheel
         // paging the list instead of zooming the board under it.
-        "pointer-events-auto nodrag nowheel absolute z-20 flex h-[min(560px,calc(100vh-120px))] w-full max-w-[calc(100vw-16px)] flex-col overflow-hidden border border-neutral-800 bg-[#25272c] text-neutral-100 shadow-[0_8px_24px_rgba(0,0,0,0.5)] sm:w-[380px] sm:max-w-[380px]",
+        "pointer-events-auto nodrag nowheel absolute z-20 flex h-[min(560px,calc(100*var(--ui-vh)-120px))] w-full max-w-[calc(100*var(--ui-vw)-16px)] flex-col overflow-hidden border border-neutral-800 bg-[#25272c] text-neutral-100 shadow-[0_8px_24px_rgba(0,0,0,0.5)] sm:w-[380px] sm:max-w-[380px]",
         placement === "above" ? "bottom-full left-1/2 mb-2 -translate-x-1/2" : "left-1/2 top-full mt-2",
       ].join(" ")}
       data-item-picker={role}

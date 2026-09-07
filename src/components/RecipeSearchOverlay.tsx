@@ -46,6 +46,7 @@ import {
   type AlternativeCycleFace,
 } from "@/lib/nei/alternative-cycle";
 import { useIsCompactViewport } from "@/lib/compact-view";
+import { getUiScale, useUiScale } from "@/lib/ui-scale";
 import { machineArtPixels } from "./flow/MachinePicker";
 import { ItemPickerPopover } from "./ItemPickerPopover";
 import { ResourceIcon } from "./nei/ResourceIcon";
@@ -284,6 +285,8 @@ export function RecipeSearchOverlay({
   // SCREEN, first-class: its own header stack with the close in the top
   // right, one swipeable row of machine chips, and a shorter stencil.
   const compact = useIsCompactViewport();
+  // The shell zoom, for placing fixed children of this zoomed portal.
+  const uiScale = useUiScale();
   const sheet = compact || layout.sheet;
   const [pickerRole, setPickerRole] = useState<RecipeQueryRole | undefined>(undefined);
   const [rateView, setRateView] = useState<RateView>(() => storedRateView);
@@ -415,10 +418,12 @@ export function RecipeSearchOverlay({
     event.preventDefault();
     event.stopPropagation();
     setChipMenu(undefined);
+    // Real px -> shell px: the menu is a fixed child of the zoomed root.
+    const scale = getUiScale();
     setCardMenu({
       ...menu,
-      x: Math.min(event.clientX, window.innerWidth - 310),
-      y: Math.min(event.clientY, window.innerHeight - 170),
+      x: Math.min(event.clientX / scale, window.innerWidth / scale - 310),
+      y: Math.min(event.clientY / scale, window.innerHeight / scale - 170),
     });
   }, []);
 
@@ -426,9 +431,11 @@ export function RecipeSearchOverlay({
     (event: ReactMouseEvent, resource: ResourceAmount, picker?: ChipMenuPicker) => {
       event.preventDefault();
       event.stopPropagation();
+      // Real px -> shell px: the menu is a fixed child of the zoomed root.
+      const scale = getUiScale();
       setChipMenu({
-        x: Math.min(event.clientX, window.innerWidth - 230),
-        y: Math.min(event.clientY, window.innerHeight - (picker ? 330 : 190)),
+        x: Math.min(event.clientX / scale, window.innerWidth / scale - 230),
+        y: Math.min(event.clientY / scale, window.innerHeight / scale - (picker ? 330 : 190)),
         resource,
         picker,
       });
@@ -1008,7 +1015,9 @@ export function RecipeSearchOverlay({
       className={[
         // A near-black ground: the search is the only thing on screen, and
         // everything on it stands off the dark.
-        "pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/70",
+        // ui-zoom: a body portal is outside the zoomed shell, so the search
+        // zooms itself; the viewport it is laid out in is read in shell px.
+        "ui-zoom pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/70",
         // The search covers the RIGHT column and spends that room on bigger
         // recipes; the LEFT column stays live beside it (see the style
         // below). On compact it outranks ALL the app chrome - full screen
@@ -1345,10 +1354,12 @@ export function RecipeSearchOverlay({
           {stencilDrag?.active && liftedClause ? (
             <div
               className="pointer-events-none fixed z-[60] cursor-grabbing"
+              // The drag is tracked in real px; this box is a fixed child of
+              // the zoomed root, so it is placed in shell px.
               style={{
-                left: stencilDrag.x - stencilDrag.grabDX,
-                top: stencilDrag.y - stencilDrag.grabDY,
-                width: stencilDrag.width,
+                left: (stencilDrag.x - stencilDrag.grabDX) / uiScale,
+                top: (stencilDrag.y - stencilDrag.grabDY) / uiScale,
+                width: stencilDrag.width / uiScale,
               }}
             >
               <span className="flex w-full items-center gap-2 border-2 border-[var(--mc-61)] bg-[var(--mc-47)] py-0.5 pl-0.5 pr-1 shadow-[6px_6px_0_rgba(0,0,0,0.5)]">
@@ -2720,21 +2731,24 @@ interface RecipeSearchViewport {
   height: number;
 }
 
-function measureLeftSidebar(): number {
+function measureLeftSidebar(scale: number): number {
   if (typeof document === "undefined") {
     return BOARD_SIDEBAR_LEFT;
   }
   const element = document.querySelector('aside[data-help-anchor="browser"]');
-  return element ? Math.round(element.getBoundingClientRect().width) : BOARD_SIDEBAR_LEFT;
+  // Real px -> shell px.
+  return element ? Math.round(element.getBoundingClientRect().width / scale) : BOARD_SIDEBAR_LEFT;
 }
 
+/** In SHELL px: the search draws zoomed, so the window is measured in its units. */
 function readRecipeSearchViewport(): RecipeSearchViewport {
   if (typeof window === "undefined") {
     return { sheet: false, leftInset: BOARD_SIDEBAR_LEFT, width: 960, height: 760 };
   }
 
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
+  const scale = getUiScale();
+  const viewportWidth = window.innerWidth / scale;
+  const viewportHeight = window.innerHeight / scale;
 
   // Too narrow to be a window at all: fill the screen instead of leaving a
   // panel that is mostly margin. The item browser is a drawer here anyway.
@@ -2742,7 +2756,7 @@ function readRecipeSearchViewport(): RecipeSearchViewport {
     return { sheet: true, leftInset: 0, width: viewportWidth, height: viewportHeight };
   }
 
-  const leftInset = measureLeftSidebar();
+  const leftInset = measureLeftSidebar(scale);
   return {
     sheet: false,
     leftInset,

@@ -4,6 +4,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { LoaderCircle } from "lucide-react";
 import type { DatasetVersion, RecipeSummary } from "@/lib/datasets/types";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets/remote";
@@ -134,17 +135,21 @@ export function CropPickerMenu({
     const parent = anchorRef.current?.parentElement;
     const card = anchorRef.current?.closest("[data-node-glance-root]");
     if (parent) {
+      // Real px throughout; the menu box wears ui-zoom, so every number is
+      // divided by the scale where the style reads it.
+      const scale = getUiScale();
+      const shell = (px: number) => px / scale;
       const rect = parent.getBoundingClientRect();
       const cardRect = card?.getBoundingClientRect() ?? rect;
-      const width = Math.max(360, Math.round(cardRect.width));
+      const width = Math.max(360 * scale, Math.round(cardRect.width));
       const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
       // UP, always, unless the card is jammed against the top of the window:
       // the list takes whatever room there is above and scrolls inside it.
       const roomAbove = Math.round(cardRect.top) - 12;
       setAnchorAt(
-        roomAbove >= MENU_MIN_HEIGHT
-          ? { left, width, bottom: window.innerHeight - Math.round(cardRect.top) + 4, maxHeight: roomAbove }
-          : { left, width, top: Math.min(rect.bottom + 2, window.innerHeight - 120) },
+        roomAbove >= MENU_MIN_HEIGHT * scale
+          ? { left: shell(left), width: shell(width), bottom: shell(window.innerHeight - Math.round(cardRect.top) + 4), maxHeight: shell(roomAbove) }
+          : { left: shell(left), width: shell(width), top: shell(Math.min(rect.bottom + 2, window.innerHeight - 120)) },
       );
     }
   }, []);
@@ -169,7 +174,7 @@ export function CropPickerMenu({
       // "nowheel" stops React Flow from zooming the canvas when scrolling the
       // list: its native wheel handler runs before React's synthetic one, so
       // stopPropagation alone is not enough.
-      className="nodrag nowheel z-[300] flex flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className="ui-zoom nodrag nowheel z-[300] flex flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}

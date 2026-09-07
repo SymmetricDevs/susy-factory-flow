@@ -256,7 +256,9 @@ export function FactoryPlannerApp() {
   }, [communityUser]);
 
   return (
-    // h-dvh, not h-screen: a phone browser's address bar comes and goes, and
+    // Height in --ui-dvh (dvh over the interface size, see ui-scale.ts: the
+    // shell is CSS-zoomed and viewport units are not divided by zoom), and
+    // dvh, not vh: a phone browser's address bar comes and goes, and
     // `vh` measures the window as if it never did, so the bottom row of the
     // board spent its life under the chrome.
     //
@@ -266,7 +268,7 @@ export function FactoryPlannerApp() {
     // fold, and a classic scrollbar appeared and threw off every measurement made
     // against `window.innerWidth`. The board and the panels carry their own
     // floors, which is where the guarantee belongs.
-    <div className="flex h-dvh flex-col bg-canvas text-fg">
+    <div className="ui-scale-shell flex h-[calc(100*var(--ui-dvh))] flex-col bg-canvas text-fg">
       <RecipeBookOpener />
       <PlacementRevealer />
       <SharedAddressSync />

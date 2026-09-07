@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { getUiScale } from "@/lib/ui-scale";
 
 /**
  * The Welcome page's backdrop: the pack's most-used items drifting through
@@ -235,9 +236,13 @@ export function WelcomeBackdrop({ icons }: { icons: string[] }) {
 
     const resize = () => {
       const box = canvas.getBoundingClientRect();
-      const dpr = Math.min(DPR_CAP, window.devicePixelRatio || 1);
-      width = Math.max(1, Math.round(box.width));
-      height = Math.max(1, Math.round(box.height));
+      // The canvas lives in the zoomed shell: its drawing space is shell
+      // pixels (the rect is real pixels, divided by the interface scale) and
+      // the scale joins the device ratio so the raster stays crisp.
+      const scale = getUiScale();
+      const dpr = Math.min(DPR_CAP, window.devicePixelRatio || 1) * scale;
+      width = Math.max(1, Math.round(box.width / scale));
+      height = Math.max(1, Math.round(box.height / scale));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

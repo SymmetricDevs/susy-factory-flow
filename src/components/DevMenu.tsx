@@ -43,6 +43,7 @@ import {
 import { isNodeDetailGlanceForced, setNodeDetailGlanceForced } from "./flow/node-detail";
 import { isPerfHudEnabled, setPerfHudEnabled } from "./flow/PerfHud";
 import { useFactoryStore } from "@/store/factory-store";
+import { getUiScale } from "@/lib/ui-scale";
 
 /**
  * The dev menu, behind a shift-click on the version chip.
@@ -115,7 +116,7 @@ export function DevMenu({
     <div
       role="dialog"
       aria-label="Dev menu"
-      className="fixed z-[120] flex max-h-[85vh] w-96 max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-2xl"
+      className="fixed z-[120] flex max-h-[calc(85*var(--ui-vh))] w-96 max-w-[calc(100*var(--ui-vw)-16px)] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-2xl"
       style={{ left: position.x, top: position.y }}
     >
       <div
@@ -124,10 +125,13 @@ export function DevMenu({
           if ((event.target as Element).closest("button")) {
             return;
           }
+          // Inside the zoomed shell: the position is shell pixels, the
+          // pointer real pixels, so the pointer is divided by the scale.
+          const scale = getUiScale();
           dragRef.current = {
             pointerId: event.pointerId,
-            offsetX: event.clientX - position.x,
-            offsetY: event.clientY - position.y,
+            offsetX: event.clientX / scale - position.x,
+            offsetY: event.clientY / scale - position.y,
           };
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
@@ -136,12 +140,16 @@ export function DevMenu({
           if (!drag || drag.pointerId !== event.pointerId) {
             return;
           }
+          const scale = getUiScale();
           setPosition({
             x: Math.min(
-              window.innerWidth - 72,
-              Math.max(72 - 384, event.clientX - drag.offsetX),
+              window.innerWidth / scale - 72,
+              Math.max(72 - 384, event.clientX / scale - drag.offsetX),
             ),
-            y: Math.min(window.innerHeight - 48, Math.max(0, event.clientY - drag.offsetY)),
+            y: Math.min(
+              window.innerHeight / scale - 48,
+              Math.max(0, event.clientY / scale - drag.offsetY),
+            ),
           });
         }}
         onPointerUp={() => {

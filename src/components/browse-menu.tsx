@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 
 /**
  * "What makes it" / "What uses it", for a finger.
@@ -198,8 +199,12 @@ function BrowseMenu({
   // Wide enough for "What makes it" on one line in this font: wrapped over two, a
   // button stops looking like a button.
   const width = 208;
-  const left = Math.min(Math.max(8, at.x - width / 2), window.innerWidth - width - 8);
-  const top = Math.min(at.y + 12, window.innerHeight - 148);
+  // Shell pixels: the menu is a body portal wearing .ui-zoom, so its left/top
+  // and width are shell pixels, and the pointer and window (real pixels) come
+  // across by the interface scale (ui-scale.ts).
+  const scale = getUiScale();
+  const left = Math.min(Math.max(8, at.x / scale - width / 2), window.innerWidth / scale - width - 8);
+  const top = Math.min(at.y / scale + 12, window.innerHeight / scale - 148);
   // The finger that opened this menu is still on the screen, and its release fires
   // the compatibility mouse events every tap fires. The gesture that opened the
   // menu cannot also dismiss it.
@@ -306,7 +311,7 @@ function BrowseMenu({
         ref={menuRef}
         {...{ [BROWSE_MENU_ATTRIBUTE]: "" }}
         style={{ left, top, width }}
-        className="fixed z-[80] border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-1 font-mono shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),4px_4px_0_rgba(0,0,0,0.45)]"
+        className="ui-zoom fixed z-[80] border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-1 font-mono shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),4px_4px_0_rgba(0,0,0,0.45)]"
       >
         <p className="truncate px-1 pb-1 text-[11px] font-bold text-[var(--mc-ink-muted)]">
           {name}

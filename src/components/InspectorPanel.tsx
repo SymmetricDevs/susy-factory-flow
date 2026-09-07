@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { MachineShoppingList } from "./MachineShoppingList";
 import { formatCompact } from "@/lib/model";
 import { makeResourceKey } from "@/lib/model/resources";
@@ -957,7 +958,10 @@ function FlowVirtualList({
       return;
     }
     overlay.style.visibility = "";
-    overlay.style.top = `${box.top}px`;
+    // The copy is a body portal wearing .ui-zoom: its top/right are shell
+    // pixels, the row's rect and the document width real pixels.
+    const scale = getUiScale();
+    overlay.style.top = `${box.top / scale}px`;
     // clientWidth, not innerWidth: innerWidth counts the width of a classic
     // scrollbar and the `right` of a fixed element is measured from the initial
     // containing block, which does not. That difference is what let the row
@@ -965,7 +969,7 @@ function FlowVirtualList({
     // purpose: an inset "for the scrollbar" left the row's lit edge showing
     // beside its own copy, which read as a second row. The scrollbar problem
     // is solved by the copy being a pointer GHOST instead — see the wrapper.
-    overlay.style.right = `${document.documentElement.clientWidth - box.right}px`;
+    overlay.style.right = `${(document.documentElement.clientWidth - box.right) / scale}px`;
   }, [expandedKey, findExpandedRow]);
 
   /**
@@ -996,9 +1000,13 @@ function FlowVirtualList({
     // Fractional measurement plus slack, never offsetWidth: that rounds to
     // whole pixels, and a round-down of a fractional max-content re-trims
     // the name to "…" — the whole point of the copy is that it never does.
-    const natural = Math.ceil(overlay.getBoundingClientRect().width) + 2;
+    // Rects are real pixels and the copy's width is a shell-pixel style
+    // (it is a body portal wearing .ui-zoom): everything is brought across.
+    const scale = getUiScale();
+    const natural = Math.ceil(overlay.getBoundingClientRect().width / scale) + 2;
+    const rowWidth = box.width / scale;
     overlay.style.width = `${Math.round(
-      Math.min(Math.max(natural, box.width), Math.max(box.right - 12, box.width)),
+      Math.min(Math.max(natural, rowWidth), Math.max(box.right / scale - 12, rowWidth)),
     )}px`;
     overlay.classList.remove("resource-row-measuring");
   }, [findExpandedRow]);
@@ -1231,9 +1239,11 @@ function FlowVirtualList({
               // Where the row was when the pointer reached it, so the first
               // frame is drawn in the right place. From then on the layout
               // effect above owns these two, measured off the row itself.
-              top: expandedRow.top,
-              right: expandedRow.right,
-              "--row-start-width": `${expandedRow.startWidth}px`,
+              // Reported in real pixels by the row; this portal positions in
+              // shell pixels (see positionExpanded).
+              top: expandedRow.top / getUiScale(),
+              right: expandedRow.right / getUiScale(),
+              "--row-start-width": `${expandedRow.startWidth / getUiScale()}px`,
             } as React.CSSProperties
           }
           // One ring around the pair, so the row and its chart read as a
@@ -1245,7 +1255,7 @@ function FlowVirtualList({
           // mark buttons opt back into the pointer (pointer-events-auto on
           // themselves). Hover and dismissal are the underlying rows' and the
           // document watcher's job now, not this element's.
-          className="resource-row-expand pointer-events-none fixed z-[60] overflow-hidden rounded bg-[#2a2d33] shadow-xl ring-1 ring-cyan-500/60"
+          className="resource-row-expand ui-zoom pointer-events-none fixed z-[60] overflow-hidden rounded bg-[#2a2d33] shadow-xl ring-1 ring-cyan-500/60"
         >
           <FlowResourceRow
             balance={expandedRow.balance}

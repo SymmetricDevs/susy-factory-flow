@@ -212,7 +212,7 @@ import {
 } from "@/lib/board-arrange";
 import {
   BOARD_CAMERA_DURATION,
-  BOARD_CAMERA_MAX_ZOOM,
+  boardCameraMaxZoom,
   BOARD_CAMERA_PADDING,
   BOARD_MAX_ZOOM,
   BOARD_MIN_ZOOM,
@@ -286,6 +286,7 @@ import { rateSuffixForKind, rateUnitSuffix, type RateUnit } from "@/lib/model/ra
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import { GT_TIER_COLORS } from "./tier-colors";
 import { useIsCompactViewport } from "@/lib/compact-view";
+import { getUiScale, useUiScale } from "@/lib/ui-scale";
 import { useToolbarFold } from "./toolbar-fold";
 import { browseHoveredPort } from "./port-browse";
 import { useBoardTouchGestures } from "./board-touch-gestures";
@@ -331,7 +332,6 @@ import {
   getPublishedNodeDetailLevel,
   getServerNodeDetailLevel,
   nodeDetailAttributeValue,
-  NODE_GLANCE_LEAVE_ZOOM,
   setNodeDetailLevel,
   subscribeNodeDetailLevel,
   type NodeDetailLevel,
@@ -2262,6 +2262,10 @@ export function FactoryFlow() {
   // A phone changes several things about the board: which cards can be dragged,
   // which toolbars are folded, where the centred banners sit.
   const isCompact = useIsCompactViewport();
+  // The board's zoom ceiling carries the interface size (ui-scale.ts); the
+  // prop must follow the setting live, so it is a hook rather than a getter.
+  const uiScale = useUiScale();
+  const boardMaxZoomValue = BOARD_MAX_ZOOM * uiScale;
   // The two top toolbars fold into their triggers when the BOARD is too
   // narrow for both rows, whatever the window: see toolbar-fold.ts.
   const toolbarFold = useToolbarFold(boardRef, isCompact);
@@ -2541,7 +2545,7 @@ export function FactoryFlow() {
       const zoom = zoomForRect(rect, usable, {
         padding: framing?.padding ?? BOARD_CAMERA_PADDING,
         minZoom: BOARD_MIN_ZOOM,
-        maxZoom: framing?.maxZoom ?? BOARD_CAMERA_MAX_ZOOM,
+        maxZoom: framing?.maxZoom ?? boardCameraMaxZoom(),
       });
       // setCenter puts a board point at the middle of the WHOLE viewport, so
       // landing the cards in the middle of the usable part means handing it a
@@ -3704,7 +3708,7 @@ export function FactoryFlow() {
             zoomForRect(coverRect, planSize, {
               padding: 0.22,
               minZoom: BOARD_MIN_ZOOM,
-              maxZoom: BOARD_CAMERA_MAX_ZOOM,
+              maxZoom: boardCameraMaxZoom(),
             }) * getBoardTimelapseCineZoom(),
           ),
         });
@@ -3759,7 +3763,7 @@ export function FactoryFlow() {
         const fit = zoomForRect(widened, planSize, {
           padding: 0.06,
           minZoom: BOARD_MIN_ZOOM,
-          maxZoom: BOARD_CAMERA_MAX_ZOOM,
+          maxZoom: boardCameraMaxZoom(),
         });
         if (fit < zoomRange.min) {
           break;
@@ -3788,7 +3792,7 @@ export function FactoryFlow() {
         ? zoomForRect(union, planSize, {
             padding: 0.34,
             minZoom: BOARD_MIN_ZOOM,
-            maxZoom: BOARD_CAMERA_MAX_ZOOM,
+            maxZoom: boardCameraMaxZoom(),
           }) *
           0.94 *
           (getBoardTimelapseCameraMode() === "cinematic" ? getBoardTimelapseCineZoom() : 1)
@@ -3799,7 +3803,7 @@ export function FactoryFlow() {
               zoomForRect(union, planSize, {
                 padding: BOARD_CAMERA_PADDING,
                 minZoom: BOARD_MIN_ZOOM,
-                maxZoom: BOARD_CAMERA_MAX_ZOOM,
+                maxZoom: boardCameraMaxZoom(),
               }),
             ),
           ),
@@ -6370,7 +6374,7 @@ export function FactoryFlow() {
         zoomOnScroll={false}
         // The same floor and ceiling a framing move is clamped to.
         minZoom={BOARD_MIN_ZOOM}
-        maxZoom={BOARD_MAX_ZOOM}
+        maxZoom={boardMaxZoomValue}
         // React Flow's default ("basic") raises every edge to at least the
         // z-index of its two endpoint nodes, so an edge can never be told to
         // pass BEHIND a node it connects to — which is why asking for -1 did
@@ -6486,7 +6490,7 @@ export function FactoryFlow() {
       {overwritePicking ? (
         <div
           className={[
-            "pointer-events-none absolute left-1/2 z-40 flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-2 border-2 border-amber-500 bg-[#2a1e07]/95 px-3 py-1.5 font-mono text-[12px] text-amber-200 shadow-[4px_4px_0_rgba(0,0,0,0.45)]",
+            "pointer-events-none absolute left-1/2 z-40 flex max-w-[calc(100*var(--ui-vw)-24px)] -translate-x-1/2 items-center gap-2 border-2 border-amber-500 bg-[#2a1e07]/95 px-3 py-1.5 font-mono text-[12px] text-amber-200 shadow-[4px_4px_0_rgba(0,0,0,0.45)]",
             // An instruction about what to do next, so on a phone it goes to the
             // bottom with the other actions. Above the compact bar if both are up.
             actionBarPosition(isCompact, false),
@@ -6522,7 +6526,7 @@ export function FactoryFlow() {
           // w-max: hung from the board's centre, the column's shrink-to-fit
           // width was capped at HALF the board, which folded every notice
           // onto three centred rows on a narrow board.
-          "nodrag pointer-events-none absolute bottom-3 left-1/2 z-30 flex w-max max-w-[94vw] -translate-x-1/2 flex-col-reverse items-center gap-2 transition-opacity",
+          "nodrag pointer-events-none absolute bottom-3 left-1/2 z-30 flex w-max max-w-[calc(94*var(--ui-vw))] -translate-x-1/2 flex-col-reverse items-center gap-2 transition-opacity",
           // The recipe search dims the whole board; these sit level with it
           // in the stack, so they mute themselves or they shout through it.
           recipeSearchOpen ? "opacity-20 grayscale [&_*]:pointer-events-none" : "",
@@ -6584,7 +6588,7 @@ const UnwiredNotice = memo(function UnwiredNotice({
   }
 
   return (
-    <div className="unwired-notice nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#c8d2e0] bg-[#2b3038] px-2 py-1.5 font-mono text-[12px] text-[#e8ecf2] shadow-[inset_2px_2px_0_#5d6877,inset_-2px_-2px_0_#171a1f,4px_4px_0_rgba(0,0,0,0.35)]">
+    <div className="unwired-notice nodrag pointer-events-auto flex max-w-[min(calc(92*var(--ui-vw)),560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#c8d2e0] bg-[#2b3038] px-2 py-1.5 font-mono text-[12px] text-[#e8ecf2] shadow-[inset_2px_2px_0_#5d6877,inset_-2px_-2px_0_#171a1f,4px_4px_0_rgba(0,0,0,0.35)]">
       <span className="shrink-0 font-bold tracking-[0.5px] text-[#eef2f8]">NOT WIRED UP</span>
       {/* One line, always. The card already explains itself; this only says
           how many are left and offers to take you to them. */}
@@ -6625,7 +6629,7 @@ const DeathSpiralNotice = memo(function DeathSpiralNotice({
   const story = describeDeathSpiral(spiral);
 
   return (
-    <div className="nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#c34c4c] bg-[#2b1c1c] px-2 py-1.5 font-mono text-[12px] text-[#f2e4e4] shadow-[inset_2px_2px_0_#7a3636,inset_-2px_-2px_0_#1a1010,4px_4px_0_rgba(0,0,0,0.35)]">
+    <div className="nodrag pointer-events-auto flex max-w-[min(calc(92*var(--ui-vw)),560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#c34c4c] bg-[#2b1c1c] px-2 py-1.5 font-mono text-[12px] text-[#f2e4e4] shadow-[inset_2px_2px_0_#7a3636,inset_-2px_-2px_0_#1a1010,4px_4px_0_rgba(0,0,0,0.35)]">
       <span className="shrink-0 font-bold tracking-[0.5px] text-[#ff9c9c]">DEAD LOOP</span>
       <span className="text-[#e6d2d2]">{story.short}</span>
       {spirals.length > 1 ? (
@@ -6689,7 +6693,7 @@ const ClogLockNotice = memo(function ClogLockNotice({
   const showAt = showIndex % showTargets.length;
 
   return (
-    <div className="nodrag pointer-events-auto flex max-w-[min(92vw,560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#4c7ec3] bg-[#1a222b] px-2 py-1.5 font-mono text-[12px] text-[#e4ecf2] shadow-[inset_2px_2px_0_#365d7a,inset_-2px_-2px_0_#10161a,4px_4px_0_rgba(0,0,0,0.35)]">
+    <div className="nodrag pointer-events-auto flex max-w-[min(calc(92*var(--ui-vw)),560px)] flex-wrap items-center justify-center gap-x-2 gap-y-1.5 border-2 border-[#4c7ec3] bg-[#1a222b] px-2 py-1.5 font-mono text-[12px] text-[#e4ecf2] shadow-[inset_2px_2px_0_#365d7a,inset_-2px_-2px_0_#10161a,4px_4px_0_rgba(0,0,0,0.35)]">
       <span className="shrink-0 font-bold tracking-[0.5px] text-[#9cc9ff]">CLOG LOCK</span>
       <span className="text-[#d2e0e6]">{story.short}</span>
       {locks.length > 1 ? (
@@ -7029,7 +7033,7 @@ function ToolGroup({
         // root it is positioned against — which folded is one 36px button, so
         // every row wrapped into a vertical column one button wide.
         // top-[3rem]: the plated trigger stands 44px tall now.
-        "absolute top-[3rem] flex w-max max-w-[calc(var(--board-width,100vw)-24px)] flex-wrap items-start gap-1 transition-[opacity,transform] duration-100",
+        "absolute top-[3rem] flex w-max max-w-[calc(var(--board-width,calc(100*var(--ui-vw)))-24px)] flex-wrap items-start gap-1 transition-[opacity,transform] duration-100",
         side === "left" ? "left-0 justify-start" : "right-0 justify-end",
         isOpen ? "translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0",
       ].join(" ")}
@@ -7252,7 +7256,7 @@ const SolveModeNotice = memo(function SolveModeNotice({
     // One line on a desktop: label, sentence, button. Wider and a point
     // larger than its siblings so the button never folds onto a centred
     // second row; only a phone is allowed to wrap it.
-    <div className={`nodrag pointer-events-auto flex max-w-[min(94vw,760px)] flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-2 px-3 py-2 font-mono text-[13px] ${poolMode
+    <div className={`nodrag pointer-events-auto flex max-w-[min(calc(94*var(--ui-vw)),760px)] flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-2 px-3 py-2 font-mono text-[13px] ${poolMode
       ? "border-[#6f9cff] bg-[#1a2233] text-[#d3dff4] shadow-[inset_2px_2px_0_#3e567d,inset_-2px_-2px_0_#101622,4px_4px_0_rgba(0,0,0,0.35)]"
       : "border-[#9a6fd1] bg-[#241a2e] text-[#e0d3ec] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]"}`}>
       <span className={`shrink-0 font-bold tracking-[0.5px] ${poolMode ? "text-[#adc7ff]" : "text-[#d9b8ff]"}`}>
@@ -7377,8 +7381,9 @@ const ModeKeys = memo(function ModeKeys() {
   const [dragX, setDragX] = useState<number | undefined>(undefined);
   const xToIndex = (x: number) =>
     Math.max(0, Math.min(MODE_KEYS.length - 1, Math.floor(x / MODE_STEP)));
+  // Real px -> shell px: MODE_STEP is the keys' layout pitch.
   const localX = (event: ReactPointerEvent<HTMLDivElement>) =>
-    event.clientX - (rowRef.current?.getBoundingClientRect().left ?? 0) - 2;
+    (event.clientX - (rowRef.current?.getBoundingClientRect().left ?? 0)) / getUiScale() - 2;
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !rowRef.current) {
       return;
@@ -7449,7 +7454,7 @@ const ModeKeys = memo(function ModeKeys() {
         <MinecraftTooltip
           key={key}
           content={
-            <div className="w-[340px] max-w-[calc(100vw-44px)] space-y-3 text-sm leading-5 text-fg-subtle">
+            <div className="w-[340px] max-w-[calc(100*var(--ui-vw)-44px)] space-y-3 text-sm leading-5 text-fg-subtle">
               <div className={`text-base font-semibold leading-6 ${ink}`}>{label}</div>
               <p>
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-muted">Setup</span>
@@ -8975,7 +8980,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
         <Eye className="h-4 w-4" />
       </button>
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-30 flex max-h-[70vh] w-[300px] max-w-[calc(100vw-24px)] flex-col gap-1 overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+        <div className="absolute right-0 top-[calc(100%+6px)] z-30 flex max-h-[calc(70*var(--ui-vh))] w-[300px] max-w-[calc(100*var(--ui-vw)-24px)] flex-col gap-1 overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
           {/* The background's paper... */}
           <div className="grid grid-cols-2 gap-1">
             {CANVAS_THEMES.map((theme) => (

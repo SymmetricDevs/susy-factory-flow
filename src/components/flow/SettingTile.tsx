@@ -5,6 +5,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import type { MachineConfigTierControl } from "@/lib/model/recipe-rules";
 import type { MachineConfigTierOption, ResourceAmount } from "@/lib/model/types";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
@@ -265,15 +266,19 @@ export function SettingListMenu({
   useDropdownDismiss(true, { refs: [rootRef], onClose, fade: true });
   if (typeof document === "undefined") return null;
   const width = 240;
-  const left = Math.max(8, Math.min(anchor.left + anchor.width / 2 - width / 2, window.innerWidth - width - 8));
-  const below = anchor.bottom + 4;
-  const above = window.innerHeight - anchor.top + 4;
-  const fitsBelow = window.innerHeight - below >= Math.min(320, rows.length * 28 + 12 + (searchable ? 36 : 0));
+  // The anchor rect and the window are real px; this box is zoomed (ui-zoom),
+  // so its fixed offsets are shell px: real px are divided by the scale.
+  const scale = getUiScale();
+  const shell = (px: number) => px / scale;
+  const left = Math.max(8, Math.min(shell(anchor.left + anchor.width / 2) - width / 2, shell(window.innerWidth) - width - 8));
+  const below = shell(anchor.bottom) + 4;
+  const above = shell(window.innerHeight - anchor.top) + 4;
+  const fitsBelow = shell(window.innerHeight) - below >= Math.min(320, rows.length * 28 + 12 + (searchable ? 36 : 0));
   return createPortal(
     <div
       ref={rootRef}
       role="listbox"
-      className="nodrag nowheel fixed z-[300] flex max-h-[360px] flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
+      className="ui-zoom nodrag nowheel fixed z-[300] flex max-h-[360px] flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
       style={{ left, width, ...(fitsBelow ? { top: below } : { bottom: above }) }}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}

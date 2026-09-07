@@ -474,7 +474,8 @@ function AnnotationStylePanel({
       style={{ zIndex: 30 }}
     >
       <div
-        className="nodrag relative ml-2 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]"
+        // ui-zoom: the toolbar portal lives inside .react-flow, which is unzoomed.
+        className="ui-zoom nodrag relative ml-2 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]"
         onPointerDown={stop}
         onDoubleClick={stop}
       >

@@ -64,7 +64,7 @@ export function AppMenu({
           // `text-sm` up here because buttons inherit their font (the global
           // reset outranks text-* on the control): without it the sheet's
           // button rows render a size up from its link rows.
-          className="absolute right-2 top-full z-[90] mt-1 flex w-[min(320px,calc(100vw-16px))] flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
+          className="absolute right-2 top-full z-[90] mt-1 flex w-[min(320px,calc(100*var(--ui-vw)-16px))] flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
         >
           {/* Pinned with the header's pack picker: see SHOW_PACK_PICKER. */}
           {SHOW_PACK_PICKER ? (

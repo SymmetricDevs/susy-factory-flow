@@ -653,6 +653,46 @@ Working notes for future agents on GTNH Factory Flow.
   so Ctrl+G and the button agree. Boards inside boards is a real feature
   and a separate decision; it must not happen by accident from a marquee.
 
+## Interface Size (130 Is The New 100%)
+
+- The planner renders a third larger than it used to (Jack, 2026-09-07:
+  "130 is the new 100%"). `src/lib/ui-scale.ts` owns it: a Settings
+  stepper (Size, minus/plus, 60-200% in tens, Reset) stores a PERCENT of
+  the default (`gtnh-factory-flow.ui-scale.v1`), and the factor is
+  percent x `UI_SCALE_BASE` (1.3) - or x1 on a viewport that is compact
+  at 1:1, so phones keep their size. The boot script in layout.tsx
+  (`uiScaleBootScript`, ui-scale-boot.ts, hook-free so the server layout
+  may import it) stamps `--ui-scale` / `--ui-scale-inverse` and the
+  `data-compact` / `data-snug` attributes before first paint;
+  `UiScaleRestore` keeps them live.
+- HOW: CSS `zoom` on the app shell (`.ui-scale-shell`, the FactoryPlannerApp
+  root), and the BOARD UNZOOMS ITSELF (`.ui-scale-shell .react-flow` at the
+  inverse) because React Flow measures cards and the pointer in two pixel
+  spaces once zoom is involved (probed 2026-09-07: fit framed a plan at a
+  third of its size, wheel zoom drifted, drags ran fast). The board carries
+  the factor through its camera instead: `boardMaxZoom()` /
+  `boardCameraMaxZoom()` in board-camera.ts, the glance thresholds in
+  node-detail.ts compare `zoom / boardZoomScale()`, the timelapse range
+  scales at read time. `BOARD_MIN_ZOOM` is not scaled. Never CSS-zoom the
+  board.
+- TWO PIXEL SPACES, and every measurement must say which: REAL px are
+  `clientX`, `getBoundingClientRect`, `window.innerWidth`, anything inside
+  `.react-flow`, and anything portaled to `document.body` (outside the
+  shell); SHELL px are `offsetWidth`/`clientWidth`/`scrollLeft`/style
+  lengths/ResizeObserver rects/CSS lengths inside the shell. The ratio is
+  `getUiScale()`. A portal to the body keeps its fixed positioning box in
+  real px and wears `.ui-zoom` on its VISUAL box. Pointer deltas applied to
+  shell state divide by the scale; containment tests need nothing.
+- VIEWPORT UNITS are not divided by zoom, so `100vh` inside the shell is
+  taller than the window: use `--ui-vh` / `--ui-vw` / `--ui-dvh`
+  (`max-h-[calc(88*var(--ui-vh))]`), never a bare vh/vw in the shell or in
+  a `.ui-zoom` box.
+- The `compact:` and `snug:` Tailwind variants key on the html attributes,
+  NOT on media queries: the breakpoints (viewport-breakpoints.ts, 900 /
+  560 / 1280) are shell px, so compact-view.ts builds its media queries
+  from the live factor. `getUiScale()` is 1 wherever matchMedia is missing
+  (server, jsdom), so tests see an unzoomed world.
+
 ## Compact Mode (Phones And Small Windows)
 
 - `src/lib/compact-view.ts` owns the switch: `useIsCompactViewport()` /

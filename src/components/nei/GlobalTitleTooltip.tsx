@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { isTouchPointer } from "@/lib/pointer-kind";
 import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
@@ -94,10 +95,14 @@ export function GlobalTitleTooltip() {
       const lines = text.split("\n");
       const panelWidth = panelRef.current?.offsetWidth ?? 260;
       const panelHeight = panelRef.current?.offsetHeight ?? 60;
+      // The panel is a body portal wearing .ui-zoom, so its left/top and its
+      // offset size are shell pixels: the pointer and the window (real
+      // pixels) are brought across by the interface scale (ui-scale.ts).
+      const scale = getUiScale();
       pendingRef.current = {
         lines,
-        x: Math.max(4, Math.min(clientX + 12, window.innerWidth - panelWidth - 8)),
-        y: Math.max(4, Math.min(clientY + 12, window.innerHeight - panelHeight - 8)),
+        x: Math.max(4, Math.min(clientX / scale + 12, window.innerWidth / scale - panelWidth - 8)),
+        y: Math.max(4, Math.min(clientY / scale + 12, window.innerHeight / scale - panelHeight - 8)),
       };
       if (frameRef.current === undefined) {
         frameRef.current = window.requestAnimationFrame(flush);
@@ -164,7 +169,7 @@ export function GlobalTitleTooltip() {
     <div
       ref={panelRef}
       data-minecraft-tooltip="true"
-      className={`${TOOLTIP_PANEL_CLASS} max-w-[340px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
+      className={`${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[340px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
       style={{ left: tip.x, top: tip.y }}
     >
       {tip.lines.map((line, index) => (

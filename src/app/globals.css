@@ -6,42 +6,62 @@
  * share the screen with both side columns. The height half catches a phone held
  * sideways, which is wider than the width test but only ~430px tall.
  *
- * The same thresholds as COMPACT_MAX_WIDTH and COMPACT_MAX_HEIGHT in
- * `src/lib/compact-view.ts`, which owns the behavioural half of the switch
- * (drawers instead of columns, one menu instead of a top bar, folded toolbars).
- * This variant is for the style-only half: heights, minimum heights, tap
- * targets, font sizes. Change one, change the other.
+ * Keyed on the `data-compact` attribute that `src/lib/compact-view.ts` stamps
+ * on <html> (and the boot script in layout.tsx stamps before first paint),
+ * not on a media query of its own: the numbers are shell pixels and the shell
+ * is zoomed by the interface size (`--ui-scale`), so the query has to be built
+ * from the live factor, which CSS cannot do. compact-view.ts owns the numbers
+ * (COMPACT_MAX_WIDTH, COMPACT_MAX_HEIGHT) and the behavioural half of the
+ * switch (drawers instead of columns, one menu instead of a top bar, folded
+ * toolbars). This variant is for the style-only half: heights, minimum
+ * heights, tap targets, font sizes.
  */
-/* Two blocks rather than one comma-separated query: the comma form makes
-   Tailwind emit a rule with an empty selector, and `or` inside one media query
-   asks more of a browser than two plain ones do. */
-@custom-variant compact {
-  @media (max-width: 899.98px) {
-    & {
-      @slot;
-    }
-  }
-  @media (max-height: 559.98px) {
-    & {
-      @slot;
-    }
-  }
-}
+@custom-variant compact (&:where(html[data-compact], html[data-compact] *));
 
 /*
  * `snug:` — wide enough for the full top bar, not wide enough for every button
- * to keep its word. Between the compact cutoff and ~1280px the bar's labelled
- * buttons (Support, What's new, Report Bug) drop to their icons; the bar used
- * to overflow here, and an overflowing bar is what makes a phone browser widen
- * its layout viewport and shrink the whole page to fit (see AppMenu).
+ * to keep its word. Between the compact cutoff and SNUG_MAX_WIDTH the bar's
+ * labelled buttons (Support, What's new, Report Bug) drop to their icons; the
+ * bar used to overflow here, and an overflowing bar is what makes a phone
+ * browser widen its layout viewport and shrink the whole page to fit (see
+ * AppMenu). Same attribute scheme as `compact:`.
  */
-@custom-variant snug {
-  @media (max-width: 1279.98px) {
-    & {
-      @slot;
-    }
-  }
+@custom-variant snug (&:where(html[data-snug], html[data-snug] *));
+
+/*
+ * The interface size (src/lib/ui-scale.ts). The shell is drawn at
+ * `--ui-scale` with CSS zoom; the board unzooms itself back to real pixels
+ * because React Flow cannot measure under zoom, and scales through its own
+ * camera instead. Viewport units are not divided by zoom, so inside the shell
+ * `100vh` is taller than the window: the `--ui-vh` family is the unit to use
+ * there. The boot script stamps the live values on <html>; these are the
+ * server-render defaults.
+ */
+:root {
+  --ui-scale: 1.3;
+  --ui-scale-inverse: 0.76923;
+  --ui-vh: calc(1vh * var(--ui-scale-inverse));
+  --ui-vw: calc(1vw * var(--ui-scale-inverse));
+  --ui-dvh: calc(1dvh * var(--ui-scale-inverse));
 }
+
+.ui-scale-shell {
+  zoom: var(--ui-scale);
+}
+
+/* A portal to the body sits outside the shell: its positioning box stays in
+   real pixels and its visual box wears this. */
+.ui-zoom {
+  zoom: var(--ui-scale);
+}
+
+/* The board, back at 1:1. Nested zooms multiply, so this cancels the shell's;
+   the element is still sized by its zoomed parent, so it fills the same space
+   and simply has more pixels in it. */
+.ui-scale-shell .react-flow {
+  zoom: var(--ui-scale-inverse);
+}
+
 
 
 /*

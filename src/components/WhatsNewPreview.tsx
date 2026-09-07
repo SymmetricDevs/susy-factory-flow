@@ -59,7 +59,7 @@ export function WhatsNewPreview({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label="Preview the what's new popup"
-        className="flex max-h-[80vh] w-full max-w-md flex-col rounded-lg border border-line-strong bg-surface shadow-2xl"
+        className="flex max-h-[calc(80*var(--ui-vh))] w-full max-w-md flex-col rounded-lg border border-line-strong bg-surface shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-line p-4">

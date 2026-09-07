@@ -48,7 +48,11 @@ export function cells(n: number): number {
 /* ---------------------------------------------------------------------- */
 
 /** Every recipe card is this wide. 18 cells. */
-export const RECIPE_NODE_WIDTH = cells(18); // 360
+// Four cells wider since 2026-09-06: the machine picture sits BETWEEN the
+// two rails now (where the arrow was) instead of in a band above them, and
+// the middle column needs 96px beside a 140px input rail and a 176px output
+// rail to show a structure render at a readable size.
+export const RECIPE_NODE_WIDTH = cells(22); // 440
 
 /** Card padding either side of the rails (inside the 2px frame). */
 export const RECIPE_NODE_PAD_X = 8;

@@ -1658,17 +1658,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           ) : null}
         </div>
         </div>
-        {/* The picture window sits under the title bar, over the ports:
-            the multiblock render (or the machine item), full card width. */}
-        {!calmMode && hasPowerPicture ? (
-          <PowerStructureWindow
-            art={powerArt}
-            icon={powerMachineIcon ?? previewMachineIcon}
-            tint={isCropFarmNode ? "#4f8c33" : powerInfo ? undefined : "#8a8f99"}
-            // Which handler and tier the art was picked for, for probes.
-            pickedFor={`${previewHandler.id}@${pictureTier}:${machineIconEntries.get(previewHandler.id)?.tiers?.length ?? 0}`}
-          />
-        ) : null}
         {/* The card body. No paint of its own: the window behind it is
             already the ramp's face, painted or not. */}
         <div>
@@ -1715,8 +1704,25 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 pending={pendingResourceConnection}
               />
             )}
-            {hasInputSideView && hasOutputSideView ? (
-              <div className="flex w-4 shrink-0 items-center justify-center self-stretch text-[15px] font-black text-[var(--mc-ink-muted)]">
+            {/* THE PICTURE sits between the rails (2026-09-06), where the
+                arrow was: the multiblock render or the machine item, on a
+                recessed window that stretches to the rails' height. Inputs
+                on its left, outputs on its right, so the card reads as the
+                machine with things going in and coming out - no arrow
+                needed. Calm mode keeps the bare arrow. */}
+            {!calmMode && hasPowerPicture ? (
+              <div className="flex min-h-[120px] min-w-0 flex-1 items-stretch self-stretch">
+                <PowerStructureWindow
+                  art={powerArt}
+                  icon={powerMachineIcon ?? previewMachineIcon}
+                  tint={isCropFarmNode ? "#4f8c33" : powerInfo ? undefined : "#8a8f99"}
+                  inline
+                  // Which handler and tier the art was picked for, for probes.
+                  pickedFor={`${previewHandler.id}@${pictureTier}:${machineIconEntries.get(previewHandler.id)?.tiers?.length ?? 0}`}
+                />
+              </div>
+            ) : hasInputSideView && hasOutputSideView ? (
+              <div className="flex min-w-0 flex-1 items-center justify-center self-stretch text-[15px] font-black text-[var(--mc-ink-muted)]">
                 →
               </div>
             ) : null}
@@ -2730,6 +2736,7 @@ function PowerStructureWindow({
   icon,
   tint = "#d99a2b",
   pickedFor,
+  inline = false,
 }: {
   art?: string;
   icon?: { id: string; displayName?: string; iconPath?: string; dominantColor?: string };
@@ -2737,15 +2744,23 @@ function PowerStructureWindow({
   tint?: string;
   /** Handler id, tier and variant count the art was picked for (probes read it). */
   pickedFor?: string;
+  /** Between the rails: fill the column the card gives it, no band height. */
+  inline?: boolean;
 }) {
   if (!art && !icon?.iconPath) {
     return null;
   }
+  // A deeper drop shadow than the glance art's (Jack, 2026-09-06): the
+  // picture sits between two busy rails now and needs to lift off them.
+  const shadow = "drop-shadow-[5px_7px_6px_rgba(0,0,0,0.6)]";
   return (
     <div
       data-machine-picture={art ?? icon?.id}
       data-picked-for={pickedFor}
-      className="box-border mb-2 flex h-[112px] w-full items-center justify-center overflow-hidden border-2 border-[var(--mc-47)] p-1 shadow-[inset_2px_2px_0_rgba(0,0,0,0.3),inset_-2px_-2px_0_rgba(255,255,255,0.04)]"
+      className={[
+        "box-border flex items-center justify-center overflow-hidden border-2 border-[var(--mc-47)] p-1 shadow-[inset_2px_2px_0_rgba(0,0,0,0.3),inset_-2px_-2px_0_rgba(255,255,255,0.04)]",
+        inline ? "h-full w-full" : "mb-2 h-[112px] w-full",
+      ].join(" ")}
       style={{ backgroundColor: `color-mix(in srgb, var(--mc-33) 92%, ${tint} 8%)` }}
     >
       {art ? (
@@ -2754,7 +2769,7 @@ function PowerStructureWindow({
           src={art}
           alt=""
           draggable={false}
-          className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
+          className={`max-h-full max-w-full object-contain [image-rendering:pixelated] ${shadow}`}
         />
       ) : (
         <ResourceIcon
@@ -2772,8 +2787,8 @@ function PowerStructureWindow({
           showConsumedState={false}
           // Same zoom-and-crop ratio the picker's banner uses, scaled to
           // this window's height: the render's padding goes, its face stays.
-          iconPixelSize={170}
-          className="!h-[100px] !w-[100px]"
+          iconPixelSize={inline ? 150 : 170}
+          className={`${inline ? "!h-[88px] !w-[88px]" : "!h-[100px] !w-[100px]"} ${shadow}`}
         />
       )}
     </div>

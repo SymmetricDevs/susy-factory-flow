@@ -10234,24 +10234,20 @@ function ResourceConnectionLine({
   // when it will do nothing (this port's drawer already exists). Over a
   // refusing card it goes red, agreeing with the card's own wash.
   const overSolidCard = !snap && isPointOverSolidCard(toX, toY);
-  // POOL MODE: nothing connects, so there is no pipe to promise one. A drag
-  // whose release will make a product drawer draws NO line at all - the
-  // ghost drawer riding the pointer is the whole story - and one whose
-  // release will do nothing draws the red dashed line, so the reason card
-  // under it reads as "I see what you are trying, and here is why not".
-  const poolMode = useFactoryStore.getState().project.poolMode === true;
-  if (poolMode && voidDropWillSpawn) {
+  // POOL MODE: nothing connects, so there is never a pipe - a line is the
+  // picture of a wire, and neither thing a drag can do here is one. The
+  // ghost drawer riding the pointer says a release makes a product; the
+  // reason card in its place says why a release makes nothing.
+  if (useFactoryStore.getState().project.poolMode) {
     return <g className="react-flow__connection" />;
   }
-  const verdict = poolMode
-    ? "dead"
-    : snap
-      ? "connect"
-      : connectionStatus === "invalid" || overSolidCard
-        ? "refuse"
-        : voidDropWillSpawn
-          ? "spawn"
-          : "dead";
+  const verdict = snap
+    ? "connect"
+    : connectionStatus === "invalid" || overSolidCard
+      ? "refuse"
+      : voidDropWillSpawn
+        ? "spawn"
+        : "dead";
   // Snapped is GREEN and solid - "this will connect" - with white marching
   // dots running toward the caught slot; a spawnable void is green dashed;
   // refusals and dead voids are red. A snap whose release would DELETE the

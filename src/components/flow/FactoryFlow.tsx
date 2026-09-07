@@ -7474,6 +7474,19 @@ const ModeKeys = memo(function ModeKeys() {
                 </ul>
               )}
               {note && <p className="border-t border-line pt-2.5 text-fg-muted">{note}</p>}
+              {/* The mode's picture, last and centred: the same flow drawn
+                  three ways, so the difference between the modes is seen
+                  before it is read. Exported at 640px wide for the 2x
+                  screens the tooltip is mostly read on. */}
+              <div className="border-t border-line pt-3">
+                <img
+                  src={`/mode-art/${key}.webp`}
+                  alt=""
+                  width={640}
+                  draggable={false}
+                  className="mx-auto block w-[300px] max-w-full select-none"
+                />
+              </div>
             </div>
           }
         >

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
+import { useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -26,26 +28,7 @@ export function LibraryMenu({
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsideClick, true);
-    document.addEventListener("keydown", closeOnEscape);
-    window.addEventListener("resize", onClose);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsideClick, true);
-      document.removeEventListener("keydown", closeOnEscape);
-      window.removeEventListener("resize", onClose);
-    };
-  }, [onClose]);
+  useDropdownDismiss(true, { refs: [menuRef], onClose, fade: true, ignoreCameraMove: true });
 
   if (typeof document === "undefined") {
     return null;

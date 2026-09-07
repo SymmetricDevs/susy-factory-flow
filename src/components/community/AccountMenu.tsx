@@ -1,7 +1,9 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { ChevronDown, Factory, LogOut, ShieldCheck, User } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { openLibrary } from "@/lib/library/library-tab";
 import { AuthForm, useCommunityUser } from "./auth";
 
@@ -15,22 +17,7 @@ export function AccountMenu() {
   const [isAuthOpen, setAuthOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!isMenuOpen) {
-      return;
-    }
-
-    const close = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-
-    // Capture phase: the board's pan handler stops a press on the canvas before
-    // it reaches a bubble-phase listener, which left this menu open over it.
-    window.addEventListener("pointerdown", close, true);
-    return () => window.removeEventListener("pointerdown", close, true);
-  }, [isMenuOpen]);
+  useDropdownDismiss(isMenuOpen, { refs: [menuRef], onClose: () => setMenuOpen(false), fade: true });
 
   if (isLoading) {
     return <div className="h-7 w-20 animate-pulse rounded bg-surface-sunken" aria-hidden />;

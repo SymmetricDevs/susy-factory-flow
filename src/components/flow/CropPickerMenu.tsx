@@ -1,5 +1,7 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { LoaderCircle } from "lucide-react";
@@ -109,24 +111,16 @@ export function CropPickerMenu({
     });
   }, [crops, search]);
 
-  // Click-away closes the picker: capture phase, because the board's own
-  // handlers stop pointer events long before they would bubble up here.
+  // The one dropdown rule (use-dropdown-dismiss.ts). The sprout key manages
+  // its own toggle, so a press on it is "inside": closing here too would make
+  // its click immediately reopen the panel.
   const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const root = rootRef.current;
-      // The sprout key manages its own toggle; closing here too would make
-      // its click immediately reopen the panel.
-      if ((event.target as Element | null)?.closest?.("[data-crop-picker-toggle]")) {
-        return;
-      }
-      if (root && event.target instanceof Node && !root.contains(event.target)) {
-        onClose();
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [onClose]);
+  useDropdownDismiss(true, {
+    refs: [rootRef],
+    onClose,
+    insideSelector: "[data-crop-picker-toggle]",
+    fade: true,
+  });
 
   // The menu PORTALS to the body: inside the card it lived in the node
   // layer's stacking context, under the marching-dash canvas and every

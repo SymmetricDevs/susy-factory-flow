@@ -1,5 +1,7 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { Compass, Library } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -769,37 +771,9 @@ function DesignMenu({
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    // Capture phase, and pointerdown rather than mousedown: the board's pan
-    // handler stops the event dead on the way up (d3-zoom calls
-    // stopImmediatePropagation), so a bubble-phase listener here never heard a
-    // press on the canvas and the menu just sat there. Pointer events also
-    // cover a finger without waiting for the synthesized mouse press.
-    document.addEventListener("pointerdown", closeOnOutsideClick, true);
-    document.addEventListener("keydown", closeOnEscape);
-    // A fixed menu does not travel with the strip, so it is dismissed rather
-    // than left floating somewhere it no longer points at.
-    window.addEventListener("scroll", onClose, true);
-    window.addEventListener("resize", onClose);
-
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsideClick, true);
-      document.removeEventListener("keydown", closeOnEscape);
-      window.removeEventListener("scroll", onClose, true);
-      window.removeEventListener("resize", onClose);
-    };
-  }, [onClose]);
+  // The one dropdown rule (use-dropdown-dismiss.ts): press outside, Escape,
+  // wheel, scroll, resize, a board pan, or the mouse drifting away.
+  useDropdownDismiss(true, { refs: [menuRef], onClose, fade: true });
 
   // The menu only ever opens from a click, so this is really just a guard for
   // any render that happens without a DOM.

@@ -1,5 +1,9 @@
 "use client";
 
+import { emitBoardCameraMove } from "@/lib/board-camera-signal";
+
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -4600,6 +4604,8 @@ export function FactoryFlow() {
     // something you do while reading one node's neighbourhood.
     clearHopMap();
     boardRef.current?.classList.add("factory-flow-board--moving");
+    // Every dropdown over the board closes when the camera moves.
+    emitBoardCameraMove();
   }, []);
 
   /**
@@ -6961,29 +6967,9 @@ function useFoldoutDismiss(
   ref: React.RefObject<HTMLDivElement | null>,
   close: () => void,
 ) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointer = (event: PointerEvent) => {
-      // `globalThis.Node`, not `Node`: React Flow's own Node type is imported
-      // into this file and would shadow the DOM one.
-      if (!ref.current?.contains(event.target as globalThis.Node)) {
-        close();
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        close();
-      }
-    };
-    window.addEventListener("pointerdown", onPointer, true);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("pointerdown", onPointer, true);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, ref, close]);
+  // The one dropdown rule (use-dropdown-dismiss.ts): press outside, Escape,
+  // wheel, scroll, resize, a board pan, or the mouse drifting away.
+  useDropdownDismiss(open, { refs: [ref], onClose: close, fade: true });
 }
 
 /**

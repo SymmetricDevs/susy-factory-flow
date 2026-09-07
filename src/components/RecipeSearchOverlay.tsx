@@ -1,5 +1,7 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import {
   ArrowLeftRight,
   ChevronDown,
@@ -400,26 +402,14 @@ export function RecipeSearchOverlay({
   // inside the menu itself are told apart by containment, not by the
   // menu stopping propagation.
   const menuRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!chipMenu && !cardMenu) {
-      return;
-    }
-    const dismiss = (event: Event) => {
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) {
-        return;
-      }
+  useDropdownDismiss(Boolean(chipMenu || cardMenu), {
+    refs: [menuRef],
+    onClose: () => {
       setChipMenu(undefined);
       setCardMenu(undefined);
-    };
-    window.addEventListener("pointerdown", dismiss, true);
-    window.addEventListener("wheel", dismiss, true);
-    window.addEventListener("scroll", dismiss, true);
-    return () => {
-      window.removeEventListener("pointerdown", dismiss, true);
-      window.removeEventListener("wheel", dismiss, true);
-      window.removeEventListener("scroll", dismiss, true);
-    };
-  }, [cardMenu, chipMenu]);
+    },
+    fade: true,
+  });
 
   const openCardMenu = useCallback((event: ReactMouseEvent, menu: Omit<CardMenu, "x" | "y">) => {
     event.preventDefault();

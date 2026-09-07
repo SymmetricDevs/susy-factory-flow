@@ -1,7 +1,9 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { ChevronDown, Minus, Plus, Search } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { MachineConfigTierControl } from "@/lib/model/recipe-rules";
 import type { MachineConfigTierOption, ResourceAmount } from "@/lib/model/types";
@@ -256,20 +258,7 @@ export function SettingListMenu({
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   const shown = needle ? rows.filter((row) => row.label.toLowerCase().includes(needle)) : rows;
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [onClose]);
+  useDropdownDismiss(true, { refs: [rootRef], onClose, fade: true });
   if (typeof document === "undefined") return null;
   const width = 240;
   const left = Math.max(8, Math.min(anchor.left + anchor.width / 2 - width / 2, window.innerWidth - width - 8));

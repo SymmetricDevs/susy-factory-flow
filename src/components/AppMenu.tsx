@@ -1,7 +1,9 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { Menu, Settings, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AccountMenu } from "./community/AccountMenu";
 import { SHOW_PACK_PICKER } from "./AppHeader";
 import { AppIdentity } from "./AppIdentity";
@@ -40,30 +42,7 @@ export function AppMenu({
   const sheetRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const closeOnOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!sheetRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
-        setOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    window.addEventListener("pointerdown", closeOnOutside);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("pointerdown", closeOnOutside);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isOpen]);
+  useDropdownDismiss(isOpen, { refs: [sheetRef, triggerRef], onClose: () => setOpen(false) });
 
   return (
     <>

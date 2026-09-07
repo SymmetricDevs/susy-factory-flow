@@ -1,5 +1,7 @@
 "use client";
 
+import { emitBoardCameraMove } from "@/lib/board-camera-signal";
+
 import { useEffect } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
 import { isEditableKeyboardTarget } from "./keyboard";
@@ -237,6 +239,9 @@ export function useBoardCameraControls({
       if (nextX !== current.x || nextY !== current.y || nextZoom !== current.zoom) {
         lastWritten = { x: nextX, y: nextY, zoom: nextZoom };
         void instance.setViewport(lastWritten);
+        // The wheel and WASD write the camera themselves, so the dropdowns
+        // hear about it from here rather than from React Flow.
+        emitBoardCameraMove();
       }
 
       if (anyMotionLeft()) {

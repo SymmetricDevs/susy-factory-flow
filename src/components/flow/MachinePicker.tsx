@@ -1,5 +1,7 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FactoryNode, MachineHandler, Recipe } from "@/lib/model/types";
@@ -284,25 +286,15 @@ export function MachineMenu({
     [handlers, node, recipe],
   );
 
-  // Anywhere outside, or Escape, closes it. Capture phase so canvas handlers
-  // that stop propagation cannot swallow the click; the chevron manages its
-  // own toggle, so a click on it is left alone.
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Element | null;
-      if (target?.closest?.("[data-machine-menu-toggle]")) return;
-      if (!rootRef.current?.contains(event.target as Node)) onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [onClose]);
+  // The one dropdown rule (use-dropdown-dismiss.ts): press outside, Escape,
+  // wheel, scroll, a board pan, or the mouse drifting away. The name bar
+  // manages its own toggle, so a press on it is left alone.
+  useDropdownDismiss(true, {
+    refs: [rootRef],
+    onClose,
+    insideSelector: "[data-machine-menu-toggle]",
+    fade: true,
+  });
 
   const menu = anchorAt ? (
     <div

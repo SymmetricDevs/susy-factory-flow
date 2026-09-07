@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
+import { useLayoutEffect, useRef, useState } from "react";
 import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
 import type { RecipeQueryRole } from "@/lib/datasets/recipe-query";
 import { ResourceIndexPane, type IndexedResource } from "./ResourceIndexPane";
@@ -48,27 +50,9 @@ export function ItemPickerPopover({
     }
   }, [placement]);
 
-  // A click elsewhere closes the picker.
-  useEffect(() => {
-    const onPointerDown = (event: globalThis.PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    return () => window.removeEventListener("pointerdown", onPointerDown, true);
-  }, [onClose]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  // The one dropdown rule (use-dropdown-dismiss.ts); its Escape is consumed
+  // so the search behind the picker stays open.
+  useDropdownDismiss(true, { refs: [rootRef], onClose, fade: true });
 
   const pick = (resource: IndexedResource) => {
     onPick(

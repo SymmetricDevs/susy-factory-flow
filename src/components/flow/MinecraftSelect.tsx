@@ -1,5 +1,7 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
@@ -53,16 +55,9 @@ export function MinecraftSelect({
   useEffect(() => {
     if (!isOpen) {
       setFilter("");
-      return;
     }
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [isOpen]);
+  useDropdownDismiss(isOpen, { refs: [rootRef], onClose: () => setOpen(false), fade: true });
 
   useEffect(() => {
     if (isOpen) {

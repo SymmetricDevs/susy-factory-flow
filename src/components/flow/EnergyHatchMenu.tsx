@@ -1,5 +1,7 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Zap } from "lucide-react";
@@ -86,37 +88,15 @@ function MenuShell({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    // The anchor button is "inside": it runs its own toggle, and closing here
-    // first would make that toggle reopen the menu instead.
-    const outside = (target: EventTarget | null) =>
-      panelRef.current &&
-      !panelRef.current.contains(target as Node) &&
-      !(target instanceof Element && target.closest("[data-hatch-menu-anchor]"));
-    const onPointer = (event: PointerEvent) => {
-      if (outside(event.target)) {
-        onClose();
-      }
-    };
-    const onWheel = (event: WheelEvent) => {
-      if (outside(event.target)) {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointer, true);
-    document.addEventListener("wheel", onWheel, true);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer, true);
-      document.removeEventListener("wheel", onWheel, true);
-    };
-  }, [onClose]);
+  // The one dropdown rule (use-dropdown-dismiss.ts). The anchor button is
+  // "inside": it runs its own toggle, and closing here first would make that
+  // toggle reopen the menu instead.
+  useDropdownDismiss(true, {
+    refs: [panelRef],
+    onClose,
+    insideSelector: "[data-hatch-menu-anchor]",
+    fade: true,
+  });
 
   // Prefer opening UPWARD (the card stays visible for the hover-preview),
   // but flip downward when the chip is too close to the top of the screen -

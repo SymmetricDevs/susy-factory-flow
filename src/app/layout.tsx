@@ -89,7 +89,7 @@ const openDyslexic = localFont({
 
 /*
  * Restamps the saved font choice before anything paints, so a reload never
- * flashes Monocraft at someone who switched away from it. Unknown or absent
+ * flashes the default font at someone who switched away from it. Unknown or absent
  * values simply match no CSS rule and land on the default; setAppFont owns
  * the real validation.
  */

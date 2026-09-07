@@ -78,6 +78,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "A chevron by the card's name opens the machine list, which also offers other recipes that take and make the same items, every card wears its machine's picture, and tooltips state rates, requirements and the gestures on offer.",
       "A shorter top bar: share, import and export sit under one key, the version chip opens the release notes, and the generator, custom rate and crop farm keys moved to the top of the items column.",
       "The board's ? help points at the Library, the mode switch and the machine list, and draws each drawer as its own shape.",
+      "The planner reads in Inter now; the pixel font is still there under Settings.",
     ],
   },
   {

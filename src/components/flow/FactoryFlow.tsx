@@ -6289,6 +6289,11 @@ export function FactoryFlow() {
         edges={visibleFlowEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        // A press that travels under this many pixels is a CLICK, over it a
+        // DRAG. The card's buttons and name bar drag the card like its
+        // background does (Jack, 2026-09-07); only text inputs and the wire
+        // handles keep nodrag, so a jittery click must still count as one.
+        nodeClickDistance={4}
         onConnect={handleConnect}
         onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectEndWithSound}

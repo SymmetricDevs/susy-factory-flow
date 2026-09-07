@@ -1399,7 +1399,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   event.stopPropagation();
                   deleteNode(projectNode.id);
                 }}
-                className="nodrag h-6 w-6 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-base leading-[16px] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-red-700"
+                className="h-6 w-6 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-base leading-[16px] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-red-700"
                 title="Delete node"
                 aria-label="Delete node"
               >
@@ -1411,7 +1411,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   event.stopPropagation();
                   duplicateNode(projectNode.id);
                 }}
-                className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+                className="flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
                 title="Clone node"
                 aria-label="Clone node"
               >
@@ -1424,7 +1424,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     event.stopPropagation();
                     beginRecipeRefactor(projectNode.id);
                   }}
-                  className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+                  className="flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
                   title="Replace the recipe"
                   aria-label="Refactor node"
                 >
@@ -1444,7 +1444,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                       event.stopPropagation();
                       setCropMenuOpen((open) => !open);
                     }}
-                    className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+                    className="flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
                     title={cropTitle ? `${cropTitle}. Click to pick another crop.` : "Pick a crop"}
                     aria-label="Pick a crop"
                     aria-haspopup="dialog"
@@ -1522,7 +1522,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   // bar has to truncate them.
                   "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[13px] leading-[18px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
                   hasMachineMenu
-                    ? "nodrag nowheel relative cursor-pointer pl-4 pr-1.5 hover:brightness-110"
+                    ? "nowheel relative cursor-pointer pl-4 pr-1.5 hover:brightness-110"
                     : "px-2",
                 ].join(" ")}
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
@@ -1672,7 +1672,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     event.stopPropagation();
                     stepSupply(event.deltaY < 0 ? 1 : -1);
                   }}
-                  className="nodrag nowheel flex h-6 items-center justify-center gap-0.5 whitespace-nowrap border-2 border-r-0 px-0.5 text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+                  className="nowheel flex h-6 items-center justify-center gap-0.5 whitespace-nowrap border-2 border-r-0 px-0.5 text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
                   style={{
                     backgroundColor: tierColor.background,
                     borderColor: tierColor.border,
@@ -1717,7 +1717,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   event.stopPropagation();
                   updateTier(event.deltaY < 0 ? 1 : -1);
                 }}
-                className="nodrag nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+                className="nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
                 style={{
                   backgroundColor: tierColor.background,
                   borderColor: tierColor.border,
@@ -1745,7 +1745,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 event.stopPropagation();
                 setCropMenuOpen(true);
               }}
-              className="nodrag mx-auto my-0 flex h-[80px] w-[240px] items-center justify-center gap-2 border-2 border-dashed border-[var(--mc-33)] bg-[var(--mc-71)] text-[14px] font-bold text-[var(--mc-ink)] hover:bg-[var(--mc-85)]"
+              className="mx-auto my-0 flex h-[80px] w-[240px] items-center justify-center gap-2 border-2 border-dashed border-[var(--mc-33)] bg-[var(--mc-71)] text-[14px] font-bold text-[var(--mc-ink)] hover:bg-[var(--mc-85)]"
             >
               <Sprout className="h-5 w-5" /> Pick a crop
               {/* The picker hangs under this button while there is no crop
@@ -2961,7 +2961,7 @@ function PowerTierChip({
         event.stopPropagation();
         step(event.deltaY < 0 ? 1 : -1);
       }}
-      className="nodrag nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+      className="nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
       style={chipStyle}
       title={`Tier ${shownTier}`}
       aria-label={`Tier ${shownTier}`}
@@ -3727,7 +3727,7 @@ function CustomRatePanel({
   };
   const modeButtonClassName = (active: boolean) =>
     [
-      "nodrag h-6 px-2 text-[11px] font-bold uppercase",
+      "h-6 px-2 text-[11px] font-bold uppercase",
       // The chosen side is the app's blue and keeps it on any paint: it is the
       // one thing on this row that says which way the card faces.
       active
@@ -3737,7 +3737,7 @@ function CustomRatePanel({
 
   return (
     // Two cells tall, or more if the dial needs them.
-    <GridBlock className="nodrag border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
+    <GridBlock className="border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
     <div className="flex items-center gap-1">
       <div className="flex border-2 border-[var(--mc-33)]">
         <button
@@ -4121,7 +4121,7 @@ function MachineConfigControlPanel({
   );
   const rows = Math.ceil((controls.length + facts.length) / perRow);
   return (
-    <GridBlock className="nodrag" minCells={(rows * SETTING_TILE_HEIGHT_PX) / BOARD_GRID}>
+    <GridBlock className="" minCells={(rows * SETTING_TILE_HEIGHT_PX) / BOARD_GRID}>
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${SETTING_TILE_MIN_WIDTH_PX}px, 1fr))` }}
@@ -4181,7 +4181,7 @@ function PassiveProductionConfigPanel({
   return (
     <GridBlock
       className={[
-        "nodrag border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]",
+        "border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]",
         className,
       ].join(" ")}
       minCells={Math.max(isFolded ? 1 : 2, headCells + rows * PASSIVE_PANEL_ROW_CELLS)}
@@ -4251,13 +4251,13 @@ const CROP_UNIT_PIP_COLORS: Record<string, string> = {
 // The SEEDS cell's exact chrome, shared by every crop knob so the settings
 // speak the same beveled tile language as the footer under them.
 const CROP_TILE_CLASS =
-  "nodrag nowheel min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 pb-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]";
+  "nowheel min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 pb-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]";
 const CROP_TILE_CAPTION_CLASS =
   "flex items-center gap-1 truncate text-[11px] uppercase leading-[13px] text-[var(--mc-ink-muted)]";
 // Narrow buttons, so the word well between them keeps the width: "60% Wet"
 // has to fit a four-across tile.
 const CROP_TILE_BUTTON_CLASS =
-  "nodrag flex h-5 w-3.5 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] enabled:hover:bg-[var(--mc-100)] enabled:active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)] disabled:opacity-35";
+  "flex h-5 w-3.5 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] enabled:hover:bg-[var(--mc-100)] enabled:active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)] disabled:opacity-35";
 
 /** One browser-wide fold for every crop card's worked-formula strip. */
 const CROP_FORMULAS_OPEN_KEY = "gtnh-factory-flow.crop-formulas-open.v1";
@@ -4489,7 +4489,7 @@ function CropTierChip({
         event.stopPropagation();
         step(event.deltaY < 0 ? 1 : -1);
       }}
-      className="nodrag nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+      className="nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
       style={
         tierColor
           ? {
@@ -4764,7 +4764,7 @@ function CropConfigPanel({
     const head = (
       <button
         type="button"
-        className="nodrag flex h-[12px] w-full items-center gap-1 text-left text-[9px] uppercase tracking-wide text-[var(--mc-ink-muted)] hover:text-[var(--mc-ink)]"
+        className="flex h-[12px] w-full items-center gap-1 text-left text-[9px] uppercase tracking-wide text-[var(--mc-ink-muted)] hover:text-[var(--mc-ink)]"
         onClick={(event) => {
           event.stopPropagation();
           onToggleFormulas();
@@ -4962,7 +4962,7 @@ function CropConfigPanel({
   // follows under the UPGRADES head with its slot budget.
   return (
     <GridBlock
-      className={["nodrag min-w-0", className].join(" ")}
+      className={["min-w-0", className].join(" ")}
       minCells={Math.max(1, Math.ceil(bodyPx / BOARD_GRID))}
       clearancePx={4}
       // The block's own rounding slack goes ABOVE the knobs (where the
@@ -5329,7 +5329,7 @@ function SolvedMachinesStat({
           }}
           onPointerDown={(event) => event.stopPropagation()}
           aria-label={isPinned ? "Change the pinned machine count" : "Pin a machine count"}
-          className="nodrag group/pin flex w-full min-w-0 items-center gap-[3px] text-left"
+          className="group/pin flex w-full min-w-0 items-center gap-[3px] text-left"
         >
           <span
             className={[
@@ -5599,11 +5599,11 @@ function MachineCountStat({
   };
 
   const stepButtonClassName =
-    "nodrag flex h-5 w-5 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] hover:bg-[var(--mc-100)] active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)]";
+    "flex h-5 w-5 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] hover:bg-[var(--mc-100)] active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)]";
 
   return (
     <div
-      className="nodrag nowheel min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
+      className="nowheel min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
       // The wheel walks the count too, with the same shift/ctrl multipliers
       // the buttons take. "nowheel" keeps React Flow from zooming under it.
       onWheel={(event) => {

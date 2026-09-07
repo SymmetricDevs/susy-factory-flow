@@ -27,7 +27,10 @@ export type GlanceTone =
   | "starved"
   | "blocked"
   | "bottleneck"
-  | "clogged";
+  | "clogged"
+  | "build"
+  | "solve"
+  | "pool";
 
 /** Which mouse button a row is about, drawn as a little lit-up mouse. */
 export type GlanceMouse = "left" | "right" | "scroll";
@@ -69,6 +72,10 @@ export const GLANCE_TONES: Record<GlanceTone, string> = {
   bottleneck: "#e05252",
   // The clog family's cool blue (--verdict-clogged-ink): full, not broken.
   clogged: "#6fb2d6",
+  // The three mode keys' own inks (ModeKeys in FactoryFlow.tsx).
+  build: "#f5b642",
+  solve: "#c78bff",
+  pool: "#6f9cff",
 };
 
 export const GLANCE_CARD_CLASS =

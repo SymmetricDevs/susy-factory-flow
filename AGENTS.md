@@ -383,8 +383,12 @@ Working notes for future agents on GTNH Factory Flow.
   over the framing dock, the corner stack over the "?", the browser cards
   inside the browser column, the legend cards - inputs and outputs, machines,
   drawers, board windows, notices - over the inspector; the corner stack ends
-  in the plan card, arrowed down at the plan bar). Do not go back to per-card
-  offsets. The glance layer only shows while the paint row is unfolded
+  in the plan card, arrowed down at the plan bar; since 2026-09-06 a MODE
+  column - Build, Solve, Pool, one terse card each - hangs under the centre
+  mode switch, and when there is no room for it between the other columns
+  the layout reports `fits: false` and the one-column hover panel is shown
+  instead). Do not go back to per-card offsets. Copy is terse engineering
+  text, no quips (Jack, 2026-09-06). The glance layer only shows while the paint row is unfolded
   (`compact={isCompact || toolbarFold.paint}`), so with both columns open
   it needs a window about 1560px wide; narrower windows get the one-column
   hover panel, phones the full-screen sheet. `help-probe.local.mjs`

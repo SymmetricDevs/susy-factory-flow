@@ -6,15 +6,13 @@ import {
   ImagePlus,
   Network,
   Paintbrush,
+  Pencil,
   RefreshCw,
   RotateCcw,
   Search,
   Share2,
   Store,
   Library,
-  Sigma,
-  SlidersHorizontal,
-  Sprout,
   Square,
   Trash2,
   TriangleAlert,
@@ -115,24 +113,52 @@ const BUILD: HelpCard = {
     { icon: Undo2, text: "Undo and redo" },
     { chip: "/s", text: "*Rate unit*: click or wheel it" },
     { chip: "EU/t", text: "*Power unit*: EU/t or amps" },
-    { icon: Zap, text: "*POWER*: place a generator" },
-    { icon: Gauge, text: "A *custom rate* card" },
-    { icon: Sprout, text: "A *crop farm* card" },
+  ],
+};
+
+/** The mode switch: one card per key, in the key's colour. */
+const BUILD_MODE: HelpCard = {
+  title: "Build",
+  rows: [
+    { chip: "BUILD", tone: "build", text: "You set *counts* and *wires*" },
+    { text: "Board reports flow and speed" },
+    { text: "Cards say why: starved, clogged" },
+  ],
+};
+
+const SOLVE_MODE: HelpCard = {
+  title: "Solve",
+  rows: [
+    { chip: "SOLVE", tone: "solve", text: "You set *wires* and a *target*" },
+    { text: "Board sets machine counts" },
+    { text: "Target: drawer rate or pinned count" },
+    { text: "Big plans solve in the background" },
+  ],
+};
+
+const POOL_MODE: HelpCard = {
+  title: "Pool",
+  rows: [
+    { chip: "POOL", tone: "pool", text: "You set *recipes* and a *target*" },
+    { text: "No wires: one pool per resource" },
+    { text: "Missing inputs are imported" },
+    { text: "Surplus is output" },
+    { chip: "+", tone: "pool", text: "Add a product drawer, set its rate" },
+    { text: "Only product drawers count" },
   ],
 };
 
 const TOOLS: HelpCard = {
   title: "Board tools",
   rows: [
+    { icon: Pencil, text: "*Markup*: draw, paint, image" },
+    { icon: Square, text: "Board, box, arrow, note" },
     { icon: Paintbrush, text: "Pick a colour, *paint* cards" },
-    { icon: Square, text: "*Draw*: board, box, arrow, note" },
     { icon: ImagePlus, text: "Add an image, or paste one" },
-    { icon: Trash2, text: "*Bin*: click things to delete" },
-    { icon: Sigma, text: "*Solve*: type amounts, get counts" },
-    { icon: SlidersHorizontal, text: "*Rules*: free ports, loose cells" },
-    { icon: Network, text: "*Arrange* the loose cards" },
-    { icon: Volume2, text: "Mute; and *watch it build*" },
     { icon: Eye, text: "*View*: paper, wires, motion" },
+    { icon: Network, text: "*Arrange*: in view options" },
+    { icon: Trash2, text: "*Bin*: click things to delete" },
+    { icon: Volume2, text: "Mute, *watch it build*: Settings" },
   ],
 };
 
@@ -151,7 +177,7 @@ const FRAMING: HelpCard = {
 const ON_A_CARD: HelpCard = {
   title: "On a card",
   rows: [
-    { text: "Tabs above it pick the *machine*" },
+    { text: "*Name bar*: machine list" },
     { chip: "LV", text: "*Tier*: click up, right click down" },
     { chip: "2×", text: "*Hatches*: click to type a count" },
     { chip: "8", text: "*Count*: type, wheel, Shift ×100" },
@@ -169,7 +195,7 @@ const DRAWERS: HelpCard = {
     { chip: "BYPRODUCT", tone: "output", text: "Takes what is left over" },
     { chip: "TRASH", tone: "internal", text: "Voids what arrives" },
     { chip: "BUFFER", tone: "fine", text: "Pass-through, or *strict*" },
-    { text: "Solve mode: type *amounts*" },
+    { text: "Solve, Pool: type *amounts*" },
   ],
 };
 
@@ -188,6 +214,7 @@ const BOARDS: HelpCard = {
 const LEFT_COLUMN: HelpCard = {
   title: "The left column",
   rows: [
+    { icon: Zap, text: "*Generator*, custom rate, farm" },
     { icon: Search, text: "*Items*: search, filters, sorts" },
     { text: "Left click makes, right uses" },
     { icon: Library, text: "*Library* (tab strip): designs, boards, setups" },
@@ -244,10 +271,10 @@ const NOTICES: HelpCard = {
   title: "Bottom notices",
   rows: [
     { chip: "NOT WIRED UP", tone: "fine", text: "Slots still to wire" },
-    { chip: "LOOSE WIRES", tone: "bottleneck", text: "Cell wires, rule off" },
     { chip: "DEAD LOOP", tone: "bottleneck", text: "A ring starving to *0%*" },
     { chip: "CLOG LOCK", tone: "clogged", text: "Jam: add *a drawer*" },
-    { chip: "SOLVE MODE", tone: "product", text: "Products need an *amount*" },
+    { chip: "SOLVE MODE", tone: "solve", text: "Needs a *rate* or count" },
+    { chip: "POOL MODE", tone: "pool", text: "Same" },
   ],
 };
 
@@ -280,8 +307,12 @@ const TOUCH_MOVES: HelpCard = {
   ],
 };
 
+/** The mode stack, in the order the switch reads. */
+const MODES: HelpCard[] = [BUILD_MODE, SOLVE_MODE, POOL_MODE];
+
 /** Every card, in reading order, for the one-column formats. */
 const LINEAR: HelpCard[] = [
+  ...MODES,
   BUILD,
   TOOLS,
   FRAMING,
@@ -363,6 +394,9 @@ type GlanceLayout = {
   rings: HelpRect[];
   columns: Column[];
   arrows: Arrow[];
+  /** False when the mode column has no room between the others: the
+   * caller shows the one-column panel instead of overlapping cards. */
+  fits: boolean;
 };
 
 /**
@@ -382,7 +416,8 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
   const arrows: Arrow[] = [];
 
   const build = rects.build;
-  const toolRow = unionRects(rects.paint, rects.rules, rects.view);
+  const toolRow = unionRects(rects.paint, rects.view);
+  const modeSwitch = rects.rules;
   const dock = rects.glance;
   const browser = rects.browser;
   const inspector = rects.inspector;
@@ -391,6 +426,29 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
   // The x the whole right side is hung from: the tool row's right edge,
   // which is also the framing dock's.
   const rightEdge = toolRow?.right ?? dock?.right ?? vw - 12;
+
+  // The legend's left edge when it has to sit on the board (no inspector):
+  // the mode column may not run into it either.
+  const legendOnBoardLeft = rightEdge - CARD_W - CARD_GAP - CARD_W;
+  const rightColumnsLeft = inspector ? rightEdge - CARD_W : legendOnBoardLeft;
+
+  // THE MODE STACK hangs under the switch, top centre, and needs a third
+  // column between the build column and whatever hangs on the right. When
+  // there is no room the whole spread is abandoned for the one-column panel
+  // (`fits`), which is what any narrower window gets anyway.
+  const leftColumnRight = (build?.left ?? 12) + CARD_W;
+  const modeColumnLeft = modeSwitch
+    ? clamp(
+        (modeSwitch.left + modeSwitch.right) / 2 - CARD_W / 2,
+        leftColumnRight + CARD_GAP,
+        rightColumnsLeft - CARD_GAP - CARD_W,
+      )
+    : undefined;
+  const modeColumnFits =
+    modeSwitch !== undefined &&
+    modeColumnLeft !== undefined &&
+    modeColumnLeft >= leftColumnRight + CARD_GAP &&
+    modeColumnLeft + CARD_W + CARD_GAP <= rightColumnsLeft;
 
   if (build) {
     const ring = padRect(build);
@@ -403,6 +461,25 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
     });
     const x = clamp((ring.left + ring.right) / 2, build.left + 24, build.left + CARD_W - 24);
     arrows.push({ points: [{ x, y: top }, { x, y: ring.bottom }] });
+  }
+
+  if (modeSwitch) {
+    const ring = padRect(modeSwitch);
+    rings.push(modeSwitch);
+    if (modeColumnFits && modeColumnLeft !== undefined) {
+      const top = ring.bottom + CALLOUT_GAP;
+      columns.push({
+        key: "modes",
+        style: { left: modeColumnLeft, top, width: CARD_W },
+        cards: MODES,
+      });
+      const x = clamp(
+        (ring.left + ring.right) / 2,
+        modeColumnLeft + 24,
+        modeColumnLeft + CARD_W - 24,
+      );
+      arrows.push({ points: [{ x, y: top }, { x, y: ring.bottom }] });
+    }
   }
 
   if (toolRow) {
@@ -476,7 +553,7 @@ function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
     cards: legendCards,
   });
 
-  return { rings, columns, arrows };
+  return { rings, columns, arrows, fits: modeSwitch === undefined || modeColumnFits };
 }
 
 /** The arrow's segments as 3px bars, and its head as a border triangle. */
@@ -784,7 +861,10 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   // desktop windows; they hover the one-column panel instead. Decided per
   // open, so resizing simply changes what the next hover shows.
   const fitsGlance =
-    measured !== undefined && measured.vw >= GLANCE_MIN_VW && measured.vh >= GLANCE_MIN_VH;
+    measured !== undefined &&
+    measured.vw >= GLANCE_MIN_VW &&
+    measured.vh >= GLANCE_MIN_VH &&
+    layoutGlance(measured).fits;
 
   return (
     <div

@@ -4224,7 +4224,8 @@ function PassiveProductionConfigPanel({
                 options={control.tiers}
                 onSelect={(key) => onSelect(control.id, key)}
                 disabled={control.tiers.length <= 1}
-                title={`${control.label}: ${control.current.label}`}
+                // No native title: it would stop the rich hover above and
+                // show the bare value when the pointer reaches the select.
                 ariaLabel={control.label}
               />
             </label>
@@ -4321,12 +4322,24 @@ function CropStepperRow({
       onStep(next);
     }
   };
+  // The live line (what this count does now, why it cannot go up) rides
+  // the SAME hover as the explanation, under it: a native title on the row
+  // would stop the rich panel and hand the buttons a second, poorer tip.
+  const liveLine = [effect, value >= max && lockedHint ? lockedHint : undefined].filter(Boolean).join(". ");
+  const hover =
+    help || liveLine ? (
+      <>
+        {help}
+        {liveLine ? (
+          <p className={help ? "mt-2 border-t border-white/10 pt-2 text-[16px] leading-relaxed text-slate-100" : ""}>
+            {liveLine}
+          </p>
+        ) : null}
+      </>
+    ) : undefined;
   const row = (
     <div
       className={CROP_TILE_CLASS}
-      title={[effect, value >= max && lockedHint ? lockedHint : undefined]
-        .filter(Boolean)
-        .join(" · ")}
       onWheel={(event) => {
         event.stopPropagation();
         step(event.deltaY < 0 ? 1 : -1);
@@ -4357,7 +4370,6 @@ function CropStepperRow({
           type="button"
           className={CROP_TILE_BUTTON_CLASS}
           disabled={value >= max}
-          title={value >= max ? lockedHint : undefined}
           onClick={(event) => {
             event.stopPropagation();
             step(1);
@@ -4370,7 +4382,7 @@ function CropStepperRow({
       </div>
     </div>
   );
-  return help ? <MinecraftTooltip content={help}>{row}</MinecraftTooltip> : row;
+  return hover ? <MinecraftTooltip content={hover}>{row}</MinecraftTooltip> : row;
 }
 
 /**

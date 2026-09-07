@@ -123,6 +123,11 @@ function Face({ resource }: { resource: ResourceAmount }) {
   );
 }
 
+// No native `title` anywhere on a tile (Jack, 2026-09-07): the global title
+// tooltip turns a titled element inside a rich area into a STOP, so hovering
+// the value well swapped the setting's whole story for the bare number. One
+// setting, one hover, everywhere on the tile - the rich panel already names
+// the current value in its subtitle.
 export function SettingTile({
   caption,
   value,
@@ -209,7 +214,6 @@ export function SettingTile({
                 }
               : undefined
           }
-          title={value}
         >
           {face ? <Face resource={face} /> : null}
           <span className="min-w-0 truncate">{value}</span>
@@ -374,7 +378,6 @@ export function SettingSelectTile({
           if (rect) setListAt(listAt ? undefined : rect);
         }}
         className={[SETTING_TILE_WELL_CLASS, "w-full flex-none justify-between px-1 enabled:hover:bg-[var(--mc-93)]"].join(" ")}
-        title={current?.label}
       >
         <span className="flex min-w-0 items-center gap-1">
           {current?.face ? <Face resource={current.face} /> : null}
@@ -421,7 +424,7 @@ export function FactTile({
         <span className="min-w-0 truncate">{caption}</span>
       </div>
       <div className="flex min-w-0 items-center">
-        <span className={[SETTING_TILE_WELL_CLASS, "w-full flex-none px-1 tabular-nums"].join(" ")} title={value}>
+        <span className={[SETTING_TILE_WELL_CLASS, "w-full flex-none px-1 tabular-nums"].join(" ")}>
           <span className="min-w-0 truncate">{value}</span>
         </span>
       </div>

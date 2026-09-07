@@ -1,6 +1,7 @@
 import type { FactoryProject, NodeThroughputResult, ResourceKey } from "@/lib/model/types";
 import { makeResourceKey } from "@/lib/model/resources";
 import { getStorageRoles } from "@/lib/model/storage-role";
+import { isPoolEdgeId } from "./pool-mode";
 import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
 import { type LinearProgram, type LpSolution } from "./simplex";
@@ -167,9 +168,15 @@ export function solveSolveMode(
   const upperBounds: LinearProgram["upperBounds"] = [];
 
   // Drawer-to-drawer wires get a finite roof so a teleporter chain cannot
-  // read as unbounded; machine wires are bounded by their port rows.
+  // read as unbounded; machine wires are bounded by their port rows. POOL
+  // wires are exempt: a source-to-pool import is bounded by what the pool's
+  // takers drink and a pool-to-product line by what its feeders make, both
+  // machine rows - and every import and product in pool mode runs over one
+  // of them, so the roof capped a typed target at a million a second
+  // (Jack, 2026-09-06: 1000/t of a product read "no machine count reaches
+  // the required amount" because its import needed more than that).
   for (const edge of usable) {
-    if (!actVar.has(edge.source) && !actVar.has(edge.target)) {
+    if (!actVar.has(edge.source) && !actVar.has(edge.target) && !isPoolEdgeId(edge.id)) {
       upperBounds.push({ coefficients: new Map([[flowVar.get(edge.id)!, 1]]), rhs: 1e6 });
     }
   }

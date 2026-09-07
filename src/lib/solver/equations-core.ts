@@ -5,6 +5,7 @@ import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
 import { type LinearProgram, type LpSolution } from "./simplex";
 import { solveLpAuto } from "./lp-engine";
+import { isPoolEdgeId } from "./pool-mode";
 
 /**
  * The board's steady state as equations, solved directly: the BOOKS half of
@@ -227,9 +228,11 @@ export function solveEquationsCore(
   // story) in the finalize layer, exactly where it lives today.
 
   // Drawer-to-drawer wires get a finite roof so a teleporter chain cannot
-  // read as unbounded; machine wires are bounded by their port rows.
+  // read as unbounded; machine wires are bounded by their port rows. Pool
+  // wires are exempt, as in solve-mode.ts: each is bounded by the machine
+  // rows on the pool's other side, and the roof capped pool imports.
   for (const edge of usable) {
-    if (!actVar.has(edge.source) && !actVar.has(edge.target)) {
+    if (!actVar.has(edge.source) && !actVar.has(edge.target) && !isPoolEdgeId(edge.id)) {
       upperBounds.push({ coefficients: new Map([[flowVar.get(edge.id)!, 1]]), rhs: 1e6 });
     }
   }

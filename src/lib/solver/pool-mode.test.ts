@@ -188,6 +188,23 @@ describe("pool mode", () => {
     expect(result.nodes["q"]!.theoreticalMachinesRequired).toBeCloseTo(2, 3);
   });
 
+  it("scales a typed product past a million a second", () => {
+    // Every import and product in pool mode runs over a drawer-to-drawer
+    // wire, and those carried a 1e6/s roof against teleporter chains; a
+    // big typed target read "no machine count reaches the required amount".
+    const proj = project({
+      recipes: RECIPES,
+      nodes: [node("c", "crush")],
+      storages: [drawer("gravel-out", "gravel", { poolSide: "drain", targetPerSecond: 1e7 })],
+      solveMode: true,
+    });
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    expect(result.storages["gravel-out"]!.targetUnreachable).toBeFalsy();
+    expect(result.nodes["c"]!.theoreticalMachinesRequired).toBeCloseTo(1e7, 0);
+    // The cobble it eats is an import at the same scale.
+    expect(result.externalInputs.find((entry) => entry.resourceId === "cobble")?.deficitPerSecond).toBeCloseTo(1e7, 0);
+  });
+
   it("ignores drawn wires: the pool is the only carrier", () => {
     // A wire that would starve the second crusher on a wired board (the
     // quarry wired to c1 alone) means nothing here: both drink from the pool.

@@ -83,6 +83,17 @@ const MACHINE_STRUCTURE_ART_IDS = new Set([
   "thermic-heating-device",
   "vacuum-freezer",
   "volcanus",
+  // The second batch (2026-09-06): machines whose maps export no handler
+  // list and so were missed by the first sweep, the Pyrolyse Oven first.
+  "boldarnator",
+  "chemical-plant",
+  "coke-oven",
+  "dissolution-tank",
+  "industrial-coke-oven",
+  "industrial-sledgehammer",
+  "multiblock-electrolyzer",
+  "pyrolyse-oven",
+  "vacuum-furnace",
 ]);
 
 /**

@@ -51,3 +51,42 @@ export function getPowerStructureArt(sourceId: string): string | undefined {
   const id = STRUCTURE_ART_ALIASES[sourceId] ?? sourceId;
   return STRUCTURE_ART_IDS.has(id) ? `/power-art/${id}.png` : undefined;
 }
+
+/**
+ * Structure renders for PROCESSING multiblocks, keyed by the dataset's
+ * machine handler id (`recipe.machineHandlers[].id`), shipped beside the
+ * power renders. Jack supplied the first twenty (2026-09-06) - the ones the
+ * public setups place most, which cover most cards on community boards -
+ * as 1254px renders, re-encoded here at 640px wide, palette PNG. A handler
+ * not in this set wears its controller's item icon, as every multiblock
+ * did before. To add one: drop `<handler-id>.png` in public/power-art and
+ * list the id here.
+ */
+const MACHINE_STRUCTURE_ART_IDS = new Set([
+  "cryogenic-freezer",
+  "dangote-distillus",
+  "distillation-tower",
+  "electric-blast-furnace",
+  "industrial-autoclave",
+  "industrial-centrifuge",
+  "industrial-chemical-bath",
+  "industrial-maceration-stack",
+  "industrial-mixing-machine",
+  "large-chemical-reactor",
+  "large-electric-compressor",
+  "large-fluid-extractor",
+  "large-sifter",
+  "oil-cracking-unit",
+  "steam-grinder",
+  "steam-separator",
+  "steam-squasher",
+  "thermic-heating-device",
+  "vacuum-freezer",
+  "volcanus",
+]);
+
+export function getMachineStructureArt(handlerId: string | undefined): string | undefined {
+  return handlerId && MACHINE_STRUCTURE_ART_IDS.has(handlerId)
+    ? `/power-art/${handlerId}.png`
+    : undefined;
+}

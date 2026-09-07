@@ -150,7 +150,7 @@ import { MinecraftSelect } from "./MinecraftSelect";
 import { FactTile, LadderTile, SETTING_TILE_HEIGHT_PX } from "./SettingTile";
 import { PowerConfigPanel } from "./PowerConfigPanel";
 import { getPowerSource } from "@/lib/power/registry";
-import { getPowerStructureArt } from "@/lib/power/structure-art";
+import { getMachineStructureArt, getPowerStructureArt } from "@/lib/power/structure-art";
 import { getPowerMachineIcon, type PowerMachineIcon } from "@/lib/power/planner-data";
 import type { PowerSelectSetting } from "@/lib/power/types";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
@@ -594,7 +594,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       ? "/power-art/industrial-farm.png"
       : undefined;
   const powerArt =
-    (powerInfo ? getPowerStructureArt(powerInfo.sourceId) : undefined) ?? cropStructureArt;
+    (powerInfo ? getPowerStructureArt(powerInfo.sourceId) : undefined) ??
+    cropStructureArt ??
+    // A processing multiblock with a render of its own (2026-09-06) wears
+    // the same window as a generator; the rest keep the controller icon.
+    getMachineStructureArt(selectedMachineHandler.id);
   const powerMachineIcon = powerInfo ? getPowerMachineIcon(powerInfo.sourceId) : undefined;
 
   // A generator's EU rides the output rail as its first row (a real port,

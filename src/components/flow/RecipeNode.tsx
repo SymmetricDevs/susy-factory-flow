@@ -1514,7 +1514,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 } : undefined}
                 onPointerEnter={mayHaveTwins && !twins ? () => setTwinsWanted(true) : undefined}
                 data-machine-menu-toggle={hasMachineMenu ? "" : undefined}
-                data-tooltip-wheel-steps={hasMachinePicker && !calmMode ? "" : undefined}
+                // Tells the board camera the wheel is taken here, not a zoom.
+                data-wheel-steps={hasMachinePicker && !calmMode ? "" : undefined}
                 className={[
                   // 13px, shrunk by measurement (useFitTitle) as far as 9px
                   // when the name would not fit: the real tier names

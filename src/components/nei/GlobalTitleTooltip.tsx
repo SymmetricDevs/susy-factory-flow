@@ -31,6 +31,7 @@ export function GlobalTitleTooltip() {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<number | undefined>(undefined);
   const pendingRef = useRef<{ lines: string[]; x: number; y: number } | undefined>(undefined);
+  const pointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
 
   useEffect(() => {
     const hide = () => {
@@ -58,12 +59,11 @@ export function GlobalTitleTooltip() {
       );
     };
 
-    const onMove = (event: globalThis.MouseEvent) => {
+    const resolveAt = (target: Element | null, clientX: number, clientY: number, buttons: number) => {
       if (isTouchPointer()) {
         hide();
         return;
       }
-      const target = event.target as Element | null;
       const titled = target?.closest?.(`[title], [${STORED}]`) ?? null;
       if (!titled) {
         hide();
@@ -86,7 +86,7 @@ export function GlobalTitleTooltip() {
         return;
       }
       const text = titled.getAttribute(STORED);
-      if (!text || event.buttons !== 0) {
+      if (!text || buttons !== 0) {
         hide();
         return;
       }
@@ -96,17 +96,41 @@ export function GlobalTitleTooltip() {
       const panelHeight = panelRef.current?.offsetHeight ?? 60;
       pendingRef.current = {
         lines,
-        x: Math.max(4, Math.min(event.clientX + 12, window.innerWidth - panelWidth - 8)),
-        y: Math.max(4, Math.min(event.clientY + 12, window.innerHeight - panelHeight - 8)),
+        x: Math.max(4, Math.min(clientX + 12, window.innerWidth - panelWidth - 8)),
+        y: Math.max(4, Math.min(clientY + 12, window.innerHeight - panelHeight - 8)),
       };
       if (frameRef.current === undefined) {
         frameRef.current = window.requestAnimationFrame(flush);
       }
     };
+    const onMove = (event: globalThis.MouseEvent) => {
+      pointerRef.current = { x: event.clientX, y: event.clientY };
+      resolveAt(event.target as Element | null, event.clientX, event.clientY, event.buttons);
+    };
+    // A wheel or scroll never hides a tip by itself (Jack, 2026-09-07): a
+    // frame later, once the page has settled, the tip is re-read from
+    // whatever is under the pointer - the same thing keeps it, something
+    // else scrolled in re-targets it, and where the document cannot say
+    // (no elementFromPoint) the tip stays.
+    let settleFrame: number | undefined;
+    const recheckAfterScroll = () => {
+      if (settleFrame !== undefined) {
+        return;
+      }
+      settleFrame = window.requestAnimationFrame(() => {
+        settleFrame = undefined;
+        const pointer = pointerRef.current;
+        if (!pointer || typeof document.elementFromPoint !== "function") {
+          return;
+        }
+        resolveAt(document.elementFromPoint(pointer.x, pointer.y), pointer.x, pointer.y, 0);
+      });
+    };
 
     const options = { capture: true, passive: true } as const;
     document.addEventListener("mousemove", onMove, options);
-    window.addEventListener("wheel", hide, options);
+    window.addEventListener("wheel", recheckAfterScroll, options);
+    window.addEventListener("scroll", recheckAfterScroll, options);
     window.addEventListener("pointerdown", hide, options);
     window.addEventListener("pointercancel", hide, options);
     window.addEventListener("resize", hide, options);
@@ -114,7 +138,11 @@ export function GlobalTitleTooltip() {
     document.documentElement.addEventListener("mouseleave", hide);
     return () => {
       document.removeEventListener("mousemove", onMove, options);
-      window.removeEventListener("wheel", hide, options);
+      window.removeEventListener("wheel", recheckAfterScroll, options);
+      window.removeEventListener("scroll", recheckAfterScroll, options);
+      if (settleFrame !== undefined) {
+        window.cancelAnimationFrame(settleFrame);
+      }
       window.removeEventListener("pointerdown", hide, options);
       window.removeEventListener("pointercancel", hide, options);
       window.removeEventListener("resize", hide, options);

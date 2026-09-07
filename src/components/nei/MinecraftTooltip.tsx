@@ -15,10 +15,15 @@ import { isTouchPointer } from "@/lib/pointer-kind";
 import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
 /**
- * Marks an element that turns the wheel into its own state change rather than
- * scrolling: it stays put, so a tooltip over it stays too.
+ * What is under the pointer once a wheel or scroll has settled, or undefined
+ * where the document cannot say (jsdom has no elementFromPoint).
  */
-export const WHEEL_STEPS_IN_PLACE_ATTRIBUTE = "data-tooltip-wheel-steps";
+export function elementUnderPointer(x: number, y: number): Element | null | undefined {
+  if (typeof document.elementFromPoint !== "function") {
+    return undefined;
+  }
+  return document.elementFromPoint(x, y);
+}
 
 
 export function MinecraftTooltip({
@@ -192,31 +197,46 @@ export function MinecraftTooltip({
       }
       clearTooltip();
     };
-    // A wheel normally scrolls the thing out from under the pointer, so the tip
-    // has to go with it. A slot that rotates through what it accepts is the
-    // exception: it EATS the wheel to step through its items and never moves, so
-    // clearing there made the tip blink out on every notch, exactly while you
-    // were reading which item you had landed on. Marked slots keep theirs, and
-    // it re-labels itself as the slot steps.
-    const clearOnWheel = (event: Event) => {
-      const target = event.target as HTMLElement | null;
-      if (
-        target?.closest?.(`[${WHEEL_STEPS_IN_PLACE_ATTRIBUTE}]`) &&
-        rootRef.current?.contains(target)
-      ) {
+    // A wheel or scroll NEVER clears a tooltip by itself (Jack, 2026-09-07):
+    // zooming the board keeps the card under the pointer, a slot that eats
+    // the wheel to step through its items never moves, a setting tile steps
+    // its count in place - and in every one of those the tip blinking out
+    // read as broken. So the question is asked a frame later, once the
+    // page has settled: is the hovered thing STILL under the pointer? It
+    // stays while the answer is yes and goes only when something else has
+    // scrolled in. Where the document cannot answer, the tip stays.
+    let settleFrame: number | undefined;
+    const recheckAfterScroll = () => {
+      if (settleFrame !== undefined) {
         return;
       }
-      clearTooltip();
+      settleFrame = window.requestAnimationFrame(() => {
+        settleFrame = undefined;
+        const pointer = pointerRef.current;
+        if (!pointer) {
+          return;
+        }
+        const under = elementUnderPointer(pointer.x, pointer.y);
+        if (under === undefined || (under && rootRef.current?.contains(under))) {
+          return;
+        }
+        clearTooltip();
+      });
     };
     const options = { capture: true, passive: true } as const;
 
-    window.addEventListener("wheel", clearOnWheel, options);
+    window.addEventListener("wheel", recheckAfterScroll, options);
+    window.addEventListener("scroll", recheckAfterScroll, options);
     window.addEventListener("pointerdown", clearOnPointerDown, options);
     window.addEventListener("pointercancel", clearOnInteraction, options);
     window.addEventListener("resize", clearOnInteraction, options);
     window.addEventListener("blur", clearOnWindowBlur, options);
     return () => {
-      window.removeEventListener("wheel", clearOnWheel, options);
+      if (settleFrame !== undefined) {
+        window.cancelAnimationFrame(settleFrame);
+      }
+      window.removeEventListener("wheel", recheckAfterScroll, options);
+      window.removeEventListener("scroll", recheckAfterScroll, options);
       window.removeEventListener("pointerdown", clearOnPointerDown, options);
       window.removeEventListener("pointercancel", clearOnInteraction, options);
       window.removeEventListener("resize", clearOnInteraction, options);

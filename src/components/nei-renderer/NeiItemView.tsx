@@ -12,7 +12,6 @@ import type { ResourceAmount } from "@/lib/model/types";
 import type { NeiPositionedSlot } from "@/lib/nei/layout";
 import type { NeiItemCommand } from "@/lib/nei-renderer/core/commands";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
-import { WHEEL_STEPS_IN_PLACE_ATTRIBUTE } from "@/components/nei/MinecraftTooltip";
 import { useAlternativeCycleScope } from "@/components/nei/AlternativeCycleScope";
 import {
   applyAlternativeCycleFace,
@@ -204,9 +203,9 @@ function SlotButton({
       type="button"
       tabIndex={slot ? 0 : -1}
       {...(slot ? getSlotConnectionAttributes?.(slot) : undefined)}
-      // The wheel steps this slot instead of scrolling anything, so its tooltip
-      // must survive being spun (see MinecraftTooltip).
-      {...(alternativeState ? { [WHEEL_STEPS_IN_PLACE_ATTRIBUTE]: "" } : undefined)}
+      // The wheel steps this slot instead of scrolling or zooming anything;
+      // the board camera honours the mark (board-camera-controls.ts).
+      {...(alternativeState ? { "data-wheel-steps": "" } : undefined)}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onClick={(event) => {

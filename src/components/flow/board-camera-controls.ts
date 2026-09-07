@@ -277,12 +277,12 @@ export function useBoardCameraControls({
     const handleWheel = (event: WheelEvent) => {
       const target = event.target as Element | null;
       // Only the canvas: the toolbars live beside the flow element, a
-      // `nowheel` popup is scrolling its own list, and a marked slot is
-      // stepping through its alternatives. Same skip set d3 honoured.
+      // `nowheel` popup is scrolling its own list, and a `data-wheel-steps`
+      // element is stepping through its own choices. Same skip set d3 honoured.
       if (!target?.closest?.(".react-flow")) {
         return;
       }
-      if (target.closest(".nowheel, [data-tooltip-wheel-steps]")) {
+      if (target.closest(".nowheel, [data-wheel-steps]")) {
         return;
       }
       event.preventDefault();

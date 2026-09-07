@@ -169,10 +169,14 @@ export function MinecraftTooltip({
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = undefined;
     }
-    if (position !== undefined) {
-      setPosition(undefined);
-    }
-  }, [position]);
+    // A functional update, never a closure check: the tip opens on an
+    // animation frame, and a fast pointer has often LEFT before React has
+    // re-rendered with the open position. The leave handler that fires then
+    // still holds the closed state, and guarding on it skipped the hide -
+    // the panel committed open with nobody left to close it, and a quick
+    // sweep across a board left hundreds standing until the next click.
+    setPosition((current) => (current === undefined ? current : undefined));
+  }, []);
 
   useEffect(() => {
     if (!position) {

@@ -155,3 +155,38 @@ describe("MinecraftTooltip", () => {
     });
   });
 });
+
+describe("MinecraftTooltip fast pass", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("never commits open when the pointer left before the opening frame ran", async () => {
+    // The open lands on an animation frame; a fast sweep leaves the target
+    // before that frame. The leave must still win, or the panel commits open
+    // with nobody left to close it.
+    vi.restoreAllMocks();
+    let queued: FrameRequestCallback | undefined;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queued = callback;
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {
+      queued = undefined;
+    });
+    render(
+      <MinecraftTooltip label="Quick line">
+        <button type="button">Hover target</button>
+      </MinecraftTooltip>,
+    );
+    const target = screen.getByRole("button", { name: "Hover target" });
+    fireEvent.mouseMove(target, { clientX: 120, clientY: 80, buttons: 0 });
+    const frame = queued;
+    // The frame fires, but React has not re-rendered when the leave arrives.
+    if (frame) frame(0);
+    fireEvent.mouseLeave(target);
+    await waitFor(() => {
+      expect(screen.queryByText("Quick line")).toBeNull();
+    });
+  });
+});

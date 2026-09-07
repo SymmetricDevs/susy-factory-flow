@@ -204,6 +204,8 @@ import {
   glanceSurfaceFor,
   heatmapColorFor,
   rampFor,
+  POWER_CARD_RAMP,
+  CROP_CARD_RAMP,
   type NodeSurfaceColor,
 } from "./node-colors";
 import { useBoardView } from "./board-view";
@@ -233,21 +235,15 @@ const CUSTOM_RATE_UNIVERSAL_HANDLE_IDS: readonly string[] = [
   makeResourceHandleId("output", { kind: "item", id: CUSTOM_RATE_ANY_RESOURCE_ID }),
 ];
 
-/**
- * The power sector's card face: the window ground warmed toward amber - a
- * different material, with every element on it keeping its ordinary colours.
- * The face is the WHOLE mark (a chamfered-corner variant was tried and
- * dropped: the frame's flash and the selection ring could not be made to
- * traverse the cuts convincingly).
+/*
+ * The power and crop sectors' cards are a different MATERIAL: their whole
+ * --mc-* ramp is the neutral one pulled faintly toward amber or leaf green
+ * (POWER_CARD_RAMP / CROP_CARD_RAMP in node-colors.ts), so the name bar, the
+ * wells, the tiles and the bevels all take the tint, not only the ground. A
+ * face-only tint was the first version (Jack, 2026-09-06: theme the other
+ * elements too, subtly). A chamfered-corner variant was tried and dropped:
+ * the frame's flash and the selection ring could not traverse the cuts.
  */
-const POWER_CARD_FACE = "color-mix(in srgb, var(--mc-78) 85%, #d99a2b 15%)";
-
-/**
- * The crop sector's card face: the same trick in green - the crop card is a
- * different material the way a power card is, and every element on it keeps
- * its ordinary colours.
- */
-const CROP_CARD_FACE = "color-mix(in srgb, var(--mc-78) 74%, #4f8c33 26%)";
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
@@ -324,9 +320,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // every button and dropdown, and the ask was a green card, not green
   // chrome. Drawers and boards still take paint.
   const paintTag = isCustomRateRecipe(recipe) ? "blue" : undefined;
-  // A generator wears the power sector's face: the card BACKGROUND warms
-  // toward amber. Everything ON the card keeps its exact ordinary colours -
-  // this is not the paint ramp, just the window's own ground.
+  // A generator wears the power sector's ramp (see POWER_CARD_RAMP).
   const isPowerCard = Boolean(recipe.power);
   const paintColor = paintTag ? GT_NODE_COLORS[paintTag] : undefined;
   const nodeColor = paintColor;
@@ -1025,7 +1019,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         // window so the machine tabs above the card take it too — they are
         // the card's tabs, and a grey tab on a green card was the tell that
         // the paint was a list of elements rather than a palette.
-        ...(nodeRamp as CSSProperties | undefined),
+        ...((nodeRamp ??
+          (isPowerCard
+            ? POWER_CARD_RAMP
+            : isCropProductionNode || isCropFarmNode
+              ? CROP_CARD_RAMP
+              : undefined)) as CSSProperties | undefined),
         ...(glanceSurface ? (glanceCardVars(glanceSurface) as CSSProperties) : undefined),
         ...(paintCursor ? { cursor: paintCursor } : undefined),
       }}
@@ -1063,10 +1062,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             ? {
                 boxShadow: `inset 0 0 0 2px ${nodeColor.border}, inset 4px 4px 0 var(--mc-100), inset -4px -4px 0 var(--mc-33), 0 0 0 2px ${nodeColor.shadow}`,
               }
-            : undefined),
-          ...(isPowerCard ? { backgroundColor: POWER_CARD_FACE } : undefined),
-          ...(isCropProductionNode || isCropFarmNode
-            ? { backgroundColor: CROP_CARD_FACE }
             : undefined),
         }}
       >

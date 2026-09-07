@@ -613,6 +613,26 @@ export function heatmapRamp(panel: string): Record<string, string> {
   return stops;
 }
 
+/**
+ * A SECTOR's ramp: the neutral ramp pulled a little toward the sector's hue,
+ * so a power or crop card is a different material through and through - name
+ * bar, wells, tiles, bevels, footer - not a coloured ground under grey parts.
+ * Kept faint on purpose: the card must still read as a card, and its
+ * semantic colours (verdict inks, tier badges, the delete red) never take it.
+ */
+function sectorRamp(hue: string, amount: number): Record<string, string> {
+  const stops: Record<string, string> = {};
+  for (const [token, neutral] of Object.entries(GT_NODE_RAMPS.gray)) {
+    stops[token] = mixHex(neutral, hue, amount);
+  }
+  return stops;
+}
+
+/** The power sector: the neutral ramp warmed toward amber. */
+export const POWER_CARD_RAMP = sectorRamp("#d99a2b", 0.14);
+/** The crop sector: the same, toward leaf green. */
+export const CROP_CARD_RAMP = sectorRamp("#4f8c33", 0.2);
+
 function mixHex(from: string, to: string, amount: number): string {
   const channel = (hex: string, offset: number) =>
     Number.parseInt(hex.slice(offset, offset + 2), 16);

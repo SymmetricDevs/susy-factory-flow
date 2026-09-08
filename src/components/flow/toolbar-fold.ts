@@ -24,7 +24,10 @@ import { useEffect, useState, type RefObject } from "react";
 // Measured on the live board (2026-09-06) after the toolbar rework: the
 // build row is the undo pair and the rate keys. (Pool mode's product key
 // slides out of the centre mode switch, which is no part of either row.)
-const BUILD_ROW_WIDTH = 220;
+// 2026-09-07: plus the recalculation tray (the auto toggle, and the solve
+// key beside it while auto is off): 286 shell px measured with both keys
+// out, 250 with the toggle alone. The wider state decides the fold.
+const BUILD_ROW_WIDTH = 286;
 const BUILD_ROW_FOLDED_WIDTH = 132;
 // The right row: the mode switch's tray first, the paint tray, arrange,
 // the view tray (annotations and view options) and the bin last; mute and

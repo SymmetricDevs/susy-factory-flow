@@ -59,6 +59,53 @@ const SOLVE_MODE_SYNC_LIMIT = 40;
 
 let lastSolveDurationMs: number | undefined;
 
+/**
+ * AUTO RECALCULATION (Jack, 2026-09-07). On by default: every edit solves,
+ * as it always has. Off, the store's door hands the last books back flagged
+ * `held` and remembers nothing else - the project in the store IS the
+ * pending plan - until `solveBooksNow` is asked for. A browser preference,
+ * never part of the plan, for players whose boards make every edit a wait.
+ */
+const AUTO_SOLVE_KEY = "gtnh-factory-flow.auto-solve.v1";
+let autoSolve = readAutoSolve();
+const autoSolveListeners = new Set<() => void>();
+
+function readAutoSolve(): boolean {
+  try {
+    return typeof localStorage === "undefined" || localStorage.getItem(AUTO_SOLVE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function getAutoSolve(): boolean {
+  return autoSolve;
+}
+
+export function setAutoSolve(on: boolean): void {
+  autoSolve = on;
+  try {
+    localStorage.setItem(AUTO_SOLVE_KEY, on ? "on" : "off");
+  } catch {
+    // A private window that refuses storage still gets the session's setting.
+  }
+  for (const listener of autoSolveListeners) {
+    listener();
+  }
+}
+
+export function subscribeAutoSolve(listener: () => void): () => void {
+  autoSolveListeners.add(listener);
+  return () => {
+    autoSolveListeners.delete(listener);
+  };
+}
+
+/** The solve the player asked for by hand: the gate does not apply. */
+export function solveBooksNow(project: FactoryProject): ThroughputResult {
+  return solveBooksUngated(project);
+}
+
 const BIG_BOOKS_CACHE_LIMIT = 8;
 const bigBooksCache = new Map<string, ThroughputResult>();
 
@@ -83,6 +130,16 @@ export function registerBooksSink(apply: (result: ThroughputResult) => void) {
 }
 
 export function solveBooks(project: FactoryProject): ThroughputResult {
+  if (!autoSolve && lastBooks) {
+    // Held, not thinking: the old books stand until the player presses solve.
+    const held: ThroughputResult = { ...lastBooks, stale: true, held: true };
+    lastBooks = held;
+    return held;
+  }
+  return solveBooksUngated(project);
+}
+
+function solveBooksUngated(project: FactoryProject): ThroughputResult {
   const size = project.nodes.length + project.edges.length;
   const expectSlow =
     size > SYNC_SOLVE_LIMIT ||

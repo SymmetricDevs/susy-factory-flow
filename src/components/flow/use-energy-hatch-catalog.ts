@@ -58,7 +58,7 @@ async function fetchCatalog(datasetVersionId: string): Promise<EnergyHatchCatalo
       try {
         const url =
           `/api/datasets/${encodeURIComponent(datasetVersionId)}/resources` +
-          `?query=${encodeURIComponent(query)}&kind=item&limit=120`;
+          `?query=${encodeURIComponent(query)}&kind=item&limit=400`;
         const response = await fetch(url);
         if (!response.ok) {
           return;

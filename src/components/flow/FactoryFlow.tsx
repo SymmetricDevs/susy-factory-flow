@@ -71,6 +71,8 @@ import {
   Waves,
   X,
   Zap,
+  Play,
+  Repeat,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -139,6 +141,7 @@ import {
   type BoardClipboardPayload,
   type BoardFraming,
 } from "@/store/factory-store";
+import { getAutoSolve, setAutoSolve, subscribeAutoSolve } from "@/store/solve-books";
 import { hasAnySolveNumbers } from "@/lib/solver/throughput";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { useBlueprintStore } from "@/store/blueprint-store";
@@ -7999,8 +8002,73 @@ const SourceToolbar = memo(function SourceToolbar({
           ) : null}
         </div>
       </ToolTray>
+      <ToolTray>
+        <AutoSolveKeys />
+      </ToolTray>
       </ToolGroup>
     </div>
+  );
+});
+
+/**
+ * AUTOMATIC RECALCULATION and its manual counterpart (Jack, 2026-09-07).
+ * The first key is a toggle: lit, every edit solves the board as it always
+ * has; dark, edits leave the books where they were and the second key
+ * appears - press it to solve. The books wear `held` while they are out of
+ * date, which lights the solve key amber. A browser preference, not part of
+ * the plan, for boards where every edit is a wait on the main thread.
+ */
+const AutoSolveKeys = memo(function AutoSolveKeys() {
+  const auto = useSyncExternalStore(subscribeAutoSolve, getAutoSolve, () => true);
+  const held = useFactoryStore((state) => Boolean(state.lastResult.held));
+  const solveNow = useFactoryStore((state) => state.solveNow);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          playBoardSound("tick");
+          const next = !auto;
+          setAutoSolve(next);
+          if (next && held) {
+            solveNow();
+          }
+        }}
+        aria-pressed={auto}
+        aria-label={auto ? "Recalculating on every change" : "Recalculating only when asked"}
+        title={auto ? "Recalculates on every change" : "Recalculates only when asked"}
+        className={[
+          "pointer-events-auto flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
+          auto ? TOOL_FACE_ON : TOOL_FACE_OFF,
+        ].join(" ")}
+      >
+        <Repeat className="h-4 w-4" />
+      </button>
+      {auto ? null : (
+        <button
+          type="button"
+          onClick={() => {
+            playBoardSound("tick");
+            solveNow();
+          }}
+          aria-label={held ? "Recalculate now: the board has changed" : "Recalculate now"}
+          title={held ? "Recalculate: the board has changed" : "Recalculate"}
+          className={[
+            "pointer-events-auto relative flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
+            TOOL_FACE_OFF,
+          ].join(" ")}
+        >
+          <Play className="h-4 w-4" />
+          {held ? (
+            // The dot: something changed and the numbers have not caught up.
+            <span
+              aria-hidden
+              className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-[var(--mc-15)] bg-amber-400"
+            />
+          ) : null}
+        </button>
+      )}
+    </>
   );
 });
 

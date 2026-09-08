@@ -321,6 +321,7 @@ export const factoryNodeSchema = z.object({
     .max(64)
     .optional(),
   energyHatchType: z.string().min(1).optional(),
+  powerEuT: z.number().nonnegative().finite().optional(),
   machineHandlerId: z.string().min(1).optional(),
   coilTier: z.string().min(1).optional(),
   machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),

@@ -18,6 +18,14 @@ export interface RecipeTooltipView {
   mode?: TooltipMode;
   status?: { label: string; tone: TooltipTone };
   rows: Array<{ label: string; value: string }>;
+  /**
+   * A before/after ladder, three aligned columns, drawn before the rows: the
+   * calculator's own table so a hover and the panel read the same way.
+   */
+  table?: {
+    head: readonly [string, string, string];
+    rows: Array<{ label: string; before: string; after: string; emphasis?: boolean }>;
+  };
   reason?: string;
   /** Short lines in order, cause before consequence before what to do. */
   bullets?: readonly string[];

@@ -17,7 +17,7 @@ import {
   type PowerDisplayUnit,
   type RateUnit,
 } from "@/lib/model/rate-unit";
-import { registerBooksSink, solveBooks } from "./solve-books";
+import { registerBooksSink, solveBooks, solveBooksNow } from "./solve-books";
 import { applyRecipeInputOverrides, inputOverrideAmount } from "@/lib/model/recipe-input-overrides";
 import type { AlternativeCycleFace } from "@/lib/nei/alternative-cycle";
 import { createCropFarmPlaceholderRecipe, isCropFarmRecipe } from "@/lib/model/passive-production";
@@ -219,6 +219,8 @@ interface FactoryStore {
   /** EU/t, or amps of a chosen tier - the board-wide power display dial. */
   powerDisplayUnit: PowerDisplayUnit;
   setPowerDisplayUnit: (unit: PowerDisplayUnit) => void;
+  /** Recalculate the books by hand: what the solve key does while automatic recalculation is off. */
+  solveNow: () => void;
   setProject: (project: FactoryProject) => void;
   markHydratedProject: (project: FactoryProject) => void;
   undo: () => void;
@@ -894,6 +896,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     // Same view-only rule as the rate unit above.
     setActivePowerDisplayUnit(unit);
     set({ powerDisplayUnit: unit });
+  },
+  solveNow: () => {
+    set({ lastResult: solveBooksNow(get().project) });
   },
   setProject: (project) => {
     // A plan ARRIVING (import, tab switch, setup open) is not an action;

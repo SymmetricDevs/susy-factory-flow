@@ -81,6 +81,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The planner reads in Inter and a third larger; Settings has the font and a size stepper.",
       "Panning is much smoother, and the moving dashes on wires are gone.",
       "A multiblock running under one tick now counts whole recipes per tick, as the game does: 0.625 ticks runs two a tick, not 1.6.",
+      "A multiblock's power is one EU/t number you type, wheel or add up from real hatches in a calculator that shows what it buys.",
+      "The Machines list shows peak and average draw side by side with totals on top.",
+      "A key by the units turns automatic recalculation off; press the key beside it to recalculate when you choose.",
+      "Boards past a billion items or litres a second no longer read as zero.",
     ],
   },
   {

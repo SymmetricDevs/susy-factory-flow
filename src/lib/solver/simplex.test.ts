@@ -110,3 +110,23 @@ describe("simplex on the boiler books system", () => {
     }
   });
 });
+
+describe("column scaling", () => {
+  it("moves a variable that is 1 in one row and 1e12 in another", () => {
+    // A port row (flow = rate x act) with act in [0, 1]: row scaling alone
+    // left the flow's entry under the pivot epsilon, and the walk handed back
+    // act = 0 as "optimal". A UIV supply on a 10-tick recipe zeroed a whole
+    // reactor that way. Every scale must reach act = 1.
+    for (const rate of [1e6, 1e9, 2.1e9, 1e12]) {
+      const lp: LinearProgram = {
+        maximize: [1, 0],
+        equalities: [{ coefficients: new Map([[1, 1], [0, -rate]]), rhs: 0 }],
+        upperBounds: [{ coefficients: new Map([[0, 1]]), rhs: 1 }],
+      };
+      const solved = solveLp(lp);
+      expect(solved.status).toBe("optimal");
+      expect(solved.x[0]).toBeCloseTo(1, 9);
+      expect(solved.x[1]! / rate).toBeCloseTo(1, 6);
+    }
+  });
+});

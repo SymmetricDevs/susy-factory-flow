@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { RecipeTooltipView, TooltipAction } from "./recipe-tooltip-data";
 
 const GESTURE_NAME: Record<TooltipAction["gesture"], string> = {
@@ -57,6 +57,14 @@ export function RecipeTooltip({ view, children }: { view: RecipeTooltipView; chi
       {(view.subtitle || view.status) && <div className="flex flex-wrap justify-between gap-x-3 text-fg-muted">
         <span>{view.subtitle}</span>
         {view.status && <span className={view.status.tone === "warning" ? "text-amber-300" : view.status.tone === "good" ? "text-green-300" : "text-fg-muted"}>{view.status.label}</span>}
+      </div>}
+      {view.table && <div className="mt-2 grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-4 gap-y-0.5">
+        {view.table.head.map((cell, index) => <span key={cell} className={`text-xs uppercase tracking-wider text-fg-muted ${index > 0 ? "text-right" : ""}`}>{cell}</span>)}
+        {view.table.rows.map(row => <Fragment key={row.label}>
+          <span className={`min-w-0 truncate ${row.emphasis ? "border-t border-line pt-0.5 font-semibold text-fg" : "text-fg-muted"}`}>{row.label}</span>
+          <span className={`whitespace-nowrap text-right tabular-nums text-fg-muted ${row.emphasis ? "border-t border-line pt-0.5" : ""}`}>{row.before}</span>
+          <span className={`whitespace-nowrap text-right font-medium tabular-nums text-fg ${row.emphasis ? "border-t border-line pt-0.5 font-semibold" : ""}`}>{row.after}</span>
+        </Fragment>)}
       </div>}
       {view.rows.length > 0 && <dl className="mt-2 space-y-0.5">
         {view.rows.map(row => <div key={row.label} className="flex items-baseline justify-between gap-5">

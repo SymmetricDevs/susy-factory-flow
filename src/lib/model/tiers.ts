@@ -31,6 +31,24 @@ export function getVoltageTierForEuT(euT: number): Exclude<MachineTier, "DEMO"> 
   return GT_VOLTAGE_TIERS.find((entry) => absEuT <= entry.maxEuT)?.tier ?? "MAX";
 }
 
+/**
+ * The highest tier whose voltage fits INSIDE a power budget: the hatch tier
+ * a typed EU/t reads as (6,000 EU/t is EV hatches carrying 2.93 amps, never
+ * an IV hatch fed short). Floors at ULV.
+ */
+export function getVoltageTierWithinEuT(euT: number): Exclude<MachineTier, "DEMO"> {
+  if (!Number.isFinite(euT) || euT <= 0) {
+    return "ULV";
+  }
+  let tier: Exclude<MachineTier, "DEMO"> = "ULV";
+  for (const entry of GT_VOLTAGE_TIERS) {
+    if (entry.maxEuT <= euT) {
+      tier = entry.tier;
+    }
+  }
+  return tier;
+}
+
 export function getRecipePowerTier(recipe: Pick<Recipe, "eut">): Exclude<MachineTier, "DEMO"> {
   return getVoltageTierForEuT(recipe.eut);
 }

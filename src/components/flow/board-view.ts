@@ -109,7 +109,13 @@ export const DEFAULT_BOARD_VIEW: BoardView = {
   freeDockMode: true,
   lineLabelsMode: false,
   lineThicknessMode: true,
-  linePulseMode: true,
+  // RETIRED (2026-09-07). The marching dashes were a full-board canvas
+  // redrawn every frame; in Firefox a dirty canvas re-renders every board
+  // tile under it, which cost most of the frame rate at 4K (33 fps sitting
+  // still, 166 without it), and the dashes read the camera a frame late, so
+  // they slid against the wires during every pan. The field stays so stored
+  // views and shared plans still parse; it is never true again.
+  linePulseMode: false,
   calmMode: false,
   glanceMode: "identity",
 };
@@ -144,7 +150,8 @@ function readBoardView(): BoardView {
       freeDockMode: flag(parsed.freeDockMode, DEFAULT_BOARD_VIEW.freeDockMode),
       lineLabelsMode: flag(parsed.lineLabelsMode, DEFAULT_BOARD_VIEW.lineLabelsMode),
       lineThicknessMode: flag(parsed.lineThicknessMode, DEFAULT_BOARD_VIEW.lineThicknessMode),
-      linePulseMode: flag(parsed.linePulseMode, DEFAULT_BOARD_VIEW.linePulseMode),
+      // Retired: a stored true is not honoured (see DEFAULT_BOARD_VIEW).
+      linePulseMode: false,
       calmMode: flag(parsed.calmMode, DEFAULT_BOARD_VIEW.calmMode),
       glanceMode,
 

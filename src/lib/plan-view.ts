@@ -125,12 +125,13 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   // `glanceMode` from an older plan is skipped for the same reason the reset
   // above exists; `lineHeatMode` is deliberately NOT applied either: line
   // colour rides the status glance mode now, and the old flag would arrive
-  // with no control that turns it off.
+  // with no control that turns it off. `linePulseMode` is skipped since the
+  // dashes were retired (board-view.ts): a plan saved with them on must not
+  // switch on a layer that no longer exists.
   for (const key of [
     "lineThicknessMode",
     "freeDockMode",
     "lineLabelsMode",
-    "linePulseMode",
     "calmMode",
   ] as const) {
     const set = flag(view[key]);

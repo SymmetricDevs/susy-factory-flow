@@ -39,7 +39,12 @@
  */
 :root {
   --ui-scale: 1.3;
-  --ui-scale-inverse: 0.76923;
+  /* The EXACT reciprocal, never a rounded decimal: 1.3 x 0.76923 is not 1,
+     and an effective zoom of 0.99996 on the board put every card on
+     sub-pixel geometry, which doubled the compositor's per-frame layer
+     rebuild while panning (measured 2026-09-07). calc(1 / 1.3) cancels
+     exactly. ui-scale.ts and the boot script write the same form. */
+  --ui-scale-inverse: calc(1 / var(--ui-scale));
   --ui-vh: calc(1vh * var(--ui-scale-inverse));
   --ui-vw: calc(1vw * var(--ui-scale-inverse));
   --ui-dvh: calc(1dvh * var(--ui-scale-inverse));
@@ -53,6 +58,23 @@
    real pixels and its visual box wears this. */
 .ui-zoom {
   zoom: var(--ui-scale);
+}
+
+/* THE BOARD IS ITS OWN COMPOSITOR LAYER. A pan moves the viewport's
+   composited transform, and Chrome then re-tests everything painted after
+   it on the PAGE for overlap with that moving layer, expanded out to the
+   nearest COMPOSITED clip. The board had none, so the clip was the whole
+   page: ~200 rows in the two side columns became layers of their own, and
+   rebuilding that layer list cost ~40 ms on every pan frame (a 13 fps pan
+   on a 100-card plan, measured 2026-09-07). will-change: opacity gives the
+   board a composited layer of its own, so its overflow clip bounds the
+   test; unlike transform it is not a containing block for fixed
+   descendants (the in-board menus are body portals regardless). Layer
+   build fell from 41 ms to 14 ms a frame, the overview pan from 13 to
+   ~48 fps. Do not swap it for isolation or contain: paint - neither
+   composites, both were measured doing nothing. */
+.factory-flow-board {
+  will-change: opacity;
 }
 
 /* The board, back at 1:1. Nested zooms multiply, so this cancels the shell's;
@@ -608,7 +630,13 @@ textarea {
   z-index: auto !important;
 }
 
-.factory-flow-board--moving .react-flow__viewport {
+/* Always, not only while a gesture is flagged as moving: a keyboard pan
+   calls setViewport per frame, which fires move start and end per frame, so
+   the flag flickered and the layer was promoted and dropped every frame. The
+   pan is a scroll offset now (scroll-camera.tsx) and this transform only
+   changes on zoom; the retained layer is what keeps a zoom from repainting
+   the whole board. */
+.factory-flow-board .react-flow__viewport {
   will-change: transform;
 }
 

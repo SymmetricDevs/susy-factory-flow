@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import { edgePulseCount } from "./edge-pulse";
 
 /**
  * The performance readout, bottom left of the board.
@@ -76,6 +75,7 @@ export function PerfHud() {
   const lineStatsRef = useRef<HTMLDivElement | null>(null);
   const lineStutterRef = useRef<HTMLDivElement | null>(null);
   const lineCountsRef = useRef<HTMLDivElement | null>(null);
+  const lineCameraRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!enabled) {
@@ -147,7 +147,31 @@ export function PerfHud() {
       if (lineCountsRef.current) {
         const cards = document.querySelectorAll(".react-flow__node").length;
         const wires = document.querySelectorAll(".react-flow__edge").length;
-        lineCountsRef.current.textContent = `cards ${cards} · wires ${wires} · dashes ${edgePulseCount()}`;
+        lineCountsRef.current.textContent = `cards ${cards} · wires ${wires}`;
+      }
+      if (lineCameraRef.current) {
+        // The flow-space point under the centre of the board, and the zoom:
+        // the address of what you are looking at, for reporting one exact
+        // view on one plan. Both rects and the transform are real pixels
+        // (everything inside .react-flow is unzoomed).
+        const flow = document.querySelector<HTMLElement>(".react-flow");
+        const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+        const match = viewport
+          ? /translate\(([-\d.e]+)px, ([-\d.e]+)px\) scale\(([-\d.e]+)\)/.exec(
+              viewport.style.transform,
+            )
+          : null;
+        if (flow && match) {
+          const rect = flow.getBoundingClientRect();
+          // Under the scroll camera the pan is the .react-flow wrapper's scroll
+          // offset (scroll-camera.tsx); zero when the viewport pans itself.
+          const zoom = Number(match[3]);
+          const tx = Number(match[1]) - flow.scrollLeft;
+          const ty = Number(match[2]) - flow.scrollTop;
+          const x = (rect.width / 2 - tx) / zoom;
+          const y = (rect.height / 2 - ty) / zoom;
+          lineCameraRef.current.textContent = `centre x ${Math.round(x)} · y ${Math.round(y)} · zoom ${zoom.toFixed(3)}`;
+        }
       }
     };
 
@@ -174,13 +198,19 @@ export function PerfHud() {
 
   return (
     <div
-      className="pointer-events-none absolute bottom-12 left-2 z-50 border-2 border-[#3b414c] bg-[#14161a]/90 px-2 py-1 font-mono text-[11px] leading-[15px] text-[#c3cad6] shadow-[3px_3px_0_rgba(0,0,0,0.45)]"
+      // Selectable on purpose: the readout is for copying into a report, so
+      // it takes the pointer and the text can be dragged over. nodrag/nopan
+      // keep a selection sweep from panning the board underneath.
+      className="nodrag nopan nowheel absolute bottom-12 left-2 z-50 cursor-text select-text border-2 border-[#3b414c] bg-[#14161a]/90 px-2 py-1 font-mono text-[11px] leading-[15px] text-[#c3cad6] shadow-[3px_3px_0_rgba(0,0,0,0.45)]"
       aria-hidden
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
     >
       <div ref={lineLiveRef} className="text-[#e8ecf3]" />
       <div ref={lineStatsRef} />
       <div ref={lineStutterRef} />
       <div ref={lineCountsRef} className="text-[#8a93a3]" />
+      <div ref={lineCameraRef} className="text-[#8a93a3]" />
     </div>
   );
 }

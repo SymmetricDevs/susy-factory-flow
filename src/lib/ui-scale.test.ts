@@ -66,9 +66,11 @@ describe("interface size", () => {
     expect(getUiScale()).toBe(1.56);
     expect(window.localStorage.getItem("gtnh-factory-flow.ui-scale.v1")).toBe("120");
     expect(document.documentElement.style.getPropertyValue("--ui-scale")).toBe("1.56");
-    expect(Number(document.documentElement.style.getPropertyValue("--ui-scale-inverse"))).toBeCloseTo(
-      1 / 1.56,
-      4,
+    // The exact reciprocal as a calc(), so the board's inverse zoom cancels
+    // the shell's to exactly 1 (a rounded decimal left sub-pixel geometry
+    // that doubled the compositor's per-frame work).
+    expect(document.documentElement.style.getPropertyValue("--ui-scale-inverse")).toBe(
+      "calc(1 / 1.56)",
     );
   });
 

@@ -1,0 +1,53 @@
+/*
+ * THE SCROLL CAMERA (scroll-camera.tsx has the why). The `.react-flow`
+ * wrapper is the scroll container (it is already overflow: hidden by React
+ * Flow's own inline style), the pane inside it is one million pixels square
+ * so any camera the plan can reach is a reachable offset, the viewport is
+ * pinned at the centre of that area with only the zoom left in its
+ * transform, and the pan is the wrapper's scroll offset. `!important`
+ * throughout because React Flow writes the viewport's transform inline on
+ * every camera change and the pane's size inline on mount, and both have to
+ * lose.
+ *
+ * THE WRAPPER, NOT THE RENDERER. Firefox pans the wrapper at the display
+ * cap (165 fps at 4K) but the renderer at ~80: with the renderer as the
+ * scroller Gecko rebuilt the whole display list on every scroll instead of
+ * scrolling asynchronously. Measured 2026-09-07, cause in Gecko unknown;
+ * do not move the scroller back in without re-measuring in Firefox.
+ *
+ * Keyed on a data attribute, not a class: React rebuilds the board's
+ * className on every render and would drop a class the camera added.
+ *
+ * The numbers here are SCROLL_CAMERA_OFFSET (500000px) and twice it; change
+ * them together with the constant.
+ */
+.factory-flow-board[data-scroll-camera] .react-flow {
+  overflow: hidden;
+  overflow-anchor: none;
+}
+
+/* The PANE is the scroll area, one million square, so any camera the plan
+   can reach is a reachable offset; it is a hit target and hosts the marquee,
+   and its size costs nothing to paint. NOT the renderer: React Flow measures
+   its own width and height from the renderer's offset size, and a
+   million-pixel renderer made the initial fit centre the plan at
+   (500000, 500000). The renderer keeps its 100% box; the pane's overflow is
+   what the wrapper scrolls. */
+.factory-flow-board[data-scroll-camera] .react-flow__pane {
+  width: 1000000px !important;
+  height: 1000000px !important;
+}
+
+/* The viewport and the multi-selection frame (React Flow gives it the same
+   transform as the viewport) sit at the centre of the scroll area, zoom only.
+   3d so the pinned layer stays its own compositor surface across both
+   engines. */
+.factory-flow-board[data-scroll-camera] .react-flow__viewport,
+.factory-flow-board[data-scroll-camera] .react-flow__nodesselection {
+  transform: translate3d(500000px, 500000px, 0) scale(var(--camera-zoom, 1)) !important;
+}
+
+/* The marquee (.react-flow__selection) is drawn inside the scrolled pane at
+   container coordinates; scroll-camera.tsx writes its shift inline while one
+   exists. Not a variable here: a per-frame custom property on the pane
+   recalculated the whole viewport under it. */

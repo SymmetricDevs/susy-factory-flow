@@ -79,6 +79,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "A shorter top bar: share, import and export sit under one key, the version chip opens the release notes, and the generator, custom rate and crop farm keys moved to the top of the items column.",
       "The board's ? help points at the Library, the mode switch and the machine list, and draws each drawer as its own shape.",
       "The planner reads in Inter and a third larger; Settings has the font and a size stepper.",
+      "Panning is much smoother, and the moving dashes on wires are gone.",
     ],
   },
   {

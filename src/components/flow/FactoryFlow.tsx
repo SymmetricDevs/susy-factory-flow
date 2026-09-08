@@ -40,7 +40,6 @@ import {
   Box,
   Cable,
   Grid2x2,
-  Ellipsis,
   Anchor,
   Eye,
   Focus,
@@ -111,6 +110,8 @@ import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
 import { ItemPickerPopover } from "@/components/ItemPickerPopover";
 import { listPoolCellPairs } from "@/lib/solver/pool-mode";
 import "./pool-mode.css";
+import "./scroll-camera.css";
+import { ScrollCamera } from "./scroll-camera";
 import {
   getEffectiveNodeRecipe,
   isPocketId,
@@ -337,10 +338,6 @@ import {
   type NodeDetailLevel,
 } from "./node-detail";
 import {
-  clearEdgePulses,
-  drawEdgePulses,
-  edgePulseCount,
-  eraseEdgePulseOcclusion,
   publishEdgeLabelBox,
   publishEdgePulse,
   publishEdgeWaypointDots,
@@ -390,6 +387,9 @@ import { BOARD_PAPER_IDS } from "@/lib/model/board-paper";
 import { getSetupRules } from "@/lib/model/setup-rules";
 import { nearestFreeSpot, type PlacementRect, type PlacementRegion } from "./board-placement";
 import { registerBoardResize, type BoardResizeDraft } from "./board-resize";
+
+/** How long after the last camera step the settled camera work runs. */
+const MOVE_END_SETTLE_MS = 120;
 
 const nodeTypes = {
   recipeNode: RecipeNode,
@@ -1948,20 +1948,13 @@ export function FactoryFlow() {
   const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
   const boardView = useBoardView();
   const { freeDockMode, lineLabelsMode, lineThicknessMode, calmMode } = boardView;
-  // Holding Shift or the Windows key parks the marching dashes and shows the
-  // direction chevrons instead, for as long as the key is down. Screenshots
-  // are the reason: Win+Shift+S is the snipping tool, and a frame of moving
-  // dashes photographs as a broken line. The view's own setting is untouched;
-  // the toolbar keeps showing it, and the wires resume when the key lifts.
-  const stillKeyHeld = useStillKeyHeld();
-  const linePulseMode = boardView.linePulseMode && !stillKeyHeld;
   // Device taste, not plan state: never captured into plan-view snapshots.
   const boardMotion = useBoardMotion();
   const canvasTheme = getCanvasTheme(boardView.canvasTheme);
   // Line colour rides the speed smart view now — no switch of its own. The
   // edge component itself gates it to the glance step, where the view lives.
   const speedColorMode = boardView.glanceMode === "status";
-  const anyLineMode = speedColorMode || lineThicknessMode || linePulseMode;
+  const anyLineMode = speedColorMode || lineThicknessMode;
   const setFlowViewportCenter = useFactoryStore((state) => state.setFlowViewportCenter);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
@@ -2377,15 +2370,6 @@ export function FactoryFlow() {
       return withTouchDragRule(changed ? next : current, isCompact);
     });
   }, [isCompact, nodesFromProject, setPendingBoardSelection]);
-
-  // Switching pulse mode off has to empty the canvas registry: the edges stay
-  // mounted and simply stop publishing, so without this the last frame's
-  // dashes would march on forever.
-  useEffect(() => {
-    if (!linePulseMode) {
-      clearEdgePulses();
-    }
-  }, [linePulseMode]);
 
   useEffect(() => {
     pruneNodeDataCaches(
@@ -3375,7 +3359,11 @@ export function FactoryFlow() {
                 kind: flowBucketFor(edge.resourceKind),
                 color: speedColorMode,
                 thickness: lineThicknessMode,
-                pulse: linePulseMode,
+                // The marching dashes were retired (2026-09-07): their canvas
+                // dirtied the whole board every frame and read the camera a
+                // frame late, so they cost most of the frame rate and still
+                // slid against the wires. Nothing publishes a pulse now.
+                pulse: false,
               }
             : undefined,
           layoutEpoch: layoutVersion,
@@ -3450,7 +3438,6 @@ export function FactoryFlow() {
     freeDockMode,
     speedColorMode,
     lineLabelsMode,
-    linePulseMode,
     lineThicknessMode,
     layoutVersion,
     pocketSummaries,
@@ -4607,7 +4594,6 @@ export function FactoryFlow() {
     // never painted — and moving the board is a deliberate act anyway, not
     // something you do while reading one node's neighbourhood.
     clearHopMap();
-    boardRef.current?.classList.add("factory-flow-board--moving");
     // Every dropdown over the board closes when the camera moves.
     emitBoardCameraMove();
   }, []);
@@ -4620,22 +4606,35 @@ export function FactoryFlow() {
    * therefore also proof that a design handover is over, however the ordering
    * fell out - see design-camera.ts.
    */
+  // A keyboard pan (board-camera-controls.ts) and every animated camera move
+  // call setViewport per FRAME, and React Flow reports each call as a move
+  // that started and ended, so this used to run per frame: a forced layout
+  // for the centre, a store write that re-rendered its readers, and a
+  // localStorage write of the camera table. It is settled work, so it runs
+  // once, shortly after the last end (the settle itself stays immediate: it
+  // is a flag, and design-camera.ts wants it the moment a hand moves).
+  const moveEndTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lastMoveEndRef = useRef<BoardCamera | undefined>(undefined);
+  useEffect(() => () => clearTimeout(moveEndTimerRef.current), []);
   const handleMoveEnd = useCallback(
     (event: MouseEvent | TouchEvent | null, viewport: BoardCamera) => {
-      boardRef.current?.classList.remove("factory-flow-board--moving");
-      updateFlowViewportCenter();
-
       if (event) {
         settleDesignCamera();
       }
-      if (!isDesignCameraSettled()) {
-        return;
-      }
-
-      const designId = useDesignStore.getState().activeDesignId;
-      if (designId) {
-        writeDesignCamera(designId, viewport);
-      }
+      lastMoveEndRef.current = viewport;
+      clearTimeout(moveEndTimerRef.current);
+      moveEndTimerRef.current = setTimeout(() => {
+        moveEndTimerRef.current = undefined;
+        updateFlowViewportCenter();
+        const settled = lastMoveEndRef.current;
+        if (!settled || !isDesignCameraSettled()) {
+          return;
+        }
+        const designId = useDesignStore.getState().activeDesignId;
+        if (designId) {
+          writeDesignCamera(designId, settled);
+        }
+      }, MOVE_END_SETTLE_MS);
     },
     [updateFlowViewportCenter],
   );
@@ -4643,6 +4642,11 @@ export function FactoryFlow() {
   const handleInit = useCallback(
     (instance: ReactFlowInstance<BoardFlowNode, ResourceFlowEdge>) => {
       flowInstanceRef.current = instance;
+      // Dev builds only: the performance probes (*.local.mjs) put the camera
+      // on an exact spot through this instead of faking wheel and drag input.
+      if (process.env.NODE_ENV !== "production") {
+        (window as unknown as { __gtnhFlow?: unknown }).__gtnhFlow = instance;
+      }
       // A remembered camera that arrived before the board existed. It waits
       // rather than being dropped, because on a page load this is the usual
       // order: the plan comes out of IndexedDB while React Flow is still
@@ -4704,7 +4708,6 @@ export function FactoryFlow() {
       // card look, not whatever the live board is switched to. All restored
       // after.
       writeBoardView({
-        linePulseMode: true,
         calmMode: request.presentation === true,
         glanceMode: isStatLook ? cardDetail : "identity",
       });
@@ -4840,7 +4843,6 @@ export function FactoryFlow() {
       } finally {
         writeBoardMotion(savedMotion);
         writeBoardView({
-          linePulseMode: savedBoardView.linePulseMode,
           calmMode: savedBoardView.calmMode,
           glanceMode: savedBoardView.glanceMode,
         });
@@ -6361,7 +6363,7 @@ export function FactoryFlow() {
         // on every path that puts cards on the board (the design store, plan
         // import, blueprint paste), so nothing was relying on it.
         // Culling pauses while an export photographs the whole plan.
-        onlyRenderVisibleElements={!isExportRendering}
+        onlyRenderVisibleElements={false}
         // Double-click PINS AND UNPINS waypoint dots now, so the gesture can
         // no longer also mean "zoom in". d3's dblclick.zoom listener sits on
         // the pane, upstream of React's synthetic events — stopPropagation
@@ -6391,13 +6393,12 @@ export function FactoryFlow() {
         <NodeDetailController boardRef={boardRef} />
         <HopMapController boardRef={boardRef} />
         <SelectionHandoffController signal={selectionHandoffCount} />
-        {linePulseMode ? <EdgePulseCanvas edgesUnderNodes={lineThicknessMode} /> : null}
+        {/* The pan is a scroll offset, not a transform: see scroll-camera.tsx. */}
+        <ScrollCamera boardRef={boardRef} />
         {/* The paper's tooth, in board space so it pans and zooms with the
             factory. Mounted before the pattern so dots ink OVER the grain.
             A pocket keeps its flat violet room. */}
-        {canvasTheme.grain ? (
-          <GrainBackground layers={canvasTheme.grain} />
-        ) : null}
+        {canvasTheme.grain ? <GrainBackground layers={canvasTheme.grain} /> : null}
         {boardView.canvasPattern === "none" ? null : boardView.canvasPattern === "ruled" ||
           boardView.canvasPattern === "graph" ? (
           <RuledBackground
@@ -7379,6 +7380,13 @@ const ModeKeys = memo(function ModeKeys() {
   // mode. A plain click on a key still jumps the glass there.
   const rowRef = useRef<HTMLDivElement | null>(null);
   const [dragX, setDragX] = useState<number | undefined>(undefined);
+  // A press is a CLICK until the pointer has travelled: the glass used to
+  // jump under the pointer on pointer-down and slide to the key on release,
+  // two moves for one click. That read as a glitch once the board stopped
+  // lagging enough to hide the first move. Now the glass only follows the
+  // pointer past a few pixels of travel; a plain click slides it once.
+  const pressRef = useRef<{ x: number; dragging: boolean } | undefined>(undefined);
+  const DRAG_START_PX = 4;
   const xToIndex = (x: number) =>
     Math.max(0, Math.min(MODE_KEYS.length - 1, Math.floor(x / MODE_STEP)));
   // Real px -> shell px: MODE_STEP is the keys' layout pitch.
@@ -7389,19 +7397,30 @@ const ModeKeys = memo(function ModeKeys() {
       return;
     }
     rowRef.current.setPointerCapture(event.pointerId);
-    setDragX(localX(event));
+    pressRef.current = { x: localX(event), dragging: false };
   };
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (dragX !== undefined) {
-      setDragX(localX(event));
-    }
-  };
-  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (dragX === undefined) {
+    const press = pressRef.current;
+    if (!press) {
       return;
     }
     const x = localX(event);
-    setDragX(undefined);
+    if (!press.dragging && Math.abs(x - press.x) < DRAG_START_PX) {
+      return;
+    }
+    press.dragging = true;
+    setDragX(x);
+  };
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const press = pressRef.current;
+    if (!press) {
+      return;
+    }
+    pressRef.current = undefined;
+    const x = localX(event);
+    if (press.dragging) {
+      setDragX(undefined);
+    }
     pick(MODE_KEYS[xToIndex(x)]!.mode);
   };
   // The WHEEL walks the positions too, the way it walks every chip on the
@@ -7443,7 +7462,10 @@ const ModeKeys = memo(function ModeKeys() {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={() => setDragX(undefined)}
+      onPointerCancel={() => {
+        pressRef.current = undefined;
+        setDragX(undefined);
+      }}
       onWheel={onWheel}
       className={[
         "pointer-events-auto relative z-10 flex h-8 touch-none select-none border-2 border-[var(--mc-15)]",
@@ -7513,16 +7535,22 @@ const ModeKeys = memo(function ModeKeys() {
         </MinecraftTooltip>
       ))}
       {/* The glass: a faint pane of the engaged mode's colour, a hair
-          brighter along its top edge, and nothing else. It slides. */}
+          brighter along its top edge, and nothing else. It slides on LEFT,
+          not transform: the shell is CSS-zoomed (ui-scale.ts), and Chrome
+          runs a transform transition on the compositor with the target read
+          in unzoomed pixels, so the glass slid to 96px where 124.8px was
+          meant and snapped the last stretch when the main thread landed it.
+          A left transition is resolved on the main thread in the zoomed
+          units, one smooth slide. */}
       <span
         aria-hidden
         className={[
           "pointer-events-none absolute top-0 h-full shadow-[inset_0_2px_0_rgba(255,255,255,0.18)] ease-out",
-          dragX === undefined ? "transition-[transform,background-color] duration-200" : "",
+          dragX === undefined ? "transition-[left,background-color] duration-200" : "",
         ].join(" ")}
         style={{
           width: MODE_STEP,
-          transform: `translateX(${glassLeft}px)`,
+          left: glassLeft,
           backgroundColor: MODE_KEYS[shown]!.glass,
         }}
       />
@@ -7977,350 +8005,6 @@ const SourceToolbar = memo(function SourceToolbar({
 });
 
 /** How long the wires stay parked after the still key is released. */
-const STILL_KEY_RELEASE_MS = 1000;
-
-/**
- * True while Shift or the Windows (Meta) key is held anywhere on the page.
- *
- * Keyup is not to be trusted: Win+Shift+S hands focus to the snipping tool
- * and the release never reaches the page, so a window blur or a hidden tab
- * lets go too, and any later key or pointer event without the modifier
- * resyncs. Keys pressed inside a text field are ignored - a capital letter
- * in the search box must not blink every wire on the board.
- */
-function useStillKeyHeld(): boolean {
-  const [held, setHeldNow] = useState(false);
-  useEffect(() => {
-    // The pause starts the instant the key goes down and lets go a second
-    // AFTER it comes up: Win+Shift+S is tapped, not held, and the shot is
-    // taken a beat later, so the dashes must stay parked past the release.
-    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
-    let down = false;
-    const setHeld = (next: boolean) => {
-      if (next) {
-        down = true;
-        if (releaseTimer !== undefined) {
-          clearTimeout(releaseTimer);
-          releaseTimer = undefined;
-        }
-        setHeldNow(true);
-        return;
-      }
-      if (!down) {
-        return;
-      }
-      down = false;
-      if (releaseTimer === undefined) {
-        releaseTimer = setTimeout(() => {
-          releaseTimer = undefined;
-          setHeldNow(false);
-        }, STILL_KEY_RELEASE_MS);
-      }
-    };
-    const isStillKey = (key: string) => key === "Shift" || key === "Meta" || key === "OS";
-    const isEditable = (target: EventTarget | null) => {
-      const element = target instanceof HTMLElement ? target : null;
-      return Boolean(
-        element &&
-          (element.isContentEditable ||
-            element.tagName === "INPUT" ||
-            element.tagName === "TEXTAREA" ||
-            element.tagName === "SELECT"),
-      );
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (isStillKey(event.key)) {
-        if (!isEditable(event.target)) {
-          setHeld(true);
-        }
-        return;
-      }
-      if (!event.shiftKey && !event.metaKey) {
-        setHeld(false);
-      }
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (isStillKey(event.key) || (!event.shiftKey && !event.metaKey)) {
-        setHeld(false);
-      }
-    };
-    const onPointer = (event: MouseEvent) => {
-      if (!event.shiftKey && !event.metaKey) {
-        setHeld(false);
-      }
-    };
-    const release = () => setHeld(false);
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        release();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("keyup", onKeyUp, true);
-    window.addEventListener("mousemove", onPointer, true);
-    window.addEventListener("mousedown", onPointer, true);
-    window.addEventListener("blur", release);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("keyup", onKeyUp, true);
-      window.removeEventListener("mousemove", onPointer, true);
-      window.removeEventListener("mousedown", onPointer, true);
-      window.removeEventListener("blur", release);
-      document.removeEventListener("visibilitychange", onVisibility);
-      if (releaseTimer !== undefined) {
-        clearTimeout(releaseTimer);
-      }
-    };
-  }, []);
-  return held;
-}
-
-/**
- * The board's marching dashes, on one canvas.
- *
- * Sits OUTSIDE the viewport in screen space (see the note on its element) and
- * applies the camera itself, so the dashes are drawn at device pixels at
- * every zoom instead of being a bitmap the browser stretches. The canvas
- * covers exactly the visible rectangle, so its cost is a function of the
- * window, not of the plan: a 10,000-edge board draws the same number of
- * pixels as a 10-edge one.
- *
- * It reads the camera per frame rather than subscribing — a subscription
- * would re-render this component on every pan frame, which is the thing the
- * whole layer exists to avoid — and it reads it from the viewport DIV's own
- * inline transform, not the store, so the dashes always agree with the frame
- * the wires actually paint (see readPaintedTransform in the draw loop).
- */
-const EdgePulseCanvas = memo(function EdgePulseCanvas({
-  edgesUnderNodes,
-}: {
-  /** Thickness mode: cards sit ON the pipes, so the dashes stop at them. */
-  edgesUnderNodes: boolean;
-}) {
-  // Held in state, not a ref, so the draw loop starts on the render where the
-  // element actually exists.
-  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
-  const flowStore = useStoreApi();
-  // Read inside the loop rather than baked into it, so toggling thickness mode
-  // does not tear down and restart the animation.
-  const edgesUnderNodesRef = useRef(edgesUnderNodes);
-  useEffect(() => {
-    edgesUnderNodesRef.current = edgesUnderNodes;
-  }, [edgesUnderNodes]);
-
-  useEffect(() => {
-    if (!canvas) {
-      return;
-    }
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    let frame = 0;
-    let backingWidth = 0;
-    let backingHeight = 0;
-    // With no pulses (zoomed past the detail step, or none marching) the loop
-    // used to clear the full canvas every frame forever; once wiped it can
-    // simply stand down until a pulse returns.
-    let cleared = false;
-    // The static half of the occlusion list — every rect except the cards
-    // being dragged right now — only changes when geometry republishes or the
-    // drag set changes, so it is rebuilt on those keys and reused per frame.
-    let occlusionBase: Array<{ left: number; top: number; right: number; bottom: number }> = [];
-    let occlusionKeyFrames: typeof publishedBoardFrameBounds | undefined;
-    let occlusionKeyBounds: typeof publishedBoardBounds;
-    let occlusionKeyUnder = false;
-    let occlusionKeyDragging = false;
-    let occlusionKeyEpoch = -1;
-    // The pane is what the canvas has to cover. Measured from the DOM rather
-    // than read from the store's width/height, which are only populated once
-    // React Flow's own observer has fired and would leave the layer blank
-    // until then.
-    const pane =
-      canvas.closest<HTMLElement>(".react-flow") ??
-      (typeof document !== "undefined"
-        ? document.querySelector<HTMLElement>(".react-flow")
-        : null);
-    let width = pane?.clientWidth ?? 0;
-    let height = pane?.clientHeight ?? 0;
-    const observer =
-      pane && typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => {
-            width = pane.clientWidth;
-            height = pane.clientHeight;
-          })
-        : undefined;
-    observer?.observe(pane!);
-
-    // The wires paint under the VIEWPORT DIV's CSS transform, and React
-    // commits that on its own schedule - during a pan the store can be a
-    // frame newer than the DOM (the pointer event updates it, the commit
-    // lands in a scheduler task), so a canvas drawn from the store slid off
-    // the wires until the pan stopped. Nothing runs between rAF and paint,
-    // so the div's inline transform at draw time is exactly what this
-    // frame's wires will paint with: read that, and fall back to the store
-    // only until the div exists.
-    let viewport = pane?.querySelector<HTMLElement>(".react-flow__viewport") ?? null;
-    const viewportTransformPattern =
-      /translate\((-?[\d.e+]+)px,\s*(-?[\d.e+]+)px\)\s*scale\((-?[\d.e+]+)\)/;
-    const readPaintedTransform = (): [number, number, number] => {
-      if (!viewport) {
-        viewport = pane?.querySelector<HTMLElement>(".react-flow__viewport") ?? null;
-      }
-      const raw = viewport?.style.transform;
-      if (raw) {
-        const match = viewportTransformPattern.exec(raw);
-        if (match) {
-          return [Number(match[1]), Number(match[2]), Number(match[3])];
-        }
-      }
-      return flowStore.getState().transform;
-    };
-
-    const draw = (timeMs: number) => {
-      frame = window.requestAnimationFrame(draw);
-      const [translateX, translateY, zoom] = readPaintedTransform();
-      if (width <= 0 || height <= 0 || zoom <= 0) {
-        return;
-      }
-
-      const ratio = window.devicePixelRatio || 1;
-      const nextBackingWidth = Math.round(width * ratio);
-      const nextBackingHeight = Math.round(height * ratio);
-      if (backingWidth !== nextBackingWidth || backingHeight !== nextBackingHeight) {
-        backingWidth = nextBackingWidth;
-        backingHeight = nextBackingHeight;
-        canvas.width = nextBackingWidth;
-        canvas.height = nextBackingHeight;
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
-        cleared = false;
-      }
-
-      if (edgePulseCount() === 0) {
-        if (!cleared) {
-          context.setTransform(ratio, 0, 0, ratio, 0, 0);
-          context.clearRect(0, 0, width, height);
-          cleared = true;
-        }
-        return;
-      }
-      cleared = false;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.clearRect(0, 0, width, height);
-
-      // From here the context speaks flow coordinates, exactly like the SVG.
-      context.translate(translateX, translateY);
-      context.scale(zoom, zoom);
-      const visible = {
-        left: -translateX / zoom,
-        top: -translateY / zoom,
-        right: (-translateX + width) / zoom,
-        bottom: (-translateY + height) / zoom,
-      };
-      // Value motion read per frame, not baked into the loop: flipping the
-      // toggle changes how the dashes accelerate without restarting them.
-      drawEdgePulses(context, visible, timeMs / 1000, readBoardMotionSnapshot().valueMotion);
-      // Punch back out what the dashes are supposed to be behind.
-      // `publishedBoardBounds` is the card set already — it excludes
-      // annotations, which wires (and so their dashes) legitimately pass
-      // straight over. During a drag the whole nodes layer rides above the
-      // wires, so EVERY card occludes — and the held cards' rects come from
-      // React Flow live (published geometry mid-drag is at best one live-drag
-      // beat behind on a small board, and frozen at the drag's start on a
-      // big one).
-      const dragging = activelyDraggedNodeIds.size > 0;
-      if (
-        occlusionKeyFrames !== publishedBoardFrameBounds ||
-        occlusionKeyBounds !== publishedBoardBounds ||
-        occlusionKeyUnder !== edgesUnderNodesRef.current ||
-        occlusionKeyDragging !== dragging ||
-        occlusionKeyEpoch !== draggedNodeSetEpoch
-      ) {
-        occlusionKeyFrames = publishedBoardFrameBounds;
-        occlusionKeyBounds = publishedBoardBounds;
-        occlusionKeyUnder = edgesUnderNodesRef.current;
-        occlusionKeyDragging = dragging;
-        occlusionKeyEpoch = draggedNodeSetEpoch;
-        occlusionBase = [];
-        // A board's bar and rim occlude the wires in EVERY mode, so the dashes
-        // stop at them in every mode too — this is not part of the thickness
-        // mode's cards-on-pipes trade.
-        for (const entry of publishedBoardFrameBounds) {
-          if (dragging && activelyDraggedNodeIds.has(entry.id)) {
-            continue;
-          }
-          occlusionBase.push(...boardChromeOccluders(entry.bounds));
-        }
-        if (edgesUnderNodesRef.current || dragging) {
-          for (const entry of publishedBoardBounds ?? []) {
-            if (dragging && activelyDraggedNodeIds.has(entry.id)) {
-              continue;
-            }
-            occlusionBase.push(entry.bounds);
-          }
-        }
-      }
-      let occlusionBounds = occlusionBase;
-      if (edgesUnderNodesRef.current || dragging) {
-        if (dragging) {
-          // The held cards' rects come from React Flow live and move every
-          // frame; they are the only per-frame part of the list.
-          occlusionBounds = occlusionBase.slice();
-          const nodeLookup = flowStore.getState().nodeLookup;
-          for (const draggedId of activelyDraggedNodeIds) {
-            const draggedNode = nodeLookup?.get(draggedId);
-            if (!draggedNode) {
-              continue;
-            }
-            const position =
-              draggedNode.internals?.positionAbsolute ?? draggedNode.position;
-            const nodeWidth = draggedNode.measured?.width ?? 0;
-            const nodeHeight = draggedNode.measured?.height ?? 0;
-            if (nodeWidth <= 0 || nodeHeight <= 0) {
-              continue;
-            }
-            const rect = {
-              left: position.x,
-              top: position.y,
-              right: position.x + nodeWidth,
-              bottom: position.y + nodeHeight,
-            };
-            // A dragged FRAME is mostly a window: only its chrome is solid,
-            // and the wires inside it keep their dashes.
-            if (draggedNode.type === "boardNode") {
-              occlusionBounds.push(...boardChromeOccluders(rect));
-              continue;
-            }
-            occlusionBounds.push(rect);
-          }
-        }
-      }
-      eraseEdgePulseOcclusion(context, visible, occlusionBounds);
-    };
-
-    frame = window.requestAnimationFrame(draw);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      observer?.disconnect();
-    };
-  }, [canvas, flowStore]);
-
-  // Deliberately NOT inside the viewport: it is the last thing painted in the
-  // board, which is what keeps it from promoting every node and label above it
-  // into its own composited layer. It draws in screen space and applies the
-  // viewport transform itself, so it stays pixel-crisp at every zoom.
-  return (
-    <canvas
-      ref={setCanvas}
-      className="wire-dash-canvas pointer-events-none absolute left-0 top-0 h-full w-full"
-      style={{ zIndex: 5 }}
-    />
-  );
-});
-
 /**
  * The single owner of the board's zoom-detail level.
  *
@@ -8879,7 +8563,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
     freeDockMode,
     lineLabelsMode,
     lineThicknessMode,
-    linePulseMode,
     calmMode,
   } = view;
   // Motion is device taste, not plan state: read and written through its own
@@ -8906,14 +8589,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
       line: "Wires with more flow are drawn thicker.",
       Icon: Cable,
       flip: () => onChange({ lineThicknessMode: !lineThicknessMode }),
-    },
-    {
-      id: "dashes",
-      on: linePulseMode,
-      label: "Moving dashes",
-      line: "Wires show moving dashes.",
-      Icon: Ellipsis,
-      flip: () => onChange({ linePulseMode: !linePulseMode }),
     },
     {
       id: "labels",
@@ -12708,11 +12383,18 @@ function getViewportTransform(element: HTMLElement) {
 
   const rendererRect = renderer.getBoundingClientRect();
   const matrix = parseCssMatrix(getComputedStyle(viewport).transform);
+  // The scroll camera (scroll-camera.tsx) pins the viewport's transform and
+  // carries the pan in the .react-flow wrapper's scroll offset, so the
+  // translation the screen shows is the transform's minus that offset (zero
+  // without the camera). The renderer's rect is the wrapper's under the
+  // camera - it hands that rect out on purpose, see scroll-camera.tsx.
+  const scrollLeft = root?.scrollLeft ?? 0;
+  const scrollTop = root?.scrollTop ?? 0;
   viewportTransformCache = {
     rendererLeft: rendererRect.left,
     rendererTop: rendererRect.top,
-    translateX: matrix.translateX,
-    translateY: matrix.translateY,
+    translateX: matrix.translateX - scrollLeft,
+    translateY: matrix.translateY - scrollTop,
     scaleX: matrix.scaleX,
     scaleY: matrix.scaleY,
   };

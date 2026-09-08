@@ -149,7 +149,11 @@ export function applyUiScaleToDocument(factor: number): void {
   }
   const root = document.documentElement;
   root.style.setProperty(UI_SCALE_VAR, String(factor));
-  root.style.setProperty(UI_SCALE_INVERSE_VAR, String(Math.round((1 / factor) * 100000) / 100000));
+  // The exact reciprocal as a calc(), never a rounded decimal: the board
+  // cancels the shell's zoom with it, and anything short of exactly 1 puts
+  // every card on sub-pixel geometry that doubles the compositor's work on
+  // every pan frame (globals.css, --ui-scale-inverse).
+  root.style.setProperty(UI_SCALE_INVERSE_VAR, `calc(1 / ${factor})`);
 }
 
 export function setUiScalePercent(percent: number): void {

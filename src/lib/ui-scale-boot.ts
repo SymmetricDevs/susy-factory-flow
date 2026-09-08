@@ -44,7 +44,7 @@ export function uiScaleBootScript(viewport: {
     `if(!(p>=${UI_SCALE_MIN_PERCENT}&&p<=${UI_SCALE_MAX_PERCENT}))p=${DEFAULT_UI_SCALE_PERCENT};` +
     `var b=m(${JSON.stringify(PHONE_MEDIA_QUERY)}).matches?1:${UI_SCALE_BASE};` +
     `var s=Math.round(p/100*b*1000)/1000;` +
-    `d.style.setProperty("${UI_SCALE_VAR}",s);d.style.setProperty("${UI_SCALE_INVERSE_VAR}",Math.round(100000/s)/100000);` +
+    `d.style.setProperty("${UI_SCALE_VAR}",s);d.style.setProperty("${UI_SCALE_INVERSE_VAR}","calc(1 / "+s+")");` +
     `if(m("(max-width: "+(${compactMaxWidth}*s-0.02)+"px), (max-height: "+(${compactMaxHeight}*s-0.02)+"px)").matches)d.setAttribute("data-compact","");` +
     `if(m("(max-width: "+(${snugMaxWidth}*s-0.02)+"px)").matches)d.setAttribute("data-snug","")}catch(e){}`
   );

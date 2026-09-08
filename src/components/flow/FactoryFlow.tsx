@@ -1426,7 +1426,19 @@ function ensureGridSolve() {
       signature,
       obstacles,
       requests,
+      tuning,
     };
+    // Read the installed geometry on demand, never re-solve a benchmark's
+    // approximation. The signature gate lets probes wait for the worker.
+    (window as unknown as { __gtnhReadDisplayedRoutes?: unknown }).__gtnhReadDisplayedRoutes = () => ({
+      signature: gridSolveSignature,
+      wantedSignature: gridSolveWantedSignature,
+      project: useFactoryStore.getState().project,
+      routes: publishedGridRouteEdges.flatMap((input) => {
+        const entry = directRouteCache.get(input.edgeId);
+        return entry ? [{ edgeId: input.edgeId, signature: entry.signature, points: entry.route.points }] : [];
+      }),
+    });
   }
   // A big board routes in the worker (`grid-route-solve.ts`): this render
   // keeps serving the routes already installed - `gridSolveSignature` does

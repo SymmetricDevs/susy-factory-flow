@@ -38,7 +38,6 @@ import { applyPlanView, capturePlanView } from "@/lib/plan-view";
 import {
   OPEN_SETUPS_EVENT,
   SETUPS_CHANGED_EVENT,
-  takePendingSetupsScope,
   type SetupsScope,
 } from "@/lib/setups-tab";
 import { useCommunityUser } from "@/components/community/auth";
@@ -86,7 +85,7 @@ interface SetupShelf {
  */
 export function SetupsPanel() {
   const { user, isLoading: isAuthLoading } = useCommunityUser();
-  const [scope, setScope] = useState<SetupsScope>(() => takePendingSetupsScope() ?? "network");
+  const [scope, setScope] = useState<SetupsScope>("network");
   const [sort, setSort] = useState<CommunityPlanSort>("new");
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 250);
@@ -110,10 +109,7 @@ export function SetupsPanel() {
   // "My setups" in the account menu can retarget an already-open panel.
   useEffect(() => {
     const applyScope = () => {
-      const requested = takePendingSetupsScope();
-      if (requested) {
-        setScope(requested);
-      }
+      setScope("network");
     };
     window.addEventListener(OPEN_SETUPS_EVENT, applyScope);
     return () => window.removeEventListener(OPEN_SETUPS_EVENT, applyScope);

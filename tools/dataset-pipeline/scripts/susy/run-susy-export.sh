@@ -239,6 +239,14 @@ if [[ "$jvm_export_root" != "$SUSY_RAW_EXPORT_DIR" ]]; then
   rendered_icon_dir="$SUSY_RAW_EXPORT_DIR/rendered-icons"
 fi
 
+# The local orchestrator uses this runner for the client-only extraction phase.
+# Leave the raw dump and rendered icons in temp so later stages can be resumed
+# independently without booting Minecraft again.
+if [[ "${SUSY_EXPORT_PHASE:-full}" == "extract" ]]; then
+  echo "SUSY extraction completed; raw artifacts are in $SUSY_RAW_EXPORT_DIR."
+  exit 0
+fi
+
 echo "Normalizing SusyCore recipedump into the planner dataset."
 SUSY_DATASET_VERSION_ID="$SUSY_DATASET_VERSION_ID" \
 SUSY_DATASET_VERSION_LABEL="$SUSY_DATASET_VERSION_LABEL" \

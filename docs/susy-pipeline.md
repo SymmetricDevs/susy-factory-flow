@@ -15,21 +15,61 @@ differs.
 ## Pipeline
 
 ```
-local SUSY client (susy-hei-oracle injected)
-        │  -Dsusy.oracle.autorun=true -Dsusy.oracle.dumpRecipes=true
-        ▼
-recipedump.json + rendered icons
-        ▼
-normalize-susy-recipedump.mjs      → RecipeDataset (+ plain recipes.json)
-apply-susy-icons.mjs               → stamps iconPath from HEI icon maps,
-                                     copies PNGs into textures/rendered/
-build-resource-index.mjs           → resource-index.json.gz
-build-recipe-index.mjs             → recipe-index/-lookup/shards (.gz)
-gzip -c recipes.json > recipes.json.gz   ← LAST, see below
-rebuild-manifest.mjs               → datasets.manifest.json
+ download.mjs                 → resolves/downloads or bootstraps the pack instance
+ build-oracle.mjs             → builds the HEI extraction oracle
+ extract.mjs                  → client export: recipedump.json + rendered icons
+ normalize.mjs                → normalized plain recipes.json
+ normalize-textures.mjs      → copied/rendered texture references
+ merge-custom.mjs             → validated local recipes and overrides
+ indexes.mjs                  → resource/recipe indexes and shards
+ package-dataset.mjs          → recipes.json.gz + datasets.manifest.json
 ```
 
-Run it end to end (no environment needed):
+Run the complete resumable pipeline with one command:
+
+```bash
+npm run pipeline
+npm run versions:select
+```
+
+Use a specific release or branch, or point at an existing instance. The selector remembers its last choice in `temp/version-selection.json` and can include local development versions:
+
+```bash
+npm run pipeline -- --version 0.1.16.14.1
+npm run pipeline -- --ref master-ceu --version-id daily-local
+npm run pipeline -- --instance /path/to/Supersymmetry
+npm run versions:select -- --include-local
+npm run dev:init -- --name experimental-branch --base-version stable-1.2.0
+```
+
+The shared state/config file and every pipeline log are written below `./temp`:
+
+- `temp/susy-pipeline.json` tracks settings, paths, attempts, and completed steps.
+- `temp/logs/orchestrator.log` contains the overall run.
+- `temp/logs/<step>.log` contains each standalone step and its child output.
+- `temp/raw-export/` contains the raw recipe dump, rendered icon maps, and client logs.
+- `data/versions/local/<name>/` contains experimental version data and metadata.
+- `data/custom-recipes/local-dev.json` contains custom recipes; saves create backups under `history/`.
+
+A failed step is retried three times by default and then halts the pipeline. No later step
+runs after a failure. Inspect the step log, perform or repair that step manually, then
+resume with `npm run pipeline -- --from <step>`. Use `--force` to rerun completed steps.
+The oracle build is automatic, but can also be run independently with `build-oracle.mjs`.
+
+Each step can also be run independently after `temp/susy-pipeline.json` exists:
+
+```bash
+node tools/dataset-pipeline/scripts/susy/download.mjs
+node tools/dataset-pipeline/scripts/susy/build-oracle.mjs
+node tools/dataset-pipeline/scripts/susy/extract.mjs
+node tools/dataset-pipeline/scripts/susy/normalize.mjs
+node tools/dataset-pipeline/scripts/susy/normalize-textures.mjs
+node tools/dataset-pipeline/scripts/susy/merge-custom.mjs
+node tools/dataset-pipeline/scripts/susy/indexes.mjs
+node tools/dataset-pipeline/scripts/susy/package-dataset.mjs
+```
+
+The original full client runner remains available for manual debugging:
 
 ```bash
 bash tools/dataset-pipeline/scripts/susy/run-susy-export.sh
@@ -82,8 +122,8 @@ So the index builders must run against the plain line-oriented `recipes.json`
 ## Self-containedness
 
 Raw export artifacts are archived under this repo's gitignored working area
-(`temp/raw-export/recipedump.json`, `temp/icons/`) so every pipeline stage runs
-from here; nothing at runtime references another repository or install path.
+(`temp/raw-export/recipedump.json`, `temp/raw-export/rendered-icons/`) so every pipeline
+stage runs from here; nothing at runtime references another repository or install path.
 
 ## First real export (0.1.16.14.1)
 

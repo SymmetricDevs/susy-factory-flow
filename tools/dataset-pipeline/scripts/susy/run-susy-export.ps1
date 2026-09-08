@@ -260,6 +260,14 @@ try {
   }
 }
 
+# The local orchestrator uses this runner for the client-only extraction phase.
+# Leave the raw dump and rendered icons under temp so later stages can resume
+# without booting Minecraft again.
+if ($env:SUSY_EXPORT_PHASE -eq "extract") {
+  Write-Log "SUSY extraction completed; raw artifacts are in $RawExportDir."
+  exit 0
+}
+
 # --- Normalize and publish -------------------------------------------------------
 
 # The dataset scripts read these from the environment; PowerShell variables

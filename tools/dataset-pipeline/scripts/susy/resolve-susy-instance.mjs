@@ -19,6 +19,7 @@
  * Usage:
  *   node resolve-susy-instance.mjs [--instance <dir>] [--json]
  *        [--bootstrap-if-missing] [--no-bootstrap] [--ref <tag|branch>]
+ *        [--bootstrap-dir <dir>]
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -49,7 +50,9 @@ const bootstrapRef = flag("--ref") ?? process.env.SUSY_BOOTSTRAP_REF;
 const jsonOutput = args.includes("--json");
 const bootstrapIfMissing = args.includes("--bootstrap-if-missing");
 const noBootstrap = args.includes("--no-bootstrap");
-const bootstrapDir = path.join(repoRoot, "temp", ".minecraft");
+const bootstrapDir = path.resolve(
+  flag("--bootstrap-dir") ?? path.join(repoRoot, "temp", ".minecraft"),
+);
 
 function resolveResult(result) {
   if (jsonOutput) {

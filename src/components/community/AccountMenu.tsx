@@ -5,7 +5,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { ChevronDown, Factory, LogOut, ShieldCheck, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { LOGIN_ENABLED } from "@/lib/feature-toggles";
-import { openSetupsTab } from "@/lib/setups-tab";
+import { openLibrary } from "@/lib/library/library-tab";
 import { AuthForm, useCommunityUser } from "./auth";
 
 /**

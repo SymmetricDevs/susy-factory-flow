@@ -821,6 +821,8 @@ export interface DatasetRecipeQueryRequest {
   maxTier: TierFilter;
   offset: number;
   limit: number;
+  /** Allow an explicitly requested paginated browse with no search clauses. */
+  browseAll?: boolean;
 }
 
 export interface RecipeMapSelection {
@@ -1150,7 +1152,7 @@ async function queryDatasetRecipesFromLookup(
   const parsedQuery = parseSearchQuery(request.query);
   const clauses = normalizedRecipeQueryClauses(request);
 
-  if (clauses.length === 0 && parsedQuery.terms.length === 0) {
+  if (clauses.length === 0 && parsedQuery.terms.length === 0 && !request.browseAll) {
     return emptyRecipeQueryResult(request);
   }
 
@@ -1184,9 +1186,16 @@ async function queryDatasetRecipesFromLookup(
   const searchScores = resolved.searchScores;
   // A pure text search has no resource to group by, so the maps come out of what
   // the words matched.
+  const browseIndexes = request.browseAll
+    ? Array.from({ length: lookup.recipeCount }, (_, index) => index)
+    : [];
   const tierCandidatesByMap =
     scopedByMap ??
-    tierFilteredByMap(lookup, groupRecipesByMap(lookup, searchScores?.keys() ?? []), request.maxTier);
+    tierFilteredByMap(
+      lookup,
+      groupRecipesByMap(lookup, searchScores?.keys() ?? browseIndexes),
+      request.maxTier,
+    );
   const countedRecipeMaps = [...tierCandidatesByMap.entries()]
     .map(([recipeMapId, recipeIndexes]) => {
       const recipeMap = lookup.recipeMaps[recipeMapId];

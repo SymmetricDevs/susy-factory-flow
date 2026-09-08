@@ -1,13 +1,24 @@
 "use client";
 
 import { SpawnKeys } from "@/components/SpawnKeys";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Cpu,
+  GitBranchPlus,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { PointerEvent, RefObject } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
   getRecipeDatasetRecipe,
   queryRecipeDatasetResources,
   queryRecipeDatasetRecipes,
   type RecipeDatasetQueryResult,
+  type RecipeDatasetResourceQueryResult,
   type RecipeMapSelection,
 } from "@/lib/datasets/browser-loader";
 import type {
@@ -15,7 +26,18 @@ import type {
   RecipeQuerySideOp,
 } from "@/lib/datasets/recipe-query";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
-import { resourceMatchesInput } from "@/lib/model";
+import {
+  formatRate,
+  getRecipeMachineHandlers,
+  resourceLabel,
+  resourceMatchesInput,
+} from "@/lib/model";
+import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
+import { getRecipeProgrammedCircuit } from "@/lib/model/programmed-circuit";
+import { usesNativeNeiChrome } from "@/lib/nei/layout";
+import { NEI_PALETTE } from "@/lib/nei-renderer/theme/palette";
+import { useIsCompactViewport } from "@/lib/compact-view";
+import { isEchoOfTouch } from "@/lib/pointer-kind";
 import { MACHINE_PIN_RESOURCE_ID, useFactoryStore } from "@/store/factory-store";
 import { useDesignStore } from "@/store/design-store";
 import { leaveWelcomeTab, readWelcomeTabState } from "@/lib/welcome/welcome-tab";
@@ -28,11 +50,19 @@ import {
   takePendingSidebarTab,
 } from "@/lib/sidebar-tab";
 import { writeWorkspaceView } from "@/lib/workspace-view";
+import { isFromBrowseMenu, useBrowseMenu } from "./browse-menu";
+import { MinecraftTooltip } from "./nei/MinecraftTooltip";
+import { ResourceIcon } from "./nei/ResourceIcon";
+import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
+import { AlternativeCycleScope, useAlternativeCycleFacesRef } from "./nei/AlternativeCycleScope";
+import { machineArtPixels } from "./flow/MachinePicker";
+import { useMachineHandlerIcons } from "./flow/machine-icons";
 import {
   deferStateUpdate,
   getDatasetVersionCacheKey,
   ResourceIndexPane,
   RESOURCE_SEARCH_DEBOUNCE_MS,
+  useResourcePageSize,
   type IndexedResource,
 } from "./ResourceIndexPane";
 import { ChevronIcon } from "./PanelDrawer";
@@ -44,11 +74,13 @@ import {
 
 // The preview helpers used to live here; they moved out with the overlay and
 // keep their old import path for everyone already using it.
-export {
+import {
   contextualizePreviewRecipe,
   summaryToPreviewRecipe,
   type PreviewContextResource,
 } from "./recipe-preview";
+export { contextualizePreviewRecipe, summaryToPreviewRecipe };
+export type { PreviewContextResource };
 
 const RECIPE_QUERY_LIMIT = 120;
 
@@ -195,7 +227,6 @@ const RESOURCE_GRID_ART = "!h-full !w-full scale-[1.4]";
 const RESOURCE_PAGER_HEIGHT = 40;
 /** One mouse notch is 100 on most platforms, so one notch is one page. */
 const RESOURCE_WHEEL_PAGE_DELTA = 80;
-const RESOURCE_VIEW_STORAGE_KEY = "susy-factory-flow.resource-view.v1";
 const RESOURCE_VIEW_STORAGE_KEY = "susy-factory-flow.resource-view.v1";
 /** Whether the filter block under the search box is folded away. */
 const RESOURCE_FILTERS_STORAGE_KEY = "susy-factory-flow.resource-filters.v1";
@@ -1281,7 +1312,7 @@ function VirtualResourceResultList({
   onBrowse: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { pageSize, gridColumns } = useResourcePageSize(containerRef, view, onPageSizeChange);
+  const { pageSize, gridColumns } = useResourcePageSize(containerRef, onPageSizeChange);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const handlePreviousPage = useCallback(() => {
     onPageChange(Math.max(0, currentPage - 1));
@@ -2682,76 +2713,6 @@ function CircuitSetting({ recipe }: { recipe: Recipe }) {
   );
 }
 
-function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
-  return {
-    id: summary.id,
-    name: summary.name,
-    kind: summary.kind,
-    category: summary.category,
-    machineType: summary.machineType,
-    minimumTier: summary.minimumTier,
-    durationTicks: summary.durationTicks,
-    eut: summary.eut,
-    inputs: summary.inputs,
-    outputs: summary.outputs,
-    programmedCircuit: summary.programmedCircuit,
-    specialValue: summary.specialValue,
-    machineHandlers: summary.machineHandlers,
-    machineConfigControls: summary.machineConfigControls,
-    source: summary.source ?? (summary.recipeMap ? { recipeMap: summary.recipeMap } : undefined),
-    metadata: summary.metadata,
-    nei: summary.nei,
-  };
-}
-
-export function contextualizePreviewRecipe(
-  recipe: Recipe,
-  resource: PreviewContextResource | undefined,
-): Recipe {
-  if (!resource) {
-    return recipe;
-  }
-
-  let changed = false;
-  const inputs = recipe.inputs.map((input) => {
-    if (!resourceMatchesInput(resource, input)) {
-      return input;
-    }
-
-    if (input.kind !== resource.kind) {
-      return input;
-    }
-
-    changed = true;
-    return {
-      ...input,
-      kind: resource.kind,
-      id: resource.id,
-      displayName: resource.displayName ?? input.displayName,
-      iconPath: resource.iconPath ?? input.iconPath,
-      iconAtlas: resource.iconAtlas ?? input.iconAtlas,
-      dominantColor: resource.dominantColor ?? input.dominantColor,
-      alternatives: undefined,
-    };
-  });
-  const outputs = recipe.outputs.map((output) => {
-    if (output.kind !== resource.kind || output.id !== resource.id) {
-      return output;
-    }
-
-    changed = true;
-    return {
-      ...output,
-      displayName: resource.displayName ?? output.displayName,
-      iconPath: resource.iconPath ?? output.iconPath,
-      iconAtlas: resource.iconAtlas ?? output.iconAtlas,
-      dominantColor: resource.dominantColor ?? output.dominantColor,
-    };
-  });
-
-  return changed ? { ...recipe, inputs, outputs } : recipe;
-}
-
 function getRecipeAddContextResource(
   activeResource: (IndexedResource & { anchorNodeId?: string }) | undefined,
   mode: "recipes" | "uses",
@@ -2824,6 +2785,73 @@ function getRecipeAddContextResource(
     dominantColor: activeResource.dominantColor ?? activeResource.iconAtlas?.dominantColor,
     mode,
   };
+}
+
+function clampDragOffset(offset: { x: number; y: number }, panel: HTMLElement | null) {
+  if (!panel || typeof window === "undefined") {
+    return offset;
+  }
+
+  const rect = panel.getBoundingClientRect();
+  const margin = 12;
+  const maxX = Math.max(0, (window.innerWidth - rect.width) / 2 - margin);
+  const maxY = Math.max(0, (window.innerHeight - rect.height) / 2 - margin);
+  return {
+    x: Math.min(maxX, Math.max(-maxX, offset.x)),
+    y: Math.min(maxY, Math.max(-maxY, offset.y)),
+  };
+}
+
+function readRecipeBookViewport(): RecipeBookViewport {
+  if (typeof window === "undefined") {
+    return {
+      sheet: false,
+      showRail: true,
+      dodgesSidebars: true,
+      width: 960,
+      height: 760,
+      sidebars: { left: BOARD_SIDEBAR_LEFT, right: BOARD_SIDEBAR_RIGHT },
+    };
+  }
+
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  if (viewportWidth < RECIPE_BOOK_SHEET_BELOW) {
+    return {
+      sheet: true,
+      showRail: false,
+      dodgesSidebars: false,
+      width: viewportWidth,
+      height: viewportHeight,
+      sidebars: { left: 0, right: 0 },
+    };
+  }
+
+  const besideSidebars = viewportWidth - BOARD_SIDEBAR_LEFT - BOARD_SIDEBAR_RIGHT - 24;
+  const dodgesSidebars = besideSidebars >= RECIPE_BOOK_COMFORTABLE_WIDTH;
+  const available = dodgesSidebars ? besideSidebars : viewportWidth - 24;
+  return {
+    sheet: false,
+    showRail: available >= RECIPE_BOOK_RAIL_NEEDS,
+    dodgesSidebars,
+    width: Math.min(RECIPE_BOOK_MAX_WIDTH, Math.max(RECIPE_BOOK_MIN_WIDTH, available)),
+    height: Math.min(RECIPE_BOOK_MAX_HEIGHT, Math.max(360, viewportHeight - 32)),
+    sidebars: {
+      left: dodgesSidebars ? BOARD_SIDEBAR_LEFT : 0,
+      right: dodgesSidebars ? BOARD_SIDEBAR_RIGHT : 0,
+    },
+  };
+}
+
+function useRecipeBookViewport(): RecipeBookViewport {
+  const [viewport, setViewport] = useState(readRecipeBookViewport);
+  useEffect(() => {
+    const update = () => setViewport(readRecipeBookViewport());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return viewport;
 }
 
 function recipeHasRenderableIcons(recipe: Recipe) {

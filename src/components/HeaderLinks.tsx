@@ -1,15 +1,16 @@
 "use client";
 
-import { Bug, Compass, Heart, Sparkles } from "lucide-react";
+import { Bug, Compass, Heart, Library } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DONATIONS_ENABLED } from "@/lib/feature-toggles";
-import { openWelcomeTab } from "@/lib/tour/welcome-tab";
+import { openWelcomeTab } from "@/lib/welcome/welcome-tab";
 import {
   markVersionSeenAndNotify,
   subscribeToVersionSeen,
   unseenEntries,
 } from "@/lib/whats-new";
 import { APP_VERSION } from "@/lib/version";
+import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
 
 const GITHUB_URL = "https://github.com/jackwrichards/gtnh-factory-flow";
 

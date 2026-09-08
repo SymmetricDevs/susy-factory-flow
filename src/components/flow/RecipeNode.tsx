@@ -3137,6 +3137,7 @@ function SharedMachineRails({
   pending,
   picture,
   onRemove,
+  onMove,
 }: {
   nodeId: string;
   sections: Array<{

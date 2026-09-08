@@ -25,7 +25,8 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..\..\..\..")).Path
 $Resolver = Join-Path $PSScriptRoot "resolve-susy-instance.mjs"
 
-$RunnerLog = Join-Path $RepoRoot "temp\raw-export\export-runner.log"
+$RunnerRawExportDir = if ($env:SUSY_RAW_EXPORT_DIR) { [System.IO.Path]::GetFullPath($env:SUSY_RAW_EXPORT_DIR) } else { Join-Path $RepoRoot "temp\raw-export" }
+$RunnerLog = Join-Path $RunnerRawExportDir "export-runner.log"
 function Write-Log {
   param([string]$Message)
   $line = $Message
@@ -165,6 +166,27 @@ function Find-StartScript {
   return $null
 }
 
+function Find-LauncherExecutable {
+  foreach ($name in @("prismlauncher.exe", "PrismLauncher.exe", "prismlauncher", "PrismLauncher")) {
+    $command = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($command) {
+      if ($command.Source) { return $command.Source }
+      return $command.Path
+    }
+  }
+
+  foreach ($candidate in @(
+    (Join-Path ${env:ProgramFiles} "PrismLauncher\prismlauncher.exe"),
+    (Join-Path ${env:ProgramFiles} "PrismLauncher\PrismLauncher.exe"),
+    (Join-Path ${env:LOCALAPPDATA} "Programs\PrismLauncher\prismlauncher.exe"),
+    (Join-Path ${env:LOCALAPPDATA} "Programs\PrismLauncher\PrismLauncher.exe")
+  )) {
+    if ($candidate -and (Test-Path -LiteralPath $candidate)) { return $candidate }
+  }
+  return $null
+}
+
+$launcherManaged = [bool]$resolved.prismInstanceId -and [string]::IsNullOrWhiteSpace($env:SUSY_LAUNCH_COMMAND)
 $proc = $null
 $launchDesc = ""
 try {
@@ -176,39 +198,54 @@ try {
       -WorkingDirectory $InstanceDir -PassThru `
       -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
   } else {
-    $startScript = Find-StartScript
-    if ($startScript -and ($startScript.EndsWith(".cmd") -or $startScript.EndsWith(".bat"))) {
-      $launchDesc = "cmd.exe /c `"$startScript`""
-      Write-Log "Launch: $launchDesc"
-      $proc = Start-Process -FilePath "cmd.exe" `
-        -ArgumentList @("/d", "/c", "`"$startScript`"") `
-        -WorkingDirectory $InstanceDir -PassThru `
-        -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
-    } elseif ($startScript) {
-      $launchDesc = "bash `"$startScript`""
-      Write-Log "Launch: $launchDesc"
-      $proc = Start-Process -FilePath "bash" `
-        -ArgumentList @($startScript) `
+    if ($launcherManaged) {
+      $launcher = Find-LauncherExecutable
+      if (-not $launcher) {
+        Fail "This is a Prism-managed instance, but Prism Launcher was not found. Set SUSY_LAUNCH_COMMAND to the Prism executable and launch arguments."
+      }
+      $launchDesc = "`"$launcher`" -l `"$($resolved.prismInstanceId)`""
+      Write-Log "Launch through Prism: $launchDesc"
+      $proc = Start-Process -FilePath $launcher `
+        -ArgumentList @("-l", $resolved.prismInstanceId) `
         -WorkingDirectory $InstanceDir -PassThru `
         -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
     } else {
-      $fallbackJar = Join-Path $InstanceDir "binClient-modified.jar"
-      if (-not (Test-Path -LiteralPath $fallbackJar)) {
-        Fail "No start script and no binClient-modified.jar in the instance; cannot launch."
+      $startScript = Find-StartScript
+      if ($startScript -and ($startScript.EndsWith(".cmd") -or $startScript.EndsWith(".bat"))) {
+        $launchDesc = "cmd.exe /c `"$startScript`""
+        Write-Log "Launch: $launchDesc"
+        $proc = Start-Process -FilePath "cmd.exe" `
+          -ArgumentList @("/d", "/c", "`"$startScript`"") `
+          -WorkingDirectory $InstanceDir -PassThru `
+          -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
+      } elseif ($startScript) {
+        $launchDesc = "bash `"$startScript`""
+        Write-Log "Launch: $launchDesc"
+        $proc = Start-Process -FilePath "bash" `
+          -ArgumentList @($startScript) `
+          -WorkingDirectory $InstanceDir -PassThru `
+          -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
+      } else {
+        $fallbackJar = Join-Path $InstanceDir "binClient-modified.jar"
+        if (-not (Test-Path -LiteralPath $fallbackJar)) {
+          Fail "No start script and no binClient-modified.jar in the instance; cannot launch."
+        }
+        $launchDesc = "java -jar binClient-modified.jar nogui"
+        Write-Log "No start script found; falling back to: $launchDesc"
+        $proc = Start-Process -FilePath "java" `
+          -ArgumentList @("-jar", "binClient-modified.jar", "nogui") `
+          -WorkingDirectory $InstanceDir -PassThru `
+          -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
       }
-      $launchDesc = "java -jar binClient-modified.jar nogui"
-      Write-Log "No start script found; falling back to: $launchDesc"
-      $proc = Start-Process -FilePath "java" `
-        -ArgumentList @("-jar", "binClient-modified.jar", "nogui") `
-        -WorkingDirectory $InstanceDir -PassThru `
-        -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
     }
   }
 
-  if (-not $proc -or $proc.HasExited) {
+  # Prism may hand the launch request to an already-running launcher process,
+  # so the short-lived CLI process is not evidence that the game failed.
+  if (-not $proc -or ($proc.HasExited -and -not $launcherManaged)) {
     Fail "The Susy client exited immediately (exit code $($proc.ExitCode)). Check $RuntimeErrLog."
   }
-  Write-Log "Client PID: $($proc.Id)"
+  Write-Log "Launcher/client PID: $($proc.Id)"
 
   # --- Watchdog loop -----------------------------------------------------------
 
@@ -233,9 +270,15 @@ try {
       $sizeAfter = (Get-Item -LiteralPath $RecipedumpPath).Length
       if ($sizeBefore -eq $sizeAfter -and $sizeAfter -gt 2) {
         # The client exits itself after the dump settles; give it a moment.
-        if ($proc.HasExited) { $dumpReady = $true; break }
+        # Prism itself can remain open after the game exits, so a settled dump
+        # is sufficient for launcher-managed instances.
+        if ($proc.HasExited) {
+          if ($launcherManaged) { $dumpReady = $true; break }
+          $dumpReady = $true
+          break
+        }
         Start-Sleep -Seconds 15
-        if ($proc.HasExited) { $dumpReady = $true; break }
+        if ($launcherManaged -or $proc.HasExited) { $dumpReady = $true; break }
         Write-Log "recipedump.json present but the client is still running; waiting for its own exit."
       }
     }
@@ -243,7 +286,10 @@ try {
     if ($proc.HasExited) {
       $proc.WaitForExit()
       if (Test-Path -LiteralPath $RecipedumpPath) { $dumpReady = $true; break }
-      Fail "Susy client exited without producing $RecipedumpPath."
+      if (-not $launcherManaged) {
+        Fail "Susy client exited without producing $RecipedumpPath."
+      }
+      Write-Log "Prism launch request exited; waiting for the managed client to produce the dump."
     }
 
     Start-Sleep -Seconds 5

@@ -5,10 +5,9 @@
  */
 
 /**
- * The Ko-fi tip jar (header button + compact menu row). OFF while the fork's
- * own hosting settles; the upstream planner keeps its own link.
+ * The Ko-fi tip jar (header button + compact menu row).
  */
-export const DONATIONS_ENABLED = false;
+export const DONATIONS_ENABLED = true;
 
 /**
  * Community accounts: the sign-in button, the share dialog's auth form, and

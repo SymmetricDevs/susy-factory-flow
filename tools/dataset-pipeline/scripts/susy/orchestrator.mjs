@@ -150,6 +150,20 @@ try {
         haltedAtStep = true;
         halted = true;
       }
+
+      // A failed step is a hard pipeline boundary. The recovery prompt may
+      // start another retry window, but once the user declines recovery we
+      // must not fall through to downstream steps with missing artifacts.
+      if (halted) {
+        break;
+      }
+    }
+
+    // Stop the outer step loop too. Without this break, a declined recovery
+    // prompt still allowed normalize/index/package to run against artifacts
+    // that the failed step never produced.
+    if (halted) {
+      break;
     }
   }
 

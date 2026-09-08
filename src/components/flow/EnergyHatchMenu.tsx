@@ -125,7 +125,7 @@ function MenuShell({
       ref={panelRef}
       // "nowheel" stops React Flow from zooming the canvas when scrolling the
       // list: its native wheel handler runs before React's synthetic one.
-      className="ui-zoom nodrag nowheel fixed z-[9999] flex flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className="ui-zoom nodrag nowheel fixed z-[9999] flex flex-col overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       style={{
         width,
         left: Math.max(8, Math.min(shell(anchor.x) - width, shell(window.innerWidth) - width - 8)),
@@ -406,7 +406,7 @@ export function energySupplyChipText(familyId: string | undefined, hatches: numb
  * and the number itself at the bottom.
  */
 /** The list shows this many whole hatch rows; the rest scroll. A row is h-7. */
-const HATCH_LIST_ROWS = 9;
+const HATCH_LIST_ROWS = 12;
 const HATCH_ROW_HEIGHT = 28;
 
 export function EnergyHatchCalculator({
@@ -444,7 +444,7 @@ export function EnergyHatchCalculator({
   );
 
   return (
-    <MenuShell anchor={anchor} width={620} maxHeight={380} onClose={onClose}>
+    <MenuShell anchor={anchor} width={620} maxHeight={440} onClose={onClose}>
       <div className="flex min-h-0 flex-1 gap-2">
         {/* Every hatch, once. */}
         <div className="flex min-h-0 w-[306px] shrink-0 flex-col">
@@ -485,7 +485,7 @@ export function EnergyHatchCalculator({
         </div>
 
         {/* What it buys, the climb, the number. */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto">
           {/* The ladder: the bare recipe against this supply, in the order
               the game applies things. Each row explains itself on hover. */}
           <div className={SETTING_TILE_CLASS}>

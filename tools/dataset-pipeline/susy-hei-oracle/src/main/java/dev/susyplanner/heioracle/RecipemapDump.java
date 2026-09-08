@@ -1,5 +1,6 @@
 package dev.susyplanner.heioracle;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
 
 import java.lang.reflect.Method;
@@ -46,13 +47,43 @@ public final class RecipemapDump {
             // pass a minimal console sender instead of null.
             SusyHeiOracleMod.LOG.info("SUSY HEI oracle triggering Susy-Core /recipemapdump.");
             execute.invoke(command, (MinecraftServer) null, consoleSender(), new String[0]);
-            waitForDump();
-            SusyHeiOracleMod.LOG.info(
-                "SUSY HEI oracle /recipemapdump completed in {:.2f}s.",
-                Double.valueOf(elapsedSeconds(startedAt))
-            );
+            // The command can finish its file write asynchronously. Never block
+            // the Minecraft client thread while waiting for it: doing so stops
+            // the client tick loop and can prevent Susy-Core from producing the
+            // dump in the first place.
+            waitForDumpAsync(done, startedAt);
+            return;
         } catch (Throwable t) {
             SusyHeiOracleMod.LOG.error("SUSY HEI oracle /recipemapdump failed; continuing.", t);
+        }
+        finishOnClientThread(done);
+    }
+
+    private static void waitForDumpAsync(final Runnable done, final long startedAt) {
+        Thread waiter = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                waitForDump();
+                SusyHeiOracleMod.LOG.info(
+                    "SUSY HEI oracle /recipemapdump completed in {:.2f}s.",
+                    Double.valueOf(elapsedSeconds(startedAt))
+                );
+                finishOnClientThread(done);
+            }
+        }, "susy-oracle-dump-waiter");
+        waiter.setDaemon(true);
+        waiter.start();
+    }
+
+    private static void finishOnClientThread(final Runnable done) {
+        try {
+            Minecraft minecraft = Minecraft.getMinecraft();
+            if (minecraft != null) {
+                minecraft.addScheduledTask(done);
+                return;
+            }
+        } catch (Throwable t) {
+            SusyHeiOracleMod.LOG.warn("Could not schedule SUSY oracle completion on the client thread.", t);
         }
         done.run();
     }

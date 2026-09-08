@@ -148,17 +148,70 @@ steps, `--retries <count>` to change retry count, `--instance <directory>` to us
 pack instance, `--no-bootstrap` to disable automatic instance setup, and `--temp <directory>`
 to relocate all generated pipeline artifacts and logs.
 
+### Windows and Prism Launcher extraction
+
+On Windows, the normal command automatically detects a Prism-managed Supersymmetry
+instance, rebuilds the extraction oracle when its sources changed, launches Prism with
+that instance, and waits for the oracle's `recipedump.json` output:
+
+```powershell
+# Complete resumable build; use --force after changing the oracle or instance
+npm run susy -- --force --interactive=false
+
+# Build/rebuild only the extraction oracle
+npm run susy -- build-oracle --force --interactive=false
+
+# Retry only extraction after fixing Prism or the Minecraft instance
+npm run susy -- extract --force --interactive=false
+
+# Resume the normal pipeline at extraction
+npm run susy -- --from extract --force --interactive=false
+```
+
+To use a specific Prism instance instead of auto-detection, set its Minecraft directory
+(the directory containing `mods`, `logs`, and `options.txt`) before running the pipeline:
+
+```powershell
+$env:SUSY_INSTANCE_DIR = "C:\Users\<user>\AppData\Roaming\PrismLauncher\instances\Supersymmetry\minecraft"
+npm run susy -- --force --interactive=false
+```
+
+The Windows runner launches Prism with `-l <instance-id>` and does not require a
+`start.bat` file. If Prism is not installed in a standard location, provide an explicit
+launch override instead:
+
+```powershell
+$env:SUSY_LAUNCH_COMMAND = '"C:\Path\To\prismlauncher.exe" -l "Supersymmetry"'
+npm run susy -- extract --force --interactive=false
+```
+
+The runner clears stale dumps before every extraction and stops with diagnostics instead
+of waiting indefinitely. If the client loads but extraction does not start, inspect these
+files:
+
+```text
+temp\logs\extract.log
+temp\raw-export\export-runner.log
+temp\raw-export\susy-runtime.out.log
+temp\raw-export\susy-runtime.err.log
+<Prism instance>\logs\latest.log
+```
+
+The extraction watchdog reports when the oracle is not loaded after 180 seconds and when
+no dump is produced after 300 seconds. Recipe-only fallback is attempted if HEI does not
+register or the client never becomes render-ready. Close a running Minecraft instance
+before retrying so the oracle JAR can be replaced safely.
+
 The recipe editor stores custom recipes in human-readable JSON and creates up to ten
-history snapshots before writes. Published data is never modified. The legacy full runner
-is still available for manual debugging:
+history snapshots before writes. Published data is never modified. The legacy full runner is still available for manual debugging:
 
 ```bash
 ./build-jar.sh
 bash tools/dataset-pipeline/scripts/susy/run-susy-export.sh
 ```
 
-```bash
-powershell -ExecutionPolicy Bypass -File tools\dataset-pipeline\scripts\susy\run-all.ps1
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\dataset-pipeline\scripts\susy\run-susy-export.ps1
 ```
 
 ## Public Repository Notes

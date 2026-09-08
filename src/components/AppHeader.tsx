@@ -18,11 +18,8 @@ import { SettingsDialog } from "./SettingsDialog";
 import { HeaderLinks, ReportBugButton, SupportButton } from "./HeaderLinks";
 import { WhatsNewPreview } from "./WhatsNewPreview";
 
-/**
- * The pack picker's switch. See the note where it renders; flip this back to
- * true when there is more than one pack to pick from.
- */
-export const SHOW_PACK_PICKER = false;
+/** The dataset version selector is part of the planner's main controls. */
+export const SHOW_PACK_PICKER = true;
 
 interface AppHeaderProps {
   onLoadDatasetVersion: (versionId: string) => void;
@@ -111,12 +108,8 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             gets a whole row of its height back. On a phone it moves once more,
             into the menu: it is the widest control on the bar and the one people
             touch least. */}
-        {/* PINNED (Jack, 2026-09-06): the pack picker is off the bar while
-            2.9 is the only pack there is. A dropdown with one option is a
-            question nobody can answer. AppIdentity and the header's
-            `onLoadDatasetVersion` prop stay wired so it can come back the
-            day a second pack ships; the compact menu's Pack section is
-            pinned the same way in AppMenu. */}
+        {/* Keep the dataset version selector visible so users can switch
+            between published and experimental planner datasets. */}
         {isCompact || !SHOW_PACK_PICKER ? null : (
           <>
             <span className="ml-3 h-5 w-px bg-line" aria-hidden />

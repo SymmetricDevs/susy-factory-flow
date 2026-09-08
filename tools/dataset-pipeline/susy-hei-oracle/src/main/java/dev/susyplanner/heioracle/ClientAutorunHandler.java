@@ -27,15 +27,20 @@ public final class ClientAutorunHandler {
     private static final int TICKS_BEFORE_LAUNCH = Integer.getInteger("susy.oracle.autorunDelayTicks", 40);
     private static final int TICKS_BEFORE_EXPORT = Integer.getInteger("susy.oracle.worldReadyTicks", 30);
     private static final int WORLD_TIMEOUT_SECONDS = Integer.getInteger("susy.oracle.worldTimeoutSeconds", 120);
+    private static final int CLIENT_READY_TIMEOUT_SECONDS = Integer.getInteger("susy.oracle.clientReadyTimeoutSeconds", 180);
     private static final boolean SKIP_WORLD = Boolean.getBoolean("susy.oracle.skipWorld");
-    private static final long REGISTRY_TIMEOUT_MILLIS = 300000L;
+    private static final long REGISTRY_TIMEOUT_MILLIS = Integer.getInteger(
+        "susy.oracle.registryTimeoutSeconds", 45
+    ) * 1000L;
 
     private int tickCounter;
     private boolean worldRequested;
     private boolean started;
     private boolean timedOut;
     private boolean registrySeen;
+    private boolean registryTimedOut;
     private long watchStartedAt;
+    private boolean clientReadyTimedOut;
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -47,28 +52,61 @@ public final class ClientAutorunHandler {
             return;
         }
         try {
+            if (watchStartedAt == 0L) {
+                watchStartedAt = System.nanoTime();
+            }
             if (!registrySeen) {
-                if (!IconQueue.isReady()) {
+                if (IconQueue.isReady()) {
+                    registrySeen = true;
+                    SusyHeiOracleMod.LOG.info(
+                        "SUSY HEI oracle registry ready (delay {} ticks, export {} ticks after world, timeout {}s).",
+                        Integer.valueOf(TICKS_BEFORE_LAUNCH),
+                        Integer.valueOf(TICKS_BEFORE_EXPORT),
+                        Integer.valueOf(WORLD_TIMEOUT_SECONDS)
+                    );
+                } else if (elapsedMillis() >= REGISTRY_TIMEOUT_MILLIS) {
+                    // Some HEI builds do not invoke the JEI compatibility
+                    // plugin even though the client and Susy-Core are fully
+                    // usable. Do not wait forever: recipe extraction is still
+                    // valuable without rendered icons, and IconExporter will
+                    // finish an empty queue before /recipemapdump runs.
+                    registrySeen = true;
+                    registryTimedOut = true;
+                    SusyHeiOracleMod.LOG.warn(
+                        "SUSY HEI oracle ingredient registry was not ready after {}s; continuing with recipe-only export.",
+                        Long.valueOf(REGISTRY_TIMEOUT_MILLIS / 1000L)
+                    );
+                } else {
                     return;
                 }
-                registrySeen = true;
-                watchStartedAt = System.nanoTime();
-                SusyHeiOracleMod.LOG.info(
-                    "SUSY HEI oracle registry ready at tick 0 (delay {} ticks, export {} ticks after world, timeout {}s).",
-                    Integer.valueOf(TICKS_BEFORE_LAUNCH),
-                    Integer.valueOf(TICKS_BEFORE_EXPORT),
-                    Integer.valueOf(WORLD_TIMEOUT_SECONDS)
-                );
             }
 
             tickCounter++;
 
             Minecraft minecraft = Minecraft.getMinecraft();
             if (minecraft == null || minecraft.getTextureManager() == null || minecraft.fontRenderer == null) {
+                if (elapsedSeconds() >= CLIENT_READY_TIMEOUT_SECONDS && !clientReadyTimedOut) {
+                    clientReadyTimedOut = true;
+                    SusyHeiOracleMod.LOG.error(
+                        "SUSY HEI oracle client did not become render-ready after {}s; exporting recipes without icons.",
+                        Long.valueOf(CLIENT_READY_TIMEOUT_SECONDS)
+                    );
+                    worldRequested = true;
+                    startExport("client-ready-timeout-recipe-only");
+                }
                 return;
             }
 
             if (!worldRequested) {
+                // A missing HEI registry cannot be repaired by waiting for a
+                // world. The recipe dump is independent of icon rendering, so
+                // export it as soon as the client is usable instead of waiting
+                // another world-timeout interval.
+                if (registryTimedOut) {
+                    worldRequested = true;
+                    startExport("registry-timeout-recipe-only");
+                    return;
+                }
                 if (tickCounter < TICKS_BEFORE_LAUNCH) {
                     return;
                 }
@@ -99,7 +137,7 @@ public final class ClientAutorunHandler {
                 if (elapsedSeconds() > WORLD_TIMEOUT_SECONDS && !timedOut) {
                     timedOut = true;
                     SusyHeiOracleMod.LOG.warn("Integrated world did not load in time; exporting anyway.");
-                    startExport("world-timeout");
+                    startExport(registryTimedOut ? "world-timeout-recipe-only" : "world-timeout");
                 }
                 return;
             }
@@ -116,6 +154,10 @@ public final class ClientAutorunHandler {
 
     private long elapsedSeconds() {
         return (System.nanoTime() - watchStartedAt) / 1000000000L;
+    }
+
+    private long elapsedMillis() {
+        return (System.nanoTime() - watchStartedAt) / 1000000L;
     }
 
     /**

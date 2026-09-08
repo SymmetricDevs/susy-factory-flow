@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import * as readline from "node:readline/promises";
@@ -99,8 +100,12 @@ try {
   for (const step of delegatedVersions ? [] : steps.slice(startIndex)) {
     const previous = config.state?.steps?.[step];
     if (!force && previous?.status === "completed") {
-      logger.info(`Skipping completed step ${step}. Use --force to run it again.`);
-      continue;
+      if (await isStepStale(step)) {
+        logger.info(`Completed step ${step} is stale; rerunning it.`);
+      } else {
+        logger.info(`Skipping completed step ${step}. Use --force to run it again.`);
+        continue;
+      }
     }
 
     let completed = false;
@@ -174,6 +179,52 @@ try {
   }
 } finally {
   logger.close();
+}
+
+async function isStepStale(step) {
+  if (step !== "build-oracle") {
+    return false;
+  }
+
+  const jarDir = path.join(repoRoot, "tools", "dataset-pipeline", "susy-hei-oracle", "build", "libs");
+  let jarStats;
+  try {
+    const jars = (await fs.readdir(jarDir, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".jar") && !entry.name.endsWith("-sources.jar"));
+    if (jars.length === 0) return true;
+    jarStats = await Promise.all(jars.map(async (entry) => ({
+      path: path.join(jarDir, entry.name),
+      mtimeMs: (await fs.stat(path.join(jarDir, entry.name))).mtimeMs,
+    })));
+  } catch {
+    return true;
+  }
+
+  const newestJar = Math.max(...jarStats.map((entry) => entry.mtimeMs));
+  const sourceRoot = path.join(repoRoot, "tools", "dataset-pipeline", "susy-hei-oracle", "src");
+  let newestSource = 0;
+  async function visit(directory) {
+    let entries;
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(fullPath);
+      } else if (/\.(java|gradle|properties|json)$/.test(entry.name)) {
+        try {
+          newestSource = Math.max(newestSource, (await fs.stat(fullPath)).mtimeMs);
+        } catch {
+          // A source removed during a build does not make the old jar stale.
+        }
+      }
+    }
+  }
+  await visit(sourceRoot);
+  return newestSource > newestJar;
 }
 
 async function runSelectedVersions(versionIds, parentConfig, logger) {

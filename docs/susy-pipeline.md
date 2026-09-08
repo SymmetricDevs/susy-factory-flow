@@ -69,11 +69,63 @@ node tools/dataset-pipeline/scripts/susy/indexes.mjs
 node tools/dataset-pipeline/scripts/susy/package-dataset.mjs
 ```
 
-The original full client runner remains available for manual debugging:
+The original full client runner remains available for manual debugging. On Windows,
+run the PowerShell runner directly; on Linux/macOS, use the shell runner:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\dataset-pipeline\scripts\susy\run-susy-export.ps1
+```
 
 ```bash
 bash tools/dataset-pipeline/scripts/susy/run-susy-export.sh
 ```
+
+For a Prism-managed Windows instance, the runner uses Prism's `-l <instance-id>`
+launch mode and watches the actual instance log and dump instead of waiting for the
+short-lived Prism launch request. Useful commands are:
+
+```powershell
+# Complete resumable build
+npm run susy -- --force --interactive=false
+
+# Rebuild the oracle after changing its Java source
+npm run susy -- build-oracle --force --interactive=false
+
+# Retry extraction only after fixing Prism or the Minecraft instance
+npm run susy -- extract --force --interactive=false
+
+# Resume from extraction
+npm run susy -- --from extract --force --interactive=false
+```
+
+For an instance that is not auto-detected, set the Minecraft game directory explicitly:
+
+```powershell
+$env:SUSY_INSTANCE_DIR = "C:\Users\<user>\AppData\Roaming\PrismLauncher\instances\Supersymmetry\minecraft"
+npm run susy -- extract --force --interactive=false
+```
+
+If Prism is installed outside the standard locations, provide a launch command override:
+
+```powershell
+$env:SUSY_LAUNCH_COMMAND = '"C:\Path\To\prismlauncher.exe" -l "Supersymmetry"'
+npm run susy -- extract --force --interactive=false
+```
+
+If extraction appears stuck, inspect the runner log, client logs, and Prism's latest log:
+
+```text
+temp\logs\extract.log
+temp\raw-export\export-runner.log
+temp\raw-export\susy-runtime.out.log
+temp\raw-export\susy-runtime.err.log
+<Prism instance>\logs\latest.log
+```
+
+The Windows runner clears stale output before each run, reports if the oracle is not
+loaded after 180 seconds, and reports if no dump appears after 300 seconds. It also
+restores the original Prism `instance.cfg` after completion. The oracle falls back to
+recipe-only extraction when HEI is unavailable or the client is not render-ready.
 
 The runner resolves the instance itself, in this order:
 

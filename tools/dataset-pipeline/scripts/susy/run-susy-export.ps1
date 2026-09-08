@@ -78,6 +78,7 @@ if (-not $resolved -or $resolved.found -ne $true) {
 
 $InstanceDir = [System.IO.Path]::GetFullPath($resolved.instanceDir)
 if (-not (Test-Path -LiteralPath $InstanceDir)) { Fail "Resolved instance '$InstanceDir' does not exist." }
+$InstanceLogPath = Join-Path $InstanceDir "logs\latest.log"
 
 $VersionId = if ($env:SUSY_DATASET_VERSION_ID) { $env:SUSY_DATASET_VERSION_ID } else { $resolved.version }
 $VersionLabel = if ($env:SUSY_DATASET_VERSION_LABEL) { $env:SUSY_DATASET_VERSION_LABEL } elseif ($VersionId) { "SUSY $VersionId" } else { $null }
@@ -93,6 +94,16 @@ $RuntimeLog = Join-Path $RawExportDir "susy-runtime.out.log"
 $RuntimeErrLog = Join-Path $RawExportDir "susy-runtime.err.log"
 $RecipedumpPath = [System.IO.Path]::GetFullPath((Join-Path $RawExportDir "recipedump.json"))
 $RenderedIconDir = [System.IO.Path]::GetFullPath((Join-Path $RawExportDir "rendered-icons"))
+$RunId = [guid]::NewGuid().ToString("N")
+$OracleGameDumpPath = Join-Path $InstanceDir "recipedump.json"
+
+# Never accept a dump or icon map from an earlier run as this run's result.
+Remove-Item -LiteralPath $RecipedumpPath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $OracleGameDumpPath -Force -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $RenderedIconDir) {
+  Remove-Item -LiteralPath $RenderedIconDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+New-Item -ItemType Directory -Force -Path $RenderedIconDir | Out-Null
 
 $startedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss+00:00")
 Write-Log "SUSY export runner started at $startedAt"
@@ -147,7 +158,7 @@ if (Test-Path -LiteralPath $instanceOptions) {
 New-Item -ItemType Directory -Force -Path $RenderedIconDir | Out-Null
 
 $susyJavaOpts = "$($env:JAVA_TOOL_OPTIONS) -Dsusy.oracle.autorun=true -Dsusy.oracle.dumpRecipes=true " +
-  "-Dsusy.oracle.recipedumpPath=`"$RecipedumpPath`" -Dsusy.oracle.iconDir=`"$RenderedIconDir`""
+  "-Dsusy.oracle.runId=$RunId -Dsusy.oracle.recipedumpPath=`"$RecipedumpPath`" -Dsusy.oracle.iconDir=`"$RenderedIconDir`""
 $env:JAVA_TOOL_OPTIONS = $susyJavaOpts.Trim()
 
 # --- Launch the client -------------------------------------------------------------
@@ -186,9 +197,75 @@ function Find-LauncherExecutable {
   return $null
 }
 
+# Prism launches the game in a child process and the `-l` request commonly
+# exits as soon as that request has been handed to the already-running Prism
+# GUI. JAVA_TOOL_OPTIONS is not guaranteed to be forwarded by every Prism
+# installation, so put the oracle properties in the instance JVM arguments for
+# this launch and restore the file in the finally block below.
+$script:PrismInstanceConfigPath = $null
+$script:PrismInstanceConfigOriginal = $null
+function Set-PrismOracleJvmArguments {
+  if (-not $resolved.prismInstanceId) { return }
+  $wrapperDir = Split-Path -Parent $InstanceDir
+  $configPath = Join-Path $wrapperDir "instance.cfg"
+  if (-not (Test-Path -LiteralPath $configPath)) {
+    Write-Log "Prism instance.cfg was not found at $configPath; relying on JAVA_TOOL_OPTIONS."
+    return
+  }
+
+  $original = [System.IO.File]::ReadAllText($configPath)
+  $script:PrismInstanceConfigPath = $configPath
+  $script:PrismInstanceConfigOriginal = $original
+  $oracleArgs = @(
+    "-Dsusy.oracle.autorun=true",
+    "-Dsusy.oracle.dumpRecipes=true",
+    "-Dsusy.oracle.runId=$RunId",
+    "-Dsusy.oracle.recipedumpPath=`"$RecipedumpPath`"",
+    "-Dsusy.oracle.iconDir=`"$RenderedIconDir`""
+  )
+  $lines = $original -split "`r?`n", -1
+  $found = $false
+  for ($index = 0; $index -lt $lines.Count; $index++) {
+    if ($lines[$index] -notmatch "^JvmArgs=") { continue }
+    $existing = $lines[$index].Substring(8)
+    $existing = [regex]::Replace($existing, '-Dsusy\.oracle\.(?:autorun|dumpRecipes)=(?:true|false)', '')
+    $existing = [regex]::Replace($existing, '-Dsusy\.oracle\.(?:recipedumpPath|iconDir)=(?:"[^"]*"|\S+)', '')
+    $existing = $existing.Trim()
+    $arguments = $oracleArgs -join ' '
+    if ($existing) { $arguments = "$arguments $existing" }
+    $lines[$index] = "JvmArgs=$arguments"
+    $found = $true
+    break
+  }
+  if (-not $found) {
+    $lines += "JvmArgs=$($oracleArgs -join ' ')"
+  }
+  [System.IO.File]::WriteAllText($configPath, ($lines -join [Environment]::NewLine))
+  Write-Log "Configured oracle JVM arguments in Prism instance.cfg for this launch."
+}
+
+function Restore-PrismJvmArguments {
+  if ($script:PrismInstanceConfigPath -and $null -ne $script:PrismInstanceConfigOriginal) {
+    try {
+      [System.IO.File]::WriteAllText($script:PrismInstanceConfigPath, $script:PrismInstanceConfigOriginal)
+      Write-Log "Restored the original Prism instance.cfg JVM arguments."
+    } catch {
+      Write-Log "WARNING: Could not restore $script:PrismInstanceConfigPath: $($_.Exception.Message)"
+    }
+  }
+}
+
+function Get-InstanceLogPath {
+  if (Test-Path -LiteralPath $InstanceLogPath) { return $InstanceLogPath }
+  return $null
+}
+
 $launcherManaged = [bool]$resolved.prismInstanceId -and [string]::IsNullOrWhiteSpace($env:SUSY_LAUNCH_COMMAND)
+if ($launcherManaged) { Set-PrismOracleJvmArguments }
 $proc = $null
 $launchDesc = ""
+$handoffStartedAt = $null
+$oracleSeen = $false
 try {
   if ($env:SUSY_LAUNCH_COMMAND) {
     $launchDesc = $env:SUSY_LAUNCH_COMMAND
@@ -241,11 +318,19 @@ try {
   }
 
   # Prism may hand the launch request to an already-running launcher process,
-  # so the short-lived CLI process is not evidence that the game failed.
+  # so the short-lived CLI process is not evidence that the game failed. The
+  # instance log and requested dump, not this process, are the source of truth.
   if (-not $proc -or ($proc.HasExited -and -not $launcherManaged)) {
     Fail "The Susy client exited immediately (exit code $($proc.ExitCode)). Check $RuntimeErrLog."
   }
   Write-Log "Launcher/client PID: $($proc.Id)"
+  if ($launcherManaged) {
+    # The Prism CLI process is not the Minecraft process. It may remain alive
+    # as the Prism GUI, or exit immediately after handing the request off, so
+    # never use its lifetime as the extraction watchdog.
+    $handoffStartedAt = Get-Date
+    Write-Log "Prism launch request submitted; monitoring the managed client and instance log."
+  }
 
   # --- Watchdog loop -----------------------------------------------------------
 
@@ -255,13 +340,20 @@ try {
   $dumpReady = $false
 
   while ([DateTime]::UtcNow -lt $deadline) {
-    foreach ($logFile in @($RuntimeLog, $RuntimeErrLog)) {
-      if ((Test-Path -LiteralPath $logFile) -and
+    foreach ($logFile in @($RuntimeLog, $RuntimeErrLog, (Get-InstanceLogPath))) {
+      if ($logFile -and (Test-Path -LiteralPath $logFile) -and
           (Select-String -LiteralPath $logFile -Pattern "Minecraft Crash Report|Fatal errors were detected" -Quiet)) {
-        Write-Log "Susy client crashed before completing the export."
+        Write-Log "Susy client/oracle reported a failure before completing the export."
         Get-Content -LiteralPath $logFile -Tail 120 | ForEach-Object { Write-Log $_ }
         exit 1
       }
+    }
+
+    $instanceLog = Get-InstanceLogPath
+    if ($instanceLog -and -not $oracleSeen -and
+        (Select-String -LiteralPath $instanceLog -Pattern "SUSY HEI oracle run $RunId (client autorun handler registered|export started)" -Quiet)) {
+      $oracleSeen = $true
+      Write-Log "SUSY HEI oracle run $RunId is running inside the Prism client."
     }
 
     if (Test-Path -LiteralPath $RecipedumpPath) {
@@ -289,18 +381,35 @@ try {
       if (-not $launcherManaged) {
         Fail "Susy client exited without producing $RecipedumpPath."
       }
-      Write-Log "Prism launch request exited; waiting for the managed client to produce the dump."
+    }
+
+    if ($launcherManaged -and $handoffStartedAt) {
+      $handoffSeconds = ((Get-Date) - $handoffStartedAt).TotalSeconds
+      if ($handoffSeconds -gt 180 -and -not $oracleSeen) {
+        $logHint = Get-InstanceLogPath
+        if ($logHint -and (Test-Path -LiteralPath $logHint)) {
+          Write-Log "Last 120 lines from the Prism instance log:"
+          Get-Content -LiteralPath $logHint -Tail 120 | ForEach-Object { Write-Log $_ }
+        }
+        Fail "Prism accepted the launch request, but the SUSY oracle was not seen in the instance log after 180 seconds. Confirm the oracle jar is enabled in Prism and inspect $logHint."
+      }
+      if ($handoffSeconds -gt 300) {
+        Fail "Prism launched the instance, but no recipedump appeared after 300 seconds. Check $RuntimeErrLog and $(Get-InstanceLogPath)."
+      }
     }
 
     Start-Sleep -Seconds 5
   }
 
   if (-not $dumpReady) {
-    Fail "Timed out waiting for $RecipedumpPath."
+    Fail "Timed out waiting for $RecipedumpPath. Check $(Get-InstanceLogPath)."
   }
 } finally {
-  if ($proc -and -not $proc.HasExited) {
-    Write-Log "Stopping the Susy client (PID $($proc.Id))..."
+  Restore-PrismJvmArguments
+  # Do not terminate Prism itself: for a launcher-managed instance `$proc` is
+  # the Prism GUI/request process, not the Minecraft client.
+  if ($proc -and -not $proc.HasExited -and -not $launcherManaged) {
+    Write-Log "Stopping the SUSY client (PID $($proc.Id))..."
     & taskkill /PID $proc.Id /T /F 2>$null | Out-Null
     try { $proc.WaitForExit(10000) | Out-Null } catch {}
   }

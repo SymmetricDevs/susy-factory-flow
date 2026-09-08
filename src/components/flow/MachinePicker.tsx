@@ -186,6 +186,7 @@ export function MachineMenu({
   mapIcons,
   onUseTwin,
   onAddRecipe,
+  figures = true,
 }: {
   recipe: Recipe;
   /** The card's node: a steam machine's litres are read at its settings. */
@@ -208,6 +209,8 @@ export function MachineMenu({
   onUseTwin?: (twin: RecipeTwin) => void;
   /** SHARED MACHINES: opens the search pinned to this machine, so another recipe can join the card. */
   onAddRecipe?: () => void;
+  /** Off on a shared card: a time and power figure would be one recipe's, and the card runs several. */
+  figures?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   // The menu PORTALS to the body, like the crop and hatch menus: inside the
@@ -360,8 +363,8 @@ export function MachineMenu({
               ) : null}
             </span>
             <span className="min-w-0 truncate">{handler.label}</span>
-            <Figure value={formatSeconds(stats.seconds)} unit="s" />
-            <Figure value={power.value} unit={power.unit} dim={power.unit === ""} />
+            {figures ? <Figure value={formatSeconds(stats.seconds)} unit="s" /> : <span />}
+            {figures ? <Figure value={power.value} unit={power.unit} dim={power.unit === ""} /> : <span />}
           </button>
         );
       })}

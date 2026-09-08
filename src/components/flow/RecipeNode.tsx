@@ -619,11 +619,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           const sectionEffective = applyMachineHandlerToRecipe(sectionNodeRecipe, node);
           const stats = getOverclockedRecipeStats(sectionNodeRecipe, node);
           const adjusted = applyMachineOutputMultipliers(sectionEffective, node, stats.tier);
+          // The section's own draw at the card's budget: what the POWER
+          // cell's peak and average are built from.
+          const drawsEu = sectionEffective.eut > 0 && !isSteamMachineHandler(getSelectedMachineHandler(sectionRecipe, node));
           return {
             section,
             node,
             recipe: sectionRecipe,
             display: { ...sectionEffective, ...adjusted, ...stats },
+            powerReport: drawsEu && hasPowerReport(sectionNodeRecipe) ? getNodePowerReport(sectionNodeRecipe, node) : undefined,
+            steamReport: !drawsEu ? getNodeSteamReport(sectionNodeRecipe, node) : undefined,
           };
         })
         .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined),
@@ -684,6 +689,49 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         Math.min(1, result?.utilization ?? 0),
       )
     : undefined;
+  // The shared machine's POWER: what it spikes to is the hungriest recipe's
+  // draw, what it averages is every recipe's draw weighted by its share of
+  // the time. The MACHINES list bills a shared card the same way.
+  const sharedDraw = (() => {
+    if (!isSharedMachine) {
+      return undefined;
+    }
+    const perMachine = projectNode.machineCount * Math.max(1, projectNode.parallel);
+    const parts = [
+      { report: powerReport, share: Math.min(1, result?.utilization ?? 0) },
+      ...sectionRails.map((entry) => ({
+        report: entry.powerReport,
+        share: Math.min(1, entry.result?.utilization ?? 0),
+      })),
+    ];
+    const totalShare = parts.reduce((sum, part) => sum + part.share, 0);
+    return {
+      peakEuT: totalShare > 0 ? Math.max(...parts.map((part) => part.report?.drawEuT ?? 0)) * perMachine : 0,
+      avgEuT: parts.reduce((sum, part) => sum + (part.report?.drawEuT ?? 0) * part.share, 0) * perMachine,
+      recipes: parts.length,
+    };
+  })();
+  const sharedLitres = (() => {
+    if (!isSharedMachine) {
+      return undefined;
+    }
+    const perMachine = { machineCount: projectNode.machineCount, parallel: projectNode.parallel };
+    const parts = [
+      { report: steamReport, share: Math.min(1, result?.utilization ?? 0) },
+      ...sectionRails.map((entry) => ({
+        report: entry.steamReport,
+        share: Math.min(1, entry.result?.utilization ?? 0),
+      })),
+    ];
+    const litres = (report: NodeSteamReport | undefined) =>
+      report ? steamDrawLitresPerSecond(report, perMachine) : 0;
+    const totalShare = parts.reduce((sum, part) => sum + part.share, 0);
+    return {
+      peak: totalShare > 0 ? Math.max(...parts.map((part) => litres(part.report))) : 0,
+      avg: parts.reduce((sum, part) => sum + litres(part.report) * part.share, 0),
+      recipes: parts.length,
+    };
+  })();
   const cardVerdict: NodeVerdict =
     sharedUsage !== undefined && verdict.kind !== "off" && verdict.kind !== "no-recipe"
       ? {
@@ -1599,6 +1647,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   // lines); the machine tooltip's overclock story does not
                   // apply to it and would just be wrong here.
                   (recipe.notes ?? recipe.name)
+                ) : isSharedMachine ? (
+                  // One recipe's stats would be the wrong story for a
+                  // machine running several; the rows below carry each.
+                  <RecipeTooltip
+                    view={{
+                      title: machineDisplayName,
+                      rows: [{ label: "Recipes", value: String(1 + sectionRails.length) }],
+                      reason: "Runs its recipes one at a time; each row says how its share goes.",
+                    }}
+                  />
                 ) : (
                   <MachineStatsContent
                     recipe={recipe}
@@ -1690,6 +1748,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 twins={isSharedMachine ? undefined : twins}
                 mapIcons={recipeMapIcons}
                 onUseTwin={useTwin}
+                figures={!isSharedMachine}
                 onAddRecipe={
                   canShareMachine
                     ? () => {
@@ -1734,7 +1793,20 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             <div className="relative">
             <MinecraftTooltip
               content={
-                powerReport && !isHatchMenuOpen ? (
+                powerReport && !isHatchMenuOpen && isSharedMachine ? (
+                  // A shared machine's chip is a machine fact: its tier and
+                  // budget. Each recipe's own story sits on its rule row.
+                  <RecipeTooltip
+                    view={{
+                      title: "Machine power",
+                      rows: [
+                        { label: "Tier", value: powerReport.tier },
+                        { label: "Supply per machine", value: `${formatCompact(powerDisplayFromEuT(powerReport.poolEuT))} ${powerDisplaySuffix()}` },
+                        { label: "Recipes", value: String(1 + sectionRails.length) },
+                      ],
+                    }}
+                  />
+                ) : powerReport && !isHatchMenuOpen ? (
                   <PowerStoryContent
                     report={powerReport}
                     utilization={result?.utilization}
@@ -2075,7 +2147,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                           ? "Machine"
                           : "Machines"}
                     </span>
-                    {programmedCircuit ? <CircuitChip circuit={programmedCircuit} /> : null}
+                    {programmedCircuit && !isSharedMachine ? <CircuitChip circuit={programmedCircuit} /> : null}
                   </div>
                 ) : (
                   <>
@@ -2165,6 +2237,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                               average={averageDraw}
                               recipe={nodeRecipe}
                               node={projectNode}
+                              sharedDraw={sharedDraw}
                             />
                           ) : null}
                           {steamReport ? (
@@ -2174,6 +2247,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                               nodeParallel={projectNode.parallel}
                               utilization={result?.utilization}
                               average={averageDraw}
+                              sharedLitres={sharedLitres}
                             />
                           ) : null}
                           {cropDrawEuT > 0 ? (
@@ -2216,7 +2290,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                               onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
                             />
                           )}
-                          {programmedCircuit ? (
+                          {programmedCircuit && !isSharedMachine ? (
                             <CircuitChip circuit={programmedCircuit} />
                           ) : null}
                         </>
@@ -5788,6 +5862,7 @@ function PowerStat({
   average,
   recipe,
   node,
+  sharedDraw,
 }: {
   report: NodePowerReport;
   machineCount: number;
@@ -5798,18 +5873,40 @@ function PowerStat({
   utilization?: number;
   /** The right panel's PEAK/AVG switch; see drawScaleFor. */
   average: boolean;
+  /**
+   * A SHARED MACHINE's draw: PEAK is the hungriest recipe's, AVG every
+   * recipe's weighted by its share. The one-recipe power story does not
+   * apply, so the hover states the two figures and leaves it there.
+   */
+  sharedDraw?: { peakEuT: number; avgEuT: number; recipes: number };
 }) {
   const stalled = report.state !== "ok";
   // Always EU/t, whatever the board's rate unit: power is a per-tick fact in
   // GT and reads as noise in any other clock. The unit itself is rendered as
   // a small suffix below, not part of this string. The figure follows the
   // PEAK/AVG switch; the hover still tells the build's whole story.
-  const drawEuT =
-    report.drawEuT * machineCount * nodeParallel * drawScaleFor(average, utilization);
+  const drawEuT = sharedDraw
+    ? average
+      ? sharedDraw.avgEuT
+      : sharedDraw.peakEuT
+    : report.drawEuT * machineCount * nodeParallel * drawScaleFor(average, utilization);
 
   return (
     <MinecraftTooltip
       content={
+        sharedDraw ? (
+          <RecipeTooltip
+            view={{
+              title: "Power",
+              rows: [
+                { label: "Peak", value: `${formatCompact(powerDisplayFromEuT(sharedDraw.peakEuT))} ${powerDisplaySuffix()}` },
+                { label: "Average", value: `${formatCompact(powerDisplayFromEuT(sharedDraw.avgEuT))} ${powerDisplaySuffix()}` },
+                { label: "Supply per machine", value: `${formatCompact(powerDisplayFromEuT(report.poolEuT))} ${powerDisplaySuffix()}` },
+              ],
+              reason: `${sharedDraw.recipes} recipes share this machine. Peak is the hungriest recipe's draw; average weights each by its share of the time.`,
+            }}
+          />
+        ) : (
         <PowerStoryContent
           report={report}
           utilization={utilization}
@@ -5817,6 +5914,7 @@ function PowerStat({
           recipe={recipe}
           node={node}
         />
+        )
       }
     >
       <div
@@ -5881,6 +5979,7 @@ function SteamStat({
   nodeParallel,
   utilization,
   average,
+  sharedLitres,
 }: {
   report: NodeSteamReport;
   machineCount: number;
@@ -5888,12 +5987,17 @@ function SteamStat({
   utilization?: number;
   /** The right panel's PEAK/AVG switch; see drawScaleFor. */
   average: boolean;
+  /** A shared machine's litres: peak is the hungriest recipe's, average weighted by share. */
+  sharedLitres?: { peak: number; avg: number; recipes: number };
 }) {
   // Same rule as the POWER cell: the figure follows the PEAK/AVG switch;
   // the hover still quotes the per-machine burn.
-  const drawLitresPerSecond =
-    steamDrawLitresPerSecond(report, { machineCount, parallel: nodeParallel }) *
-    drawScaleFor(average, utilization);
+  const drawLitresPerSecond = sharedLitres
+    ? average
+      ? sharedLitres.avg
+      : sharedLitres.peak
+    : steamDrawLitresPerSecond(report, { machineCount, parallel: nodeParallel }) *
+      drawScaleFor(average, utilization);
   const perMachine = report.drawSteamPerTick * 20;
 
   return (

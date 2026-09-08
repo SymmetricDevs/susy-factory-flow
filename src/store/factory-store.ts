@@ -15,6 +15,7 @@ import {
   isSharedMachineNode,
   listNodeRecipeIds,
   listNodeSections,
+  nodeSectionCount,
   sectionHandleId,
   sectionNodeView,
   sharedHandlersWith,
@@ -339,6 +340,8 @@ interface FactoryStore {
    * that one is refused (delete the card instead).
    */
   removeRecipeSection: (nodeId: string, section: number) => void;
+  /** Swaps a recipe with the one above (-1) or below (+1) it on the card; wires follow. */
+  moveRecipeSection: (nodeId: string, section: number, direction: -1 | 1) => void;
   /** Drops an empty crop source node; a crop is picked on the node itself. */
   addCropFarmNode: () => void;
   /** The power source picker overlay (src/lib/power). */
@@ -1705,6 +1708,58 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           edges,
         }),
       );
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: nodeId,
+        selectedRecipeId: nextNode.recipeId,
+        lastResult: solveBooks(project),
+      });
+    });
+  },
+  moveRecipeSection: (nodeId, section, direction) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      const count = node ? nodeSectionCount(node) : 0;
+      const other = section + direction;
+      if (!node || section < 0 || section >= count || other < 0 || other >= count) {
+        return state;
+      }
+      // The two sections swap places: the card's recipe and picks for each,
+      // and every wire's handle prefix, so the wires stay on their recipe.
+      const sections = listNodeSections(node).map(({ node: view }) => ({
+        recipeId: view.recipeId,
+        recipeInputOverrides: view.recipeInputOverrides,
+      }));
+      [sections[section], sections[other]] = [sections[other]!, sections[section]!];
+      const swapped = (handleId: string | undefined) => {
+        const { section: at, handleId: bare } = splitSectionHandleId(handleId);
+        if (!bare || (at !== section && at !== other)) {
+          return handleId;
+        }
+        return sectionHandleId(at === section ? other : section, bare);
+      };
+      const nextNode: FactoryNode = {
+        ...node,
+        recipeId: sections[0]!.recipeId,
+        recipeInputOverrides: sections[0]!.recipeInputOverrides,
+        extraRecipes: sections.slice(1).map((entry) => ({
+          recipeId: entry.recipeId,
+          ...(entry.recipeInputOverrides ? { recipeInputOverrides: entry.recipeInputOverrides } : {}),
+        })),
+      };
+      const project = touchProject({
+        ...state.project,
+        nodes: state.project.nodes.map((entry) => (entry.id === nodeId ? nextNode : entry)),
+        edges: state.project.edges.map((edge) =>
+          edge.source === nodeId || edge.target === nodeId
+            ? {
+                ...edge,
+                sourceHandle: edge.source === nodeId ? swapped(edge.sourceHandle) : edge.sourceHandle,
+                targetHandle: edge.target === nodeId ? swapped(edge.targetHandle) : edge.targetHandle,
+              }
+            : edge,
+        ),
+      });
       return withProjectHistory(state, {
         project,
         selectedNodeId: nodeId,

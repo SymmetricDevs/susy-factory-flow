@@ -15,6 +15,7 @@ import {
 } from "react";
 import {
   ChevronDown,
+  ChevronUp,
   Calculator,
   Copy,
   Cpu,
@@ -330,6 +331,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const updateNode = useFactoryStore((state) => state.updateNode);
   const browseMachineRecipes = useFactoryStore((state) => state.browseMachineRecipes);
   const removeRecipeSection = useFactoryStore((state) => state.removeRecipeSection);
+  const moveRecipeSection = useFactoryStore((state) => state.moveRecipeSection);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const dataset = useFactoryStore((state) => state.dataset);
@@ -2025,6 +2027,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               ]}
               pending={pendingResourceConnection}
               onRemove={(section) => removeRecipeSection(projectNode.id, section)}
+              onMove={(section, direction) => moveRecipeSection(projectNode.id, section, direction)}
               picture={
                 !calmMode && hasPowerPicture ? (
                   <PowerStructureWindow
@@ -3145,7 +3148,38 @@ function SharedMachineRails({
   pending: ComponentProps<typeof PortRail>["pending"];
   picture?: ReactNode;
   onRemove: (section: number) => void;
+  /** Swap the recipe with its neighbour above (-1) or below (+1). */
+  onMove: (section: number, direction: -1 | 1) => void;
 }) {
+  const last = sections.length - 1;
+  // A bare key in the reading's row: the arrows sit together, the x a
+  // little apart from them, so a hand aiming to reorder never lands on
+  // remove.
+  const key = (
+    label: string,
+    icon: ReactNode,
+    onClick: () => void,
+    disabled: boolean,
+    extraClass = "",
+  ) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      aria-label={label}
+      title={label}
+      className={[
+        "nodrag -mt-0.5 flex h-4 w-4 items-center justify-center text-[var(--mc-ink-muted)]",
+        disabled ? "opacity-30" : "hover:text-white",
+        extraClass,
+      ].join(" ")}
+    >
+      {icon}
+    </button>
+  );
   const rowsOf = (entry: (typeof sections)[number]) =>
     Math.max(1, entry.rails.inputs.length, entry.rails.outputs.length);
   // The rule over a recipe carries the recipe's own reading: its share of
@@ -3191,19 +3225,11 @@ function SharedMachineRails({
     >
       {withKey ? null : reading(entry)}
       {withKey ? (
-        <MinecraftTooltip content="Take this recipe off the machine">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRemove(entry.section);
-            }}
-            aria-label="Remove this recipe from the machine"
-            className="nodrag -mt-0.5 flex h-4 w-4 items-center justify-center text-[var(--mc-ink-muted)] hover:text-white"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </MinecraftTooltip>
+        <span className="flex items-center">
+          {key("Move this recipe up", <ChevronUp className="h-3.5 w-3.5" />, () => onMove(entry.section, -1), entry.section === 0)}
+          {key("Move this recipe down", <ChevronDown className="h-3.5 w-3.5" />, () => onMove(entry.section, 1), entry.section === last)}
+          {key("Take this recipe off the machine", <X className="h-3 w-3" />, () => onRemove(entry.section), false, "ml-2")}
+        </span>
       ) : null}
     </div>
   );

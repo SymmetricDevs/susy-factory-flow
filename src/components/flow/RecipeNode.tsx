@@ -1749,6 +1749,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 mapIcons={recipeMapIcons}
                 onUseTwin={useTwin}
                 figures={!isSharedMachine}
+                title={isSharedMachine ? "Machines that run every recipe on this card" : undefined}
                 onAddRecipe={
                   canShareMachine
                     ? () => {
@@ -2292,6 +2293,24 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                           )}
                           {programmedCircuit && !isSharedMachine ? (
                             <CircuitChip circuit={programmedCircuit} />
+                          ) : null}
+                          {canShareMachine ? (
+                            // The second door to the same action as the
+                            // machine menu's last row: a bare plus at the
+                            // foot of the recipes, taking no room of its own.
+                            <MinecraftTooltip content="Add another recipe to this machine">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  browseMachineRecipes(projectNode.id);
+                                }}
+                                aria-label="Add another recipe to this machine"
+                                className="nodrag flex w-5 shrink-0 items-center justify-center self-stretch text-[var(--mc-ink-muted)] hover:text-white"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </MinecraftTooltip>
                           ) : null}
                         </>
                       ) : null}

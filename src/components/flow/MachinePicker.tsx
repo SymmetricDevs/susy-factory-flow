@@ -187,6 +187,7 @@ export function MachineMenu({
   onUseTwin,
   onAddRecipe,
   figures = true,
+  title,
 }: {
   recipe: Recipe;
   /** The card's node: a steam machine's litres are read at its settings. */
@@ -211,6 +212,8 @@ export function MachineMenu({
   onAddRecipe?: () => void;
   /** Off on a shared card: a time and power figure would be one recipe's, and the card runs several. */
   figures?: boolean;
+  /** The heading over the machine rows; a shared card says "every recipe on this card". */
+  title?: string;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   // The menu PORTALS to the body, like the crop and hatch menus: inside the
@@ -328,6 +331,11 @@ export function MachineMenu({
       onWheel={(event) => event.stopPropagation()}
       onMouseLeave={() => onHover(undefined)}
     >
+      {/* The list's title, in the same voice as the twins section below it:
+          what these rows ARE, so the two sections read as two questions. */}
+      <div className="mx-3 mb-1 mt-0.5 text-[13px] uppercase tracking-wide text-[var(--mc-ink-muted)]">
+        {title ?? "Machines that run this recipe"}
+      </div>
       {rows.map(({ handler, stats, power }) => {
         const active = handler.id === selectedId;
         const icon = iconsById.get(handler.id);
@@ -436,7 +444,7 @@ export function MachineMenu({
           className="mx-3 mt-1.5 flex w-[calc(100%-24px)] items-center gap-4 border-t-2 border-[var(--mc-33)] px-0 py-2 pt-3 text-left text-[17px] leading-[24px] text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white"
         >
           <span className="flex h-9 w-9 items-center justify-center text-[24px] font-black leading-none">+</span>
-          <span className="min-w-0 truncate">Add a recipe this machine runs</span>
+          <span className="min-w-0 truncate">Add another recipe to this machine</span>
         </button>
       ) : null}
     </div>

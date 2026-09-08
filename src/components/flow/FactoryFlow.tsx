@@ -281,6 +281,7 @@ import {
 } from "./grid-edge-router";
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
 import type { ArrangeInput } from "@/lib/board-arrange";
+import { makeRouteJudge } from "@/lib/route-judge";
 import {
   ASYNC_ROUTE_EDGE_LIMIT,
   routeWorkerAvailable,
@@ -1535,36 +1536,20 @@ function buildArrangeJudge(cardIds: readonly string[]): ArrangeInput["judge"] | 
     }
     bounds.set(id, rect);
   }
-  const tuning = getRouterTuning();
-  return (positions) => {
-    const delta = new Map<string, { dx: number; dy: number }>();
-    const obstacles: GridObstacle[] = [];
-    for (const [id, rect] of bounds) {
-      const at = positions.get(id) ?? { x: rect.left, y: rect.top };
-      delta.set(id, { dx: at.x - rect.left, dy: at.y - rect.top });
-      obstacles.push({
-        id,
-        left: at.x,
-        top: at.y,
-        right: at.x + (rect.right - rect.left),
-        bottom: at.y + (rect.bottom - rect.top),
-      });
-    }
-    const shift = (ends: GridEndpoint[], id: string): GridEndpoint[] => {
-      const d = delta.get(id) ?? { dx: 0, dy: 0 };
-      return ends.map((end) => ({ ...end, x: end.x + d.dx, y: end.y + d.dy }));
-    };
-    const requests: GridRouteRequest[] = base.map(({ input, sources, targets }) => ({
-      edgeId: input.edgeId,
-      order: input.order,
-      sources: shift(sources, input.sourceNodeId),
-      targets: shift(targets, input.targetNodeId),
-      strokeWidth: Math.min(input.routingWidth, LANE_CAPACITY),
-      sourceCardId: input.sourceNodeId,
-      targetCardId: input.targetNodeId,
-    }));
-    return measureRoutes(solveGridRoutes(obstacles, requests, undefined, tuning).values());
-  };
+  const obstacles: GridObstacle[] = [];
+  for (const [id, rect] of bounds) {
+    obstacles.push({ id, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  }
+  const requests: GridRouteRequest[] = base.map(({ input, sources, targets }) => ({
+    edgeId: input.edgeId,
+    order: input.order,
+    sources,
+    targets,
+    strokeWidth: Math.min(input.routingWidth, LANE_CAPACITY),
+    sourceCardId: input.sourceNodeId,
+    targetCardId: input.targetNodeId,
+  }));
+  return makeRouteJudge(obstacles, requests, getRouterTuning());
 }
 
 function clearDirectRoutes() {

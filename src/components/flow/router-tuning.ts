@@ -53,6 +53,8 @@ export interface RouterTuning {
   longestFirst: boolean;
   /** Search window padding round a wire's ends, in cells. */
   windowPad: number;
+  /** Padding of the wide retry rung a route that paid for a crossing gets, in cells. */
+  wideRungCells: number;
 }
 
 export const DEFAULT_ROUTER_TUNING: RouterTuning = {
@@ -77,6 +79,7 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   negotiationBudget: 2,
   longestFirst: true,
   windowPad: 4,
+  wideRungCells: 30,
 };
 
 export interface RouterTuningField {
@@ -113,6 +116,7 @@ export const ROUTER_TUNING_FIELDS: RouterTuningField[] = [
   { key: "dockShare", label: "Shared dock", hint: "Extra for landing on a dock another wire already uses. Never a ban: wires may stack onto one side.", kind: "number", min: 0, max: 600, step: 10, group: "Docks" },
   { key: "dockPlanWindow", label: "Plan window", hint: "Cells of rim either side of the plan a wire may still dock in.", kind: "number", min: 1, max: 60, step: 1, group: "Docks" },
   { key: "diagonalLaneCapacity", label: "Diagonal lane width", hint: "Usable stroke pixels in a diagonal lane.", kind: "number", min: 4, max: 16, step: 1, group: "Search" },
+  { key: "wideRungCells", label: "Wide retry", hint: "Cells of search window a route that paid for a crossing gets on its retry.", kind: "number", min: 0, max: 80, step: 2, group: "Search" },
   { key: "windowPad", label: "Search pad", hint: "Cells of search window round a wire's ends before it grows.", kind: "number", min: 2, max: 40, step: 1, group: "Search" },
 ];
 

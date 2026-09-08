@@ -150,10 +150,28 @@ export interface ArrangeInput {
    * have. Built by the host on the board's own route requests, so the
    * arranger optimises the picture the player will actually get.
    */
-  judge?: (positions: ReadonlyMap<string, { x: number; y: number }>) => {
+  judge?: (
+    positions: ReadonlyMap<string, { x: number; y: number }>,
+    options?: {
+      /**
+       * A quicker verdict for the polish's many trials: the wires a moved
+       * card touches are re-solved, the rest hold their routes from the
+       * `base` layout. The final word is always the full verdict.
+       */
+      quick?: boolean;
+      base?: ReadonlyMap<string, { x: number; y: number }>;
+    },
+  ) => {
     crossings: number;
     length: number;
+    /** Where wires cross, with the two wire ids, when the judge knows. */
+    events?: Array<{ point: { x: number; y: number }; edges: [string, string] }>;
   };
+  /**
+   * Judge calls the exact polish may spend after the layout is chosen
+   * (default 60). Each is a full solve of the board's wires.
+   */
+  polishBudget?: number;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -319,14 +337,302 @@ export function arrangeBoard(input: ArrangeInput): ArrangeResult {
     input.judge!(new Map(result.moves.map((move) => [move.id, move.position])));
   const plainVerdict = verdict(plain);
   const challengerVerdict = verdict(challenger);
-  if (
-    challengerVerdict.crossings < plainVerdict.crossings ||
-    (challengerVerdict.crossings === plainVerdict.crossings &&
-      challengerVerdict.length < plainVerdict.length)
-  ) {
-    return challenger;
+  // Both layouts are polished - they start from different structures and
+  // the polish is greedy, so each can reach a place the other cannot - and
+  // the better finished board wins: fewer crossings, then shorter wire.
+  const polishedPlain = polishWithJudge(input, plain, plainVerdict);
+  const polishedChallenger = polishWithJudge(input, challenger, challengerVerdict);
+  const finalPlain = verdict(polishedPlain);
+  const finalChallenger = verdict(polishedChallenger);
+  const better =
+    finalChallenger.crossings < finalPlain.crossings ||
+    (finalChallenger.crossings === finalPlain.crossings && finalChallenger.length < finalPlain.length);
+  return better ? polishedChallenger : polishedPlain;
+}
+
+/**
+ * THE EXACT POLISH. The layout is done; now the real router says where the
+ * wires still cross, and the cards on those wires are tried elsewhere -
+ * swapped with a column neighbour, or set down beside a partner on any of
+ * its four sides - each try judged by the router itself. The first try
+ * that lowers the crossings (or keeps them and shortens the wire) is
+ * taken, and the search goes again from there until nothing helps or the
+ * budget of judge calls is spent. This is what a player does by hand: look
+ * at the crossing, move the card. Every try keeps the grid and the
+ * no-overlap rule; nothing else on the board moves.
+ */
+function polishWithJudge(
+  input: ArrangeInput,
+  result: ArrangeResult,
+  verdict: { crossings: number; length: number; events?: Array<{ point: { x: number; y: number }; edges: [string, string] }> },
+): ArrangeResult {
+  const judge = input.judge;
+  if (!judge || verdict.crossings === 0) {
+    return result;
   }
-  return plain;
+  let budget = input.polishBudget ?? 100;
+  const sizeById = new Map(input.cards.map((card) => [card.id, { width: card.width, height: card.height }]));
+  const wiresOf = new Map<string, ArrangeWire[]>();
+  for (const wire of input.wires) {
+    push(wiresOf, wire.source, wire);
+    push(wiresOf, wire.target, wire);
+  }
+  const wireById = new Map(input.wires.filter((wire) => wire.id).map((wire) => [wire.id!, wire]));
+  const positions = new Map(result.moves.map((move) => [move.id, { ...move.position }]));
+  // The search runs on quick verdicts against a fully judged BASE: a move
+  // is tried with only its own wires re-solved, and when it wins, the new
+  // layout gets the full verdict and becomes the base.
+  let base = new Map(positions);
+  let best = verdict;
+  const start = { positions: new Map(positions), verdict };
+  const gap = BOARD_GRID;
+  const overlaps = (id: string, x: number, y: number): boolean => {
+    const size = sizeById.get(id)!;
+    for (const [other, at] of positions) {
+      if (other === id) continue;
+      const otherSize = sizeById.get(other)!;
+      if (
+        x < at.x + otherSize.width + gap &&
+        x + size.width + gap > at.x &&
+        y < at.y + otherSize.height + gap &&
+        y + size.height + gap > at.y
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const tried = new Set<string>();
+  // A machine moves with the drawers that serve only it, the way a hand
+  // drags a machine and its buds together.
+  const budsOf = new Map<string, string[]>();
+  for (const [id, size] of sizeById) {
+    if (size.width > cells(6)) continue;
+    const partners = new Set((wiresOf.get(id) ?? []).map((wire) => (wire.source === id ? wire.target : wire.source)));
+    if (partners.size === 1) {
+      const [anchor] = partners;
+      if (sizeById.get(anchor)!.width > cells(6)) push(budsOf, anchor, id);
+    }
+  }
+  const groupOf = (id: string): string[] => [id, ...(budsOf.get(id) ?? [])];
+  const groupOverlaps = (group: string[], dx: number, dy: number): boolean => {
+    const set = new Set(group);
+    for (const member of group) {
+      const at = positions.get(member)!;
+      const size = sizeById.get(member)!;
+      const x = at.x + dx;
+      const y = at.y + dy;
+      for (const [other, otherAt] of positions) {
+        if (set.has(other)) continue;
+        const otherSize = sizeById.get(other)!;
+        if (
+          x < otherAt.x + otherSize.width + gap &&
+          x + size.width + gap > otherAt.x &&
+          y < otherAt.y + otherSize.height + gap &&
+          y + size.height + gap > otherAt.y
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  for (let round = 0; round < 40 && budget > 0 && best.crossings > 0; round += 1) {
+    // Cards on crossing wires, the most-crossed first; drawers before
+    // machines because a drawer is cheap to move.
+    const blame = new Map<string, number>();
+    // The far end of each crossing wire, per card: the partner a move
+    // should bring the card toward.
+    const crossingPartners = new Map<string, Set<string>>();
+    for (const event of best.events ?? []) {
+      for (const edgeId of event.edges) {
+        const wire = wireById.get(edgeId);
+        if (!wire) continue;
+        blame.set(wire.source, (blame.get(wire.source) ?? 0) + 1);
+        blame.set(wire.target, (blame.get(wire.target) ?? 0) + 1);
+        if (!crossingPartners.has(wire.source)) crossingPartners.set(wire.source, new Set());
+        if (!crossingPartners.has(wire.target)) crossingPartners.set(wire.target, new Set());
+        crossingPartners.get(wire.source)!.add(wire.target);
+        crossingPartners.get(wire.target)!.add(wire.source);
+      }
+    }
+    if (blame.size === 0) break;
+    // The most-crossed card first: it is the one standing in the wrong
+    // place. Drawers break ties, being cheap to move.
+    const suspects = [...blame.keys()].sort((a, b) => {
+      const storageA = sizeById.get(a)!.width <= cells(6) ? 1 : 0;
+      const storageB = sizeById.get(b)!.width <= cells(6) ? 1 : 0;
+      return blame.get(b)! - blame.get(a)! || storageB - storageA || (a < b ? -1 : 1);
+    });
+    let improved = false;
+    for (const id of suspects) {
+      if (improved || budget <= 0) break;
+      const size = sizeById.get(id)!;
+      const partners = [...new Set((wiresOf.get(id) ?? []).map((wire) => (wire.source === id ? wire.target : wire.source)))]
+        .filter((partner) => positions.has(partner));
+      const candidates: Array<{ x: number; y: number }> = [];
+      const add = (x: number, y: number) => {
+        x = snapToGrid(x);
+        y = snapToGrid(y);
+        const key = `${id}@${x},${y}`;
+        if (tried.has(key)) return;
+        const home = positions.get(id)!;
+        if (groupOverlaps(groupOf(id), x - home.x, y - home.y)) return;
+        tried.add(key);
+        candidates.push({ x, y });
+      };
+      const own = positions.get(id)!;
+      const group = groupOf(id);
+      for (const partner of partners) {
+        const at = positions.get(partner)!;
+        const partnerSize = sizeById.get(partner)!;
+        const rows = [at.y, at.y + partnerSize.height - size.height, at.y + (partnerSize.height - size.height) / 2];
+        const columns = [at.x, at.x + partnerSize.width - size.width, at.x + (partnerSize.width - size.width) / 2];
+        for (const y of rows) {
+          add(at.x - size.width - 2 * gap, y);
+          add(at.x + partnerSize.width + 2 * gap, y);
+          // A slide in its own column, level with the partner.
+          add(own.x, y);
+        }
+        for (const x of columns) {
+          add(x, at.y - size.height - 2 * gap);
+          add(x, at.y + partnerSize.height + 2 * gap);
+        }
+      }
+      // Nearest a partner first: the smallest move that helps is the one a
+      // hand would make.
+      // The partners on the crossing wires count four times over: it is
+      // the wire that crosses that the move has to shorten.
+      const wanted = crossingPartners.get(id);
+      const distance = (p: { x: number; y: number }) =>
+        partners.reduce((sum, partner) => {
+          const at = positions.get(partner)!;
+          const partnerSize = sizeById.get(partner)!;
+          const weight = wanted?.has(partner) ? 4 : 1;
+          return (
+            sum +
+            weight *
+              (Math.max(0, at.x - p.x - size.width, p.x - at.x - partnerSize.width) +
+                Math.max(0, at.y - p.y - size.height, p.y - at.y - partnerSize.height))
+          );
+        }, 0) + Math.abs(p.x - own.x) * 0.1 + Math.abs(p.y - own.y) * 0.1;
+      candidates.sort((a, b) => distance(a) - distance(b));
+      for (const candidate of candidates.slice(0, 18)) {
+        if (budget <= 0) break;
+        const saved = new Map(group.map((member) => [member, positions.get(member)!]));
+        const dx = candidate.x - own.x;
+        const dy = candidate.y - own.y;
+        for (const member of group) {
+          const at = saved.get(member)!;
+          positions.set(member, { x: at.x + dx, y: at.y + dy });
+        }
+        const quick = judge(positions, { quick: true, base });
+        budget -= 1;
+        if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
+          console.log("try", id.slice(0, 14), candidate.x, candidate.y, "quick", quick.crossings, Math.round(quick.length), "best", best.crossings, Math.round(best.length));
+        }
+        // A crossing fewer is always worth the full verdict; a length gain
+        // must be real (two percent) to be worth one.
+        if (
+          quick.crossings < best.crossings ||
+          (quick.crossings === best.crossings && quick.length < best.length * 0.98)
+        ) {
+          const next = judge(positions);
+          if (
+            next.crossings < best.crossings ||
+            (next.crossings === best.crossings && next.length < best.length - 1)
+          ) {
+            best = next;
+            base = new Map(positions);
+            improved = true;
+            break;
+          }
+        }
+        for (const [member, at] of saved) positions.set(member, at);
+      }
+      if (improved || budget <= 0) break;
+      // SWAPS: trade places with a card in the same column - the move
+      // that fixes a wire climbing past its neighbours' wires. Each card
+      // takes the other's top-left, buds riding along; both must fit.
+      const swapKeys = new Set<string>();
+      for (const [other, otherAt] of positions) {
+        if (budget <= 0 || improved) break;
+        if (other === id || group.includes(other) || groupOf(other).includes(id)) continue;
+        const otherSize = sizeById.get(other)!;
+        const sameColumn = own.x < otherAt.x + otherSize.width && otherAt.x < own.x + size.width;
+        if (!sameColumn) continue;
+        const key = [id, other].sort().join("<>") + `@${own.x},${own.y}|${otherAt.x},${otherAt.y}`;
+        if (tried.has(key) || swapKeys.has(key)) continue;
+        swapKeys.add(key);
+        tried.add(key);
+        const otherGroup = groupOf(other);
+        const both = [...group, ...otherGroup];
+        const saved = new Map(both.map((member) => [member, positions.get(member)!]));
+        const dxA = otherAt.x - own.x;
+        const dyA = otherAt.y - own.y;
+        for (const member of group) {
+          const at = saved.get(member)!;
+          positions.set(member, { x: at.x + dxA, y: at.y + dyA });
+        }
+        for (const member of otherGroup) {
+          const at = saved.get(member)!;
+          positions.set(member, { x: at.x - dxA, y: at.y - dyA });
+        }
+        // Neither group may land on anything (the other group included).
+        let legal = true;
+        for (const member of both) {
+          const at = positions.get(member)!;
+          const memberSize = sizeById.get(member)!;
+          for (const [third, thirdAt] of positions) {
+            if (third === member) continue;
+            const thirdSize = sizeById.get(third)!;
+            if (
+              at.x < thirdAt.x + thirdSize.width + gap &&
+              at.x + memberSize.width + gap > thirdAt.x &&
+              at.y < thirdAt.y + thirdSize.height + gap &&
+              at.y + memberSize.height + gap > thirdAt.y
+            ) {
+              legal = false;
+              break;
+            }
+          }
+          if (!legal) break;
+        }
+        if (legal) {
+          const quick = judge(positions, { quick: true, base });
+          budget -= 1;
+          if (
+            quick.crossings < best.crossings ||
+            (quick.crossings === best.crossings && quick.length < best.length * 0.98)
+          ) {
+            const next = judge(positions);
+            if (
+              next.crossings < best.crossings ||
+              (next.crossings === best.crossings && next.length < best.length - 1)
+            ) {
+              best = next;
+              base = new Map(positions);
+              improved = true;
+              break;
+            }
+          }
+        }
+        for (const [member, at] of saved) positions.set(member, at);
+      }
+    }
+    if (!improved) break;
+  }
+  // The full verdict decides: the polished layout only replaces the
+  // starting one if it is truly better by the real router.
+  const final = judge(positions);
+  const keep =
+    final.crossings < start.verdict.crossings ||
+    (final.crossings === start.verdict.crossings && final.length < start.verdict.length);
+  const chosen = keep ? positions : start.positions;
+  return {
+    ...result,
+    moves: result.moves.map((move) => ({ ...move, position: chosen.get(move.id) ?? move.position })),
+  };
 }
 
 /** Whether layoutIsland runs the optimiser; set per arrangeBoardOnce call. */
@@ -1154,7 +1460,7 @@ function layoutIsland(
   // Two-card loops are lifted out before any of that: their wires never
   // touch the column system, and the pair stacks in one column.
   const pairs = twoCycleLinks(links);
-  const forward = breakCycles(members, links, pairs);
+  const forward = splitCoFeeders(breakCycles(members, links, pairs), members);
 
   assignLayers(members, forward, pairs, exits);
 
@@ -1403,12 +1709,12 @@ function layoutIsland(
         sectionGapCells: Math.round(SECTION_GAP / BOARD_GRID),
         columnGapCells: Math.round(COLUMN_GAP_MIN / BOARD_GRID),
         satellitePadCells: Math.round(SATELLITE_PAD / BOARD_GRID),
-        // The island's finalists are judged by the optimiser's own stand-in
-        // (island-local, cheap); the host's judge routes the WHOLE board and
-        // is spent once, on the finished layouts (arrangeBoard).
-        judge: undefined,
+        // With a host judge, the finished layouts are judged for real in
+        // arrangeBoard, so the island's finalists go by proxy score alone;
+        // without one, the optimiser's own stand-in picks among them.
+        judge: _judge ? false : undefined,
       });
-      if (process.env.ARRANGE_DEBUG) {
+      if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
         console.log("finalists", JSON.stringify(optimized.finalists), "before", Math.round(optimized.before), "after", Math.round(optimized.after));
       }
       optimized.positions.forEach((place, i) => {
@@ -1594,6 +1900,80 @@ function assignLayers(
   slideTowardWires(members, forward, undefined, exits);
   pullPairsTogether(pairs, forward);
   packLayers(members);
+}
+
+/**
+ * Two machines that FEED THE SAME DRAWER stand on opposite sides of it, the
+ * drawer between them - the way Jack drew the oil board (2026-09-08): the
+ * tower's product drawers in a column to its right, the second producer to
+ * the right of the drawers, feeding them leftward. Ranked left to right
+ * alone, both producers land in one column, stacked, and their fans of
+ * wires into the shared drawers cross each other wholesale. So for every
+ * pair of machines that share a drawer as co-feeders (or co-consumers) and
+ * have no forward path between them, the wires of one of them are turned
+ * round for the RANKING only: that machine ranks past the drawers and
+ * stands to their right. The one that keeps the left is the one with more
+ * of its own other wires pointing right (its own satellites, its onward
+ * chain); the other has less to lose from facing left.
+ */
+function splitCoFeeders(forward: WireLink[], members: CardSlot[]): WireLink[] {
+  const byStorage = new Map<CardSlot, WireLink[]>();
+  for (const link of forward) {
+    if (link.to.card.role === "storage") push(byStorage, link.to, link);
+    if (link.from.card.role === "storage") push(byStorage, link.from, link);
+  }
+  const outgoing = new Map<CardSlot, WireLink[]>();
+  for (const link of forward) {
+    push(outgoing, link.from, link);
+  }
+  const reaches = (from: CardSlot, to: CardSlot): boolean => {
+    const seen = new Set<CardSlot>([from]);
+    const queue = [from];
+    for (let head = 0; head < queue.length; head += 1) {
+      for (const link of outgoing.get(queue[head]) ?? []) {
+        if (link.to === to) return true;
+        if (!seen.has(link.to)) {
+          seen.add(link.to);
+          queue.push(link.to);
+        }
+      }
+    }
+    return false;
+  };
+  // Decide once per pair of machines which one turns round.
+  const turned = new Set<CardSlot>();
+  const decided = new Set<string>();
+  for (const [storage, storageLinks] of byStorage) {
+    const feeders = storageLinks.filter((l) => l.to === storage).map((l) => l.from);
+    const takers = storageLinks.filter((l) => l.from === storage).map((l) => l.to);
+    for (const group of [feeders, takers]) {
+      const machines = [...new Set(group)].filter((slot) => slot.card.role !== "storage");
+      if (machines.length !== 2) continue;
+      const [p, q] = machines.sort((a, b) => a.index - b.index);
+      const key = `${p.index}:${q.index}`;
+      if (decided.has(key)) continue;
+      decided.add(key);
+      if (turned.has(p) || turned.has(q) || reaches(p, q) || reaches(q, p)) continue;
+      const shared = new Set<CardSlot>();
+      for (const [other, otherLinks] of byStorage) {
+        const ends = new Set(otherLinks.map((l) => (l.from === other ? l.to : l.from)));
+        if (ends.has(p) && ends.has(q)) shared.add(other);
+      }
+      const rightward = (slot: CardSlot) =>
+        (outgoing.get(slot) ?? []).filter((l) => !shared.has(l.to)).reduce((sum, l) => sum + l.weight, 0);
+      turned.add(rightward(p) >= rightward(q) ? q : p);
+    }
+  }
+  if (turned.size === 0) return forward;
+  // Cards wired to nothing but shared drawers are the classic case; a card
+  // with other forward wires keeps them, and only its drawer wires turn.
+  return forward.map((link) => {
+    const storageEnd = link.to.card.role === "storage" ? link.to : link.from.card.role === "storage" ? link.from : undefined;
+    if (!storageEnd) return link;
+    const machine = storageEnd === link.to ? link.from : link.to;
+    if (!turned.has(machine)) return link;
+    return { ...link, from: link.to, to: link.from, fromAnchor: link.toAnchor, toAnchor: link.fromAnchor };
+  });
 }
 
 /**

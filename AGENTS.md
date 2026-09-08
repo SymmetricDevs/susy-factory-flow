@@ -582,26 +582,44 @@ Working notes for future agents on GTNH Factory Flow.
   through a wire or two stand apart - they just get no frame.
 - THE ARRANGE IS BENCHMARKED, and the benchmark is Jack's (2026-09-08):
   total crossings of the board's real wires first, total wire length
-  second, readability assumed to follow. `arrangeBoard` lays out twice -
-  the plain column pass, and a CHALLENGER where every island is rearranged
-  by `src/lib/board-arrange-optimize.ts` (simulated annealing over column
-  order, column offsets, row air and satellite slides, scored against a
-  router-shaped proxy: clean-exit octilinear paths, crossings x 1200,
-  wires through cards x 500, bends, length, sprawl, strangers apart) - and
-  when the host supplies a JUDGE (`ArrangeInput.judge`, built by
-  `buildArrangeJudge` in FactoryFlow on the published route inputs, real
-  docks and widths, shifted to the candidate positions and solved by the
-  real router; `measureRoutes` counts) both layouts are routed and the
-  fewer crossings wins, shorter wire breaking ties. Without a judge (boards
-  on the level, interior passes) the plain pass stands: the proxy is not to
-  be trusted unjudged. So an arrange is never worse than the plain pass on
-  the board's own wires. Corpus (arrange-router.local.test.ts, CAPTURE=...)
-  on 2026-09-08, plain -> judged: jack-board 1/29k -> 1/23k, hv-oil 1/19.6k
-  same, LUV 0/37k -> 0/35k, platline 2/32k -> 1/37k, untitled 2/68k ->
-  1/62k (crossings/length px); 3-9 s. Players' hand layouts still beat the
-  arrange on length every time and on crossings sometimes; the proxy's
-  crossing count is crude (it says 8 where the router draws 2), which is
-  the open problem.
+  second, readability assumed to follow. COUNT CROSSINGS THE RIGHT WAY:
+  `src/lib/route-metrics.ts` (`measureWireRoutes`, and the router's
+  `measureRoutes` is it) counts every point where two wires' rays
+  alternate - crossings AT BENDS and where a run ends on another wire
+  included; a segment-only counter that skipped endpoints said 2 where
+  Jack counted 24 on the same board. `tools/audit-board.mjs <plan> <out>
+  [--arrange]` loads a plan in the real app, presses the real Arrange, and
+  prints the two integers from the DISPLAYED routes (docs/route-audit.md);
+  Jack's counts agree with it. Jack's hand-arranged oil board is the
+  reference: 1 crossing, 12,745 px (`artifacts/route-audit/oil-manual`).
+- HOW `arrangeBoard` WORKS NOW: the plain column pass AND a challenger
+  (`board-arrange-optimize.ts`: annealing over column order / offsets /
+  row air / satellite slides against a router-shaped proxy score) are
+  each POLISHED (`polishWithJudge`) and the better finished board wins by
+  the judge. The polish is what a hand does: the real router says where
+  wires still cross, the cards on those wires are tried elsewhere -
+  beside a partner on any side (the far end of the crossing wire weighs
+  four times), level with a partner in their own column, or SWAPPED with
+  a card in their column - buds (drawers serving only that machine)
+  riding along, each try judged by the router. Quick verdicts pin every
+  wire the move does not touch and re-solve the rest (`route-judge.ts`,
+  the router's `pinned` argument, results carrying `vertices`/docks for
+  the purpose); a winning move gets the full verdict and becomes the
+  base. Budget 100 quick verdicts per polish. The host judge is
+  `buildArrangeJudge` in FactoryFlow -> `makeRouteJudge`, on the
+  published route inputs; no judge (boards on the level) -> plain pass.
+- LAYERING RULES LEARNED FROM JACK'S OIL BOARD: two machines feeding the
+  same drawer stand on OPPOSITE sides of it (`splitCoFeeders`: the one
+  with fewer other rightward wires has its drawer wires turned round for
+  the ranking, so it ranks past the drawers); shared drawers sit between
+  their partners (`relaxSharedStorages`).
+- Numbers on the oil board (2026-09-08, offline harness
+  `oil-arrange.local.mjs`): hand-drawn 12 crossings / 18.5k px; plain
+  pass 5 / 20.2k; judged and polished 2 / 20.3k in ~24 s; Jack by hand 1
+  / 12.7k. The two that remain are a machine that should stand low with
+  its feeder drawer beside it, which is a two-card move the greedy polish
+  cannot make. Open: multi-card moves, a proxy that agrees with the
+  router, and the time (two polishes of ~100 partial solves).
 - The board title bar has a paint button (palette in a NodeToolbar portal,
   because the frame's own layer sits under the cards); the paint TOOL works
   on boards too. Both go through `paintPocket`.

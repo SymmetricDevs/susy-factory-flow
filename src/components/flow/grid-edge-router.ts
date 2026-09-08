@@ -31,6 +31,7 @@
  */
 
 import { BOARD_GRID } from "@/lib/board-grid";
+import { measureWireRoutes } from "@/lib/route-metrics";
 import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "./router-tuning";
 
 /** One cell of clearance between any wire run and any card. */
@@ -159,6 +160,21 @@ export interface GridRouteRequest {
 export interface GridRoutedEdge {
   edgeId: string;
   points: GridPoint[];
+  /**
+   * The route's vertex chain in cells and the docks it took: enough to
+   * PIN it into a later solve (`solveGridRoutes`'s `pinned`) exactly as
+   * it was, so a judge can re-solve only the wires a moved card touched.
+   * Absent on a fallback L.
+   */
+  vertices?: GridPoint[];
+  source?: GridEndpoint;
+  target?: GridEndpoint;
+}
+
+/** A route to hold still in a solve: its request and the route it had. */
+export interface PinnedRoute {
+  request: GridRouteRequest;
+  route: GridRoutedEdge;
 }
 
 /** What a solve did, for tests and benches. Filled when passed in. */
@@ -220,12 +236,6 @@ const ASTAR_POPS_PER_STATE = 2;
 const WINDOW_GROWTH = 2.5;
 /** Heuristic weight of the wide rung (see routeWithinWindow). 1: plain A*. */
 const BOARD_RUNG_WEIGHT = 1;
-/**
- * Padding of the wide rung, in cells: enough to go over the top of a tall
- * card, bounded so a huge board does not make every retry a search of the
- * whole board (that was a minute of solve on a 292-wire board).
- */
-const WIDE_RUNG_CELLS = 30;
 /**
  * Search work the solve may spend, in A* pops per wire on the board. The
  * first pass may take the wide rung only while under half of it; the
@@ -480,6 +490,46 @@ class LaneOccupancy {
   private claimsByEdge = new Map<string, Array<{ key: number; cell: number; axis: Axis; claim: LaneClaim }>>();
   private passersByEdge = new Map<string, Array<{ centre: boolean; axis: Axis; cell: number }>>();
   private runsByEdge = new Map<string, ClaimedRun[]>();
+  private corners = new Map<number, Array<{ edgeId: string; a: number; b: number }>>();
+  private cornersByEdge = new Map<string, number[]>();
+
+  markCorner(x: number, y: number, incoming: number, outgoing: number, edgeId: string) {
+    if (incoming === outgoing) return;
+    const cell = this.cellOf(x, y);
+    const list = this.corners.get(cell) ?? [];
+    list.push({ edgeId, a: (incoming + 4) % 8, b: outgoing });
+    this.corners.set(cell, list);
+    const owned = this.cornersByEdge.get(edgeId) ?? [];
+    owned.push(cell);
+    this.cornersByEdge.set(edgeId, owned);
+  }
+
+  /** A wire may cross a bend too: compare the two pairs of outgoing rays. */
+  cornerCrossings(x: number, y: number, incoming: number, outgoing: number): number {
+    const cell = this.cellOf(x, y);
+    const corners = this.corners.get(cell);
+    const word = cell < 0 ? 0 : this.vertices[cell];
+    if (!corners && word === 0) return 0;
+    const a = (incoming + 4) % 8, b = outgoing;
+    const between = (d: number) => ((d - a + 8) % 8) < ((b - a + 8) % 8);
+    let count = 0;
+    for (const c of corners ?? []) {
+      if (a === c.a || a === c.b || b === c.a || b === c.b || a === b) continue;
+      if (between(c.a) !== between(c.b)) count++;
+    }
+    for (let axis = 0; axis < 4; axis++) {
+      const c = [0, 2, 1, 3][axis], d = c + 4;
+      if (a === c || a === d || b === c || b === d || a === b) continue;
+      if (between(c) !== between(d)) count += (word >>> (axis * PASSER_BITS)) & PASSER_MASK;
+    }
+    return count;
+  }
+
+  centreCrossings(axis: Axis, x0: number, y0: number, x1: number, y1: number): number {
+    if (axis < 2) return 0;
+    const cell = this.cellOf(Math.min(x0, x1), Math.min(y0, y1));
+    return cell < 0 ? 0 : this.otherPassers(this.centres[cell], axis, true);
+  }
 
   constructor(private bounds: CellBounds) {
     this.cellCount = bounds.width * bounds.height;
@@ -728,6 +778,12 @@ class LaneOccupancy {
 
   /** Rips a wire up: its lane claims and passers are forgotten. */
   release(edgeId: string) {
+    for (const cell of this.cornersByEdge.get(edgeId) ?? []) {
+      const remaining = (this.corners.get(cell) ?? []).filter((c) => c.edgeId !== edgeId);
+      if (remaining.length) this.corners.set(cell, remaining);
+      else this.corners.delete(cell);
+    }
+    this.cornersByEdge.delete(edgeId);
     const claims = this.claimsByEdge.get(edgeId);
     if (claims) {
       for (const { key, cell, axis, claim } of claims) {
@@ -886,6 +942,8 @@ interface RouteState {
   overflowed: boolean;
   /** A reroute gave it back the same route: nothing else to try. */
   stuck: boolean;
+  /** Held still by the caller: never ripped up, never traded. */
+  pinned?: boolean;
 }
 
 /**
@@ -910,13 +968,20 @@ export function solveGridRoutes(
   requests: GridRouteRequest[],
   stats?: GridSolveStats,
   tuning: RouterTuning = DEFAULT_ROUTER_TUNING,
+  /**
+   * Routes to hold exactly as they are: installed first, in the order
+   * given, and never touched by the negotiation. Everything in `requests`
+   * routes around them. A judge trying one card somewhere else pins every
+   * wire that card does not touch and re-solves the rest.
+   */
+  pinned: readonly PinnedRoute[] = [],
 ): Map<string, GridRoutedEdge> {
   applyTuning(tuning);
   workPops = 0;
   workPriced = 0;
   workSearches = 0;
   const startedAt = performance.now();
-  const bounds = boardBounds(obstacles, requests);
+  const bounds = boardBounds(obstacles, [...requests, ...pinned.map((pin) => pin.request)]);
   const context: SolveContext = {
     obstacles,
     occupancy: new LaneOccupancy(bounds),
@@ -933,17 +998,45 @@ export function solveGridRoutes(
   );
 
   const states: RouteState[] = [];
+  for (const pin of pinned) {
+    const { vertices, source, target } = pin.route;
+    const request: PlannedRequest = {
+      ...pin.request,
+      sources: pin.request.sources.filter(isFiniteEndpoint),
+      targets: pin.request.targets.filter(isFiniteEndpoint),
+      allSources: pin.request.sources.filter(isFiniteEndpoint),
+      allTargets: pin.request.targets.filter(isFiniteEndpoint),
+    };
+    if (vertices && source && target) {
+      const state = install(context, request, { source, target, vertices, cost: 0 });
+      state.pinned = true;
+      states.push(state);
+    } else {
+      states.push({ ...routeOne(context, request), pinned: true });
+    }
+  }
   for (const request of sorted) {
     states.push(routeOne(context, request));
   }
 
   const firstPassMs = performance.now() - startedAt;
+  let bestRoutes = states.map((state) => state.routed);
+  let bestMeasure = measureWireRoutes(bestRoutes);
+  const retainBest = () => {
+    const routes = states.map((state) => state.routed);
+    const measure = measureWireRoutes(routes);
+    if (measure.crossings < bestMeasure.crossings || (measure.crossings === bestMeasure.crossings && measure.length < bestMeasure.length)) {
+      bestRoutes = routes;
+      bestMeasure = measure;
+    }
+  };
   let rerouted = 0;
   // A floor on the budget: a small board's few wires may need several
   // trades to settle, and the whole solve is still milliseconds.
   let budget = Math.max(12, Math.round(T.negotiationBudget * states.length));
   const popCap = NEGOTIATION_POPS_PER_WIRE * states.length;
   context.widePopCap = popCap;
+  readCrossings(context, states);
   for (let round = 0; round < T.negotiationRounds && budget > 0 && workPops < popCap; round += 1) {
     // Every round the contested spots get dearer (escalate), so a wire
     // whose last reroute changed nothing is worth another try: `stuck`
@@ -952,7 +1045,7 @@ export function solveGridRoutes(
     for (let i = 0; i < states.length; i += 1) {
       const state = states[i];
       state.stuck = false;
-      if (state.found && (state.crossings > 0 || state.overflowed)) {
+      if (state.found && !state.pinned && (state.crossings > 0 || state.overflowed)) {
         unhappy.push(i);
       }
     }
@@ -977,6 +1070,7 @@ export function solveGridRoutes(
     // Others may have been crossed by the movers; re-read every wire so the
     // next round works from the truth.
     let remaining = readCrossings(context, states);
+    retainBest();
     if (remaining === 0) {
       break;
     }
@@ -989,12 +1083,12 @@ export function solveGridRoutes(
     // the budget per trial, one trial per pair per round.
     for (let i = 0; i < states.length && budget >= 2 && workPops < popCap; i += 1) {
       const a = states[i];
-      if (!a.found || a.crossings === 0) {
+      if (!a.found || a.pinned || a.crossings === 0) {
         continue;
       }
       for (let k = i + 1; k < states.length && budget >= 2; k += 1) {
         const b = states[k];
-        if (!b.found || b.crossings === 0 || !sharesCard(a.request, b.request)) {
+        if (!b.found || b.pinned || b.crossings === 0 || !sharesCard(a.request, b.request)) {
           continue;
         }
         const foundA = a.found;
@@ -1011,6 +1105,7 @@ export function solveGridRoutes(
         const after = readCrossings(context, states);
         if (after < remaining) {
           remaining = after;
+          retainBest();
           break;
         }
         // No better: put both back exactly as they were.
@@ -1035,23 +1130,25 @@ export function solveGridRoutes(
     for (let i = 0; i < states.length; i += 1) {
       const state = states[i];
       if (state.found) {
+        const pinnedState = state.pinned;
         states[i] = install(context, state.request, state.found);
+        states[i].pinned = pinnedState;
       }
     }
   }
 
-  const results = new Map<string, GridRoutedEdge>();
+  retainBest();
+  const results = new Map(bestRoutes.map((route) => [route.edgeId, route]));
   let crossings = 0;
   let fallbacks = 0;
   for (const state of states) {
-    results.set(state.request.edgeId, state.routed);
     crossings += state.crossings;
     if (!state.found && state.routed.points.length > 0) {
       fallbacks += 1;
     }
   }
   if (stats) {
-    stats.crossings = crossings;
+    stats.crossings = bestMeasure.crossings;
     stats.rerouted = rerouted;
     stats.fallbacks = fallbacks;
     stats.pops = workPops;
@@ -1110,14 +1207,10 @@ function boardBounds(obstacles: GridObstacle[], requests: GridRouteRequest[]): C
 
 /** Re-reads every placed wire's crossings from the occupancy; returns the total. */
 function readCrossings(context: SolveContext, states: RouteState[]): number {
-  let total = 0;
-  for (const state of states) {
-    if (state.found) {
-      state.crossings = context.occupancy.crossingsOf(state.request.edgeId);
-      total += state.crossings;
-    }
-  }
-  return total;
+  const measured = measureWireRoutes(states.map((state) => state.routed));
+  const byId = new Map(states.map((state) => { state.crossings = 0; return [state.request.edgeId, state]; }));
+  for (const event of measured.events) for (const id of event.edges) byId.get(id)!.crossings++;
+  return measured.crossings;
 }
 
 function sharesCard(a: PlannedRequest, b: PlannedRequest): boolean {
@@ -1492,7 +1585,13 @@ function install(context: SolveContext, request: PlannedRequest, found: RouteFou
   return {
     request,
     found,
-    routed: { edgeId: request.edgeId, points: assembled.points },
+    routed: {
+      edgeId: request.edgeId,
+      points: assembled.points,
+      vertices: found.vertices,
+      source: found.source,
+      target: found.target,
+    },
     crossings: assembled.crossings,
     overflowed: assembled.overflowed,
     stuck: false,
@@ -1588,7 +1687,9 @@ function findRoute(context: SolveContext, request: PlannedRequest): RouteFound |
     [request.sources, request.targets, T.windowPad * BOARD_GRID, 1],
   ];
   const last = menus[menus.length - 1];
-  rungs.push([last[0], last[1], WIDE_RUNG_CELLS * BOARD_GRID, BOARD_RUNG_WEIGHT]);
+  if (T.wideRungCells > T.windowPad) {
+    rungs.push([last[0], last[1], T.wideRungCells * BOARD_GRID, BOARD_RUNG_WEIGHT]);
+  }
   // Waypoints that cannot be reached (parked inside a card's margin,
   // sealed off) must not cost the wire its route: try again without.
   for (const stops of waypoints.length > 0 ? [waypoints, []] : [[]]) {
@@ -1756,13 +1857,14 @@ function routeWithinWindow(
     } else if (hasHome && (homeFlag[a] === 0 || homeFlag[b] === 0)) {
       framePenalty = T.costOutsideHome;
     }
-    const crossings = context.occupancy.stepCrossings(
+    // Only centre crossings are undirected. Vertex crossings depend on
+    // the arrival AND departure headings and are charged in the search.
+    const crossings = context.occupancy.centreCrossings(
       axis,
       xi + cx0,
       yi + cy0,
       nxi + cx0,
       nyi + cy0,
-      true,
     );
     const cost = DIR_LENGTH[dir] * factor * framePenalty + crossings * T.crossing;
     stepCosts[stepIndex] = cost;
@@ -2162,7 +2264,8 @@ function routeWithinWindow(
           }
         }
         const nextState = (vertexAt(xi + DIR_DX[dir], yi + DIR_DY[dir]) << 3) | dir;
-        const nextG = currentG + stepCost + turn + weave;
+        const cornerCost = context.occupancy.cornerCrossings(xi + cx0, yi + cy0, currentDir, dir) * T.crossing;
+        const nextG = currentG + stepCost + turn + weave + cornerCost;
         touch(nextState);
         if (nextG < gScores[nextState] - 1e-9) {
           gScores[nextState] = nextG;
@@ -2492,6 +2595,13 @@ function claimAndAssemble(
 
   const points: GridPoint[] = [sourceTip];
 
+  for (let i = 1; i < runs.length; i++) {
+    const prev = runs[i - 1], next = runs[i];
+    const incoming = DIR_DX.findIndex((dx, d) => dx === prev.dx && DIR_DY[d] === prev.dy);
+    const outgoing = DIR_DX.findIndex((dx, d) => dx === next.dx && DIR_DY[d] === next.dy);
+    context.occupancy.markCorner(next.x0, next.y0, incoming, outgoing, request.edgeId);
+  }
+
   // Source stub onto the first run. Along the normal (the usual clean
   // exit): straight to the apron at the port's own coordinate, then a jog
   // onto the packed lane. Any other way: straight out along the normal
@@ -2575,39 +2685,8 @@ function stubTip(endpoint: GridEndpoint): GridPoint {
  * length in px: the two numbers a layout is judged by (crossings first).
  * Touching ends and T-junctions do not count as crossings.
  */
-export function measureRoutes(routes: Iterable<GridRoutedEdge>): { crossings: number; length: number } {
-  const segments: Array<{ id: string; a: GridPoint; b: GridPoint }> = [];
-  let length = 0;
-  for (const route of routes) {
-    for (let i = 1; i < route.points.length; i += 1) {
-      const a = route.points[i - 1];
-      const b = route.points[i];
-      segments.push({ id: route.edgeId, a, b });
-      length += Math.hypot(b.x - a.x, b.y - a.y);
-    }
-  }
-  const cross = (o: GridPoint, a: GridPoint, b: GridPoint) =>
-    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  let crossings = 0;
-  for (let i = 0; i < segments.length; i += 1) {
-    for (let j = i + 1; j < segments.length; j += 1) {
-      const s = segments[i];
-      const t = segments[j];
-      if (s.id === t.id) continue;
-      const d1 = cross(s.a, s.b, t.a);
-      const d2 = cross(s.a, s.b, t.b);
-      const d3 = cross(t.a, t.b, s.a);
-      const d4 = cross(t.a, t.b, s.b);
-      const eps = 0.5;
-      if (
-        ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) &&
-        ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps))
-      ) {
-        crossings += 1;
-      }
-    }
-  }
-  return { crossings, length };
+export function measureRoutes(routes: Iterable<GridRoutedEdge>): ReturnType<typeof measureWireRoutes> {
+  return measureWireRoutes(routes);
 }
 
 /**

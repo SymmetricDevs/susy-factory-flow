@@ -206,6 +206,7 @@ export function applyMachineHandlerToRecipe(
     runtimeCalculation,
     machineType: handler.machineType,
     minimumTier: handler.minimumTier,
+    maximumTier: handler.maximumTier,
     durationTicks: handlerDurationTicks ?? recipe.durationTicks,
     eut,
     machineConfigControls,
@@ -213,6 +214,7 @@ export function applyMachineHandlerToRecipe(
       ...recipe.machineProfile,
       machineType: handler.machineType,
       minimumTier: handler.minimumTier,
+      maximumTier: handler.maximumTier,
       durationTicks: handlerDurationTicks ?? recipe.machineProfile?.durationTicks,
       eut: handlerEut ?? recipe.machineProfile?.eut,
       maxParallel: handler.maxParallel ?? recipe.machineProfile?.maxParallel,
@@ -393,7 +395,7 @@ function resolveMachineConfigTierControl(
   };
 }
 
-function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): string {
+export function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): string {
   return recipe.source?.recipeMap ?? recipe.machineType;
 }
 

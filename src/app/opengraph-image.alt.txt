@@ -1,1 +1,1 @@
-A GregTech: New Horizons factory drawn as a flowchart on GTNH Planner
+The GTNH Planner board: a Benzene setup drawn as a flowchart, with the item list on the left and the plan totals on the right

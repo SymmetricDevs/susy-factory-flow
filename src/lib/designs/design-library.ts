@@ -1,4 +1,5 @@
 import type { EntryIcon, FactoryProject } from "@/lib/model/types";
+import type { DesignStats } from "./design-stats";
 
 /** Tab-strip metadata: everything needed to draw the tabs without loading plans. */
 export interface DesignSummary {
@@ -17,6 +18,46 @@ export interface DesignSummary {
    * loading plans. Kept in step wherever the record is written.
    */
   icon?: EntryIcon;
+  /**
+   * Off the tab strip, on the shelf only. A closed design is not deleted:
+   * closing a tab puts the design back on the shelf, opening it from the
+   * shelf clears the flag. Absent means open, which is what every design was
+   * before the shelf existed.
+   */
+  closed?: boolean;
+  /** The shelf folder this design is filed in; absent means unfiled. */
+  folderId?: string;
+  /**
+   * The community post this design IS, when it is posted: copied out of the
+   * plan's metadata so the library can mark it without loading the plan. The
+   * post follows the design (post-follow.ts); a copy of someone else's post
+   * carries no link.
+   */
+  communityPlanId?: string;
+  /**
+   * SYNC BOOKKEEPING. `updatedAt` above moves when the PLAN is saved;
+   * `metaUpdatedAt` moves on any change at all (rename, close, folder,
+   * order, plan). `remoteUpdatedAt` is the account copy's `updatedAt` as of
+   * the last agreement; absent means never synced. Dirty is
+   * `metaUpdatedAt > remoteUpdatedAt`, and the plan needs sending only when
+   * `updatedAt > remoteUpdatedAt`. See library-sync.ts.
+   */
+  metaUpdatedAt?: string;
+  remoteUpdatedAt?: string;
+  /** Starred: in the built-in Favorites collection. Synced like any metadata. */
+  favorite?: boolean;
+  /** The tile's stat row, stamped at save. Local only; never synced. */
+  stats?: DesignStats;
+}
+
+/** A library folder. Flat: folders hold designs, never other folders. */
+export interface DesignFolder {
+  id: string;
+  name: string;
+  createdAt: string;
+  /** Moves on rename. Sync compares it the way it compares designs. */
+  updatedAt?: string;
+  remoteUpdatedAt?: string;
 }
 
 /** A saved design: its metadata plus the plan itself. */
@@ -25,6 +66,7 @@ export interface DesignRecord extends DesignSummary {
 }
 
 export const UNTITLED_DESIGN_NAME = "Untitled design";
+export const UNTITLED_FOLDER_NAME = "New folder";
 
 export function createDesignId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -89,7 +131,15 @@ export function duplicateDesign(
   takenNames: Iterable<string>,
   now: string = new Date().toISOString(),
 ): DesignRecord {
-  return createDesign(record.project, makeUniqueDesignName(`${record.name} copy`, takenNames), now);
+  // A copy is a new design: it must not carry the original's post along, or
+  // two designs would be feeding one post.
+  const { communityPlanId, ...metadata } = record.project.metadata ?? {};
+  void communityPlanId;
+  return createDesign(
+    { ...record.project, metadata },
+    makeUniqueDesignName(`${record.name} copy`, takenNames),
+    now,
+  );
 }
 
 export function renameDesign(
@@ -116,10 +166,19 @@ export function updateDesignProject(
   return {
     ...record,
     updatedAt: now,
+    metaUpdatedAt: now,
     // The tab name wins over whatever the plan carries, so an imported plan
     // cannot silently relabel the tab it was dropped into.
     project: { ...project, name: record.name },
   };
+}
+
+/** Stamps a metadata-only change (rename, close, folder, order) for sync. */
+export function touchDesignMeta<T extends DesignSummary>(
+  summary: T,
+  now: string = new Date().toISOString(),
+): T {
+  return { ...summary, metaUpdatedAt: now };
 }
 
 /**
@@ -172,7 +231,8 @@ export function stampDesignOrder<T extends DesignSummary>(
 }
 
 export function toDesignSummary(record: DesignRecord): DesignSummary {
-  return {
+  const communityPlanId = record.project.metadata?.communityPlanId;
+  const summary: DesignSummary = {
     id: record.id,
     name: record.name,
     createdAt: record.createdAt,
@@ -180,6 +240,50 @@ export function toDesignSummary(record: DesignRecord): DesignSummary {
     order: record.order,
     icon: record.project.icon,
   };
+  if (record.closed) {
+    summary.closed = true;
+  }
+  if (record.folderId) {
+    summary.folderId = record.folderId;
+  }
+  if (record.metaUpdatedAt) {
+    summary.metaUpdatedAt = record.metaUpdatedAt;
+  }
+  if (record.remoteUpdatedAt) {
+    summary.remoteUpdatedAt = record.remoteUpdatedAt;
+  }
+  if (record.stats) {
+    summary.stats = record.stats;
+  }
+  if (record.favorite) {
+    summary.favorite = true;
+  }
+  if (communityPlanId) {
+    summary.communityPlanId = communityPlanId;
+  }
+  return summary;
+}
+
+/** The designs on the tab strip, in strip order. */
+export function openDesigns<T extends DesignSummary>(designs: T[]): T[] {
+  return designs.filter((design) => !design.closed);
+}
+
+export function createFolder(name: string, now: string = new Date().toISOString()): DesignFolder {
+  return { id: createDesignId(), name: normalizeFolderName(name), createdAt: now, updatedAt: now };
+}
+
+export function normalizeFolderName(name: string): string {
+  return name.trim() || UNTITLED_FOLDER_NAME;
+}
+
+/** Folders are listed by name; there is no hand order to keep. */
+export function sortFolders<T extends DesignFolder>(folders: T[]): T[] {
+  return [...folders].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+      left.createdAt.localeCompare(right.createdAt),
+  );
 }
 
 /**

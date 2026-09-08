@@ -59,8 +59,8 @@ Next.js App Router + Tailwind + Zustand. The two big surfaces:
 - **Recipe finder** (`RecipeBrowser.tsx`) — NEI-style search, category rail,
   machine strips, paginated API-backed browsing.
 - **Flow board** (`components/flow/`) — React Flow canvas with custom node
-  types (recipe, storage, annotation), the machine picker (tab strip + glance
-  bar + compare table in `MachinePicker.tsx`), deterministic orthogonal edge
+  types (recipe, storage, annotation), the machine picker (the chevron menu
+  under the name bar, `MachineMenu` in `MachinePicker.tsx`), deterministic orthogonal edge
   routing with obstacle avoidance, edge labels, and the paint/annotation tools.
 
 State: `store/factory-store.ts` owns the project graph, solver results, and
@@ -151,8 +151,8 @@ is no snap toggle any more.
 2. **Card sizes are whole cells.** Recipe cards are a fixed 360 wide. Drawers
    and tanks are 140×160, trash cans 120×140.
 3. **Port rows are the vertical unit.** A port row is 40px (two cells) with no
-   gaps between rows, and the head above the rails is a whole number of 40s
-   (one title row, plus one per wrapped row of the machine tab strip). Port
+   gaps between rows, and the head above the rails is one 40px title row
+   (the machine tab strip that used to add rows above it is gone). Port
    centres therefore land on grid lines at `head + 20 + 40i`, which is what
    makes slot endpoints grid-aligned.
 4. **The recipe card's frame is an inset shadow, not a border.** A real border

@@ -89,7 +89,7 @@ describe("computeCommunityPlanStats", () => {
   it("counts crop cards by the harvesters their crops fill, not by seeds", () => {
     const project = makeProject(
       [
-        // 50 oilberries under an LV Crop Manager (605 sticks per layer x 5):
+        // 50 oilberries under an LV Crop Manager (121 sticks a layer, three layers, less its own block: 362):
         // one machine to build, not fifty.
         makeNode({
           id: "managed",

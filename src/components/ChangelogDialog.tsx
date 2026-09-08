@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, History, X } from "lucide-react";
 import { CHANGELOG, type ChangelogEntry } from "@/lib/changelog";
-import { startLesson } from "@/lib/tour/tour-state";
 import { APP_VERSION } from "@/lib/version";
 
 /**
@@ -115,7 +114,7 @@ export function ChangelogDialog({
         // NO BACKDROP FILTER ON A PHONE. A full-viewport backdrop-filter forces
         // everything under it into a composited layer and repaints that layer
         // whenever anything beneath moves - and beneath this sits the board,
-        // plus the Welcome page over it, plus the pulsing that marks unwired
+        // plus the pulsing that marks unwired
         // slots. Desktop absorbs it. A phone does not: it is the heaviest first
         // paint the app can produce, and the tab dying and being restored by
         // the browser looks exactly like a reload loop.
@@ -133,7 +132,7 @@ export function ChangelogDialog({
         aria-modal="true"
         aria-label="What's new in GTNH Planner"
         className={[
-          "flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-surface compact:max-h-[92vh]",
+          "flex max-h-[calc(88*var(--ui-vh))] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-surface compact:max-h-[calc(92*var(--ui-vh))]",
           isInterrupt
             ? "border-2 border-cyan-600/70 shadow-[0_0_0_1px_rgba(0,0,0,0.6),0_24px_70px_rgba(0,0,0,0.75)]"
             : "border border-line-strong shadow-2xl",
@@ -395,11 +394,9 @@ function EntryRow({ entry, onClose }: { entry: ChangelogEntry; onClose: () => vo
             </li>
           ))}
         </ul>
-        {/* Some things are only understood by doing them, so a release that
-            adds a tour offers it right here. A release that also carries a
-            WARNING puts the two in one block: a caution the reader believes and
-            a button that answers it, rather than a worrying sentence and a
-            stray link. */}
+        {/* A release that also carries a WARNING puts it and its actions in
+            one block: a caution the reader believes and a button that answers
+            it, rather than a worrying sentence and a stray link. */}
         {entry.warning || (entry.actions && entry.actions.length > 0) ? (
           <div
             className={[
@@ -425,36 +422,17 @@ function EntryRow({ entry, onClose }: { entry: ChangelogEntry; onClose: () => vo
               </div>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              {(entry.actions ?? []).map((action) =>
-                action.lessonId ? (
-                  <button
-                    key={action.label}
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      startLesson(action.lessonId!);
-                    }}
-                    className={[
-                      "rounded border px-3 py-1.5 text-xs font-bold",
-                      entry.warning
-                        ? "border-amber-400 bg-amber-500/25 text-amber-100 hover:bg-amber-500/40"
-                        : "border-cyan-500/60 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25",
-                    ].join(" ")}
-                  >
-                    {action.label} ▸
-                  </button>
-                ) : (
-                  <a
-                    key={action.label}
-                    href={action.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded border border-line-strong px-3 py-1.5 text-xs font-bold text-fg-subtle hover:bg-surface-raised"
-                  >
-                    {action.label}
-                  </a>
-                ),
-              )}
+              {(entry.actions ?? []).map((action) => (
+                <a
+                  key={action.label}
+                  href={action.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded border border-line-strong px-3 py-1.5 text-xs font-bold text-fg-subtle hover:bg-surface-raised"
+                >
+                  {action.label}
+                </a>
+              ))}
             </div>
           </div>
         ) : null}
@@ -464,7 +442,7 @@ function EntryRow({ entry, onClose }: { entry: ChangelogEntry; onClose: () => vo
 }
 
 /**
- * `*asterisks*` come out lit, the same convention the tour cards use.
+ * `*asterisks*` come out lit, the same convention the help cards use.
  *
  * Release notes are one paragraph after another of even grey, and a reader
  * skimming for the thing that affects them has nothing to catch on. Marking

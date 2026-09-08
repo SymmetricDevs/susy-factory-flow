@@ -47,6 +47,24 @@ export function makeActorKey(request: Request, deviceId?: string): string {
     .slice(0, 32);
 }
 
+/**
+ * Who a VOTE belongs to: the signed-in user, else the browser's device id.
+ *
+ * Not the actor key above. That one folds the client IP in, which is right
+ * for a rate limit and wrong for a vote: IPv6 privacy addresses and carrier
+ * NAT hand the same browser a new address every few minutes, and every new
+ * address was a new voter, so a player could upvote their own setup again
+ * after a short wait. The device id is a random UUID the browser keeps in
+ * localStorage; a signed-in account beats it so one person's vote follows
+ * them between browsers.
+ */
+export async function makeVoterKey(request: Request, deviceId: string): Promise<string> {
+  const user = await getSessionUser(request);
+  const salt = process.env.COMMUNITY_HASH_SALT ?? "gtnh-factory-hub";
+  const identity = user ? `user:${user.id}` : `device:${deviceId}`;
+  return createHash("sha256").update(`${salt}:${identity}`).digest("hex").slice(0, 32);
+}
+
 // ---------------------------------------------------------------------------
 // Dead-simple accounts: username + password, scrypt-hashed, with an HMAC-signed
 // session cookie. No email, no reset flow — this is a hobby community site.
@@ -172,11 +190,20 @@ export function parseEntryIcon(value: unknown): EntryIcon | null {
 }
 
 /** Columns returned for plan listings (everything except the plan JSON). */
-export const PLAN_SUMMARY_COLUMNS =
+/** The columns before the activity trio: what a database not yet migrated can answer. */
+export const PLAN_SUMMARY_COLUMNS_LEGACY =
   "id,name,description,game_version,dataset_version,tags,is_public,icon,needs,outputs," +
   "total_eu_t,machine_count,node_count,storage_count,edge_count,highest_tier," +
   "highest_tier_index,upvotes,downvotes,score,downloads,views,created_at,updated_at," +
   "user_id,author_name";
+/** The activity columns added 2026-09-04; a sort on one needs them. */
+export const PLAN_ACTIVITY_COLUMNS = new Set(["comment_count", "last_comment_at", "last_activity_at"]);
+
+export const PLAN_SUMMARY_COLUMNS =
+  "id,name,description,game_version,dataset_version,tags,is_public,icon,needs,outputs," +
+  "total_eu_t,machine_count,node_count,storage_count,edge_count,highest_tier," +
+  "highest_tier_index,upvotes,downvotes,score,downloads,views,created_at,updated_at," +
+  "user_id,author_name,comment_count,last_comment_at,last_activity_at";
 
 export interface PlanRow {
   id: string;
@@ -205,6 +232,9 @@ export interface PlanRow {
   updated_at: string | null;
   user_id: string | null;
   author_name: string;
+  comment_count: number | null;
+  last_comment_at: string | null;
+  last_activity_at: string | null;
 }
 
 export function rowToPlanSummary(row: PlanRow, sessionUserId?: string): CommunityPlanSummary {
@@ -235,7 +265,50 @@ export function rowToPlanSummary(row: PlanRow, sessionUserId?: string): Communit
     views: row.views,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? undefined,
+    commentCount: row.comment_count ?? 0,
+    lastCommentAt: row.last_comment_at ?? undefined,
+    lastActivityAt: row.last_activity_at ?? undefined,
   };
+}
+
+/**
+ * Restamps a post's comment figures after a comment lands or goes: the live
+ * count, the latest comment's time, and the post's last activity (the later
+ * of its last edit and that comment). Best effort: a failure here leaves a
+ * sort slightly stale, never a comment unposted.
+ */
+export async function recountPlanComments(planId: string): Promise<void> {
+  const db = getCommunityDb();
+  const { data: rows } = await db
+    .from("community_comments")
+    .select("created_at")
+    .eq("plan_id", planId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .returns<Array<{ created_at: string }>>();
+  const { count } = await db
+    .from("community_comments")
+    .select("id", { count: "exact", head: true })
+    .eq("plan_id", planId)
+    .is("deleted_at", null);
+  const { data: plan } = await db
+    .from("community_plans")
+    .select("created_at,updated_at")
+    .eq("id", planId)
+    .single<{ created_at: string; updated_at: string | null }>();
+  const lastCommentAt = rows?.[0]?.created_at ?? null;
+  const edited = plan?.updated_at ?? plan?.created_at ?? null;
+  const lastActivityAt =
+    lastCommentAt && edited ? (lastCommentAt > edited ? lastCommentAt : edited) : (lastCommentAt ?? edited);
+  await db
+    .from("community_plans")
+    .update({
+      comment_count: count ?? 0,
+      last_comment_at: lastCommentAt,
+      last_activity_at: lastActivityAt,
+    })
+    .eq("id", planId);
 }
 
 /**
@@ -243,6 +316,11 @@ export function rowToPlanSummary(row: PlanRow, sessionUserId?: string): Communit
  * community_plans table predates a column this build reads or writes, and
  * re-running supabase/schema.sql (idempotent ALTERs) fixes it.
  */
+/** PGRST204 / 42703: the table predates a column this build reads or writes. */
+export function isMissingColumnError(error: { code?: string } | null | undefined): boolean {
+  return error?.code === "PGRST204" || error?.code === "42703";
+}
+
 export function communityStorageErrorMessage(
   error: { code?: string; message?: string } | null,
   fallback: string,

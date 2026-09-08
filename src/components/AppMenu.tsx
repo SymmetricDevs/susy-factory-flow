@@ -1,8 +1,11 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { Menu, Settings, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AccountMenu } from "./community/AccountMenu";
+import { SHOW_PACK_PICKER } from "./AppHeader";
 import { AppIdentity } from "./AppIdentity";
 import { BoardActions } from "./BoardActions";
 import { MenuLinks } from "./HeaderLinks";
@@ -39,30 +42,7 @@ export function AppMenu({
   const sheetRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const closeOnOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!sheetRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
-        setOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    window.addEventListener("pointerdown", closeOnOutside);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("pointerdown", closeOnOutside);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isOpen]);
+  useDropdownDismiss(isOpen, { refs: [sheetRef, triggerRef], onClose: () => setOpen(false) });
 
   return (
     <>
@@ -84,13 +64,16 @@ export function AppMenu({
           // `text-sm` up here because buttons inherit their font (the global
           // reset outranks text-* on the control): without it the sheet's
           // button rows render a size up from its link rows.
-          className="absolute right-2 top-full z-[90] mt-1 flex w-[min(320px,calc(100vw-16px))] flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
+          className="absolute right-2 top-full z-[90] mt-1 flex w-[min(320px,calc(100*var(--ui-vw)-16px))] flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
         >
-          <MenuSection label="Pack">
-            <div className="px-2 py-1">
-              <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
-            </div>
-          </MenuSection>
+          {/* Pinned with the header's pack picker: see SHOW_PACK_PICKER. */}
+          {SHOW_PACK_PICKER ? (
+            <MenuSection label="Pack">
+              <div className="px-2 py-1">
+                <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
+              </div>
+            </MenuSection>
+          ) : null}
           <MenuSection label="This plan">
             <BoardActions
               variant="list"

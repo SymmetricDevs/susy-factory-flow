@@ -1,6 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { getUiScale, subscribeUiScale } from "@/lib/ui-scale";
+import { COMPACT_MAX_HEIGHT, COMPACT_MAX_WIDTH, SNUG_MAX_WIDTH } from "@/lib/viewport-breakpoints";
 
 /**
  * Compact mode: one column instead of three.
@@ -10,21 +12,30 @@ import { useSyncExternalStore } from "react";
  * drawers that slide over the board, the top bar folds into one menu, and each
  * board toolbar folds into one button.
  *
- * `globals.css` defines a Tailwind `compact:` variant on the same number for the
- * style-only half of the switch (heights, min-heights, font sizes). The two must
- * stay in step; change one, change the other.
- */
-export const COMPACT_MAX_WIDTH = 900;
-
-/**
- * A short window is compact too, whatever its width.
+ * `globals.css` defines a Tailwind `compact:` variant for the style-only half
+ * of the switch (heights, min-heights, font sizes). It keys on the
+ * `data-compact` attribute this module stamps on <html>, so the two can never
+ * disagree; the boot script in layout.tsx stamps it before first paint.
  *
- * A phone held sideways is 932x430 on the newest iPhones — wide enough to clear
+ * The numbers are SHELL pixels: the interface size (ui-scale.ts) zooms the
+ * whole shell, so a 1400px window at 130% has 1077px of layout in it, and the
+ * media queries are built from the live factor.
+ */
+export { COMPACT_MAX_WIDTH, COMPACT_MAX_HEIGHT, SNUG_MAX_WIDTH };
+
+/*
+ * COMPACT_MAX_HEIGHT: a short window is compact too, whatever its width. A
+ * phone held sideways is 932x430 on the newest iPhones — wide enough to clear
  * the width test and nowhere near tall enough for a 720px-tall app. It used to
  * get the desktop layout, whose minimum heights then pushed the board's bottom
  * corners off the screen.
+ *
+ * SNUG_MAX_WIDTH: wide enough for the full top bar, not wide enough for every
+ * button to keep its word. Between the compact cutoff and here the bar's
+ * labelled buttons drop to their icons; the bar used to overflow, and an
+ * overflowing bar is what makes a phone browser widen its layout viewport and
+ * shrink the whole page to fit (see AppMenu).
  */
-export const COMPACT_MAX_HEIGHT = 560;
 
 /**
  * `max-width` rather than the `(width < 900px)` range form: the range syntax
@@ -34,18 +45,54 @@ export const COMPACT_MAX_HEIGHT = 560;
  *
  * The comma is an OR: either measurement being short is enough.
  */
-const COMPACT_MEDIA_QUERY = `(max-width: ${COMPACT_MAX_WIDTH - 0.02}px), (max-height: ${
-  COMPACT_MAX_HEIGHT - 0.02
-}px)`;
+export function compactMediaQuery(scale: number): string {
+  return `(max-width: ${COMPACT_MAX_WIDTH * scale - 0.02}px), (max-height: ${
+    COMPACT_MAX_HEIGHT * scale - 0.02
+  }px)`;
+}
 
-let mediaQuery: MediaQueryList | undefined;
+export function snugMediaQuery(scale: number): string {
+  return `(max-width: ${SNUG_MAX_WIDTH * scale - 0.02}px)`;
+}
 
-function getMediaQuery(): MediaQueryList | undefined {
+interface ViewportQueries {
+  scale: number;
+  compact: MediaQueryList;
+  snug: MediaQueryList;
+}
+
+let queries: ViewportQueries | undefined;
+const listeners = new Set<() => void>();
+
+function getQueries(): ViewportQueries | undefined {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return undefined;
   }
-  mediaQuery ??= window.matchMedia(COMPACT_MEDIA_QUERY);
-  return mediaQuery;
+  const scale = getUiScale();
+  if (queries && queries.scale === scale) {
+    return queries;
+  }
+  if (queries) {
+    queries.compact.removeEventListener("change", notify);
+    queries.snug.removeEventListener("change", notify);
+  }
+  queries = {
+    scale,
+    compact: window.matchMedia(compactMediaQuery(scale)),
+    snug: window.matchMedia(snugMediaQuery(scale)),
+  };
+  if (listeners.size > 0) {
+    queries.compact.addEventListener("change", notify);
+    queries.snug.addEventListener("change", notify);
+  }
+  return queries;
+}
+
+function notify(): void {
+  stampViewportAttributes();
+  for (const listener of listeners) {
+    listener();
+  }
 }
 
 /**
@@ -57,17 +104,66 @@ function getMediaQuery(): MediaQueryList | undefined {
  * against the initial containing block, which is the number that matters.
  */
 export function isCompactViewport(): boolean {
-  return getMediaQuery()?.matches ?? false;
+  return getQueries()?.compact.matches ?? false;
 }
 
+export function isSnugViewport(): boolean {
+  return getQueries()?.snug.matches ?? false;
+}
+
+/**
+ * Writes the two answers onto <html> for the CSS variants. Idempotent; called
+ * on every change of window or scale, and once by UiScaleRestore on mount.
+ */
+export function stampViewportAttributes(): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const root = document.documentElement;
+  const compact = isCompactViewport();
+  const snug = isSnugViewport();
+  if (compact !== root.hasAttribute("data-compact")) {
+    if (compact) {
+      root.setAttribute("data-compact", "");
+    } else {
+      root.removeAttribute("data-compact");
+    }
+  }
+  if (snug !== root.hasAttribute("data-snug")) {
+    if (snug) {
+      root.setAttribute("data-snug", "");
+    } else {
+      root.removeAttribute("data-snug");
+    }
+  }
+}
+
+let scaleUnsubscribe: (() => void) | undefined;
+
 function subscribe(onChange: () => void): () => void {
-  const query = getMediaQuery();
-  if (!query) {
+  const current = getQueries();
+  if (!current) {
     return () => {};
   }
-
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
+  if (listeners.size === 0) {
+    current.compact.addEventListener("change", notify);
+    current.snug.addEventListener("change", notify);
+    // A new scale means new queries: rebuild them and re-answer.
+    scaleUnsubscribe = subscribeUiScale(() => {
+      getQueries();
+      notify();
+    });
+  }
+  listeners.add(onChange);
+  return () => {
+    listeners.delete(onChange);
+    if (listeners.size === 0) {
+      queries?.compact.removeEventListener("change", notify);
+      queries?.snug.removeEventListener("change", notify);
+      scaleUnsubscribe?.();
+      scaleUnsubscribe = undefined;
+    }
+  };
 }
 
 function getServerSnapshot(): boolean {
@@ -83,4 +179,10 @@ function getServerSnapshot(): boolean {
  */
 export function useIsCompactViewport(): boolean {
   return useSyncExternalStore(subscribe, isCompactViewport, getServerSnapshot);
+}
+
+/** Keeps the <html> viewport attributes live for as long as it is mounted. */
+export function subscribeViewportAttributes(): () => void {
+  stampViewportAttributes();
+  return subscribe(() => {});
 }

@@ -1,5 +1,13 @@
-import type { FactoryProject, ResourceKey, ThroughputResult } from "@/lib/model/types";
+import type {
+  ClogLock,
+  ClogLockIndex,
+  ClogLockVent,
+  FactoryProject,
+  ResourceKey,
+  ThroughputResult,
+} from "@/lib/model/types";
 import { solveEquationsCore } from "@/lib/solver/equations-core";
+import { getPoolProject } from "@/lib/solver/pool-mode";
 
 /**
  * Clog locks: machines frozen at 0% because their surpluses have nowhere to
@@ -25,44 +33,7 @@ import { solveEquationsCore } from "@/lib/solver/equations-core";
 const DEAD_EPSILON = 1e-4;
 const REVIVED_EPSILON = 1e-3;
 
-export interface ClogLockVent {
-  nodeId: string;
-  /** The culprit machine's display name, so a victim's card can say where
-   * to act without the player hunting the board. */
-  machineName: string;
-  resourceKey: ResourceKey;
-  resourceName: string;
-  /** What must leave through this port per second for the group to run. */
-  perSecond: number;
-}
-
-export interface ClogLock {
-  /** Stable id: the smallest member node id. Survives re-solves. */
-  id: string;
-  /** Every frozen card the jam holds, machines and pass-through drawers. */
-  nodeIds: string[];
-  /** Machine members only - what the copy counts. */
-  machineIds: string[];
-  /**
-   * The machines whose surplus needs the drawer - the only cards that flash,
-   * ordered WORST FIRST so the notice's "Show me" walks them by severity.
-   * A jam can hold half a board; marking every member painted whole plans
-   * blue and pointed nowhere. The victims keep the verdict and its story,
-   * the vent sites carry the ring, exactly as the fix copy promises.
-   */
-  ventNodeIds: string[];
-  /** The wires carrying a vented surplus out of a vent site - the ones the
-   * drawer tees into. Only these breathe, never the whole web. */
-  edgeIds: string[];
-  /** The surpluses that need a home, largest first. */
-  vents: ClogLockVent[];
-}
-
-export interface ClogLockIndex {
-  byNode: Map<string, ClogLock>;
-  byEdge: Map<string, ClogLock>;
-  locks: ClogLock[];
-}
+export type { ClogLock, ClogLockIndex, ClogLockVent };
 
 const EMPTY_INDEX: ClogLockIndex = { byNode: new Map(), byEdge: new Map(), locks: [] };
 
@@ -77,6 +48,13 @@ export function findClogLocks(
   project: FactoryProject,
   result: ThroughputResult | undefined,
 ): ClogLockIndex {
+  // Books solved off the main thread bring their own diagnosis (the solve
+  // worker runs `attachClogLocks`); a placeholder wearing an older plan's
+  // books wears its index too, which is as honest as the books themselves
+  // and never freezes the tab on a proof it already has.
+  if (result?.clogLocks) {
+    return result.clogLocks;
+  }
   const cached = cache.get(project);
   if (cached && cached.result === result) {
     return cached.index;
@@ -86,10 +64,21 @@ export function findClogLocks(
   return index;
 }
 
+/**
+ * Runs the diagnosis where the books were solved and stores it on them, so
+ * the board never re-proves a clog lock on the main thread. The mutation is
+ * on a result no one has seen yet, before it leaves the worker.
+ */
+export function attachClogLocks(project: FactoryProject, result: ThroughputResult): void {
+  result.clogLocks = build(project, result);
+}
+
 function build(project: FactoryProject, result: ThroughputResult | undefined): ClogLockIndex {
   if (!result) {
     return EMPTY_INDEX;
   }
+  // Pool mode: the graph the solve ran on, pools and all.
+  project = getPoolProject(project);
   // SOLVE MODE has no clog locks: machines at zero there are "not needed by
   // any typed amount", never "frozen by their own surplus" - and the vent
   // solve would burn a real LP diagnosing a build that is not on screen.
@@ -123,14 +112,104 @@ function build(project: FactoryProject, result: ThroughputResult | undefined): C
 
   // Revived: frozen in the books, running once surplus may leave. Stopped by
   // nothing but the jam.
-  const revived = new Set<string>();
-  for (const id of frozen) {
-    if ((vented.utilization.get(id) ?? 0) > REVIVED_EPSILON) {
-      revived.add(id);
+  const reviveFrom = (world: typeof vented): Set<string> => {
+    const alive = new Set<string>();
+    for (const id of frozen) {
+      if ((world.utilization.get(id) ?? 0) > REVIVED_EPSILON) {
+        alive.add(id);
+      }
     }
-  }
+    return alive;
+  };
+  let revived = reviveFrom(vented);
   if (revived.size === 0) {
     return EMPTY_INDEX;
+  }
+
+  // A surplus is only "spare" when its takers are RUNNING and still cannot
+  // swallow it. A port whose every taker is dead even in the vented world -
+  // where nothing is ever clogged, so a zero can only mean no power, a bare
+  // slot, or starvation through a chain of the same - is not choking on a
+  // surplus: it is waiting on a machine the player has not finished. Those
+  // vents are withdrawn and the world re-solved, and since withdrawing one
+  // can kill the machine behind it (its only outlet was the dead taker),
+  // the sweep repeats until nothing more falls. What survives is a jam the
+  // running machines hold on each other, the only thing a drawer fixes.
+  const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
+  const outgoingBy = new Map<string, FactoryProject["edges"]>();
+  for (const edge of project.edges) {
+    outgoingBy.set(edge.source, [...(outgoingBy.get(edge.source) ?? []), edge]);
+  }
+  const machineTakers = (nodeId: string, resourceKey: ResourceKey): Set<string> => {
+    const takers = new Set<string>();
+    const seen = new Set<string>();
+    const walk = (id: string, key: ResourceKey | undefined) => {
+      for (const edge of outgoingBy.get(id) ?? []) {
+        if (key !== undefined && `${edge.resourceKind}:${edge.resourceId}` !== key) {
+          continue;
+        }
+        if (storageIds.has(edge.target)) {
+          // A drawer passes the question on to whoever draws from it.
+          if (!seen.has(edge.target)) {
+            seen.add(edge.target);
+            walk(edge.target, undefined);
+          }
+        } else {
+          takers.add(edge.target);
+        }
+      }
+    };
+    walk(nodeId, resourceKey);
+    return takers;
+  };
+  let ventable: Set<string> | undefined;
+  for (let sweep = 0; sweep < 64; sweep += 1) {
+    const withdrawn: string[] = [];
+    for (const [nodeId, byKey] of vented.ventPerSecond ?? []) {
+      for (const key of byKey.keys()) {
+        const takers = machineTakers(nodeId, key);
+        if (takers.size === 0) {
+          continue;
+        }
+        let anyAlive = false;
+        for (const taker of takers) {
+          if ((vented.utilization.get(taker) ?? 0) > REVIVED_EPSILON) {
+            anyAlive = true;
+            break;
+          }
+        }
+        if (!anyAlive) {
+          withdrawn.push(`${nodeId}|${key}`);
+        }
+      }
+    }
+    if (withdrawn.length === 0) {
+      break;
+    }
+    if (ventable === undefined) {
+      ventable = new Set<string>();
+      for (const node of project.nodes) {
+        const report = result.nodes[node.id];
+        for (const key of Object.keys(report?.outputs ?? {})) {
+          ventable.add(`${node.id}|${key}`);
+        }
+      }
+    }
+    for (const port of withdrawn) {
+      ventable.delete(port);
+    }
+    const narrowed = solveEquationsCore(project, result.nodes, undefined, undefined, {
+      ventOutputs: true,
+      ventPorts: ventable,
+    });
+    if (narrowed.status !== "optimal") {
+      return EMPTY_INDEX;
+    }
+    vented = narrowed;
+    revived = reviveFrom(vented);
+    if (revived.size === 0) {
+      return EMPTY_INDEX;
+    }
   }
 
   // The full-throttle solve vents EVERY ratio mismatch on the line, but most
@@ -141,13 +220,28 @@ function build(project: FactoryProject, result: ThroughputResult | undefined): C
   // board runs without is not part of the lock and is dropped. What survives
   // is the minimal set of wires that genuinely need a drawer.
   {
+    // A vent is only a vent when it is MATERIAL against the port's own
+    // rate. The vent solve skips the fairness stage, so its vertex can
+    // differ from the books' by solver dust alone (a shared machine's two
+    // recipes at 100/0 in one, 50/50 in the other), and a machine "revived"
+    // by shedding a millionth of a litre is not choking on a surplus.
+    const material = (nodeId: string, key: string, perSecond: number) => {
+      const nameplate = result.nodes[nodeId]?.outputs[key as ResourceKey]?.amountPerSecond ?? 0;
+      return perSecond > Math.max(1e-9, nameplate * 1e-6);
+    };
     const candidates = [...(vented.ventPerSecond?.entries() ?? [])]
       .filter(([nodeId]) => revived.has(nodeId))
       .flatMap(([nodeId, byKey]) => [...byKey.entries()].map(([key, perSecond]) => ({
         port: `${nodeId}|${key}`,
+        nodeId,
+        key,
         perSecond,
       })))
+      .filter((candidate) => material(candidate.nodeId, candidate.key, candidate.perSecond))
       .sort((left, right) => left.perSecond - right.perSecond);
+    if (candidates.length === 0) {
+      return EMPTY_INDEX;
+    }
     const keep = new Set(candidates.map((candidate) => candidate.port));
     const mustRun = [...revived];
     for (const candidate of candidates) {
@@ -178,7 +272,6 @@ function build(project: FactoryProject, result: ThroughputResult | undefined): C
 
   // One lock per connected group of revived machines, drawers riding along
   // as pass-through hops, exactly as the death spiral walks its rings.
-  const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
   const adjacency = new Map<string, Set<string>>();
   const link = (a: string, b: string) => {
     let bucket = adjacency.get(a);

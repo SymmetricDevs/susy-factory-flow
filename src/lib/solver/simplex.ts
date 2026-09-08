@@ -103,6 +103,31 @@ function solveLpOnce(lp: LinearProgram, blandFromStart: boolean): LpSolution {
     rows.push({ coefficients: scaled.coefficients, rhs: scaled.rhs, eq: false });
   }
 
+  // Equilibrate COLUMNS too, then the rows once more. Row scaling alone
+  // cannot fix a variable that is 1 in one row and 1e9 in another (a flow
+  // in litres per second against an act in [0, 1]): dividing the port row
+  // by 1e9 leaves the flow's entry at 1e-9, under the pivot epsilon, and
+  // the walk then "cannot move" that column and hands back a clean zero as
+  // the optimum - which is how a UIV supply once zeroed a running reactor.
+  // A column scale is a change of units on the variable: the objective is
+  // divided by it and the answer multiplied back.
+  const columnScale = new Array<number>(n).fill(1);
+  for (let c = 0; c < n; c += 1) {
+    let scale = 0;
+    for (const row of rows) {
+      scale = Math.max(scale, Math.abs(row.coefficients.get(c) ?? 0));
+    }
+    columnScale[c] = scale <= 0 || (scale > 0.5 && scale < 2) ? 1 : scale;
+  }
+  for (let r = 0; r < rows.length; r += 1) {
+    const scaled = new Map<number, number>();
+    for (const [c, v] of rows[r]!.coefficients) {
+      scaled.set(c, c < n ? v / columnScale[c]! : v);
+    }
+    const again = equilibrate(scaled, rows[r]!.rhs);
+    rows[r] = { coefficients: again.coefficients, rhs: again.rhs, eq: rows[r]!.eq };
+  }
+
   const m = rows.length;
   // Column layout: [structural n][slack per <= row][artificial as needed].
   const slackOf = new Array<number>(m).fill(-1);
@@ -209,7 +234,7 @@ function solveLpOnce(lp: LinearProgram, blandFromStart: boolean): LpSolution {
   // Phase 2: the real objective, artificials pinned to zero by exclusion.
   const objective = new Array<number>(columns).fill(0);
   for (let c = 0; c < n; c += 1) {
-    objective[c] = lp.maximize[c]!;
+    objective[c] = lp.maximize[c]! / columnScale[c]!;
   }
   const banned = new Set(artificialOf.filter((a) => a >= 0));
   const bounded = runSimplex(tableau, basis, objective, columns, banned, blandFromStart);
@@ -220,7 +245,7 @@ function solveLpOnce(lp: LinearProgram, blandFromStart: boolean): LpSolution {
   const x = new Array<number>(n).fill(0);
   for (let r = 0; r < m; r += 1) {
     if (basis[r]! < n) {
-      x[basis[r]!] = tableau[r]![columns]!;
+      x[basis[r]!] = tableau[r]![columns]! / columnScale[basis[r]!]!;
     }
   }
   let value = 0;

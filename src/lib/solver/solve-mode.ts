@@ -1,6 +1,8 @@
 import type { FactoryProject, NodeThroughputResult, ResourceKey } from "@/lib/model/types";
 import { makeResourceKey } from "@/lib/model/resources";
 import { getStorageRoles } from "@/lib/model/storage-role";
+import { listSharedMachineGroups } from "@/lib/model/shared-machine";
+import { isPoolEdgeId } from "./pool-mode";
 import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
 import { type LinearProgram, type LpSolution } from "./simplex";
@@ -167,9 +169,15 @@ export function solveSolveMode(
   const upperBounds: LinearProgram["upperBounds"] = [];
 
   // Drawer-to-drawer wires get a finite roof so a teleporter chain cannot
-  // read as unbounded; machine wires are bounded by their port rows.
+  // read as unbounded; machine wires are bounded by their port rows. POOL
+  // wires are exempt: a source-to-pool import is bounded by what the pool's
+  // takers drink and a pool-to-product line by what its feeders make, both
+  // machine rows - and every import and product in pool mode runs over one
+  // of them, so the roof capped a typed target at a million a second
+  // (Jack, 2026-09-06: 1000/t of a product read "no machine count reaches
+  // the required amount" because its import needed more than that).
   for (const edge of usable) {
-    if (!actVar.has(edge.source) && !actVar.has(edge.target)) {
+    if (!actVar.has(edge.source) && !actVar.has(edge.target) && !isPoolEdgeId(edge.id)) {
       upperBounds.push({ coefficients: new Map([[flowVar.get(edge.id)!, 1]]), rhs: 1e6 });
     }
   }
@@ -257,13 +265,25 @@ export function solveSolveMode(
   // PINS: run exactly this many machines - one equality per pinned node,
   // act = pinned / built. Conservation then scales the rest of the line
   // around it, feeders and eaters both.
+  // A shared machine's pin is the card's: its sections' time shares add up
+  // to the pinned count, one equality over the whole group.
+  const sharedGroups = listSharedMachineGroups(machineIds);
   for (const pin of pins) {
-    const act = actVar.get(pin.nodeId);
-    if (act === undefined || !(pin.machines > 0)) {
+    if (!(pin.machines > 0)) {
+      continue;
+    }
+    const coefficients = new Map<number, number>();
+    for (const id of sharedGroups.get(pin.nodeId) ?? [pin.nodeId]) {
+      const act = actVar.get(id);
+      if (act !== undefined) {
+        coefficients.set(act, 1);
+      }
+    }
+    if (coefficients.size === 0) {
       continue;
     }
     const built = Math.max(1, countByNode.get(pin.nodeId) ?? 1);
-    equalities.push({ coefficients: new Map([[act, 1]]), rhs: pin.machines / built });
+    equalities.push({ coefficients, rhs: pin.machines / built });
   }
 
   // Defense: a flow variable in no row would be free to grow without bound.

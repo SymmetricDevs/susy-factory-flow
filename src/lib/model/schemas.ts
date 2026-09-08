@@ -147,6 +147,7 @@ export const runtimeCalculationSchema = z.object({
 export const machineProfileSchema = z.object({
   machineType: z.string().min(1),
   minimumTier: z.string().min(1),
+  maximumTier: z.string().min(1).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick").optional(),
   eut: z.number().min(0, "EU/t must be zero or positive").optional(),
   maxParallel: z.number().positive().optional(),
@@ -204,6 +205,7 @@ export const recipeSchema = z.object({
   category: z.string().min(1).optional(),
   machineType: z.string().min(1, "Machine type is required"),
   minimumTier: z.string().min(1, "Minimum tier is required"),
+  maximumTier: z.string().min(1).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick"),
   eut: z.number().min(0, "EU/t must be zero or positive"),
   inputs: z.array(recipeInputSchema),
@@ -319,11 +321,21 @@ export const factoryNodeSchema = z.object({
     .max(64)
     .optional(),
   energyHatchType: z.string().min(1).optional(),
+  powerEuT: z.number().nonnegative().finite().optional(),
   machineHandlerId: z.string().min(1).optional(),
   coilTier: z.string().min(1).optional(),
   machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),
   settingsCollapsed: z.boolean().optional(),
   recipeInputOverrides: z.record(z.string().min(1), recipeInputSchema).optional(),
+  // More recipes the same machine runs (shared-machine.ts), sections 1..n.
+  extraRecipes: z
+    .array(
+      z.object({
+        recipeId: z.string().min(1),
+        recipeInputOverrides: z.record(z.string().min(1), recipeInputSchema).optional(),
+      }),
+    )
+    .optional(),
   // Solve mode's pin: run exactly this many machines; absent = solver's choice.
   solvePin: z.number().nonnegative().optional(),
   targetOutput: targetRateSchema.optional(),
@@ -351,6 +363,8 @@ export const factoryStorageSchema = z.object({
   // Absent means `overflow`: every buffer catches surplus unless the player
   // deliberately sets it strict.
   bufferMode: z.enum(["overflow", "strict"]).optional(),
+  // Pool mode: which side of the shared pool an unwired drawer sits on.
+  poolSide: z.enum(["source", "drain"]).optional(),
   // Solve mode's requirement on a product drawer; absent = unconstrained.
   targetPerSecond: z.number().nonnegative().optional(),
   pocketId: z.string().min(1).optional(),
@@ -508,6 +522,10 @@ export const factoryProjectSchema = z.object({
   assumeBoundaries: z.boolean().optional(),
   // Solve mode: product amounts are the question, machine counts the answer.
   solveMode: z.boolean().optional(),
+  // Pool mode: every resource is shared, no wires needed.
+  poolMode: z.boolean().optional(),
+  // Pool mode's cell-to-fluid ratios, litres per filled cell by cell id.
+  poolCellRatios: z.record(z.string(), z.number().positive()).optional(),
   recipes: z.array(recipeSchema),
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema).optional().default([]),
@@ -524,7 +542,6 @@ export const factoryProjectSchema = z.object({
       createdAt: z.string().optional(),
       updatedAt: z.string().optional(),
       communityPlanId: z.string().optional(),
-      communityFingerprint: z.string().optional(),
     })
     .optional(),
 });

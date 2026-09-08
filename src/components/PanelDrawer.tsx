@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { registerPanelPull } from "./flow/panel-pull";
+import { getUiScale } from "@/lib/ui-scale";
 
 /**
  * A side column as a drawer over the board, for windows too narrow to give it a
@@ -90,7 +91,8 @@ export function PanelDrawer({
    */
   const getPanelWidth = () =>
     panelRef.current?.offsetWidth ||
-    Math.min(document.documentElement.clientWidth * 0.88, side === "left" ? 344 : 332);
+    // Shell pixels, like offsetWidth: the document's width is real pixels.
+    Math.min((document.documentElement.clientWidth / getUiScale()) * 0.88, side === "left" ? 344 : 332);
 
   /**
    * Live during a drag: 0 fully closed, 1 fully open.
@@ -245,7 +247,9 @@ export function PanelDrawer({
             isDragging ? "transition-none" : "transition-transform duration-200 ease-out",
             // 344 and 332 are the columns' desktop widths; a phone gets as much
             // of that as it can spare while still showing the board behind.
-            side === "left" ? "left-0 w-[min(88vw,344px)]" : "right-0 w-[min(88vw,332px)]",
+            side === "left"
+              ? "left-0 w-[min(calc(88*var(--ui-vw)),344px)]"
+              : "right-0 w-[min(calc(88*var(--ui-vw)),332px)]",
             isSlidIn ? "translate-x-0" : side === "left" ? "-translate-x-full" : "translate-x-full",
           ].join(" ")}
         >
@@ -389,8 +393,11 @@ function useSlideGesture({
         return;
       }
 
-      const dx = (touch.clientX - start.x) * handlers.current.towards;
-      const dy = touch.clientY - start.y;
+      // Real-pixel travel, spent as a shell-pixel translate: divided by the
+      // interface scale so the panel stays under the finger.
+      const scale = getUiScale();
+      const dx = ((touch.clientX - start.x) / scale) * handlers.current.towards;
+      const dy = (touch.clientY - start.y) / scale;
       if (!claimed) {
         // Backwards, or mostly vertical: someone is scrolling the panel.
         if (dx < (handlers.current.claimAtOnce ? 1 : CLAIM_DISTANCE)) {

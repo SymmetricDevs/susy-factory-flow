@@ -179,6 +179,34 @@ coolant L/s per reactor (1150 / 1380 / 1340 / custom). Rod consumption is
 absent from the sheet entirely. Hot coolant -> LHE or EHE -> cascade.
 Banner: "Try Vacuum Reactors Instead".
 
+## Vacuum Reactor (`4. Vac Nuke`)
+
+An EU-mode IC2 reactor on ONE fixed layout - 40 rods and 14 coolant cells
+in the 6x9 chamber - whose cells are pulled and recooled in a freezer.
+Rods are grouped by rod neighbours: 4 with one, 14 with two, 22 with three.
+Per rod: pulses `p = 1 + cells/2` (single 1, dual 2, quad 3, The Core 17),
+`cells x (p + n)` pulses a second with `n` neighbours, each pulse
+`sEnergy x 25` EU (IC2's x5 times the pack's `nuclear = 5.0`); heat
+`(p+n)(p+n+1) x sHeat x cells / 2` a second, shed into the cells beside it.
+Coolant heat map: hottest cell `4 x heat(3)`, coolest
+`0.5 x heat(1) + heat(2)`, average `total / 14`; lifespans are durability
+over those. Rod stats come from GT5U `LoaderGTBlockFluid`, where the sheet
+matches the source everywhere but MOX: it flattens the bonus to x2.475 for
+every MOX-type rod, the game does `1 + heatBonus x heat%` per rod (MOX 1.5,
+HD Plutonium 6, Excited Plutonium 2, Naquadria 1.5) - the app follows the
+source, with core temp as a knob.
+
+The sheet's right-hand block sizes a freezer (Vacuum Freezer / Cryogenic
+Freezer / Endothermic Fridge, hatch and amps) for the cells to recool a
+minute, `14 / (durability / avgHeat) x 60`. The app does NOT put that on
+the reactor card: the reactor's cells are real ports (hot cells out, cold
+cells in, at that rate, one item id for both), and the freezer is the
+dataset's own Vacuum Freezer recipe (120 EU/t, ticks = capacity / 1000)
+placed and wired back into the reactor, so the board counts the freezers
+and their EU like any other machine. A cell too small for the hottest
+position (`4 x heat(3)` above its capacity) is warned about, as the sheet
+does.
+
 ## DEHP (`4. DEHP`)
 
 Parasitic -480 EU/t per pump; two modes: Direct Steam 25,600 L/t SH-grade

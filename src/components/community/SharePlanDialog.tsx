@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { normalizeBlueprintTags } from "@/lib/blueprints/types";
 import {
   listCommunityPlans,
-  updateCommunityPlan,
+  patchCommunityPlan,
   uploadCommunityPlan,
   uploadPlanPreview,
 } from "@/lib/community/client";
@@ -15,7 +15,8 @@ import { sharedPlanLink } from "@/lib/community/shared-link";
 import type { CommunityPlanSummary, EntryIcon } from "@/lib/community/types";
 import { serializeFactoryProject } from "@/lib/import-export";
 import { capturePlanView } from "@/lib/plan-view";
-import { notifySetupsChanged, openSetupsTab } from "@/lib/setups-tab";
+import { openLibrary } from "@/lib/library/library-tab";
+import { notifySetupsChanged } from "@/lib/setups-tab";
 import { useFactoryStore } from "@/store/factory-store";
 import { useDesignStore } from "@/store/design-store";
 import { EntryIconSlot, IconPicker, iconSuggestionsFromStats } from "@/components/IconPicker";
@@ -52,16 +53,16 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
     username: string;
     posts: CommunityPlanSummary[];
   }>();
-  const [postAsNew, setPostAsNew] = useState(false);
   const myPosts = user && myPostsFor?.username === user.username ? myPostsFor.posts : [];
-  // The design remembers which post it was shared as / imported from; Share
-  // only ever targets that one post (or creates a new one).
+  // A design that is posted IS its post: the post follows every save, so
+  // for it this dialog is only the link and the public switch.
   const linkedPost = myPosts.find((post) => post.id === project.metadata?.communityPlanId);
-  const updateTargetId = linkedPost && !postAsNew ? linkedPost.id : "";
   const [isUploading, setUploading] = useState(false);
   const [error, setError] = useState<string>();
-  const [shared, setShared] = useState<{ kind: "created" | "updated"; planId: string }>();
+  const [shared, setShared] = useState<{ planId: string }>();
   const [isLinkCopied, setLinkCopied] = useState(false);
+  const [linkedIsPublic, setLinkedIsPublic] = useState<boolean>();
+  const isPublic = linkedIsPublic ?? linkedPost?.isPublic ?? true;
 
   const stats = useMemo(() => computeCommunityPlanStats(project, result), [project, result]);
   const datasetVersion = manifest?.versions.find(
@@ -87,23 +88,6 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
       cancelled = true;
     };
   }, [user]);
-
-  // Updating an existing post starts from its current face. Seeded the moment
-  // the linked post arrives (adjust-during-render, so the user's later edits
-  // are never overwritten), and the post only fills what the plan's own
-  // fields left blank: updating a post must never blank its description just
-  // because nobody retyped it.
-  const [seededPostId, setSeededPostId] = useState<string>();
-  if (linkedPost && seededPostId !== linkedPost.id) {
-    setSeededPostId(linkedPost.id);
-    setTags(linkedPost.tags ?? []);
-    if (!project.icon) {
-      setIcon(linkedPost.icon);
-    }
-    if (!project.description && linkedPost.description) {
-      setDescription(linkedPost.description);
-    }
-  }
 
   const addTagFromInput = () => {
     const next = normalizeBlueprintTags([...tags, tagInput]);
@@ -139,22 +123,14 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
         icon,
       };
 
-      let sharedPlanId: string;
-      if (updateTargetId) {
-        await updateCommunityPlan(updateTargetId, payload);
-        setShared({ kind: "updated", planId: updateTargetId });
-        setProjectCommunityLink(updateTargetId);
-        sharedPlanId = updateTargetId;
-      } else {
-        const { id } = await uploadCommunityPlan(payload);
-        setShared({ kind: "created", planId: id });
-        setProjectCommunityLink(id);
-        sharedPlanId = id;
-      }
+      const { id } = await uploadCommunityPlan(payload);
+      setShared({ planId: id });
+      // From here on the post follows the design (post-follow.ts).
+      setProjectCommunityLink(id);
 
       const preview = await previewPromise;
       if (preview) {
-        await uploadPlanPreview(sharedPlanId, preview).catch(() => undefined);
+        await uploadPlanPreview(id, preview).catch(() => undefined);
       }
       // The face the post just went out wearing becomes the plan's own, so
       // the plan card and the next share both start from it. Not the name:
@@ -169,12 +145,27 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const setLinkedVisibility = async (next: boolean) => {
+    if (!linkedPost) {
+      return;
+    }
+    setError(undefined);
+    try {
+      await patchCommunityPlan(linkedPost.id, { isPublic: next });
+      setLinkedIsPublic(next);
+      notifySetupsChanged();
+    } catch (thrown) {
+      setError(thrown instanceof Error ? thrown.message : "Changing visibility failed.");
+    }
+  };
+
   const copyShareLink = async () => {
-    if (!shared) {
+    const planId = shared?.planId ?? linkedPost?.id;
+    if (!planId) {
       return;
     }
 
-    const url = sharedPlanLink(shared.planId);
+    const url = sharedPlanLink(planId);
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -188,7 +179,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center bg-neutral-950/50 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-y-auto rounded border border-line-strong bg-surface p-4 shadow-xl">
+      <div className="flex max-h-[calc(90*var(--ui-vh))] w-full max-w-3xl flex-col overflow-y-auto rounded border border-line-strong bg-surface p-4 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <Share2 className="h-4 w-4" /> Share your setup
@@ -205,11 +196,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
 
         {shared ? (
           <div className="space-y-3">
-            <p className="text-sm">
-              {shared.kind === "updated"
-                ? "Your post has been updated."
-                : "Your setup is live."}
-            </p>
+            <p className="text-sm">Your setup is live. From now on every save updates the post.</p>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -229,11 +216,11 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
               type="button"
               onClick={() => {
                 onClose();
-                openSetupsTab();
+                openLibrary({ kind: "all" });
               }}
               className="inline-flex rounded border border-cyan-700 bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500"
             >
-              See it on the Setups shelf
+              See it in your library
             </button>
           </div>
         ) : isUserLoading ? (
@@ -246,6 +233,51 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
               Sharing needs an account so your posts stay yours: just a username and password.
             </p>
             <AuthForm onSignedIn={setUser} />
+          </div>
+        ) : linkedPost ? (
+          <div className="space-y-3">
+            <p className="text-sm">
+              This design is posted as{" "}
+              <span className="font-semibold text-fg">{linkedPost.name}</span>. Every save
+              updates the post: there is nothing to update by hand.
+            </p>
+            <p className="text-xs text-fg-subtle">
+              {isPublic
+                ? "Public: it shows in Public setups and anyone with the link can open a copy."
+                : "Private: only you can see it. The link opens nothing for anyone else."}
+            </p>
+            {error ? <p className="text-sm text-red-500">{error}</p> : null}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void copyShareLink()}
+                className="inline-flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-raised"
+              >
+                {isLinkCopied ? (
+                  <Check className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <Link2 className="h-4 w-4" />
+                )}
+                Copy link
+              </button>
+              <button
+                type="button"
+                onClick={() => void setLinkedVisibility(!isPublic)}
+                className="inline-flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-raised"
+              >
+                {isPublic ? "Make it private" : "Make it public"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openLibrary({ kind: "all" });
+                }}
+                className="inline-flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-raised"
+              >
+                See it in your library
+              </button>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
@@ -295,37 +327,9 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
-            {linkedPost ? (
-              <div className="rounded border border-line bg-surface-raised p-2 text-sm">
-                <p className="mb-1.5 text-xs text-fg-subtle">
-                  This tab is linked to your post &quot;{linkedPost.name}&quot;.
-                </p>
-                <div className="flex gap-3">
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="share-target"
-                      checked={!postAsNew}
-                      onChange={() => setPostAsNew(false)}
-                    />
-                    Update that post
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="share-target"
-                      checked={postAsNew}
-                      onChange={() => setPostAsNew(true)}
-                    />
-                    Post as new
-                  </label>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-fg-muted">
-                Posting as <span className="font-semibold text-fg">{user.username}</span>
-              </p>
-            )}
+            <p className="text-xs text-fg-muted">
+              Posting as <span className="font-semibold text-fg">{user.username}</span>
+            </p>
 
             <div className="block text-sm">
               <span className="mb-1 block font-medium">Icon and name</span>
@@ -401,7 +405,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
                 className="inline-flex items-center gap-2 rounded border border-cyan-700 bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isUploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                {updateTargetId ? `Update "${linkedPost?.name}"` : "Post this setup"}
+                Post this setup
               </button>
             </div>
           </div>

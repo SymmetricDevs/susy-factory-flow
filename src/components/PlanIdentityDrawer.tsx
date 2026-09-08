@@ -7,25 +7,15 @@ import {
   ChevronUp,
   Link2,
   LoaderCircle,
-  RotateCcw,
-  Save,
   Share2,
   Unlink,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  downloadCommunityPlan,
-  getCommunityPlan,
-  patchCommunityPlan,
-  tagPlanWithCommunityId,
-  voteCommunityPlan,
-} from "@/lib/community/client";
-import { planContentFingerprint } from "@/lib/community/plan-fingerprint";
+import { getCommunityPlan, voteCommunityPlan } from "@/lib/community/client";
 import { computeCommunityPlanStats } from "@/lib/community/plan-stats";
 import { noteSharedPlanGone, sharedPlanLink } from "@/lib/community/shared-link";
 import type { CommunityPlanSummary } from "@/lib/community/types";
-import { parseFactoryProjectJson } from "@/lib/import-export";
-import { notifySetupsChanged } from "@/lib/setups-tab";
+import { useCommunityAuthStore } from "@/store/community-auth-store";
 import { useDesignStore } from "@/store/design-store";
 import { useFactoryStore } from "@/store/factory-store";
 import { SharePlanDialog } from "@/components/community/SharePlanDialog";
@@ -43,8 +33,8 @@ import { formatRelativeDate } from "@/components/shelf-cards";
  * every save stamps the tab's name over the plan, so renaming here IS a tab
  * rename), and the blurb sits behind the one chevron because a textarea is
  * the only thing that cannot live on a 36px bar. Post actions ride the right
- * end: vote, link, save-to-post for the owner, post-as-your-own for anyone
- * else, reset while the board has drifted.
+ * end: vote, link, share. There is no save-to-post and no reset: a posted
+ * design IS its post, and every save reaches it (post-follow.ts).
  */
 
 const OPEN_STORAGE_KEY = "gtnh-factory-flow.plan-card-open.v1";
@@ -222,14 +212,13 @@ export function PlanIdentityDrawer() {
  */
 function LinkedPostStrip({ planId }: { planId: string }) {
   const project = useFactoryStore((state) => state.project);
-  const setProject = useFactoryStore((state) => state.setProject);
-  const frameBoardNodes = useFactoryStore((state) => state.frameBoardNodes);
   const setProjectIdentity = useFactoryStore((state) => state.setProjectIdentity);
   const clearProjectCommunityLink = useFactoryStore((state) => state.clearProjectCommunityLink);
+  const signedIn = useCommunityAuthStore((state) => Boolean(state.user));
 
   const [post, setPost] = useState<CommunityPlanSummary>();
   const [loadState, setLoadState] = useState<"loading" | "ready" | "gone" | "error">("loading");
-  const [busy, setBusy] = useState<"reset" | "save" | "vote">();
+  const [busy, setBusy] = useState<"vote">();
   const [actionError, setActionError] = useState<string>();
   const [isLinkCopied, setLinkCopied] = useState(false);
   const [isSharingAsOwn, setSharingAsOwn] = useState(false);
@@ -284,14 +273,17 @@ function LinkedPostStrip({ planId }: { planId: string }) {
     // The plan's own fields win once they exist; this only fills silence.
   }, [post, project.description, project.icon, setProjectIdentity]);
 
-  // What the board IS right now, against what it was when board and post
-  // last agreed. A copy from before fingerprints existed has no baseline and
-  // keeps reset offered, because "unchanged" cannot be proven.
-  const boardFingerprint = useMemo(() => planContentFingerprint(project), [project]);
-  const baseline = project.metadata?.communityFingerprint;
-  const isUnchanged = Boolean(baseline) && baseline === boardFingerprint;
+  // A link to a post that is not yours is a leftover from when copies kept
+  // one. A copy is a plain design now, so the link is dropped the moment the
+  // server says so - only while signed in, since signed out EVERY post reads
+  // as someone else's.
+  useEffect(() => {
+    if (post && signedIn && post.isMine === false) {
+      clearProjectCommunityLink();
+    }
+  }, [post, signedIn, clearProjectCommunityLink]);
 
-  const runAction = async (kind: "reset" | "save" | "vote", action: () => Promise<void>) => {
+  const runAction = async (kind: "vote", action: () => Promise<void>) => {
     setBusy(kind);
     setActionError(undefined);
     try {
@@ -302,42 +294,6 @@ function LinkedPostStrip({ planId }: { planId: string }) {
       setBusy(undefined);
     }
   };
-
-  const reset = () =>
-    runAction("reset", async () => {
-      if (
-        !window.confirm(
-          `Put the posted version of "${post?.name ?? project.name}" back on this board? ` +
-            "Your changes here will be lost, and this cannot be undone.",
-        )
-      ) {
-        return;
-      }
-      const { plan } = await downloadCommunityPlan(planId);
-      setProject(parseFactoryProjectJson(JSON.stringify(tagPlanWithCommunityId(plan, planId))));
-      frameBoardNodes();
-    });
-
-  const saveDetails = () =>
-    runAction("save", async () => {
-      await patchCommunityPlan(planId, {
-        name: project.name,
-        description: project.description ?? "",
-        icon: project.icon ?? null,
-      });
-      setPost((current) =>
-        current
-          ? {
-              ...current,
-              name: project.name,
-              description: project.description ?? "",
-              icon: project.icon,
-              updatedAt: new Date().toISOString(),
-            }
-          : current,
-      );
-      notifySetupsChanged();
-    });
 
   const vote = () =>
     runAction("vote", async () => {
@@ -444,51 +400,14 @@ function LinkedPostStrip({ planId }: { planId: string }) {
           <Link2 className="h-3.5 w-3.5" />
         )}
       </button>
-      {post.isMine ? (
-        <button
-          type="button"
-          onClick={() => void saveDetails()}
-          disabled={busy === "save"}
-          title="Save to the post"
-          aria-label="Save the plan's name, icon and description to your post"
-          className={BAR_BUTTON}
-        >
-          {busy === "save" ? (
-            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
-          )}
-        </button>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => void reset()}
-        disabled={isUnchanged || busy === "reset"}
-        title={
-          isUnchanged
-            ? "The board still matches the post: nothing to reset"
-            : "Replace this board with the posted version"
-        }
-        aria-label="Reset this board to the posted version"
-        className={BAR_BUTTON}
-      >
-        {busy === "reset" ? (
-          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <RotateCcw className="h-3.5 w-3.5" />
-        )}
-      </button>
-      {/* Same dialog as the top bar's Share, in the bar's rightmost spot. On
-          your own post it offers update-or-post-anew; on someone else's the
-          only thing it CAN do is a new post of your own, wearing this bar's
-          name, icon and description - and posting relinks the plan to it. */}
+      {/* Same dialog as the top bar's Share, in the bar's rightmost spot:
+          the link and the public switch, since the post already follows
+          every save. */}
       <button
         type="button"
         onClick={() => setSharingAsOwn(true)}
-        title={post.isMine ? "Share" : "Post as your own"}
-        aria-label={
-          post.isMine ? "Share this setup" : "Post this board as your own setup"
-        }
+        title="Share"
+        aria-label="Share this setup"
         className={BAR_BUTTON}
       >
         <Share2 className="h-3.5 w-3.5" />

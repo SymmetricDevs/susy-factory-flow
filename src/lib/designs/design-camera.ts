@@ -1,6 +1,6 @@
 "use client";
 
-import { BOARD_MAX_ZOOM, BOARD_MIN_ZOOM } from "@/components/flow/board-camera";
+import { BOARD_MIN_ZOOM, boardMaxZoom } from "@/components/flow/board-camera";
 
 /**
  * Where each design tab was left: the pan and the zoom it last had.
@@ -112,7 +112,7 @@ function asStoredCamera(value: unknown): StoredCamera | undefined {
   return {
     x,
     y,
-    zoom: Math.min(Math.max(zoom, BOARD_MIN_ZOOM), BOARD_MAX_ZOOM),
+    zoom: Math.min(Math.max(zoom, BOARD_MIN_ZOOM), boardMaxZoom()),
     at: isFiniteNumber(at) ? at : 0,
   };
 }

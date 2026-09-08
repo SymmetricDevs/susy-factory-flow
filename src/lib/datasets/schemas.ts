@@ -66,6 +66,16 @@ export const recipeMapIconEntrySchema = z.object({
 export const machineHandlerIconEntrySchema = z.object({
   familyId: z.string().min(1),
   resource: recipeMapIconEntrySchema.shape.resource,
+  // Every tiered variant's own item, tier order; absent on one-variant
+  // families. Zod strips unknown keys, so the list has to be named here.
+  tiers: z
+    .array(
+      z.object({
+        tier: z.string().min(1),
+        resource: recipeMapIconEntrySchema.shape.resource,
+      }),
+    )
+    .optional(),
 });
 
 export const recipeDatasetSchema = z.object({

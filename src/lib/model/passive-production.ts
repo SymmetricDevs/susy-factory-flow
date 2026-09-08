@@ -143,6 +143,13 @@ export interface CropsNhStats {
    * seed bed ladder starts here.
    */
   minSeedBedTier?: number;
+  /**
+   * The crop's `SubSoilRequirement`, as NEI words it ("Needs a block of tin
+   * under it to grow"): a specific block must sit directly under the soil.
+   * In the world that makes each layer of sticks three blocks tall instead
+   * of two, which is what a Crop Manager's five-block reach is divided by.
+   */
+  subSoil?: string;
   drops: Array<{ id: string; stackSize: number; weight: number }>;
 }
 
@@ -206,8 +213,23 @@ export function getCropsNhStats(
     growthMultiplier: toPositiveNumber(meta.growthMultiplier) ?? 1,
     machineOnly: meta.machineOnly === true ? true : undefined,
     minSeedBedTier: toPositiveNumber(meta.minSeedBedTier),
+    subSoil: readSubSoilRequirement(meta.requirements),
     drops,
   };
+}
+
+/**
+ * The pipeline stores every growth requirement as the sentence NEI shows.
+ * The subsoil ones all read "Needs a <block> under it to grow"; light-level
+ * and farm-only rules never say "under it".
+ */
+function readSubSoilRequirement(requirements: unknown): string | undefined {
+  if (!Array.isArray(requirements)) {
+    return undefined;
+  }
+  return requirements.find(
+    (entry): entry is string => typeof entry === "string" && /\bunder it\b/i.test(entry),
+  );
 }
 
 // The following mirror TileEntityCropSticks (verified against 2.9 bytecode):
@@ -307,12 +329,24 @@ export function cropsNhEnvironmentFromTiers(
 /** `MTECropManager.getHarvestBonusChance` = 0.05 * mTier, fed to `crop.harvest`. */
 const CROP_MANAGER_HARVEST_BONUS_PER_TIER = 0.05;
 /**
- * `MTECropManager.getVerticalRadius` = 2, so it reaches five layers of sticks
- * at every tier. This is the machine's capacity, not a question for the
- * player: a card says how many crop sticks it has and who picks them, and how
- * many machines that takes falls out of the two.
+ * `MTECropManager.getVerticalRadius` = 2, so it reaches five BLOCKS of
+ * height at every tier (y -2..+2). Crop sticks are not five layers in five
+ * blocks: every stick stands on a soil block, so a layer is two blocks tall
+ * and only three fit (sticks at -2, 0 and +2). A crop with a subsoil rule
+ * needs its block under the soil too, three blocks a layer, and only two of
+ * those fit. This is the machine's capacity, not a question for the player:
+ * a card says how many crop sticks it has and who picks them, and how many
+ * machines that takes falls out of the two. (Reported by a player, 2026-09-02:
+ * LV 363, MV 675, area x 3.)
  */
-export const CROP_MANAGER_LAYERS = 5;
+export const CROP_MANAGER_LAYERS = 3;
+export const CROP_MANAGER_SUBSOIL_LAYERS = 2;
+/**
+ * The manager stands in the middle of its own reach, and every stacking
+ * that fits the most layers runs a stick, soil or subsoil column through
+ * that centre block, so one stick spot is always the machine itself.
+ */
+const CROP_MANAGER_OWN_BLOCK = 1;
 /** `BlockSeedBed.HARVEST_ROUND_BONUS` = 0.2, applied as tier * bonus. */
 const SEED_BED_HARVEST_ROUND_BONUS_PER_TIER = 0.2;
 /** `BlockGrowthAccelerationUnit.GROWTH_SPEED_BONUS` = 1.0, additive per unit. */
@@ -354,7 +388,7 @@ const VOLTAGE_TIER_NAMES = [
 ];
 
 /** `cropsnh_tooltip.cropManager.name.<tier>` from the mod's lang file. */
-const CROP_MANAGER_ITEM_NAMES: Record<string, string> = {
+export const CROP_MANAGER_ITEM_NAMES: Record<string, string> = {
   LV: "Basic Crop Manager",
   MV: "Advanced Crop Manager",
   HV: "Advanced Crop Manager II",
@@ -388,6 +422,17 @@ export interface CropHarvesterSetup {
    * Fertilization Unit runs on enriched fertilizer, so it forces this on.
    */
   fertilized: boolean;
+  /**
+   * The crop needs a block under its soil (`CropsNhStats.subSoil`), so a
+   * Crop Manager stacks two layers of it in its reach instead of three. The
+   * Industrial Farm simulates the crop and never asks.
+   */
+  subSoil: boolean;
+}
+
+/** How many layers of sticks a Crop Manager's five-block reach holds. */
+export function cropsNhManagerLayers(subSoil: boolean): number {
+  return subSoil ? CROP_MANAGER_SUBSOIL_LAYERS : CROP_MANAGER_LAYERS;
 }
 
 /**
@@ -416,7 +461,10 @@ export function cropsNhCropsPerMachine(setup: CropHarvesterSetup): number {
     return 1;
   }
   if (setup.id === CROP_HARVESTER_MANAGER_ID) {
-    return cropsNhSquarePerTier(setup.tierIndex) * CROP_MANAGER_LAYERS;
+    return (
+      cropsNhSquarePerTier(setup.tierIndex) * cropsNhManagerLayers(setup.subSoil) -
+      CROP_MANAGER_OWN_BLOCK
+    );
   }
   return cropsNhSquarePerTier(setup.tierIndex);
 }
@@ -457,6 +505,7 @@ export function getNodeMachineBuildCount(
         node.machineConfigTiers,
         node.machineHandlerId,
         cropStats.minSeedBedTier,
+        cropStats.subSoil !== undefined,
       ),
       Math.round(node.machineCount),
     );
@@ -481,6 +530,8 @@ export function cropsNhHarvesterFromTiers(
    * exactly what the control's raised minimum shows.
    */
   minSeedBedTier?: number,
+  /** Whether the crop carries a subsoil rule (`CropsNhStats.subSoil`). */
+  subSoil?: boolean,
 ): CropHarvesterSetup {
   const id: CropHarvesterId =
     handlerId === CROP_HARVESTER_INDUSTRIAL_FARM_ID
@@ -541,6 +592,7 @@ export function cropsNhHarvesterFromTiers(
     environmentUnits,
     overclocks,
     fertilized,
+    subSoil: subSoil === true,
   };
 }
 

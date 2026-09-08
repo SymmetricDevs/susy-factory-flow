@@ -19,17 +19,12 @@
  * prune it back to a handful again; that only moved the wall from the archive
  * into the popup for anyone returning after a long break.
  *
- * An entry can also carry ACTIONS. A release that adds something you have to
- * DO to understand - a tour, a demo board - should offer it as a button rather
- * than describing it and hoping, because the reader is already right here with
- * the app open.
+ * An entry can also carry ACTIONS: links for anything that lives outside the
+ * app, offered as a button because the reader is already right here.
  */
 export interface ChangelogAction {
   label: string;
-  /** Starts this tour lesson and closes the dialog. */
-  lessonId?: string;
-  /** Or opens a link, for anything that lives outside the app. */
-  href?: string;
+  href: string;
 }
 
 export interface ChangelogEntry {
@@ -72,6 +67,147 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "2.58.0",
+    date: "2026-09-05",
+    headline: "Three modes: Build, Solve, Pool",
+    notes: [
+      "One switch on the toolbar: Build reports what flows, Solve counts the machines, Pool also wires and imports for you.",
+      "In Pool, nothing needs a wire: every resource is shared, anything nobody makes is imported and listed under Inputs.",
+      "The setup rules sheet is gone and a filled cell and its fluid always wire together.",
+      "A chevron by the card's name opens the machine list, which also offers other recipes that take and make the same items, every card wears its machine's picture, and tooltips state rates, requirements and the gestures on offer.",
+      "One machine can run several recipes: the machine list's last row adds another recipe to the card, each with its own ports, and they share the machine's time.",
+      "A shorter top bar: share, import and export sit under one key, the version chip opens the release notes, and the generator, custom rate and crop farm keys moved to the top of the items column.",
+      "The board's ? help points at the Library, the mode switch and the machine list, and draws each drawer as its own shape.",
+      "The planner reads in Inter and a third larger; Settings has the font and a size stepper.",
+      "Panning is much smoother, and the moving dashes on wires are gone.",
+      "A multiblock running under one tick now counts whole recipes per tick, as the game does: 0.625 ticks runs two a tick, not 1.6.",
+      "A multiblock's power is one EU/t number you type, wheel or add up from real hatches in a calculator that shows what it buys.",
+      "The Machines list shows peak and average draw side by side with totals on top.",
+      "A key by the units turns automatic recalculation off; press the key beside it to recalculate when you choose.",
+      "Boards past a billion items or litres a second no longer read as zero.",
+    ],
+  },
+  {
+    version: "2.57.0",
+    date: "2026-09-05",
+    headline: "Free inputs stay off the wires",
+    notes: [
+      "The Rock Breaker's \"IT'S FREE! Place Lava on Side\" slot is drawn greyed on the card and needs no wire, drawer or rate.",
+    ],
+  },
+  {
+    version: "2.56.3",
+    date: "2026-09-05",
+    headline: "Switching units no longer freezes a big board",
+    notes: [
+      "The rate unit and the power unit keys switch instantly on any board size.",
+      "A machine held back by one of its outputs now reads clogged and names the machine that cannot take more.",
+    ],
+  },
+  {
+    version: "2.56.2",
+    date: "2026-09-05",
+    headline: "Large Naquadah Reactor fuel amounts match the game",
+    notes: [
+      "An LNR card now asks for the real litres of fuel and depleted fuel per second, including every booster.",
+    ],
+  },
+  {
+    version: "2.56.1",
+    date: "2026-09-04",
+    headline: "The library on a phone",
+    notes: [
+      "The library's sections are one dropdown on a phone, and the filters sit behind one key.",
+      "A finger scrolls the library; a held press on a tile opens its menu.",
+      "The focus page stacks on a phone, with Back above the picture and Open across the width.",
+    ],
+  },
+  {
+    version: "2.56.0",
+    date: "2026-09-04",
+    headline: "The library: every design and every shared setup in one place",
+    notes: [
+      "The square at the head of the tab strip opens the library: your designs in collections and Favorites, searched, filtered and sorted, and kept in step across your devices when you sign in.",
+      "A posted design is its post: every save updates it, and opening someone else's setup makes a copy of your own.",
+      "Public setups have comments, a Saved shelf, sorts by activity, and filters by EU/t and by what a setup makes or takes.",
+      "Imported plans find each card's exact recipe again, big plans no longer freeze on every edit, and one broken design no longer hides the rest.",
+    ],
+  },
+  {
+    version: "2.55.0",
+    date: "2026-09-03",
+    headline: "The recipe search is grouped by machine",
+    notes: [
+      "Results sit under one title per machine; click a title to fold that machine away and click again to bring it back.",
+      "Cards are darker with plain item rows, no hover tooltips, and the machine name only in the title above.",
+      "Drag any item row from a result down into Takes or Makes to add it to the search.",
+      "The power picker's close button stays on screen on a phone.",
+    ],
+  },
+  {
+    version: "2.54.1",
+    date: "2026-09-02",
+    headline: "An unfinished machine no longer sets off clog lock and dead loop alarms",
+    notes: [
+      "A card stopped by an unwired slot or missing power is the only card that says so; its neighbours point at it instead of raising their own alarm.",
+      "A machine whose only taker has stopped now reads that it is waiting on that machine, not that it needs more machines or a drawer.",
+      "A machine fed by a stopped machine reads starved and names it.",
+    ],
+  },
+  {
+    version: "2.54.0",
+    date: "2026-09-02",
+    headline: "The recipe search has back and forward",
+    notes: [
+      "Back and forward buttons step through the items you clicked: Backspace or Alt+Left goes back, Alt+Right forward.",
+      "Click a result's machine tile to hide that machine, or right click the card for hide, only and add.",
+      "The tier filter now hides generators above the chosen tier too.",
+      "The search has quiet sounds of its own, and names on a phone wrap instead of being cut short.",
+    ],
+  },
+  {
+    version: "2.53.2",
+    date: "2026-09-02",
+    headline: "Crop Managers count real layers",
+    notes: [
+      "A Crop Manager holds three layers of crop sticks in its reach, not five: an LV one works 362 sticks, an MV one 674.",
+      "A crop that needs a block under its soil fits two layers, so its cards build more managers.",
+      "The machine's own block is no longer counted as a crop stick.",
+    ],
+  },
+  {
+    version: "2.53.1",
+    date: "2026-09-02",
+    headline: "One vote per person",
+    notes: [
+      "A setup can no longer be upvoted again after your connection changes address.",
+      "Signed in, your vote follows your account between browsers.",
+      "The Welcome tab's design and setup tiles show bigger, bare icons.",
+    ],
+  },
+  {
+    version: "2.53.0",
+    date: "2026-09-02",
+    headline: "A new Welcome tab, and help that covers the whole board",
+    notes: [
+      "The Welcome tab is rebuilt: your designs, the community's newest setups and what changed.",
+      "The ? corner's help now covers cards, drawers, board windows, the search and every key.",
+      "The guided tours are gone. A new tutorial is on the way.",
+      "The compass in the header brings the Welcome tab back once you close it.",
+    ],
+  },
+  {
+    version: "2.52.0",
+    date: "2026-09-02",
+    headline: "The Vacuum Reactor takes any fuel rod and any coolant cell",
+    notes: [
+      "Pick from every fuel rod in every size, The Core included, and every coolant cell.",
+      "MOX-type rods scale with a core temperature setting, each by its own bonus.",
+      "Hot coolant cells leave the reactor as a port: wire a Vacuum Freezer to send them back cold.",
+      "A coolant cell too small for the heat is called out before it bursts.",
+    ],
+  },
   {
     version: "2.51.0",
     date: "2026-09-02",
@@ -562,7 +698,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Board help fits small windows, opens on a click, and names today's buttons.",
       "On a phone the help teaches touch moves instead of mouse clicks.",
     ],
-    actions: [{ label: "Take the tour", lessonId: "read-the-board" }],
   },
   {
     version: "2.20.2",
@@ -833,7 +968,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The Read the board tour now explains what a full input bar means on a slowed machine.",
       "The first tour now covers the calm colours button and uses the panel's real headings.",
     ],
-    actions: [{ label: "Walk the board tour", lessonId: "read-the-board" }],
   },
   {
     version: "2.9.0",
@@ -908,7 +1042,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "New drawer shapes: *products are squares, byproducts shields, buffers hexagons*, so the product and byproduct swap keeps its buttons still. A catching buffer wears a *dashed ring*; a strict one is solid.",
       "Every grey browser tooltip is now the planner's own: same words, proper panel, no delay.",
     ],
-    actions: [{ label: "Take the tour", lessonId: "read-the-board" }],
   },
   {
     version: "2.3.0",
@@ -982,7 +1115,6 @@ export const CHANGELOG: ChangelogEntry[] = [
     // The release that introduced the version stamp, so no browser alive has
     // one to compare against. Without this, nobody sees these notes at all.
     showToEveryone: true,
-    actions: [{ label: "Take the tour", lessonId: "read-the-board" }],
   },
   {
     version: "1.42.1",

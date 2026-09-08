@@ -13,6 +13,8 @@ import {
   cropsNhUnitSlotsUsed,
   cropsNhUpgradeSlots,
   enrichPassiveProductionRecipe,
+  getCropsNhStats,
+  getNodeMachineBuildCount,
 } from "@/lib/model/passive-production";
 import { getOverclockedRecipeStats } from "./overclock";
 import {
@@ -463,13 +465,13 @@ describe("CropsNH harvesters", () => {
     const recipe = oilBerry();
     const output = recipe.outputs[0]!;
     const at = (key: string) => ({ machineConfigTiers: { cropManagerTier: key } });
-    // LV: 1 + 0.05 * 1 harvest rounds, and its full five-layer reach - for a
+    // LV: 1 + 0.05 * 1 harvest rounds, and its full three-layer reach - for a
     // stored legacy "none" exactly as for an explicit LV pick.
     for (const key of ["none", "1"]) {
       expect(getMachineOutputMultiplier(recipe, at(key), output, "LV")).toBeCloseTo(1.05, 10);
       expect(
         cropsNhCropsPerMachine(cropsNhHarvesterFromTiers({ cropManagerTier: key }, "crop-manager")),
-      ).toBe(605);
+      ).toBe(362);
     }
   });
 
@@ -498,21 +500,75 @@ describe("CropsNH harvesters", () => {
     expect(controlIds("crop-manager")).not.toContain("cropManagerLayers");
   });
 
-  it("gives a Crop Manager its whole five-layer reach", () => {
-    const capacity = (tierIndex: number) =>
+  it("stacks three layers of sticks in a Crop Manager's five-block reach", () => {
+    const capacity = (tierIndex: number, subSoil = false) =>
       cropsNhCropsPerMachine(
-        cropsNhHarvesterFromTiers({ cropManagerTier: String(tierIndex) }, "crop-manager"),
+        cropsNhHarvesterFromTiers(
+          { cropManagerTier: String(tierIndex) },
+          "crop-manager",
+          undefined,
+          subSoil,
+        ),
       );
-    // getHorizontalRadius = 3 + 2*tier, getVerticalRadius = 2 -> (4t+7)^2 * 5.
-    expect(capacity(1)).toBe(11 * 11 * 5);
-    expect(capacity(2)).toBe(15 * 15 * 5);
-    expect(capacity(8)).toBe(39 * 39 * 5);
+    // getHorizontalRadius = 3 + 2*tier, getVerticalRadius = 2: five BLOCKS
+    // tall, and a stick on its soil is two blocks, so three layers fit
+    // (y -2, 0, +2) and the machine's own block takes one spot. A player's
+    // count from a real build (2026-09-02): LV 363, MV 675, LuV 2883, all
+    // area x 3 before the manager's own block.
+    expect(capacity(1)).toBe(11 * 11 * 3 - 1);
+    expect(capacity(2)).toBe(15 * 15 * 3 - 1);
+    expect(capacity(6)).toBe(31 * 31 * 3 - 1);
+    expect(capacity(8)).toBe(39 * 39 * 3 - 1);
+    // A crop that needs a block under its soil is three blocks a layer, so
+    // only two layers fit.
+    expect(capacity(1, true)).toBe(11 * 11 * 2 - 1);
+    expect(capacity(2, true)).toBe(15 * 15 * 2 - 1);
+    // A subsoil rule never changes an Industrial Farm's seat count.
+    expect(
+      cropsNhCropsPerMachine(
+        cropsNhHarvesterFromTiers({ cropSeedBedTier: "2" }, "crop-industrial-farm", undefined, true),
+      ),
+    ).toBe(15 * 15);
     // A seed bed is a stack of seeds, not a field, so it gets no layer factor.
     expect(
       cropsNhCropsPerMachine(
         cropsNhHarvesterFromTiers({ cropSeedBedTier: "2" }, "crop-industrial-farm"),
       ),
     ).toBe(15 * 15);
+  });
+
+  it("reads a subsoil rule off the dataset's requirement sentences and builds fewer managers", () => {
+    const withRequirements = (requirements: string[]): Recipe => {
+      const base = oilBerry();
+      return {
+        ...base,
+        metadata: {
+          ...base.metadata,
+          cropsNh: {
+            ...(base.metadata as { cropsNh: Record<string, unknown> }).cropsNh,
+            requirements,
+          },
+        },
+      };
+    };
+    // The pipeline stores each growth rule as the sentence NEI shows; only
+    // the subsoil ones say "under it".
+    expect(getCropsNhStats(withRequirements(["Needs a block of tin under it to grow"]))?.subSoil).toBe(
+      "Needs a block of tin under it to grow",
+    );
+    expect(getCropsNhStats(withRequirements(["Needs a skull under it to grow"]))?.subSoil).toBe(
+      "Needs a skull under it to grow",
+    );
+    expect(
+      getCropsNhStats(withRequirements(["Needs a light Level of 9 or higher", "Only harvestable in the I. Farm"]))
+        ?.subSoil,
+    ).toBeUndefined();
+    expect(getCropsNhStats(oilBerry())?.subSoil).toBeUndefined();
+    // 500 tin-flower sticks under LV managers: 241 fit per machine (two
+    // layers), so three machines, where a plain crop's 362 needs two.
+    const node = { machineCount: 500, machineHandlerId: "crop-manager", machineConfigTiers: {} };
+    expect(getNodeMachineBuildCount(withRequirements(["Needs a block of tin under it to grow"]), node)).toBe(3);
+    expect(getNodeMachineBuildCount(oilBerry(), node)).toBe(2);
   });
 
   it("reproduces the wiki's Crop Manager output table at every tier", () => {

@@ -130,8 +130,11 @@ export type BoardSoundKind =
   | "close" // a board window folds to its summary card
   | "adjust" // a setting on a card changed: machine count, drain pill, config
   | "sweep" // one sound for a bulk change (paste, arrange, import)
-  | "solveOn" // the board shifts into solve mode: a rising shimmer
+  | "solveOn" // the board shifts into solve mode: a relay engaging, short and dry
   | "solveOff" // and back to plan mode: the same shimmer, settling home
+  | "buildOn" // back to build mode: a block set down, low and dry
+  | "poolOn" // the board pools its resources: a drop into still water
+  | "poolOff" // (unused since the mode switch; kept for older callers)
   // The build timelapse's family (board-timelapse.ts): the same events as
   // place/connect/open, but SLID rather than set down - mostly brush, a
   // whisper of tone - because dozens fire in a row and the thump family
@@ -141,7 +144,20 @@ export type BoardSoundKind =
   | "shuffleBoard" // a frame is drawn around finished cards
   | "dialRate" // the rate unit dial: one tap, pitched by the chosen step
   | "dialEnergy" // the rate dial landing on EU per unit: a coin, not a tap
-  | "dialPower"; // the power unit dial: a tap that grows with the tier
+  | "dialPower" // the power unit dial: a tap that grows with the tier
+  // The recipe search's family (Jack, 2026-09-02): the one place off the
+  // canvas that sounds, because it is a screen of its own with pages to
+  // turn. All quiet, all brush-first, none of them a thump.
+  | "pageOpen" // the search opens: a leaf lifted
+  | "pageClose" // and closes: the leaf laid down
+  | "pageTurn" // a new page while open: a chip clicked, back, forward
+  | "tick" // a switch on the page: machine chip, rate pill, any/all/only
+  | "stencilAdd" // a condition joins the stencil
+  | "stencilRemove" // a condition leaves it
+  // The library's family (Jack, 2026-09-04): the search's two sounds were
+  // too bright for a room you live in. Lower, quieter, and its own.
+  | "shelfTurn" // a view or a focus page changes: a card slid along the shelf
+  | "shelfTick"; // a filter or sort changes: a low key
 
 let audioContext: AudioContext | undefined;
 let masterGain: GainNode | undefined;
@@ -565,13 +581,13 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       blip(ctx, out, { from: 233, to: 311, duration: 0.28, peak: 0.2 });
       break;
     case "solveOn":
-      // Shifting INTO the other dimension: the pad swells and rises a
-      // fifth, two tiny sparkles drift up after it, and a high wash of air
-      // breathes over the top. Big change, quiet voice.
-      shimmerPad(ctx, out, { from: 262, to: 392, duration: 0.6, peak: 0.24 });
-      blip(ctx, out, { from: 1319, to: 1319, duration: 0.12, peak: 0.06, delay: 0.18 });
-      blip(ctx, out, { from: 1760, to: 1760, duration: 0.14, peak: 0.045, delay: 0.32 });
-      puff(ctx, out, { frequency: 3000, q: 0.6, duration: 0.35, peak: 0.06, delay: 0.05 });
+      // SOLVE: a relay engaging. A quick upward chirp with a click on it,
+      // then one clean tick a beat later - short and dry like the latch
+      // (build) and the plink (pool), so the three read as one family. The
+      // old swelling pad is gone: it was the only long sound of the three.
+      blip(ctx, out, { from: 1047, to: 1319, duration: 0.05, peak: 0.09 });
+      puff(ctx, out, { frequency: 2400, q: 2, duration: 0.04, peak: 0.1 });
+      blip(ctx, out, { from: 1568, to: 1568, duration: 0.06, peak: 0.06, delay: 0.09 });
       break;
     case "solveOff":
       // The same shimmer settling home: the pad glides back down the fifth
@@ -581,6 +597,32 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       blip(ctx, out, { from: 1319, to: 1319, duration: 0.12, peak: 0.05, delay: 0.16 });
       blip(ctx, out, { from: 988, to: 988, duration: 0.14, peak: 0.045, delay: 0.3 });
       puff(ctx, out, { frequency: 2200, q: 0.6, duration: 0.3, peak: 0.05, delay: 0.05 });
+      break;
+    case "buildOn":
+      // BUILD: a latch. A crisp high tick, then a wooden knock a beat
+      // later - two distinct hits with a gap you can hear, the sound of a
+      // catch closing, nothing like a brush or a pad. Nothing in it rises
+      // or falls, so it is not a rung on the other two.
+      blip(ctx, out, { from: 2200, to: 2200, duration: 0.03, peak: 0.1 });
+      puff(ctx, out, { frequency: 3200, q: 3, duration: 0.03, peak: 0.08 });
+      puff(ctx, out, { frequency: 320, q: 3, duration: 0.09, peak: 0.22, delay: 0.09 });
+      blip(ctx, out, { from: 262, to: 262, duration: 0.07, peak: 0.1, delay: 0.09 });
+      break;
+    case "poolOn":
+      // POOL: a drop into still water. One bright plink (a high sine that
+      // bends UP, the way a droplet rings) and its echo a beat later, a
+      // fifth down, over a short bright splash - all high and glassy,
+      // nothing below middle C. Its own material, not a pad.
+      blip(ctx, out, { from: 1568, to: 2093, duration: 0.09, peak: 0.09 });
+      puff(ctx, out, { frequency: 4200, q: 1.2, duration: 0.07, peak: 0.07, delay: 0.01 });
+      blip(ctx, out, { from: 1047, to: 1397, duration: 0.11, peak: 0.06, delay: 0.17 });
+      puff(ctx, out, { frequency: 2600, q: 1.5, duration: 0.09, peak: 0.04, delay: 0.18 });
+      break;
+    case "poolOff":
+      // Unused since the mode switch; the pool swell settling, kept so an
+      // older caller still gets a sound.
+      shimmerPad(ctx, out, { from: 175, to: 131, duration: 0.55, peak: 0.2 });
+      puff(ctx, out, { frequency: 600, q: 0.5, duration: 0.4, peak: 0.06, delay: 0.04 });
       break;
     case "shuffle":
       // A card SLID onto the table: two brushes - a soft body and a lighter
@@ -599,6 +641,50 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       // rise - the open sound's shape in the shuffle material.
       puff(ctx, out, { frequency: 600, q: 0.8, duration: 0.18, peak: 0.2 });
       blip(ctx, out, { from: 233, to: 294, duration: 0.16, peak: 0.1, delay: 0.02 });
+      break;
+    case "pageOpen":
+      // A leaf lifted: one soft brush with a small rise under it, the open
+      // sound's motion at a third of its voice.
+      puff(ctx, out, { frequency: 900, q: 0.9, duration: 0.12, peak: 0.14 });
+      blip(ctx, out, { from: 392, to: 494, duration: 0.12, peak: 0.08, delay: 0.01 });
+      break;
+    case "pageClose":
+      // The leaf laid down: the same brush a shade lower, settling (the
+      // close family's glide, nothing like the delete step).
+      puff(ctx, out, { frequency: 700, q: 0.9, duration: 0.12, peak: 0.12 });
+      blip(ctx, out, { from: 494, to: 392, duration: 0.12, peak: 0.08, delay: 0.01 });
+      break;
+    case "pageTurn":
+      // A page turned: two quick brushes, the second lighter, over a
+      // barely-there flat tick. No pitch motion - a turn is neither an
+      // arrival nor a loss.
+      puff(ctx, out, { frequency: 1100, q: 1.2, duration: 0.07, peak: 0.12 });
+      puff(ctx, out, { frequency: 1600, q: 1.6, duration: 0.04, peak: 0.06, delay: 0.03 });
+      blip(ctx, out, { from: 587, to: 587, duration: 0.05, peak: 0.06, delay: 0.01 });
+      break;
+    case "tick":
+      // A switch thrown: the adjust tap's little sibling, half its voice,
+      // with a grain of air so it reads as a key and not a note.
+      blip(ctx, out, { from: 659, to: 659, duration: 0.05, peak: 0.09 });
+      puff(ctx, out, { frequency: 2000, q: 3, duration: 0.02, peak: 0.04 });
+      break;
+    case "stencilAdd":
+      // A condition joins: one small step up.
+      blip(ctx, out, { from: 523, to: 587, duration: 0.09, peak: 0.12 });
+      break;
+    case "stencilRemove":
+      // And leaves: the same step back down - a removal, so down is right.
+      blip(ctx, out, { from: 587, to: 523, duration: 0.09, peak: 0.1 });
+      break;
+    case "shelfTurn":
+      // A card slid along the shelf: brush only, no tone at all (Jack: the
+      // tone read as a beep). One low soft brush and a fainter one trailing.
+      puff(ctx, out, { frequency: 480, q: 0.7, duration: 0.11, peak: 0.07 });
+      puff(ctx, out, { frequency: 360, q: 0.9, duration: 0.07, peak: 0.03, delay: 0.05 });
+      break;
+    case "shelfTick":
+      // A filter changed: the same brush, shorter and smaller. Air only.
+      puff(ctx, out, { frequency: 560, q: 0.9, duration: 0.06, peak: 0.05 });
       break;
   }
 }

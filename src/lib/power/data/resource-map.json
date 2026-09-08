@@ -1,6 +1,104 @@
 {
  "datasetVersionId": "local-2.9.0-beta-2",
  "resources": {
+  "1080k Sp Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.1080k_space_coolantcell",
+   "displayName": "1080k Sp Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/1080k_sp_coolant_cell-75adab6c823f.png",
+   "dominantColor": "#1f2543"
+  },
+  "10k Coolant Cell": {
+   "kind": "item",
+   "id": "ic2:reactorcoolantsimple@1",
+   "displayName": "10k Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/10k_coolant_cell-63b1b8353063.png",
+   "dominantColor": "#434343"
+  },
+  "180k He Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.180k_helium_coolantcell",
+   "displayName": "180k He Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/180k_he_coolant_cell-9da8d8216d51.png",
+   "dominantColor": "#bcbc00"
+  },
+  "180k NaK Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.180k_nak_coolantcell",
+   "displayName": "180k NaK Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/180k_nak_coolant_cell-154a59e1c3d6.png",
+   "dominantColor": "#43ad7b"
+  },
+  "180k Sp Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.180k_space_coolantcell",
+   "displayName": "180k Sp Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/180k_sp_coolant_cell-9c25fdb25802.png",
+   "dominantColor": "#1a1f36"
+  },
+  "1G Neutronium Heat Capacitor": {
+   "kind": "item",
+   "id": "gregtech:gt.neutroniumheatcapacitor",
+   "displayName": "1G Neutronium Heat Capacitor",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/1g_neutronium_heat_capacitor-26e0d8c726b2.png",
+   "dominantColor": "#c4c4c4"
+  },
+  "30k Coolant Cell": {
+   "kind": "item",
+   "id": "ic2:reactorcoolanttriple@1",
+   "displayName": "30k Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/30k_coolant_cell-25d2b9c0eca5.png",
+   "dominantColor": "#717171"
+  },
+  "360k He Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.360k_helium_coolantcell",
+   "displayName": "360k He Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/360k_he_coolant_cell-d1c7ac2fd604.png",
+   "dominantColor": "#baba00"
+  },
+  "360k NaK Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.360k_nak_coolantcell",
+   "displayName": "360k NaK Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/360k_nak_coolant_cell-f290c748b308.png",
+   "dominantColor": "#42aa79"
+  },
+  "360k Sp Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.360k_space_coolantcell",
+   "displayName": "360k Sp Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/360k_sp_coolant_cell-63fd9412cbcf.png",
+   "dominantColor": "#1d223b"
+  },
+  "540k Sp Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.540k_space_coolantcell",
+   "displayName": "540k Sp Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/540k_sp_coolant_cell-b9f19c958ae8.png",
+   "dominantColor": "#202743"
+  },
+  "60k Coolant Cell": {
+   "kind": "item",
+   "id": "ic2:reactorcoolantsix@1",
+   "displayName": "60k Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/60k_coolant_cell-82145717b4ba.png",
+   "dominantColor": "#4b4b4b"
+  },
+  "60k He Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.60k_helium_coolantcell",
+   "displayName": "60k He Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/60k_he_coolant_cell-4c352f9c8e2d.png",
+   "dominantColor": "#b3b300"
+  },
+  "60k NaK Coolant Cell": {
+   "kind": "item",
+   "id": "gregtech:gt.60k_nak_coolantcell",
+   "displayName": "60k NaK Coolant Cell",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/60k_nak_coolant_cell-de91c3e8c26c.png",
+   "dominantColor": "#3d9e71"
+  },
   "Acetic Acid": {
    "kind": "fluid",
    "id": "aceticacid",
@@ -722,6 +820,146 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dragonblood_plasma-2b2853e78f79.png",
    "dominantColor": "#dc2409"
   },
+  "Dual Fuel Rod (Depleted Excited Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodexcitedplutonium2",
+   "displayName": "Dual Fuel Rod (Depleted Excited Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_excited_plutonium-f73a4254d7c7.png",
+   "dominantColor": "#0d4260"
+  },
+  "Dual Fuel Rod (Depleted Excited Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodexciteduranium2",
+   "displayName": "Dual Fuel Rod (Depleted Excited Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_excited_uranium-68bd08bc6497.png",
+   "dominantColor": "#393939"
+  },
+  "Dual Fuel Rod (Depleted High Density Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodhighdensityplutonium2",
+   "displayName": "Dual Fuel Rod (Depleted High Density Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_high_density_plutonium-f726abe83143.png",
+   "dominantColor": "#653254"
+  },
+  "Dual Fuel Rod (Depleted High Density Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodhighdensityuranium2",
+   "displayName": "Dual Fuel Rod (Depleted High Density Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_high_density_uranium-766105eb6821.png",
+   "dominantColor": "#105343"
+  },
+  "Dual Fuel Rod (Depleted MOX)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodmox2",
+   "displayName": "Dual Fuel Rod (Depleted MOX)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_mox-98d7e6c1c38a.png",
+   "dominantColor": "#393939"
+  },
+  "Dual Fuel Rod (Depleted Naquadah)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodnaquadah2",
+   "displayName": "Dual Fuel Rod (Depleted Naquadah)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_naquadah-603c3a5724e9.png",
+   "dominantColor": "#1c213b"
+  },
+  "Dual Fuel Rod (Depleted Naquadria)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodnaquadria2",
+   "displayName": "Dual Fuel Rod (Depleted Naquadria)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_naquadria-3d202f450c54.png",
+   "dominantColor": "#1c213b"
+  },
+  "Dual Fuel Rod (Depleted Thorium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodthorium2",
+   "displayName": "Dual Fuel Rod (Depleted Thorium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_thorium-94df5b671174.png",
+   "dominantColor": "#373737"
+  },
+  "Dual Fuel Rod (Depleted Tiberium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodtiberium2",
+   "displayName": "Dual Fuel Rod (Depleted Tiberium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_tiberium-9dcab74f6b07.png",
+   "dominantColor": "#1c213b"
+  },
+  "Dual Fuel Rod (Depleted Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedroduranium2",
+   "displayName": "Dual Fuel Rod (Depleted Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_depleted_uranium-65fa8f9a17b1.png",
+   "dominantColor": "#434343"
+  },
+  "Dual Fuel Rod (Excited Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodexcitedplutonium2",
+   "displayName": "Dual Fuel Rod (Excited Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_excited_plutonium-ce3ce3146340.png",
+   "dominantColor": "#5f3232"
+  },
+  "Dual Fuel Rod (Excited Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodexciteduranium2",
+   "displayName": "Dual Fuel Rod (Excited Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_excited_uranium-83259ccba5fa.png",
+   "dominantColor": "#5c7711"
+  },
+  "Dual Fuel Rod (High Density Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodhighdensityplutonium2",
+   "displayName": "Dual Fuel Rod (High Density Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_high_density_plutonium-1dfcc5a67dd3.png",
+   "dominantColor": "#9d3434"
+  },
+  "Dual Fuel Rod (High Density Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodhighdensityuranium2",
+   "displayName": "Dual Fuel Rod (High Density Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_high_density_uranium-ecb01c6807b3.png",
+   "dominantColor": "#279a1a"
+  },
+  "Dual Fuel Rod (MOX)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodmox2",
+   "displayName": "Dual Fuel Rod (MOX)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_mox-624373a80555.png",
+   "dominantColor": "#585858"
+  },
+  "Dual Fuel Rod (Naquadah)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodnaquadah2",
+   "displayName": "Dual Fuel Rod (Naquadah)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_naquadah-68006f3cb84b.png",
+   "dominantColor": "#2c335c"
+  },
+  "Dual Fuel Rod (Naquadria)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodnaquadria2",
+   "displayName": "Dual Fuel Rod (Naquadria)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_naquadria-a1f3728d744a.png",
+   "dominantColor": "#2c335c"
+  },
+  "Dual Fuel Rod (Thorium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodthorium2",
+   "displayName": "Dual Fuel Rod (Thorium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_thorium-9f38feed4158.png",
+   "dominantColor": "#555555"
+  },
+  "Dual Fuel Rod (Tiberium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodtiberium2",
+   "displayName": "Dual Fuel Rod (Tiberium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_tiberium-5f5bea39bb6a.png",
+   "dominantColor": "#2c335c"
+  },
+  "Dual Fuel Rod (Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.roduranium2",
+   "displayName": "Dual Fuel Rod (Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/dual_fuel_rod_uranium-6015880cadee.png",
+   "dominantColor": "#467715"
+  },
   "Dysprosium Plasma": {
    "kind": "fluid",
    "id": "plasma.dysprosium",
@@ -987,6 +1225,146 @@
    "displayName": "Francium Hydroxide Dust",
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/francium_hydroxide_dust-fb3cd7a47e4e.png",
    "dominantColor": "#823621"
+  },
+  "Fuel Rod (Depleted Excited Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodexcitedplutonium",
+   "displayName": "Fuel Rod (Depleted Excited Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_excited_plutonium-57a6d07c4b4c.png",
+   "dominantColor": "#0d4260"
+  },
+  "Fuel Rod (Depleted Excited Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodexciteduranium",
+   "displayName": "Fuel Rod (Depleted Excited Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_excited_uranium-b7e419d08638.png",
+   "dominantColor": "#434343"
+  },
+  "Fuel Rod (Depleted High Density Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodhighdensityplutonium",
+   "displayName": "Fuel Rod (Depleted High Density Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_high_density_plutonium-35c05c0845a8.png",
+   "dominantColor": "#653254"
+  },
+  "Fuel Rod (Depleted High Density Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodhighdensityuranium",
+   "displayName": "Fuel Rod (Depleted High Density Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_high_density_uranium-eca65a4d1096.png",
+   "dominantColor": "#105343"
+  },
+  "Fuel Rod (Depleted MOX)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodmox",
+   "displayName": "Fuel Rod (Depleted MOX)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_mox-562dd415812b.png",
+   "dominantColor": "#383838"
+  },
+  "Fuel Rod (Depleted Naquadah)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodnaquadah",
+   "displayName": "Fuel Rod (Depleted Naquadah)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_naquadah-b6667486322f.png",
+   "dominantColor": "#1c213b"
+  },
+  "Fuel Rod (Depleted Naquadria)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodnaquadria",
+   "displayName": "Fuel Rod (Depleted Naquadria)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_naquadria-ba9e46092b2b.png",
+   "dominantColor": "#1c213b"
+  },
+  "Fuel Rod (Depleted Thorium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodthorium",
+   "displayName": "Fuel Rod (Depleted Thorium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_thorium-6e3cd2da78ec.png",
+   "dominantColor": "#373737"
+  },
+  "Fuel Rod (Depleted Tiberium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodtiberium",
+   "displayName": "Fuel Rod (Depleted Tiberium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_tiberium-6becc04c2064.png",
+   "dominantColor": "#1c213b"
+  },
+  "Fuel Rod (Depleted Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedroduranium",
+   "displayName": "Fuel Rod (Depleted Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_depleted_uranium-31b3d58f1a68.png",
+   "dominantColor": "#304b3e"
+  },
+  "Fuel Rod (Excited Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodexcitedplutonium",
+   "displayName": "Fuel Rod (Excited Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_excited_plutonium-85d02bb994c0.png",
+   "dominantColor": "#5f3131"
+  },
+  "Fuel Rod (Excited Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodexciteduranium",
+   "displayName": "Fuel Rod (Excited Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_excited_uranium-e459c124ca95.png",
+   "dominantColor": "#5c7711"
+  },
+  "Fuel Rod (High Density Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodhighdensityplutonium",
+   "displayName": "Fuel Rod (High Density Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_high_density_plutonium-bb7c1b60e8e0.png",
+   "dominantColor": "#9e3333"
+  },
+  "Fuel Rod (High Density Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodhighdensityuranium",
+   "displayName": "Fuel Rod (High Density Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_high_density_uranium-506b02727ded.png",
+   "dominantColor": "#279a1a"
+  },
+  "Fuel Rod (MOX)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodmox",
+   "displayName": "Fuel Rod (MOX)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_mox-eea756992eae.png",
+   "dominantColor": "#575757"
+  },
+  "Fuel Rod (Naquadah)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodnaquadah",
+   "displayName": "Fuel Rod (Naquadah)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_naquadah-96ca8577432f.png",
+   "dominantColor": "#2c335c"
+  },
+  "Fuel Rod (Naquadria)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodnaquadria",
+   "displayName": "Fuel Rod (Naquadria)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_naquadria-68dd8a3439c1.png",
+   "dominantColor": "#2c335c"
+  },
+  "Fuel Rod (Thorium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodthorium",
+   "displayName": "Fuel Rod (Thorium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_thorium-684e1e765f01.png",
+   "dominantColor": "#555555"
+  },
+  "Fuel Rod (Tiberium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodtiberium",
+   "displayName": "Fuel Rod (Tiberium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_tiberium-fa1525f31a3e.png",
+   "dominantColor": "#2c335c"
+  },
+  "Fuel Rod (Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.roduranium",
+   "displayName": "Fuel Rod (Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/fuel_rod_uranium-5487a64a8110.png",
+   "dominantColor": "#467715"
   },
   "Gadolinium Plasma": {
    "kind": "fluid",
@@ -2927,6 +3305,13 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/pyrotheum_dust-b55a688bab36.png",
    "dominantColor": "#dabc33"
   },
+  "Quad Fuel Rod (Depleted Excited Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodexcitedplutonium4",
+   "displayName": "Quad Fuel Rod (Depleted Excited Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_excited_plutonium-e48326f10c5f.png",
+   "dominantColor": "#0e4361"
+  },
   "Quad Fuel Rod (Depleted Excited Uranium)": {
    "kind": "item",
    "id": "gregtech:gt.depletedrodexciteduranium4",
@@ -2941,12 +3326,33 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_high_density_plutonium-298554da5b45.png",
    "dominantColor": "#613051"
   },
+  "Quad Fuel Rod (Depleted High Density Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodhighdensityuranium4",
+   "displayName": "Quad Fuel Rod (Depleted High Density Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_high_density_uranium-a0902847d863.png",
+   "dominantColor": "#115445"
+  },
   "Quad Fuel Rod (Depleted MOX)": {
    "kind": "item",
    "id": "gregtech:gt.depletedrodmox4",
    "displayName": "Quad Fuel Rod (Depleted MOX)",
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_mox-7dd9cfd2b9b1.png",
    "dominantColor": "#333333"
+  },
+  "Quad Fuel Rod (Depleted Naquadah)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodnaquadah4",
+   "displayName": "Quad Fuel Rod (Depleted Naquadah)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_naquadah-404819fd85d8.png",
+   "dominantColor": "#191d35"
+  },
+  "Quad Fuel Rod (Depleted Naquadria)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodnaquadria4",
+   "displayName": "Quad Fuel Rod (Depleted Naquadria)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_naquadria-33f121ccb929.png",
+   "dominantColor": "#191d35"
   },
   "Quad Fuel Rod (Depleted Thorium)": {
    "kind": "item",
@@ -2955,12 +3361,26 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_thorium-60d1725a33df.png",
    "dominantColor": "#323232"
   },
+  "Quad Fuel Rod (Depleted Tiberium)": {
+   "kind": "item",
+   "id": "gregtech:gt.depletedrodtiberium4",
+   "displayName": "Quad Fuel Rod (Depleted Tiberium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_tiberium-c8cb2590de26.png",
+   "dominantColor": "#191d35"
+  },
   "Quad Fuel Rod (Depleted Uranium)": {
    "kind": "item",
    "id": "gregtech:gt.depletedroduranium4",
    "displayName": "Quad Fuel Rod (Depleted Uranium)",
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_depleted_uranium-3fb150a05608.png",
    "dominantColor": "#3c3c3c"
+  },
+  "Quad Fuel Rod (Excited Plutonium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodexcitedplutonium4",
+   "displayName": "Quad Fuel Rod (Excited Plutonium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_excited_plutonium-91f7cbcf5f5c.png",
+   "dominantColor": "#5e2f2f"
   },
   "Quad Fuel Rod (Excited Uranium)": {
    "kind": "item",
@@ -2976,6 +3396,13 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_high_density_plutonium-bb2cce03bad8.png",
    "dominantColor": "#953232"
   },
+  "Quad Fuel Rod (High Density Uranium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodhighdensityuranium4",
+   "displayName": "Quad Fuel Rod (High Density Uranium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_high_density_uranium-4a414b0fbffd.png",
+   "dominantColor": "#279b1a"
+  },
   "Quad Fuel Rod (MOX)": {
    "kind": "item",
    "id": "gregtech:gt.rodmox4",
@@ -2983,12 +3410,33 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_mox-e6d081ee2242.png",
    "dominantColor": "#505050"
   },
+  "Quad Fuel Rod (Naquadah)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodnaquadah4",
+   "displayName": "Quad Fuel Rod (Naquadah)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_naquadah-3a82fc498b06.png",
+   "dominantColor": "#272d52"
+  },
+  "Quad Fuel Rod (Naquadria)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodnaquadria4",
+   "displayName": "Quad Fuel Rod (Naquadria)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_naquadria-d1094192b02c.png",
+   "dominantColor": "#272d52"
+  },
   "Quad Fuel Rod (Thorium)": {
    "kind": "item",
    "id": "gregtech:gt.rodthorium4",
    "displayName": "Quad Fuel Rod (Thorium)",
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_thorium-d91417a4f68e.png",
    "dominantColor": "#4e4e4e"
+  },
+  "Quad Fuel Rod (Tiberium)": {
+   "kind": "item",
+   "id": "gregtech:gt.rodtiberium4",
+   "displayName": "Quad Fuel Rod (Tiberium)",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/quad_fuel_rod_tiberium-56bd460169d4.png",
+   "dominantColor": "#272d52"
   },
   "Quad Fuel Rod (Uranium)": {
    "kind": "item",

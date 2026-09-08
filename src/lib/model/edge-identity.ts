@@ -1,3 +1,4 @@
+import { sectionHandleId, splitSectionHandleId } from "./shared-machine";
 import type { FactoryEdge } from "./types";
 
 /**
@@ -15,7 +16,11 @@ export function canonicalizeResourceHandleId(handleId?: string | null): string |
     return undefined;
   }
 
-  const [side, kind, encodedResourceId] = handleId.split(":");
+  // A shared machine's section prefix (`r2:`) is part of the port's identity
+  // - two sections may well carry the same resource - so it is kept and only
+  // the handle behind it is collapsed.
+  const { section, handleId: bare } = splitSectionHandleId(handleId);
+  const [side, kind, encodedResourceId] = (bare ?? "").split(":");
   if (
     (side !== "input" && side !== "output") ||
     (kind !== "item" && kind !== "fluid") ||
@@ -24,7 +29,7 @@ export function canonicalizeResourceHandleId(handleId?: string | null): string |
     return handleId;
   }
 
-  return `${side}:${kind}:${encodedResourceId}`;
+  return sectionHandleId(section, `${side}:${kind}:${encodedResourceId}`);
 }
 
 /**

@@ -12,12 +12,21 @@
  */
 export const OPEN_SIDEBAR_TAB_EVENT = "gtnh:open-sidebar-tab";
 
-export type SidebarTab = "items" | "blueprints" | "setups";
+/** Only Items is left in the column; Boards and Setups moved to the library. */
+export type SidebarTab = "items";
 
 let pendingTab: SidebarTab | undefined;
+let pendingFocusSearch = false;
 
-export function openSidebarTab(tab: SidebarTab): void {
+/**
+ * `focusSearch` also puts the cursor in the Items tab's search box. The
+ * Welcome page's "Find a recipe" asks for that: with the column already
+ * open on Items, opening it again is invisible, and a blinking cursor in the
+ * search field is the answer the click deserves.
+ */
+export function openSidebarTab(tab: SidebarTab, options: { focusSearch?: boolean } = {}): void {
   pendingTab = tab;
+  pendingFocusSearch = Boolean(options.focusSearch) && tab === "items";
   window.dispatchEvent(new Event(OPEN_SIDEBAR_TAB_EVENT));
 }
 
@@ -26,4 +35,11 @@ export function takePendingSidebarTab(): SidebarTab | undefined {
   const tab = pendingTab;
   pendingTab = undefined;
   return tab;
+}
+
+/** One-shot read of whether that request wanted the search box focused. */
+export function takePendingSearchFocus(): boolean {
+  const focus = pendingFocusSearch;
+  pendingFocusSearch = false;
+  return focus;
 }

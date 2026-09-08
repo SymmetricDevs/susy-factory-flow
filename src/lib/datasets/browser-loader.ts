@@ -1,6 +1,7 @@
 "use client";
 
-import type { MachineTier, Recipe, RecipeOutput, ResourceAmount } from "@/lib/model/types";
+import type { MachineTier, Recipe, ResourceAmount } from "@/lib/model/types";
+import type { RecipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import { APP_VERSION } from "@/lib/version";
 import {
   serializeRecipeQueryClause,
@@ -81,19 +82,14 @@ export interface RecipeDatasetResourceQueryResult {
   corrections?: SearchCorrection[];
 }
 
-export interface RecipeDatasetResolveRef {
-  id: string;
-  name: string;
-  machineType: string;
-  recipeMap?: string;
-  rawRecipeId?: string;
-  outputs: Array<Pick<RecipeOutput, "kind" | "id">>;
-}
+export type RecipeDatasetResolveRef = RecipeContentRef;
 
 export interface RecipeDatasetResolveResult {
   matches: Array<{
     importedId: string;
     recipeId: string;
+    /** The same slots, amounts, ticks and EU under a new id. */
+    exact: boolean;
   }>;
 }
 

@@ -45,8 +45,66 @@ const SYNC_SOLVE_LIMIT = 220;
  */
 const SLOW_SOLVE_MS = 150;
 const CROSS_FORM_SYNC_LIMIT = 100;
+/**
+ * SOLVE MODE is a different animal on the homegrown simplex: its LP is
+ * six dense solves over every machine and wire at once, and pool mode
+ * (which rides on solve mode) adds a pool drawer per resource on top.
+ * Measured on a 102-card community plan (2026-09-05): plan mode 7s, solve
+ * mode 43s, solve plus pool 128s on the simplex - and 0.3s, 44ms and 46ms
+ * on HiGHS, which only the worker loads. Nothing that size may run here.
+ * Forty nodes-plus-wires is a handful of machines; past it the tab would
+ * freeze for as long as the first slow solve took to teach the rule below.
+ */
+const SOLVE_MODE_SYNC_LIMIT = 40;
 
 let lastSolveDurationMs: number | undefined;
+
+/**
+ * AUTO RECALCULATION (Jack, 2026-09-07). On by default: every edit solves,
+ * as it always has. Off, the store's door hands the last books back flagged
+ * `held` and remembers nothing else - the project in the store IS the
+ * pending plan - until `solveBooksNow` is asked for. A browser preference,
+ * never part of the plan, for players whose boards make every edit a wait.
+ */
+const AUTO_SOLVE_KEY = "gtnh-factory-flow.auto-solve.v1";
+let autoSolve = readAutoSolve();
+const autoSolveListeners = new Set<() => void>();
+
+function readAutoSolve(): boolean {
+  try {
+    return typeof localStorage === "undefined" || localStorage.getItem(AUTO_SOLVE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function getAutoSolve(): boolean {
+  return autoSolve;
+}
+
+export function setAutoSolve(on: boolean): void {
+  autoSolve = on;
+  try {
+    localStorage.setItem(AUTO_SOLVE_KEY, on ? "on" : "off");
+  } catch {
+    // A private window that refuses storage still gets the session's setting.
+  }
+  for (const listener of autoSolveListeners) {
+    listener();
+  }
+}
+
+export function subscribeAutoSolve(listener: () => void): () => void {
+  autoSolveListeners.add(listener);
+  return () => {
+    autoSolveListeners.delete(listener);
+  };
+}
+
+/** The solve the player asked for by hand: the gate does not apply. */
+export function solveBooksNow(project: FactoryProject): ThroughputResult {
+  return solveBooksUngated(project);
+}
 
 const BIG_BOOKS_CACHE_LIMIT = 8;
 const bigBooksCache = new Map<string, ThroughputResult>();
@@ -72,11 +130,22 @@ export function registerBooksSink(apply: (result: ThroughputResult) => void) {
 }
 
 export function solveBooks(project: FactoryProject): ThroughputResult {
+  if (!autoSolve && lastBooks) {
+    // Held, not thinking: the old books stand until the player presses solve.
+    const held: ThroughputResult = { ...lastBooks, stale: true, held: true };
+    lastBooks = held;
+    return held;
+  }
+  return solveBooksUngated(project);
+}
+
+function solveBooksUngated(project: FactoryProject): ThroughputResult {
   const size = project.nodes.length + project.edges.length;
   const expectSlow =
     size > SYNC_SOLVE_LIMIT ||
     (lastSolveDurationMs !== undefined && lastSolveDurationMs > SLOW_SOLVE_MS) ||
-    (size > CROSS_FORM_SYNC_LIMIT && project.edges.some((edge) => edge.crossForm));
+    (size > CROSS_FORM_SYNC_LIMIT && project.edges.some((edge) => edge.crossForm)) ||
+    ((project.solveMode === true || project.poolMode === true) && size > SOLVE_MODE_SYNC_LIMIT);
   if (!expectSlow || !workerAvailable()) {
     const started = performance.now();
     const result = calculateThroughput(project);

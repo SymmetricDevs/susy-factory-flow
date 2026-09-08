@@ -1,6 +1,9 @@
 import type { FactoryProject, ThroughputResult } from "@/lib/model/types";
 import { makeResourceKey } from "@/lib/model";
 import { DEAD_RING_EPSILON, stronglyConnectedComponents } from "@/lib/solver/equilibrium";
+import { getSetupRules } from "@/lib/model/setup-rules";
+import { getPoolProject } from "@/lib/solver/pool-mode";
+import { findBareSlots } from "./bare-slots";
 
 /**
  * Death spirals: rings of machines that feed each other and cannot start.
@@ -100,6 +103,8 @@ export function findDeathSpirals(
   project: FactoryProject,
   result: ThroughputResult | undefined,
 ): DeathSpiralIndex {
+  // Pool mode: the graph the solve ran on, pools and all.
+  project = getPoolProject(project);
   const cached = cache.get(project);
   if (cached && cached.result === result) {
     return cached.index;
@@ -119,6 +124,13 @@ export function findDeathSpirals(
   const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
   const nodeById = new Map(project.nodes.map((node) => [node.id, node]));
   const recipeById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
+  const rules = getSetupRules(project);
+  const incomingBy = new Map<string, FactoryProject["edges"]>();
+  const outgoingBy = new Map<string, FactoryProject["edges"]>();
+  for (const edge of project.edges) {
+    incomingBy.set(edge.target, [...(incomingBy.get(edge.target) ?? []), edge]);
+    outgoingBy.set(edge.source, [...(outgoingBy.get(edge.source) ?? []), edge]);
+  }
 
   // Buffers ride in the graph as pass-through hops, so a ring that runs A ->
   // tank -> B -> A is still found. A hand-stocked tank has no inbound line at
@@ -168,6 +180,28 @@ export function findDeathSpirals(
     // spiral, and a ring containing one has an obvious explanation already.
     const anyDisabled = machineIds.some((id) => nodeById.get(id)?.enabled === false);
     if (anyDisabled) {
+      continue;
+    }
+    // The same goes for a member stopped by its own unfinished setup: no
+    // power for its hatches, or a slot with no wire on it yet. Its card
+    // already says so, and the ring only reads dead because that one card
+    // pins it - "feed the loop" would send the player priming a ring whose
+    // real problem is a wire they have not drawn yet. Unwiring one slot on
+    // a working ring must not turn the whole ring blue.
+    const anyUnfinished = machineIds.some((id) => {
+      const nodeResult = result.nodes[id];
+      if (!nodeResult) {
+        return false;
+      }
+      if (nodeResult.powerStalled) {
+        return true;
+      }
+      return (
+        findBareSlots(nodeResult, incomingBy.get(id) ?? [], outgoingBy.get(id) ?? [], rules) !==
+        undefined
+      );
+    });
+    if (anyUnfinished) {
       continue;
     }
 

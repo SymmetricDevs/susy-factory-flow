@@ -11,13 +11,20 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { isTouchPointer } from "@/lib/pointer-kind";
+import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
 /**
- * Marks an element that turns the wheel into its own state change rather than
- * scrolling: it stays put, so a tooltip over it stays too.
+ * What is under the pointer once a wheel or scroll has settled, or undefined
+ * where the document cannot say (jsdom has no elementFromPoint).
  */
-export const WHEEL_STEPS_IN_PLACE_ATTRIBUTE = "data-tooltip-wheel-steps";
+export function elementUnderPointer(x: number, y: number): Element | null | undefined {
+  if (typeof document.elementFromPoint !== "function") {
+    return undefined;
+  }
+  return document.elementFromPoint(x, y);
+}
 
 
 export function MinecraftTooltip({
@@ -73,9 +80,13 @@ export function MinecraftTooltip({
     (pointerX: number, pointerY: number) => {
       const panelWidth = panelRef.current?.offsetWidth ?? (hasContent ? 340 : 320);
       const panelHeight = panelRef.current?.offsetHeight ?? (hasContent ? 240 : 80);
+      // Shell pixels throughout: the panel is a body portal wearing .ui-zoom,
+      // so its left/top and offset size are shell pixels, and the pointer and
+      // window (real pixels) are divided by the interface scale (ui-scale.ts).
+      const scale = getUiScale();
       return {
-        x: Math.max(4, Math.min(pointerX + 12, window.innerWidth - panelWidth - 8)),
-        y: Math.max(4, Math.min(pointerY + 12, window.innerHeight - panelHeight - 8)),
+        x: Math.max(4, Math.min(pointerX / scale + 12, window.innerWidth / scale - panelWidth - 8)),
+        y: Math.max(4, Math.min(pointerY / scale + 12, window.innerHeight / scale - panelHeight - 8)),
       };
     },
     [hasContent],
@@ -163,10 +174,14 @@ export function MinecraftTooltip({
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = undefined;
     }
-    if (position !== undefined) {
-      setPosition(undefined);
-    }
-  }, [position]);
+    // A functional update, never a closure check: the tip opens on an
+    // animation frame, and a fast pointer has often LEFT before React has
+    // re-rendered with the open position. The leave handler that fires then
+    // still holds the closed state, and guarding on it skipped the hide -
+    // the panel committed open with nobody left to close it, and a quick
+    // sweep across a board left hundreds standing until the next click.
+    setPosition((current) => (current === undefined ? current : undefined));
+  }, []);
 
   useEffect(() => {
     if (!position) {
@@ -191,31 +206,46 @@ export function MinecraftTooltip({
       }
       clearTooltip();
     };
-    // A wheel normally scrolls the thing out from under the pointer, so the tip
-    // has to go with it. A slot that rotates through what it accepts is the
-    // exception: it EATS the wheel to step through its items and never moves, so
-    // clearing there made the tip blink out on every notch, exactly while you
-    // were reading which item you had landed on. Marked slots keep theirs, and
-    // it re-labels itself as the slot steps.
-    const clearOnWheel = (event: Event) => {
-      const target = event.target as HTMLElement | null;
-      if (
-        target?.closest?.(`[${WHEEL_STEPS_IN_PLACE_ATTRIBUTE}]`) &&
-        rootRef.current?.contains(target)
-      ) {
+    // A wheel or scroll NEVER clears a tooltip by itself (Jack, 2026-09-07):
+    // zooming the board keeps the card under the pointer, a slot that eats
+    // the wheel to step through its items never moves, a setting tile steps
+    // its count in place - and in every one of those the tip blinking out
+    // read as broken. So the question is asked a frame later, once the
+    // page has settled: is the hovered thing STILL under the pointer? It
+    // stays while the answer is yes and goes only when something else has
+    // scrolled in. Where the document cannot answer, the tip stays.
+    let settleFrame: number | undefined;
+    const recheckAfterScroll = () => {
+      if (settleFrame !== undefined) {
         return;
       }
-      clearTooltip();
+      settleFrame = window.requestAnimationFrame(() => {
+        settleFrame = undefined;
+        const pointer = pointerRef.current;
+        if (!pointer) {
+          return;
+        }
+        const under = elementUnderPointer(pointer.x, pointer.y);
+        if (under === undefined || (under && rootRef.current?.contains(under))) {
+          return;
+        }
+        clearTooltip();
+      });
     };
     const options = { capture: true, passive: true } as const;
 
-    window.addEventListener("wheel", clearOnWheel, options);
+    window.addEventListener("wheel", recheckAfterScroll, options);
+    window.addEventListener("scroll", recheckAfterScroll, options);
     window.addEventListener("pointerdown", clearOnPointerDown, options);
     window.addEventListener("pointercancel", clearOnInteraction, options);
     window.addEventListener("resize", clearOnInteraction, options);
     window.addEventListener("blur", clearOnWindowBlur, options);
     return () => {
-      window.removeEventListener("wheel", clearOnWheel, options);
+      if (settleFrame !== undefined) {
+        window.cancelAnimationFrame(settleFrame);
+      }
+      window.removeEventListener("wheel", recheckAfterScroll, options);
+      window.removeEventListener("scroll", recheckAfterScroll, options);
       window.removeEventListener("pointerdown", clearOnPointerDown, options);
       window.removeEventListener("pointercancel", clearOnInteraction, options);
       window.removeEventListener("resize", clearOnInteraction, options);
@@ -239,7 +269,7 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip="true"
-                className="pointer-events-none fixed z-[9999] max-w-[640px] border-2 border-[#2a005f] bg-[#100010] px-3 py-2.5 text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)]"
+                className={`${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
                 style={{ left: position.x, top: position.y }}
               >
                 {typeof content === "function" ? content() : content}
@@ -255,13 +285,13 @@ export function MinecraftTooltip({
                 // of its own. Asking for max-content makes the panel state its
                 // real width; the pointer clamp above reads that width back and
                 // walks it inside the edge.
-                className="pointer-events-none fixed z-[9999] w-max max-w-[420px] border-2 border-[#2a005f] bg-[#100010] px-2 py-1 font-mono text-[16px] leading-[19px] text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)] [text-shadow:2px_2px_0_#3f3f3f]"
+                className={`${TOOLTIP_PANEL_CLASS} ui-zoom w-max max-w-[420px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
                 style={{ left: position.x, top: position.y }}
               >
                 {lines.map((line, index) => (
                   <div
                     key={`${line}-${index}`}
-                    className={index === 0 ? "text-white" : "text-[#aaaaff]"}
+                    className={index === 0 ? "text-fg" : "text-fg-subtle"}
                   >
                     {line}
                   </div>

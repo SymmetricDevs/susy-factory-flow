@@ -49,6 +49,8 @@ import {
   selectRuntimeCalculationVariant,
 } from "./runtime-calculation";
 import { closeBoundaries } from "./close-boundaries";
+import { expandSharedMachines } from "../model/shared-machine";
+import { expandPool } from "./pool-mode";
 import { getSetupRules } from "../model/setup-rules";
 import { solveEquationsCore } from "./equations-core";
 import { solveSolveMode } from "./solve-mode";
@@ -78,7 +80,21 @@ export function calculateThroughput(
   // spends a free source only after every real wire (its recycle-before-
   // importing stage), so nothing the player drew is bypassed.
   const rules = getSetupRules(project);
-  if (rules.freeInputs || rules.freeOutputs) {
+  // SHARED MACHINES (shared-machine.ts): a card running several recipes is
+  // solved as one hidden node per recipe, coupled by one time row in the
+  // books. The sections stay in the result under their own ids so the card
+  // can read each of them back. Expanded first so the pool sees them.
+  project = expandSharedMachines(project);
+  // POOL MODE (pool-mode.ts) replaces the boundary rules: every output
+  // already has somewhere to go (its pool) and every input is fed from
+  // the pool or stays honestly short. The hidden pool drawers and wires
+  // stay in the result so the cards' rails can read the pool's answer.
+  let poolTankIds: string[] = [];
+  if (project.poolMode) {
+    const pool = expandPool(project);
+    project = pool.project;
+    poolTankIds = pool.hiddenNodeIds;
+  } else if (rules.freeInputs || rules.freeOutputs) {
     project = closeBoundaries(project, {
       inputs: rules.freeInputs ? "all" : "none",
       outputs: rules.freeOutputs ? "all" : "none",
@@ -88,9 +104,15 @@ export function calculateThroughput(
   // on the board carries nothing (its far end reads NO SUPPLY), and the
   // board raises a notice naming it. Anything else would let a disabled
   // rule keep converting.
-  const crossForm = rules.looseCellWires
+  const crossFormEdges = rules.looseCellWires
     ? expandCrossFormEdges(project)
     : { project, hiddenNodeIds: [], hiddenEdgeIds: [] };
+  // The pool's cell-fluid tanks are hidden helpers exactly like the loose
+  // wires' tanks: weightless to solve mode, and struck from the result.
+  const crossForm = {
+    ...crossFormEdges,
+    hiddenNodeIds: [...crossFormEdges.hiddenNodeIds, ...poolTankIds],
+  };
   project = crossForm.project;
   const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
   const nodes: Record<string, NodeThroughputResult> = {};

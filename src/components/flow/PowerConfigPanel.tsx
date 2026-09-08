@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { MinecraftSelect } from "./MinecraftSelect";
 import { getPowerSource } from "@/lib/power/registry";
 import type {
   PowerNumberSetting,
@@ -9,15 +8,15 @@ import type {
   PowerSourceDefinition,
 } from "@/lib/power/types";
 import { useFactoryStore } from "@/store/factory-store";
-
-/** How many options a select can carry before it grows a filter box. */
-const SEARCHABLE_FROM = 12;
+import { RecipeTooltip } from "./RecipeTooltip";
+import { FactTile, SettingListMenu, SettingSelectTile, SettingTile, STEPPER_MAX_RUNGS } from "./SettingTile";
 
 /**
- * The knobs on a power card: the source definition's settings rendered on
- * the same tiles machine config controls use, but writing through
- * setPowerSetting so the card's owned recipe follows every change. Below
- * the knobs: the model's stat lines (efficiency, optimal flow, lifespans)
+ * The knobs on a power card: the source definition's settings on the same
+ * tiles every machine's settings use (SettingTile), writing through
+ * setPowerSetting so the card's owned recipe follows every change. A
+ * select is a ladder, a number a count, a boolean a two-rung ladder. Below
+ * the tiles: the model's stat lines (efficiency, optimal flow, lifespans)
  * and any warning the current settings earn.
  */
 export function PowerConfigPanel({
@@ -43,8 +42,8 @@ export function PowerConfigPanel({
     condition === undefined || settingValue(source, values, condition.settingId) === condition.equals;
 
   return (
-    <div className="min-w-0 border-t border-[var(--mc-56)] py-1.5">
-      <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-x-2 gap-y-1.5">
+    <div className="min-w-0 py-1">
+      <div className="grid min-w-0 grid-cols-2 gap-1">
         {source.settings.map((setting) => {
           // The tier ladder lives on the header chip, like every machine's.
           if (setting.id === "tier") {
@@ -58,28 +57,19 @@ export function PowerConfigPanel({
                 ? values[setting.id]
                 : setting.defaultKey;
             return (
-              <label
+              <PowerSelectTile
                 key={setting.id}
-                className={["flex min-w-0 flex-col gap-0.5", enabled ? "" : "opacity-40"].join(" ")}
-              >
-                <span className="truncate text-[10px] uppercase tracking-wide text-[var(--mc-ink-muted)]">
-                  {setting.label}
-                </span>
-                <MinecraftSelect
-                  value={value}
-                  options={setting.options}
-                  onSelect={(key) => setPowerSetting(nodeId, setting.id, key)}
-                  ariaLabel={setting.label}
-                  disabled={!enabled || setting.options.length <= 1}
-                  searchable={setting.options.length >= SEARCHABLE_FROM}
-                  wideMenu={setting.options.length >= SEARCHABLE_FROM}
-                />
-              </label>
+                caption={setting.label}
+                options={setting.options}
+                value={value}
+                enabled={enabled}
+                onPick={(key) => setPowerSetting(nodeId, setting.id, key)}
+              />
             );
           }
           if (setting.type === "number") {
             return (
-              <PowerNumberField
+              <PowerNumberTile
                 key={setting.id}
                 setting={setting}
                 value={values?.[setting.id]}
@@ -90,50 +80,90 @@ export function PowerConfigPanel({
           }
           const on = values?.[setting.id] === undefined ? setting.defaultOn : values[setting.id] === "1";
           return (
-            <label
+            <SettingTile
               key={setting.id}
-              className={["flex min-w-0 flex-col gap-0.5", enabled ? "" : "opacity-40"].join(" ")}
-            >
-              <span className="truncate text-[10px] uppercase tracking-wide text-[var(--mc-ink-muted)]">
-                {setting.label}
-              </span>
-              <button
-                type="button"
-                disabled={!enabled}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setPowerSetting(nodeId, setting.id, on ? "0" : "1");
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-                className={[
-                  "nodrag h-6 border px-1.5 text-left text-[12px] disabled:cursor-not-allowed",
-                  on
-                    ? "border-amber-300/70 bg-[var(--mc-85)] text-amber-200"
-                    : "border-[var(--mc-33)] bg-[var(--mc-71)] text-[var(--mc-ink-muted)]",
-                ].join(" ")}
-                title={setting.label}
-              >
-                {on ? "On" : "Off"}
-              </button>
-            </label>
+              caption={setting.label}
+              value={on ? "On" : "Off"}
+              canStepDown={on}
+              canStepUp={!on}
+              onStep={(direction) => setPowerSetting(nodeId, setting.id, direction > 0 ? "1" : "0")}
+              disabled={!enabled}
+              help={() => <RecipeTooltip view={{ title: setting.label, rows: [{ label: "State", value: on ? "On" : "Off" }] }} />}
+            />
           );
         })}
+        {/* The model's readings (efficiency, optimal flow, lifespans) as fact
+            tiles after the settings, in the same grid. */}
+        {stats.map((line) => (
+          <FactTile key={line.label} caption={line.label} value={line.value} />
+        ))}
       </div>
-      {stats.length > 0 ? (
-        <div className="mt-1.5 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
-          {stats.map((line) => (
-            <span key={line.label} className="whitespace-nowrap text-[10px] text-[var(--mc-ink-muted)]">
-              {line.label}: <span className="text-[var(--mc-ink)]">{line.value}</span>
-            </span>
-          ))}
-        </div>
-      ) : null}
       {warnings?.map((warning) => (
         <p key={warning} className="mt-1 text-[11px] leading-tight text-amber-300">
           {warning}
         </p>
       ))}
     </div>
+  );
+}
+
+/** A select as a ladder tile: minus and plus walk the options, right click lists them. */
+function PowerSelectTile({
+  caption,
+  options,
+  value,
+  enabled,
+  onPick,
+}: {
+  caption: string;
+  options: Array<{ key: string; label: string }>;
+  value: string;
+  enabled: boolean;
+  onPick: (key: string) => void;
+}) {
+  const [listAt, setListAt] = useState<DOMRect | undefined>();
+  const index = Math.max(0, options.findIndex((option) => option.key === value));
+  const current = options[index];
+  if (options.length > STEPPER_MAX_RUNGS) {
+    return (
+      <SettingSelectTile
+        caption={caption}
+        rows={options}
+        currentKey={value}
+        onPick={onPick}
+        disabled={!enabled}
+        help={() => <RecipeTooltip view={{ title: caption, rows: [{ label: "Selected", value: current?.label ?? value }] }} />}
+      />
+    );
+  }
+  return (
+    <>
+      <SettingTile
+        caption={caption}
+        value={current?.label ?? value}
+        canStepDown={index > 0}
+        canStepUp={index < options.length - 1}
+        onStep={(direction) => {
+          const next = options[Math.max(0, Math.min(options.length - 1, index + direction))];
+          if (next && next.key !== value) onPick(next.key);
+        }}
+        onList={options.length > 2 ? setListAt : undefined}
+        disabled={!enabled || options.length <= 1}
+        help={() => <RecipeTooltip view={{ title: caption, rows: [{ label: "Selected", value: current?.label ?? value }] }} />}
+      />
+      {listAt ? (
+        <SettingListMenu
+          anchor={listAt}
+          rows={options}
+          currentKey={value}
+          onPick={(key) => {
+            setListAt(undefined);
+            onPick(key);
+          }}
+          onClose={() => setListAt(undefined)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -159,8 +189,12 @@ function settingValue(
   return raw ?? String(setting.defaultValue);
 }
 
-/** Commits on blur or Enter; the draft is local so typing never re-solves. */
-function PowerNumberField({
+/**
+ * A number as a count tile: minus and plus step it, the wheel steps it, a
+ * click on the well types it. Commits on blur or Enter; the draft is local
+ * so typing never re-solves.
+ */
+function PowerNumberTile({
   setting,
   value,
   enabled,
@@ -171,44 +205,61 @@ function PowerNumberField({
   enabled: boolean;
   onCommit: (next: string) => void;
 }) {
-  const shown = value ?? String(setting.defaultValue);
-  const [draft, setDraft] = useState<{ shown: string; draft: string }>({ shown, draft: shown });
-  if (draft.shown !== shown) {
-    setDraft({ shown, draft: shown });
-  }
-
-  const commit = () => {
-    const parsed = Number.parseFloat(draft.draft.replace(/,/g, "").trim());
-    if (!Number.isFinite(parsed)) {
-      setDraft({ shown, draft: shown });
-      return;
-    }
-    const clamped = Math.min(setting.max, Math.max(setting.min, parsed));
-    onCommit(String(clamped));
+  const shown = Number.parseFloat(value ?? String(setting.defaultValue));
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+  const clamp = (n: number) => Math.min(setting.max, Math.max(setting.min, n));
+  const commit = (text: string) => {
+    setDraft(undefined);
+    const parsed = Number.parseFloat(text.replace(/,/g, "").trim());
+    if (Number.isFinite(parsed)) onCommit(String(clamp(parsed)));
   };
-
+  if (draft !== undefined) {
+    return (
+      <div className="nodrag nowheel min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 pb-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
+        <div className="truncate text-[11px] uppercase leading-[13px] text-[var(--mc-ink-muted)]">
+          {setting.label}
+          {setting.unit ? ` (${setting.unit})` : ""}
+        </div>
+        <input
+          autoFocus
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => commit(draft)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit(draft);
+            if (event.key === "Escape") setDraft(undefined);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          inputMode="decimal"
+          aria-label={setting.label}
+          className="h-5 w-full min-w-0 border border-[var(--mc-47)] bg-[var(--mc-93)] px-1 text-center text-[11px] leading-[18px] text-[var(--mc-ink)] outline-none"
+        />
+      </div>
+    );
+  }
+  const unit = setting.unit ? ` ${setting.unit}` : "";
   return (
-    <label className={["flex min-w-0 flex-col gap-0.5", enabled ? "" : "opacity-40"].join(" ")}>
-      <span className="truncate text-[10px] uppercase tracking-wide text-[var(--mc-ink-muted)]">
-        {setting.label}
-        {setting.unit ? ` (${setting.unit})` : ""}
-      </span>
-      <input
-        value={draft.draft}
-        disabled={!enabled}
-        onChange={(event) => setDraft({ shown, draft: event.target.value })}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            (event.target as HTMLInputElement).blur();
-          }
-        }}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-        inputMode="decimal"
-        aria-label={setting.label}
-        className="nodrag h-6 min-w-0 border border-[var(--mc-33)] bg-[var(--mc-93)] px-1 text-right text-[13px] text-[var(--mc-ink)] disabled:cursor-not-allowed"
-      />
-    </label>
+    <SettingTile
+      caption={setting.label}
+      value={`${shown.toLocaleString("en-US", { maximumFractionDigits: 2 })}${unit}`}
+      canStepDown={shown > setting.min}
+      canStepUp={shown < setting.max}
+      onStep={(direction) => onCommit(String(clamp(shown + direction * setting.step)))}
+      onType={() => setDraft(String(shown))}
+      disabled={!enabled}
+      help={() => (
+        <RecipeTooltip
+          view={{
+            title: setting.label,
+            rows: [
+              { label: "Value", value: `${shown.toLocaleString("en-US")}${unit}` },
+              { label: "Range", value: `${setting.min.toLocaleString("en-US")} to ${setting.max.toLocaleString("en-US")}${unit}` },
+            ],
+            actions: [{ gesture: "left", label: "Type a value" }, { gesture: "wheel", label: "Step" }],
+          }}
+        />
+      )}
+    />
   );
 }

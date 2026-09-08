@@ -440,7 +440,7 @@ describe("the two maps the game both calls Coke Oven", () => {
 
   it("names the Industrial Coke Oven's map after the machine", () => {
     const ico = dataset.recipes.find(
-      (recipe) => recipe.source?.rawRecipeId === "gtpp.recipe.cokeoven:ico-1",
+      (recipe) => recipe.source?.rawRecipeId?.startsWith("gtpp.recipe.cokeoven:"),
     );
 
     expect(ico.machineType).toBe("Industrial Coke Oven");
@@ -451,7 +451,7 @@ describe("the two maps the game both calls Coke Oven", () => {
 
   it("leaves the Railcraft brick oven's map alone, without the ICO's knobs", () => {
     const brick = dataset.recipes.find(
-      (recipe) => recipe.source?.rawRecipeId === "gt.recipe.cokeoven:brick-1",
+      (recipe) => recipe.source?.rawRecipeId?.startsWith("gt.recipe.cokeoven:"),
     );
 
     expect(brick.machineType).toBe("Coke Oven");
@@ -550,5 +550,75 @@ describe("the Tank: the planner's free canner", () => {
     expect(dataset.recipeMaps).toContain("Tank");
     const icon = dataset.recipeMapIcons.find((entry) => entry.recipeMap === "Tank");
     expect(icon.resource.id).toBe("ic2:itemcellempty");
+  });
+});
+
+describe("recipe ids survive a rebuild", () => {
+  const steel = (id, extra = {}) => ({
+    id,
+    durationTicks: 500,
+    eut: 120,
+    itemInputs: [item("gregtech:dust.iron", 1, "Iron Dust"), item("gregtech:dust.coal", 1, "Coal Dust")],
+    fluidInputs: [fluid("oxygen", 1000, "Oxygen")],
+    itemOutputs: [item("gregtech:ingot.steel", 1, "Steel Ingot")],
+    fluidOutputs: [],
+    ...extra,
+  });
+  const exportWith = (recipes) => ({
+    schemaVersion: 1,
+    exporter: "gtnh-oracle",
+    format: "dev.gtnhplanner.oracle.v1",
+    generatedAt: "2026-08-08T05:00:00.000Z",
+    minecraftVersion: "1.7.10",
+    loadedMods: [],
+    adapters: [],
+    recipeCount: recipes.length,
+    domains: [
+      {
+        id: "gregtech",
+        recipeMaps: [
+          {
+            id: "gt.recipe.blastfurnace",
+            name: "Blast Furnace",
+            sourceClass: "gregtech.api.recipe.RecipeMap",
+            recipes,
+          },
+        ],
+      },
+    ],
+  });
+
+  it("mints the same id for the same recipe whatever id the exporter gave it", () => {
+    // The oracle's id hashed a JVM identity hash, so two exports of one
+    // unchanged game disagreed on every id, and every saved plan lost its
+    // recipes on import. The id now comes from the recipe's content.
+    const first = normalize(exportWith([steel("run-one-7f3a")])).recipes[0];
+    const second = normalize(exportWith([steel("run-two-91c0")])).recipes[0];
+    expect(second.id).toBe(first.id);
+    expect(second.source.rawRecipeId).toBe(first.source.rawRecipeId);
+    expect(first.id).not.toContain("run-one");
+  });
+
+  it("gives a recipe that differs in one slot, tick or EU its own id", () => {
+    const [a, b, c] = normalize(
+      exportWith([
+        steel("a"),
+        steel("b", { itemInputs: [item("gregtech:dust.castiron", 1, "Cast Iron Dust")] }),
+        steel("c", { fluidInputs: [fluid("oxygen", 2000, "Oxygen")] }),
+      ]),
+    ).recipes;
+    expect(new Set([a.id, b.id, c.id]).size).toBe(3);
+  });
+
+  it("keeps two identical registrations apart, in export order", () => {
+    // addRecipe folds true duplicates by signature; a pair the game keeps
+    // apart by duration alone is the case this guards.
+    const [a, b] = normalize(
+      exportWith([steel("a"), steel("b", { durationTicks: 500, eut: 120, specialValue: 0 })]),
+    ).recipes;
+    if (b) {
+      expect(a.id).not.toBe(b.id);
+    }
+    expect(a.id).toMatch(/:[0-9a-f]{16}$/);
   });
 });

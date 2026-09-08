@@ -5,6 +5,8 @@ import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
 import { type LinearProgram, type LpSolution } from "./simplex";
 import { solveLpAuto } from "./lp-engine";
+import { listSharedMachineGroups } from "@/lib/model/shared-machine";
+import { isPoolEdgeId } from "./pool-mode";
 
 /**
  * The board's steady state as equations, solved directly: the BOOKS half of
@@ -212,6 +214,22 @@ export function solveEquationsCore(
       rhs: nodes[id]!.powerStalled ? 0 : 1,
     });
   }
+  // SHARED MACHINES: the sections of one card time-share its machine. Each
+  // section's act is its share of the machine's time (its nameplate already
+  // carries the whole count), so the shares sum to at most one. That is the
+  // only thing the game couples between recipes on one machine.
+  for (const group of listSharedMachineGroups(machineIds).values()) {
+    const coefficients = new Map<number, number>();
+    for (const id of group) {
+      const act = actVar.get(id);
+      if (act !== undefined) {
+        coefficients.set(act, 1);
+      }
+    }
+    if (coefficients.size > 1) {
+      upperBounds.push({ coefficients, rhs: 1 });
+    }
+  }
   // Necessity probes: these machines must run at least a hair, or the solve
   // reports infeasible - which is the probe's whole answer.
   for (const id of options?.requireRunning ?? []) {
@@ -227,9 +245,11 @@ export function solveEquationsCore(
   // story) in the finalize layer, exactly where it lives today.
 
   // Drawer-to-drawer wires get a finite roof so a teleporter chain cannot
-  // read as unbounded; machine wires are bounded by their port rows.
+  // read as unbounded; machine wires are bounded by their port rows. Pool
+  // wires are exempt, as in solve-mode.ts: each is bounded by the machine
+  // rows on the pool's other side, and the roof capped pool imports.
   for (const edge of usable) {
-    if (!actVar.has(edge.source) && !actVar.has(edge.target)) {
+    if (!actVar.has(edge.source) && !actVar.has(edge.target) && !isPoolEdgeId(edge.id)) {
       upperBounds.push({ coefficients: new Map([[flowVar.get(edge.id)!, 1]]), rhs: 1e6 });
     }
   }
@@ -557,8 +577,34 @@ export function solveEquationsCore(
         });
       };
       let shrank = false;
-      for (const id of [...pool]) {
-        if ((solved.x[actVar.get(id)!] ?? 0) <= t + 1e-6) {
+      const atLevel = [...pool].filter((id) => (solved.x[actVar.get(id)!] ?? 0) <= t + 1e-6);
+      // A ZERO round is special. A machine that cannot run at all (a bare
+      // slot, no power, a dead feeder) pins the worst-off level at zero, and
+      // at zero the simplex is free to park OTHER machines at zero too - a
+      // shared machine's second recipe, one twin of a pair - even though
+      // they could be lifted. Flooring everything at zero then locked those
+      // in, and an Electrolyzer running two recipes read 100/0 with a
+      // phantom clog lock instead of 50/50. So at zero, only the machines
+      // that truly cannot rise leave the pool: the structurally pinned ones
+      // outright, and the rest after one solve each asking how high that
+      // machine alone can go under the locks so far.
+      if (t <= 1e-6) {
+        for (const id of atLevel) {
+          const stuck =
+            pinnedZero.has(id) ||
+            nodes[id]?.powerStalled === true ||
+            (() => {
+              const lifted = solveWithEscalation(`lift-${round}`, new Map([[actVar.get(id)!, 1]]));
+              return !lifted || lifted.status !== "optimal" || (lifted.x[actVar.get(id)!] ?? 0) <= 1e-6;
+            })();
+          if (stuck) {
+            floorAt(id);
+            pool.delete(id);
+            shrank = true;
+          }
+        }
+      } else {
+        for (const id of atLevel) {
           floorAt(id);
           pool.delete(id);
           shrank = true;

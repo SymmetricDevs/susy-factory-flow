@@ -8,8 +8,13 @@ describe("toolbarFoldFor", () => {
 
   it("folds the paint row first: a 1400px window with both columns open", () => {
     // 1400 - 344 - 332: the width that buried the paint tray under POWER.
+    // Since the recalculation tray (2026-09-07: build row 286, paint row
+    // 432) this board folds the paint row and keeps the build row; both
+    // rows fit unfolded from 766 up.
+    expect(toolbarFoldFor(766, false)).toEqual({ build: false, paint: false, paintFoldsAll: false });
     expect(toolbarFoldFor(722, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
-    // 1366 - 676: the common laptop, where even the folded paint row crowds it.
+    expect(toolbarFoldFor(600, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
+    // 1366 - 676: the common laptop now folds both rows (the build row needs 694).
     expect(toolbarFoldFor(690, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
   });
 

@@ -27,6 +27,7 @@ import {
   getEffectiveVoltageOrdinal,
   getNodeEnergyHatches,
   getNodePowerAmps,
+  getNodePowerBudget,
   getNodeRunTier,
   isMultiblockRecipe,
 } from "./power";
@@ -38,7 +39,7 @@ type PowerReportNode = Pick<
   FactoryNode,
   "overclockTier" | "coilTier" | "machineHandlerId" | "machineConfigTiers"
 > &
-  Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType">>;
+  Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType" | "powerEuT">>;
 
 /**
  * Whether the build can start at all, straight from the game's checks. There
@@ -58,6 +59,12 @@ export interface NodePowerReport {
   hatchTypeLabel?: string;
   /** Its short amp badge ("256A"), worn where the hatch count would sit. */
   hatchChip?: string;
+  /**
+   * The supply was TYPED as an EU/t budget rather than built from hatches:
+   * `tier` and `amps` are read out of the number, and the hatch fields
+   * above describe no real build.
+   */
+  typedBudget: boolean;
   isMultiblock: boolean;
   /** Working amps: hatch amps on a multiblock, machine amperage otherwise. */
   amps: number;
@@ -100,6 +107,7 @@ export function getNodePowerReport(recipe: Recipe, node: PowerReportNode): NodeP
   const isMultiblock = isMultiblockRecipe(effectiveRecipe);
   const hatches = getNodeEnergyHatches(effectiveRecipe, node);
   const hatchType = getEnergyHatchType(node.energyHatchType);
+  const typedBudget = getNodePowerBudget(effectiveRecipe, node) !== undefined;
   const amps = getNodePowerAmps(effectiveRecipe, node);
   const poolEuT = getVoltageTierMaxEuT(tier) * amps;
 
@@ -123,8 +131,9 @@ export function getNodePowerReport(recipe: Recipe, node: PowerReportNode): NodeP
     tier,
     minimumTier,
     hatches,
-    hatchTypeLabel: isMultiblock && hatchType.exotic ? hatchType.label : undefined,
-    hatchChip: isMultiblock && hatchType.exotic ? hatchType.chip : undefined,
+    hatchTypeLabel: isMultiblock && !typedBudget && hatchType.exotic ? hatchType.label : undefined,
+    hatchChip: isMultiblock && !typedBudget && hatchType.exotic ? hatchType.chip : undefined,
+    typedBudget,
     isMultiblock,
     amps,
     poolEuT,
@@ -164,6 +173,11 @@ function getPowerState(
   }
 
   if (isMultiblock) {
+    // No supply at all (a typed zero) is underpowered before it is anything
+    // else: the tier-skip rule below would read 0 as ULV hatches.
+    if (poolEuT <= 0) {
+      return "under-powered";
+    }
     // `OverclockCalculator.getAllowedTierSkip`: a recipe more than one tier
     // above the hatch voltage never runs, however many amps are stacked.
     if (
@@ -268,6 +282,9 @@ export function isPowerStalled(report: NodePowerReport): boolean {
 /** One-line reason for a stalled build, used by node warnings. */
 export function describePowerStall(report: NodePowerReport): string | undefined {
   if (report.state === "under-powered") {
+    if (report.typedBudget) {
+      return `Needs ${report.singleDrawEuT} EU/t. Supplied ${formatBudget(report.poolEuT)}.`;
+    }
     const supply = report.hatchTypeLabel
       ? `the ${report.tier} ${report.hatchTypeLabel} supplies`
       : `${report.hatches}x ${report.tier} ${report.hatches === 1 ? "hatch supplies" : "hatches supply"}`;
@@ -283,4 +300,8 @@ export function describePowerStall(report: NodePowerReport): string | undefined 
     );
   }
   return undefined;
+}
+
+function formatBudget(euT: number): string {
+  return Number.isInteger(euT) ? String(euT) : euT.toFixed(1);
 }

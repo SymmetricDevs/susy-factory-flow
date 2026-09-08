@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 import { createEmptyProject } from "@/examples";
 import {
   UNTITLED_DESIGN_NAME,
+  UNTITLED_FOLDER_NAME,
   createDesign,
+  createFolder,
   duplicateDesign,
   makeUniqueDesignName,
   normalizeDesignName,
+  normalizeFolderName,
+  openDesigns,
   pickDesignAfterDelete,
   renameDesign,
   sortDesigns,
+  sortFolders,
   stampDesignOrder,
+  toDesignSummary,
   updateDesignProject,
   type DesignSummary,
 } from "./design-library";
@@ -178,5 +184,55 @@ describe("pickDesignAfterDelete", () => {
 
   it("reports nothing left when the last design goes", () => {
     expect(pickDesignAfterDelete([ordered[0]], "a")).toBeUndefined();
+  });
+});
+
+describe("toDesignSummary", () => {
+  it("carries the shelf fields and reads the post mark off the plan", () => {
+    const record = {
+      ...createDesign(createEmptyProject(), "Oil"),
+      closed: true,
+      folderId: "f1",
+    };
+    record.project = {
+      ...record.project,
+      metadata: { communityPlanId: "post-1" },
+    };
+    const summary = toDesignSummary(record);
+    expect(summary.closed).toBe(true);
+    expect(summary.folderId).toBe("f1");
+    expect(summary.communityPlanId).toBe("post-1");
+  });
+
+  it("leaves open, unposted designs unflagged", () => {
+    const record = createDesign(createEmptyProject(), "Oil");
+    const summary = toDesignSummary(record);
+    expect(summary.closed).toBeUndefined();
+    expect(summary.communityPlanId).toBeUndefined();
+  });
+});
+
+describe("openDesigns", () => {
+  it("is the strip: everything not closed, in order", () => {
+    const a = makeSummary("a", "A", "2026-01-01");
+    const b = { ...makeSummary("b", "B", "2026-01-02"), closed: true };
+    const c = makeSummary("c", "C", "2026-01-03");
+    expect(openDesigns([a, b, c]).map((design) => design.id)).toEqual(["a", "c"]);
+  });
+});
+
+describe("folders", () => {
+  it("names a blank folder rather than allowing one with no label", () => {
+    expect(normalizeFolderName("  ")).toBe(UNTITLED_FOLDER_NAME);
+    expect(createFolder(" Oil ").name).toBe("Oil");
+  });
+
+  it("lists folders by name, case aside", () => {
+    const folders = [
+      { id: "1", name: "steel", createdAt: "2026-01-01" },
+      { id: "2", name: "Bees", createdAt: "2026-01-02" },
+      { id: "3", name: "oil", createdAt: "2026-01-03" },
+    ];
+    expect(sortFolders(folders).map((folder) => folder.name)).toEqual(["Bees", "oil", "steel"]);
   });
 });

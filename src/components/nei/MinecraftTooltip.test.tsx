@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MinecraftTooltip, WHEEL_STEPS_IN_PLACE_ATTRIBUTE } from "./MinecraftTooltip";
+import { MinecraftTooltip } from "./MinecraftTooltip";
 
 describe("MinecraftTooltip", () => {
   afterEach(() => {
@@ -18,12 +18,18 @@ describe("MinecraftTooltip", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
   });
 
-  it("clears an open tooltip when the viewport is zoomed", async () => {
+  it("clears an open tooltip when a scroll puts something else under the pointer", async () => {
     render(
-      <MinecraftTooltip label="Tooltip line">
-        <button type="button">Hover target</button>
-      </MinecraftTooltip>,
+      <>
+        <MinecraftTooltip label="Tooltip line">
+          <button type="button">Hover target</button>
+        </MinecraftTooltip>
+        <p>Something else</p>
+      </>,
     );
+    const elsewhere = screen.getByText("Something else");
+    (document as Document & { elementFromPoint: (x: number, y: number) => Element | null }).elementFromPoint =
+      () => elsewhere;
 
     fireEvent.mouseMove(screen.getByRole("button", { name: "Hover target" }), {
       clientX: 120,
@@ -40,23 +46,41 @@ describe("MinecraftTooltip", () => {
     });
   });
 
-  it("keeps the tooltip while a slot uses the wheel to step through its items", async () => {
-    // Scrolling a rotating slot changes what the slot shows without moving it, so
-    // the tip has to stay put and re-label itself rather than blink out on every
-    // notch while you are reading which item you landed on.
+  it("keeps the tooltip when the hovered thing is still under the pointer after a wheel", async () => {
+    // A board zoom keeps the card under the pointer, a rotating slot steps in
+    // place, a setting tile steps its count: none of them moved the thing
+    // being read, so the tip must not blink out on every notch.
     render(
       <MinecraftTooltip label="Oak Log">
-        <button type="button" {...{ [WHEEL_STEPS_IN_PLACE_ATTRIBUTE]: "" }}>
-          Hover target
-        </button>
+        <button type="button">Hover target</button>
       </MinecraftTooltip>,
     );
+
+    const target = screen.getByRole("button", { name: "Hover target" });
+    (document as Document & { elementFromPoint: (x: number, y: number) => Element | null }).elementFromPoint =
+      () => target;
+    fireEvent.mouseMove(target, { clientX: 120, clientY: 80, buttons: 0 });
+    expect(await screen.findByText("Oak Log")).toBeTruthy();
+
+    fireEvent.wheel(target);
+    fireEvent.wheel(window);
+
+    expect(screen.getByText("Oak Log")).toBeTruthy();
+  });
+
+  it("keeps the tooltip when the document cannot say what is under the pointer", async () => {
+    render(
+      <MinecraftTooltip label="Oak Log">
+        <button type="button">Hover target</button>
+      </MinecraftTooltip>,
+    );
+    delete (document as Partial<Document>).elementFromPoint;
 
     const target = screen.getByRole("button", { name: "Hover target" });
     fireEvent.mouseMove(target, { clientX: 120, clientY: 80, buttons: 0 });
     expect(await screen.findByText("Oak Log")).toBeTruthy();
 
-    fireEvent.wheel(target);
+    fireEvent.wheel(window);
 
     expect(screen.getByText("Oak Log")).toBeTruthy();
   });
@@ -128,6 +152,41 @@ describe("MinecraftTooltip", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Tooltip line")).toBeNull();
+    });
+  });
+});
+
+describe("MinecraftTooltip fast pass", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("never commits open when the pointer left before the opening frame ran", async () => {
+    // The open lands on an animation frame; a fast sweep leaves the target
+    // before that frame. The leave must still win, or the panel commits open
+    // with nobody left to close it.
+    vi.restoreAllMocks();
+    let queued: FrameRequestCallback | undefined;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queued = callback;
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {
+      queued = undefined;
+    });
+    render(
+      <MinecraftTooltip label="Quick line">
+        <button type="button">Hover target</button>
+      </MinecraftTooltip>,
+    );
+    const target = screen.getByRole("button", { name: "Hover target" });
+    fireEvent.mouseMove(target, { clientX: 120, clientY: 80, buttons: 0 });
+    const frame = queued;
+    // The frame fires, but React has not re-rendered when the leave arrives.
+    if (frame) frame(0);
+    fireEvent.mouseLeave(target);
+    await waitFor(() => {
+      expect(screen.queryByText("Quick line")).toBeNull();
     });
   });
 });

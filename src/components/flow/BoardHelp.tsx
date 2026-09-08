@@ -1,27 +1,26 @@
 import {
   Box,
-  Cable,
-  Download,
-  Factory,
+  Eye,
   Focus,
   Gauge,
-  Grid3x3,
-  Magnet,
+  ImagePlus,
+  Network,
   Paintbrush,
-  Play,
+  Pencil,
+  RefreshCw,
   RotateCcw,
   Search,
   Share2,
-  Square,
+  Store,
+  Library,
   Trash2,
   TriangleAlert,
   Undo2,
-  Upload,
-  SlidersHorizontal,
   Zap,
 } from "lucide-react";
 import { Fragment, memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import {
   GLANCE_CARD_CLASS,
   GLANCE_LINE,
@@ -29,22 +28,18 @@ import {
   GlanceRows,
   GlanceTitle,
   type GlanceRow,
-} from "@/components/tour/card-parts";
-import { TOUR_LESSONS } from "@/lib/tour/lessons";
-import { startLesson } from "@/lib/tour/tour-state";
+} from "@/components/help/card-parts";
 
 /**
  * The board's help corner: a "?" where the zoom buttons used to live.
  *
- * Hovering it lays a glance sheet over the whole window: every toolbar and
- * panel gets a dashed ring, a solid arrow, and a card naming what is in it,
- * using the same card the guided tour uses (see `card-parts.tsx`) so the two
- * ways of being shown around read as one thing. Beside the button sit the
- * guided tours themselves, because "what does this do" and "show me" are the
- * same question asked twice, and this corner is where people ask it.
+ * Hovering it lays a glance sheet over the whole window: each toolbar gets a
+ * dashed ring, an arrow, and a card naming what is in it (see
+ * `card-parts.tsx`). The things with no toolbar to ring - what a card does,
+ * what a drawer does, the keys, the notices - are LEGEND cards: they stack in
+ * whatever column has the room, over the panel they are nearest to.
  *
- * Pure glance layer with one exception: pointer events stay off everywhere
- * except the tours card, which you can actually press. Moving away folds the
+ * Pure glance layer: pointer events stay off everywhere. Moving away folds the
  * whole thing up again.
  *
  * The sheet portals to <body>: the board, the browser and the inspector each
@@ -53,8 +48,14 @@ import { startLesson } from "@/lib/tour/tour-state";
  *
  * Regions are found by their `data-help-anchor` attribute and measured once
  * per open, so the overlay follows the real layout instead of hardcoding it.
- * Several elements may share one anchor id; their rects union (the paint row
- * uses this to ring only its visible buttons, not the folded-away palette).
+ * Several elements may share one anchor id, and a ring may union several ids
+ * (the tool row is three trays and, folded, a trigger).
+ *
+ * LAYOUT IS COMPUTED, NOT TUNED. Every card is CARD_W wide and cards live in
+ * flex COLUMNS whose corner is fixed to a ring, so no card's position depends
+ * on another card's height, and an arrow only ever leaves the card whose edge
+ * sits on the column's fixed corner. The old hand-set offsets per card broke
+ * at every window size the author had not looked at.
  */
 
 type HelpRect = { left: number; top: number; right: number; bottom: number };
@@ -66,214 +67,313 @@ type Measured = {
   vh: number;
 };
 
-/** Which side of its anchor a callout card sits on. */
-type CalloutSide = "left" | "right" | "above" | "below";
-type CalloutAlign = "start" | "center" | "end";
-
+/** Every glance card's width. Rows are written to fit it. */
+const CARD_W = 280;
+/** Between stacked cards in one column. */
+const CARD_GAP = 14;
 /** Card edge to ring edge: room for the arrow to read as an arrow. */
 const CALLOUT_GAP = 18;
 const RING_PAD = 5;
 const ARROW_HEAD = 12;
-/** Long enough to cross the gap from the button to the tours card. */
+const ARROW_STEM = 3;
+/** Long enough to cross the gap from the button to the cards over it. */
 const HIDE_GRACE_MS = 160;
 /**
- * The smallest window the spread-out glance layout fits: below either of
- * these its hand-placed cards overlap each other and spill off the screen,
- * so hover falls back to the one-column panel instead. Checked against real
- * screenshots with both columns open: 1440x920 holds; at 860 tall the left
- * column's card has no band left between the build card and the stack, and
- * 1280x800 is a pile-up.
+ * The smallest window the spread-out glance layout is shown in: 1080p at
+ * 100% zoom. Under it the cards cram and overlap, and the one-column panel
+ * reads better (Jack, 2026-09-07). These are CSS pixels, so browser zoom
+ * counts by itself: a 1080p window at 125% reports 1536x864 and gets the
+ * panel. `layoutGlance` still reports `fits: false` when its stacks would
+ * land on each other, which catches a wide window with both side columns
+ * open. `help-fit-probe.local.mjs <WxH> <out.png>` screenshots it.
  */
-const GLANCE_MIN_VW = 1440;
-const GLANCE_MIN_VH = 920;
+const GLANCE_MIN_VW = 1920;
+const GLANCE_MIN_VH = 1080;
 
 /**
  * The sheet's own accent: one soft blue-grey.
  *
- * Not the tour's cyan. The tour rings ONE thing at a time and can afford to
- * shout; this draws seven rings and eight cards over the whole window at once,
- * and in cyan that reads as an alarm going off. Cyan is kept for the single
- * card down here you can actually click.
+ * Not cyan: this draws five rings and a dozen cards over the whole window at
+ * once, and in cyan that reads as an alarm going off.
  */
 const ACCENT = GLANCE_QUIET;
 const ACCENT_DIM = "rgba(147, 164, 187, 0.5)";
 
-const CALLOUTS: Array<{
-  anchor: string;
-  side: CalloutSide;
-  align: CalloutAlign;
-  /** Extra push away from the anchor, past the standard gap. */
-  offset?: number;
-  /** Slide along the anchor's edge, in px, after align. */
-  shift?: number;
-  /**
-   * Skipped by the spread-out glance layer. The bottom-left corner already
-   * holds the moves-and-tours stack, and a card whose anchor lives under
-   * that stack has nowhere to point from; the sheet and the panel list it
-   * like any other.
-   */
-  glance?: false;
+interface HelpCard {
   title: string;
   rows: GlanceRow[];
-}> = [
-  {
-    // One card for the whole column: its three tabs, and nothing about how to
-    // use them. Two cards up here fought the Designs card for the same corner.
-    anchor: "browser",
-    side: "right",
-    align: "center",
-    // Lifted off centre into the one clear band on this side: the build tools
-    // card takes the top of the board and the moves-and-tours stack takes the
-    // bottom, so dead centre would land on the stack. (-75, not -120: the
-    // build tools card grew an auto-arrange row, and at the minimum window
-    // height the band between its tail and the stack is only just a card.)
-    shift: -60,
-    title: "The left column",
-    rows: [
-      { icon: Search, text: "*Items*: search the whole pack" },
-      { chip: "✦", text: "*Boards*: saved chunks" },
-      { icon: Factory, text: "*Setups*: shared factories" },
-    ],
-  },
-  {
-    // The top-right band is three deep (header buttons, paint row, view row),
-    // so this card slides right until it clears the paint ring and rides over
-    // the inspector's dimmed head instead. Rows stay short to keep it narrow
-    // enough for that gap.
-    anchor: "plan-actions",
-    side: "below",
-    align: "end",
-    shift: 150,
-    title: "This plan",
-    // Undo and redo left this bar for the build toolbar, and clean-board for
-    // the menu; the card lists what the ring actually holds.
-    rows: [
-      { icon: Share2, text: "Share it with everyone" },
-      { icon: Upload, text: "Import a plan" },
-      { icon: Download, text: "*Export*: an image, JSON, diagnostics" },
-    ],
-  },
-  {
-    anchor: "build",
-    side: "below",
-    align: "start",
-    // Dropped below the designs card's band; the longer arrow reads better.
-    offset: 50,
-    title: "Build tools",
-    // Left to right as the plates sit: history, how the numbers read, the
-    // plate that places cards, then the tidy-up.
-    rows: [
-      { icon: Undo2, text: "Undo and redo" },
-      { chip: "/s", text: "*Rate unit*: click to change" },
-      { icon: Gauge, text: "Place a *custom rate* card" },
-    ],
-  },
-  {
-    anchor: "paint",
-    side: "left",
-    align: "start",
-    // Pushed further out so the card clears the view row's ring below.
-    offset: 56,
-    title: "Paint and notes",
-    rows: [
-      { icon: Paintbrush, text: "Paint cards" },
-      { icon: Square, text: "*Draw*: box, zone, arrow, note under one button" },
-      { text: "Select a box for border and fill styles" },
-      { icon: Trash2, text: "*Bin*: delete anything" },
-    ],
-  },
-  {
-    anchor: "view",
-    side: "below",
-    align: "end",
-    title: "View options",
-    // One button now: the nine toggles live in its sheet, each with a name
-    // and a line of its own, so the card only has to say what is inside.
-    rows: [
-      { text: "One button, one sheet: *view only*, never the plan" },
-      { icon: Grid3x3, text: "Background style and pattern" },
-      { icon: Cable, text: "Wire thickness, dashes, labels, docking" },
-      { icon: Magnet, text: "*Motion*: cards and numbers move smoothly" },
-      { icon: SlidersHorizontal, text: "Beside it: *setup rules* and *auto-arrange*" },
-    ],
-  },
-  {
-    anchor: "glance",
-    side: "above",
-    align: "end",
-    title: "Framing",
-    rows: [
-      { icon: Focus, text: "Fit the plan on screen" },
-      { text: "Zoomed out, cards can show:" },
-      { icon: Box, text: "Their machine" },
-      { icon: Gauge, text: "How hard they run" },
-      { icon: TriangleAlert, text: "Why: bottleneck, starved..." },
-      { icon: Zap, text: "Power draw and tier" },
-    ],
-  },
-  {
-    anchor: "plan-card",
-    side: "above",
-    align: "start",
-    // Its corner is the stack's corner: with the left column open the two sat
-    // on top of one another, and there is no static shift that clears both
-    // column states. The linear formats carry it instead.
-    glance: false,
-    title: "Plan card",
-    rows: [
-      { text: "This plan's *icon, name and blurb*" },
-      { icon: Share2, text: "Sharing posts them as its face" },
-      { icon: RotateCcw, text: "An opened setup can *reset to the post*" },
-    ],
-  },
-  {
-    anchor: "inspector",
-    side: "left",
-    align: "center",
-    title: "Plan totals",
-    rows: [
-      { chip: "INPUTS", tone: "need", text: "Bring this in yourself" },
-      { chip: "OUTPUTS", tone: "output", text: "Leaves the plan" },
-      { chip: "INTERNAL", tone: "internal", text: "Made and used here" },
-      { text: "Hover a row to light up the board" },
-    ],
-  },
-];
+}
 
-/** The gestures no button reveals. Six, not ten: this is a reminder, not a manual. */
-const MOVES: GlanceRow[] = [
-  { mouse: "left", text: "Drag a slot to *wire it*" },
-  { mouse: "left", text: "Drop on empty board for *a drawer*" },
-  { mouse: "left", text: "Click a port row: *what makes it*" },
-  { mouse: "right", text: "Right click: *what uses it*" },
-  { chip: "Shift", text: "Box-select, or add one" },
-  { chip: "Ctrl+G", text: "Wrap it in *a board*" },
-];
+/* ------------------------------------------------------------------ */
+/* The cards. Rows are short on purpose: this is a reminder, not a manual,
+   and a row that wraps costs a whole line of the column's budget. */
 
-/** The same reminder for a finger: the compact world has no hover and no
- * right button, and telling a phone to right click is worse than nothing. */
-const TOUCH_MOVES: GlanceRow[] = [
-  { text: "Drag from a slot to *wire it*" },
-  { text: "Hold a port row: *make it or use it*" },
-  { text: "Tap a card first, *then* drag to move it" },
-  { text: "Double tap to *zoom*; tap and slide to keep zooming" },
-  { text: "Swipe in from either side for the *panels*" },
-];
+const BUILD: HelpCard = {
+  title: "Units and history",
+  rows: [
+    { icon: Undo2, text: "*Undo / redo* changes" },
+    { chip: "/s", text: "Change the *rate unit*" },
+    { chip: "EU/t", text: "Show power in *EU/t or amps*" },
+  ],
+};
+
+/** The mode switch: one card per key, in the key's colour. */
+const BUILD_MODE: HelpCard = {
+  title: "Build",
+  rows: [
+    { text: "Place *recipes* and connect their slots" },
+    { text: "Set *machine counts*; read actual rates" },
+    { text: "Hover a status for *flow limits*" },
+  ],
+};
+
+const SOLVE_MODE: HelpCard = {
+  title: "Solve",
+  rows: [
+    { text: "Connect recipes and set a *target*" },
+    { text: "*Machine counts* are calculated" },
+    { text: "Target: *drawer rate* or *pinned count*" },
+  ],
+};
+
+const POOL_MODE: HelpCard = {
+  title: "Pool",
+  rows: [
+    { text: "Choose recipes and set a *target*" },
+    { text: "Counts and resource flow are *automatic*" },
+    { text: "Inputs with no producer are *imported*" },
+    { chip: "+", tone: "pool", text: "Add a *product drawer*; set its rate" },
+  ],
+};
+
+const TOOLS: HelpCard = {
+  title: "Board tools",
+  rows: [
+    { icon: Pencil, text: "*Markup*: boards, shapes and notes" },
+    { icon: Paintbrush, text: "*Paint*: apply colour to cards" },
+    { icon: ImagePlus, text: "*Image*: insert or paste" },
+    { icon: Eye, text: "*View*: background and wire display" },
+    { icon: Network, text: "*Arrange*: automatic card layout" },
+    { icon: Trash2, text: "*Bin*: click objects to delete" },
+  ],
+};
+
+const FRAMING: HelpCard = {
+  title: "Viewport",
+  rows: [
+    { icon: Focus, text: "*Fit* the plan on screen" },
+    { text: "When zoomed out, show:" },
+    { icon: Box, text: "*Machine* icons" },
+    { icon: Gauge, text: "*Utilization*: running capacity" },
+    { icon: TriangleAlert, text: "*Status*: what limits production" },
+    { icon: Zap, text: "*Power* consumption and tier" },
+  ],
+};
+
+const ON_A_CARD: HelpCard = {
+  title: "Machine controls",
+  rows: [
+    { text: "Click the *name* to change machine" },
+    { chip: "LV", text: "*Tier*: click up, right-click down" },
+    { chip: "2×", text: "Click to edit *hatch count*" },
+    { chip: "8", text: "*Count*: type or scroll" },
+    { icon: RefreshCw, text: "*Refactor*: choose another recipe" },
+    { text: "Hover the name for *machine stats*" },
+    { text: "Config slots: *coils, tools, parallels*" },
+  ],
+};
+
+const DRAWERS: HelpCard = {
+  title: "Drawers and tanks",
+  rows: [
+    { shape: "source", text: "*Source*: unlimited external supply" },
+    { shape: "product", text: "*Product*: requests full production" },
+    { shape: "byproduct", text: "*Byproduct*: collects only surplus" },
+    { shape: "trash", text: "*Trash*: discards all arrivals" },
+    { shape: "buffer", text: "*Buffer*: pass-through and storage" },
+  ],
+};
+
+const BOARDS: HelpCard = {
+  title: "Board windows",
+  rows: [
+    { chip: "Ctrl+G", text: "Group selection in a *board*" },
+    { text: "Drag *title bar*: move group" },
+    { text: "*Minimize*: show a flow summary" },
+    { text: "*Dump*: remove frame only" },
+  ],
+};
+
+const LEFT_COLUMN: HelpCard = {
+  title: "Resources",
+  rows: [
+    { icon: Zap, text: "Add *generators, custom rates, farms*" },
+    { icon: Search, text: "Find *items and fluids*" },
+    { mouse: "left", text: "Click a resource: *recipes that make it*" },
+    { mouse: "right", text: "Right-click: *recipes that use it*" },
+  ],
+};
+
+/** The Library pill at the head of the tab strip, ringed and arrowed. */
+const LIBRARY: HelpCard = {
+  title: "Library",
+  rows: [
+    { icon: Library, text: "Your *designs*, in folders" },
+    { text: "*Community setups*: open in a new tab" },
+    { text: "Favorites, saved and *posted* setups" },
+  ],
+};
+
+const RECIPE_SEARCH: HelpCard = {
+  title: "Recipe search",
+  rows: [
+    { text: "*Takes* filters inputs; *Makes* outputs" },
+    { chip: "ANY", text: "Match at least one resource" },
+    { chip: "ALL", text: "Match all; extras allowed" },
+    { chip: "ONLY", text: "Match all; no extras" },
+    { text: "*Machine buttons* filter results" },
+    { mouse: "right", text: "Result menu: *Add to board*" },
+  ],
+};
+
+const PLAN_TOTALS: HelpCard = {
+  title: "Inputs and outputs",
+  rows: [
+    { chip: "INPUTS", tone: "need", text: "Required external supply" },
+    { chip: "OUTPUTS", tone: "output", text: "Resources leaving the plan" },
+    { chip: "INTERNAL", tone: "internal", text: "Made and used in the plan" },
+    { chip: "RAW/NET", text: "Total flows / net balance" },
+  ],
+};
+
+const MACHINES: HelpCard = {
+  title: "Machines",
+  rows: [
+    { icon: Store, text: "Required *machines by tier*" },
+    { chip: "PEAK/AVG", text: "Full-load / actual power" },
+    { chip: "USED", text: "Power use and generation" },
+    { mouse: "left", text: "Click a row to *locate machines*" },
+  ],
+};
+
+const PLAN_CARD: HelpCard = {
+  title: "Plan details",
+  rows: [
+    { text: "Edit the *name, icon and description*" },
+    { icon: Share2, text: "*Share* the setup and its details" },
+    { icon: RotateCcw, text: "*Reset* to the opened setup" },
+  ],
+};
 
 /**
  * The banners the board raises on its own, so their first sighting is not
- * their first explanation. Sheet and panel only: on a healthy board there is
- * nothing to ring, so the glance layer has nowhere to point an arrow.
+ * their first explanation.
  */
-const NOTICES: GlanceRow[] = [
-  { chip: "NOT WIRED UP", tone: "fine", text: "Slots still to wire, with a *Show me*" },
-  { chip: "LOOSE WIRES", tone: "bottleneck", text: "Cell wires dead with their rule off: delete them or *turn it back on*" },
-  { chip: "DEAD LOOP", tone: "bottleneck", text: "A ring losing material, starved to *0%*" },
-  { chip: "CLOG LOCK", tone: "clogged", text: "A ring jammed by its own spare: give it *a drawer*" },
+const NOTICES: HelpCard = {
+  title: "Plan diagnostics",
+  rows: [
+    { chip: "NOT WIRED UP", tone: "fine", text: "Slots need connections" },
+    { chip: "DEAD LOOP", tone: "bottleneck", text: "Cycle supply deficit" },
+    { chip: "CLOG LOCK", tone: "clogged", text: "Surplus blocks a cycle" },
+    { chip: "SOLVE MODE", tone: "solve", text: "Set rate / pin count" },
+    { chip: "POOL MODE", tone: "pool", text: "Add a product target" },
+  ],
+};
+
+/** The gestures no button reveals. */
+const MOVES: HelpCard = {
+  title: "Mouse and keyboard",
+  rows: [
+    { mouse: "left", text: "Drag between slots to *connect*" },
+    { mouse: "left", text: "Drag slot to empty space: *drawer*" },
+    { chip: "R / U", text: "Hover a port: find *makes / uses*" },
+    { chip: "Shift", text: "Drag to *box-select*; click to add" },
+    { chip: "Ctrl+C/V", text: "*Copy / paste* selected cards" },
+    { chip: "Del", text: "*Delete* selection" },
+    { chip: "Esc", text: "*Cancel* the active tool" },
+    { chip: "WASD", text: "*Pan* the canvas" },
+    { mouse: "scroll", text: "Scroll the canvas to *zoom*" },
+  ],
+};
+
+/** The same reminder for a finger: the compact world has no hover and no
+ * right button, and telling a phone to right click is worse than nothing. */
+const TOUCH_MOVES: HelpCard = {
+  title: "Touch controls",
+  rows: [
+    { text: "Drag between slots to *connect*" },
+    { text: "Hold a resource for *makes / uses*" },
+    { text: "Tap a card, then drag to *move*" },
+    { text: "Double-tap to *zoom*" },
+    { text: "Swipe from an edge to open a *panel*" },
+  ],
+};
+
+/** The mode stack, in the order the switch reads. */
+const MODES: HelpCard[] = [BUILD_MODE, SOLVE_MODE, POOL_MODE];
+
+/**
+ * The three modes as ONE card for the spread, hung right under the switch.
+ * Three cards took 400px of the centre column; this takes half, which is
+ * what lets the drawer, board and notice legends stand under it at 920px.
+ */
+const MODES_CARD: HelpCard = {
+  title: "Build, Solve, Pool",
+  rows: [
+    { text: "*Build*: you set counts and wires" },
+    { text: "The board reports what flows" },
+    { text: "*Solve*: you wire and set a target" },
+    { text: "Machine counts are calculated" },
+    { text: "*Pool*: pick recipes, set a target" },
+    { text: "Counts, wires and imports are automatic" },
+  ],
+};
+
+/** Every card, in reading order, for the one-column formats. */
+const LINEAR: HelpCard[] = [
+  ...MODES,
+  LIBRARY,
+  BUILD,
+  TOOLS,
+  FRAMING,
+  ON_A_CARD,
+  DRAWERS,
+  BOARDS,
+  LEFT_COLUMN,
+  RECIPE_SEARCH,
+  PLAN_TOTALS,
+  MACHINES,
+  PLAN_CARD,
+  NOTICES,
 ];
 
-function toHelpRect(rect: DOMRect): HelpRect {
-  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+/* ------------------------------------------------------------------ */
+
+/**
+ * Real px (a DOMRect) to shell px: every sheet below wears ui-zoom, so its
+ * offsets, the card widths and the window size all live in shell px, and the
+ * one conversion is here and in `show` for the window itself.
+ */
+function toHelpRect(rect: DOMRect, scale = getUiScale()): HelpRect {
+  return { left: rect.left / scale, top: rect.top / scale, right: rect.right / scale, bottom: rect.bottom / scale };
+}
+
+function unionRects(...rects: Array<HelpRect | undefined>): HelpRect | undefined {
+  let out: HelpRect | undefined;
+  for (const rect of rects) {
+    if (!rect) {
+      continue;
+    }
+    out = out
+      ? {
+          left: Math.min(out.left, rect.left),
+          top: Math.min(out.top, rect.top),
+          right: Math.max(out.right, rect.right),
+          bottom: Math.max(out.bottom, rect.bottom),
+        }
+      : rect;
+  }
+  return out;
 }
 
 function measureAnchors(): Record<string, HelpRect> {
@@ -284,155 +384,413 @@ function measureAnchors(): Record<string, HelpRect> {
     if (!id || rect.width <= 0 || rect.height <= 0) {
       return;
     }
-    const seen = rects[id];
-    rects[id] = seen
-      ? {
-          left: Math.min(seen.left, rect.left),
-          top: Math.min(seen.top, rect.top),
-          right: Math.max(seen.right, rect.right),
-          bottom: Math.max(seen.bottom, rect.bottom),
-        }
-      : toHelpRect(rect);
+    rects[id] = unionRects(rects[id], toHelpRect(rect))!;
   });
   return rects;
 }
 
-function calloutStyle(
-  callout: (typeof CALLOUTS)[number],
-  rect: HelpRect,
-  vw: number,
-  vh: number,
-): CSSProperties {
-  const { side, align } = callout;
-  const push = RING_PAD + CALLOUT_GAP + (callout.offset ?? 0);
-  const style: CSSProperties = {};
-  if (side === "right") {
-    style.left = rect.right + push;
-  } else if (side === "left") {
-    style.right = vw - rect.left + push;
-  } else if (side === "below") {
-    style.top = rect.bottom + push;
-  } else {
-    style.bottom = vh - rect.top + push;
-  }
-  const shift = callout.shift ?? 0;
-  if (side === "left" || side === "right") {
-    if (align === "center") {
-      style.top = (rect.top + rect.bottom) / 2 + shift;
-      style.transform = "translateY(-50%)";
-    } else if (align === "end") {
-      style.bottom = vh - rect.bottom - shift;
-    } else {
-      style.top = rect.top + shift;
-    }
-  } else {
-    if (align === "end") {
-      style.right = vw - rect.right - shift;
-    } else if (align === "center") {
-      style.left = (rect.left + rect.right) / 2 + shift;
-      style.transform = "translateX(-50%)";
-    } else {
-      style.left = rect.left + shift;
-    }
-  }
-  return style;
+/** A ring's rect once the ring pad is on it: what arrows aim at. */
+function padRect(rect: HelpRect): HelpRect {
+  return {
+    left: rect.left - RING_PAD,
+    top: rect.top - RING_PAD,
+    right: rect.right + RING_PAD,
+    bottom: rect.bottom + RING_PAD,
+  };
+}
+
+const clamp = (value: number, low: number, high: number) =>
+  Math.max(low, Math.min(high, value));
+
+/**
+ * An axis-aligned arrow: a run of points, a head at the last one pointing
+ * the way the last segment travels.
+ */
+type Arrow = { points: Array<{ x: number; y: number }> };
+
+/** A column of cards with one fixed corner. */
+type Column = {
+  key: string;
+  style: CSSProperties;
+  cards: HelpCard[];
+};
+
+type GlanceLayout = {
+  rings: HelpRect[];
+  columns: Column[];
+  arrows: Arrow[];
+  /** False when the board is too small for the spread without cards
+   * landing on each other: the caller shows the one-column panel. */
+  fits: boolean;
+};
+
+/** About how tall a card renders at CARD_W: title, rows, the wrapped ones
+ * twice. Only used to keep stacks off each other before anything is drawn. */
+function estimateCardHeight(card: HelpCard): number {
+  const charsPerLine = 32;
+  const rows = card.rows.reduce(
+    (sum, row) => sum + 4 + 15 * Math.max(1, Math.ceil(row.text.length / charsPerLine)),
+    0,
+  );
+  return 48 + rows;
+}
+
+function estimateStackHeight(cards: HelpCard[]): number {
+  return (
+    cards.reduce((sum, card) => sum + estimateCardHeight(card), 0) + CARD_GAP * (cards.length - 1)
+  );
+}
+
+/** A stack's estimated box, for the overlap check. */
+type Box = { left: number; top: number; bottom: number };
+
+function boxesOverlap(a: Box, b: Box): boolean {
+  return (
+    a.left < b.left + CARD_W + CARD_GAP &&
+    b.left < a.left + CARD_W + CARD_GAP &&
+    a.top < b.bottom + CARD_GAP &&
+    b.top < a.bottom + CARD_GAP
+  );
 }
 
 /**
- * A solid arrow growing out of the card's facing edge: stem from the card,
- * chunky head touching the target's ring. Sized to span the exact gap.
+ * Where everything goes, from the measured rings.
+ *
+ * Board-left hangs under the build toolbar; the CENTRE hangs under the mode
+ * switch with the modes card and the machine-card controls; the LEGENDS
+ * (drawers, board windows, notices) stand along the board's foot between
+ * the corner stack and the framing dock, in as many lanes as fit; the
+ * corner stack grows up from the "?" and its bottom card points down at the
+ * plan bar; board-right hangs under the tool row and a second board-right
+ * stack sits over the framing dock; the browser cards sit inside the
+ * browser column, the Library card first with an arrow across to the
+ * Library pill; the inspector's totals card sits over its top and its
+ * machines card over the machine list. A closed panel takes its own cards
+ * with it. When the foot has no lane the legends hang under the centre;
+ * when the centre has no lane of its own it takes the build toolbar's and
+ * the Units card joins the corner stack. Stacks that would then land on
+ * each other report `fits: false`.
  */
-function CalloutArrow({
-  side,
-  align,
-  length,
-}: {
-  side: CalloutSide;
-  align: CalloutAlign;
-  length: number;
-}) {
-  const vertical = side === "below" || side === "above";
-  const wrapper: CSSProperties = vertical
-    ? { height: length, width: 16 }
-    : { width: length, height: 16 };
-  if (side === "below") {
-    wrapper.bottom = "100%";
-  } else if (side === "above") {
-    wrapper.top = "100%";
-  } else if (side === "right") {
-    wrapper.right = "100%";
-  } else {
-    wrapper.left = "100%";
+function layoutGlance({ rects, button, vw, vh }: Measured): GlanceLayout {
+  const rings: HelpRect[] = [];
+  const columns: Column[] = [];
+  const arrows: Arrow[] = [];
+  const boxes: Box[] = [];
+
+  const build = rects.build;
+  const toolRow = unionRects(rects.paint, rects.view);
+  const modeSwitch = rects.rules;
+  const dock = rects.glance;
+  const browser = rects.browser;
+  const inspector = rects.inspector;
+  const machineList = rects.machines;
+  const planBar = rects["plan-card"];
+  const libraryPill = rects.library;
+
+  // The x the whole right side is hung from: the tool row's right edge,
+  // which is also the framing dock's.
+  const rightEdge = toolRow?.right ?? dock?.right ?? vw - 12;
+  const rightColumnLeft = rightEdge - CARD_W;
+  const buildLeft = build?.left ?? 12;
+  const switchCentre = modeSwitch ? (modeSwitch.left + modeSwitch.right) / 2 : undefined;
+
+  // THE CENTRE lane wants to sit under the switch; it may start no further
+  // left than the build column's right edge (WIDE) or, failing that, the
+  // build toolbar's own left (NARROW), and must end clear of the
+  // board-right column.
+  const laneRightLimit = rightColumnLeft - CARD_GAP - CARD_W;
+  const wideLeft =
+    switchCentre !== undefined
+      ? clamp(switchCentre - CARD_W / 2, buildLeft + CARD_W + CARD_GAP, laneRightLimit)
+      : undefined;
+  const wide =
+    wideLeft !== undefined &&
+    wideLeft >= buildLeft + CARD_W + CARD_GAP &&
+    wideLeft <= laneRightLimit;
+  const narrowLeft =
+    switchCentre !== undefined
+      ? clamp(switchCentre - CARD_W / 2, buildLeft, laneRightLimit)
+      : undefined;
+  const narrow =
+    !wide && narrowLeft !== undefined && narrowLeft >= buildLeft && narrowLeft <= laneRightLimit;
+  const centreLeft = wide ? wideLeft : narrow ? narrowLeft : undefined;
+  const centreTop = modeSwitch ? padRect(modeSwitch).bottom + CALLOUT_GAP : 0;
+  const centreCards = [MODES_CARD];
+
+  // THE FOOT: two lanes between the corner stack and the dock stack, hung
+  // from the plan bar: the machine-card controls and the legends (drawers,
+  // board windows, notices), balanced by height. One lane stacks all four;
+  // no lane at all hangs them under the centre.
+  const footCards = [ON_A_CARD, DRAWERS, BOARDS, NOTICES];
+  const footBottom = planBar ? padRect(planBar).top - CALLOUT_GAP : vh - 12;
+  const footLeftLimit = (button ? button.left + CARD_W : buildLeft) + CARD_GAP;
+  const footRightLimit = (dock ? dock.right - CARD_W : rightColumnLeft) - CARD_GAP;
+  const footLanes = Math.max(
+    0,
+    Math.min(2, Math.floor((footRightLimit - footLeftLimit + CARD_GAP) / (CARD_W + CARD_GAP))),
+  );
+  const footStacks: HelpCard[][] =
+    footLanes === 2
+      ? [
+          [ON_A_CARD, BOARDS],
+          [DRAWERS, NOTICES],
+        ]
+      : footLanes === 1
+        ? [footCards]
+        : [];
+  if (footLanes === 0 && centreLeft !== undefined) {
+    centreCards.push(...footCards);
   }
-  if (vertical) {
-    if (align === "center") {
-      wrapper.left = "50%";
-      wrapper.transform = "translateX(-50%)";
-    } else if (align === "end") {
-      wrapper.right = 20;
-    } else {
-      wrapper.left = 20;
-    }
-  } else {
-    if (align === "center") {
-      wrapper.top = "50%";
-      wrapper.transform = "translateY(-50%)";
-    } else if (align === "end") {
-      wrapper.bottom = 12;
-    } else {
-      wrapper.top = 12;
+  const footWidth = footStacks.length * CARD_W + (footStacks.length - 1) * CARD_GAP;
+  const footLeft = clamp(
+    (footLeftLimit + footRightLimit) / 2 - footWidth / 2,
+    footLeftLimit,
+    Math.max(footLeftLimit, footRightLimit - footWidth),
+  );
+
+  // NARROW puts the centre lane over the build toolbar's lane, so the Units
+  // card moves to the corner stack.
+  const cornerCards = [...(narrow ? [BUILD] : []), MOVES, PLAN_CARD];
+
+  if (build && !narrow) {
+    const ring = padRect(build);
+    rings.push(build);
+    const top = ring.bottom + CALLOUT_GAP;
+    // No browser column means no place for the Library card; it sits here,
+    // under the pill it describes. No centre lane at all means the centre
+    // cards stack here too.
+    const cards = [
+      ...(browser ? [] : [LIBRARY]),
+      BUILD,
+      ...(modeSwitch && centreLeft === undefined ? centreCards : []),
+    ];
+    columns.push({
+      key: "board-left",
+      style: { left: build.left, top, width: CARD_W },
+      cards,
+    });
+    boxes.push({ left: build.left, top, bottom: top + estimateStackHeight(cards) });
+    const x = clamp((ring.left + ring.right) / 2, build.left + 24, build.left + CARD_W - 24);
+    arrows.push({ points: [{ x, y: top }, { x, y: ring.bottom }] });
+  }
+
+  if (modeSwitch) {
+    const ring = padRect(modeSwitch);
+    rings.push(modeSwitch);
+    if (centreLeft !== undefined) {
+      columns.push({
+        key: "centre",
+        style: { left: centreLeft, top: centreTop, width: CARD_W },
+        cards: centreCards,
+      });
+      boxes.push({
+        left: centreLeft,
+        top: centreTop,
+        bottom: centreTop + estimateStackHeight(centreCards),
+      });
+      const x = clamp((ring.left + ring.right) / 2, centreLeft + 24, centreLeft + CARD_W - 24);
+      arrows.push({ points: [{ x, y: centreTop }, { x, y: ring.bottom }] });
     }
   }
-  // The head aims at the anchor, so it leads on the anchor-facing end.
+
+  footStacks.forEach((cards, index) => {
+    const left = footLeft + index * (CARD_W + CARD_GAP);
+    columns.push({
+      key: `foot-${index}`,
+      style: { left, bottom: vh - footBottom, width: CARD_W },
+      cards,
+    });
+    boxes.push({ left, top: footBottom - estimateStackHeight(cards), bottom: footBottom });
+  });
+
+  if (toolRow) {
+    const ring = padRect(toolRow);
+    rings.push(toolRow);
+    const top = ring.bottom + CALLOUT_GAP;
+    const left = rightColumnLeft;
+    columns.push({
+      key: "board-right",
+      style: { left, top, width: CARD_W },
+      cards: [TOOLS],
+    });
+    boxes.push({ left, top, bottom: top + estimateStackHeight([TOOLS]) });
+    const x = clamp((ring.left + ring.right) / 2, left + 24, left + CARD_W - 24);
+    arrows.push({ points: [{ x, y: top }, { x, y: ring.bottom }] });
+  }
+
+  if (dock) {
+    const ring = padRect(dock);
+    rings.push(dock);
+    const bottom = ring.top - CALLOUT_GAP;
+    const left = dock.right - CARD_W;
+    columns.push({
+      key: "board-right-bottom",
+      style: { left, bottom: vh - bottom, width: CARD_W },
+      cards: [FRAMING],
+    });
+    boxes.push({ left, top: bottom - estimateStackHeight([FRAMING]), bottom });
+    const x = clamp((ring.left + ring.right) / 2, left + 24, left + CARD_W - 24);
+    arrows.push({ points: [{ x, y: bottom }, { x, y: ring.top }] });
+  }
+
+  if (button) {
+    const bottom = button.top - 10;
+    columns.push({
+      key: "corner",
+      style: { left: button.left, bottom: vh - bottom, width: CARD_W },
+      cards: cornerCards,
+    });
+    boxes.push({ left: button.left, top: bottom - estimateStackHeight(cornerCards), bottom });
+    if (planBar && planBar.top > bottom + ARROW_HEAD) {
+      // The plan bar runs the whole width of the board's foot, so the arrow
+      // drops from the stack's bottom card wherever it clears the button.
+      const ring = padRect(planBar);
+      rings.push(planBar);
+      const x = clamp(button.right + 120, button.left + 24, button.left + CARD_W - 24);
+      arrows.push({ points: [{ x, y: bottom }, { x, y: ring.top }] });
+    }
+  }
+
+  if (browser) {
+    rings.push(browser);
+    const left = browser.left + 12;
+    // The Library card leads, level with the pill it points at: the pill
+    // sits just past the column's right edge, so the arrow runs straight
+    // across the seam into it.
+    const pill = libraryPill && libraryPill.left >= browser.right ? libraryPill : undefined;
+    const top = pill ? Math.max(browser.top + 8, pill.top - 6) : browser.top + 80;
+    columns.push({
+      key: "browser",
+      style: { left, top, width: CARD_W },
+      cards: [LIBRARY, LEFT_COLUMN, RECIPE_SEARCH],
+    });
+    if (pill) {
+      const ring = padRect(pill);
+      rings.push(pill);
+      const y = clamp((pill.top + pill.bottom) / 2, top + 12, top + 40);
+      arrows.push({ points: [{ x: left + CARD_W, y }, { x: ring.left, y }] });
+    }
+  }
+
+  if (inspector) {
+    const left = inspector.left + Math.max(6, (inspector.right - inspector.left - CARD_W) / 2);
+    columns.push({
+      key: "inspector",
+      style: { left, top: inspector.top + 12, width: CARD_W },
+      // No machine list on the board yet: its card waits under the totals.
+      cards: machineList ? [PLAN_TOTALS] : [PLAN_TOTALS, MACHINES],
+    });
+    if (machineList) {
+      // Over the machine list itself, hung from its head.
+      rings.push(machineList);
+      columns.push({
+        key: "inspector-machines",
+        style: { left, top: machineList.top + 10, width: CARD_W },
+        cards: [MACHINES],
+      });
+    }
+  }
+
+  // Stacks that land on each other mean the board is too small for the
+  // spread; the one-column panel shows instead.
+  let fits = true;
+  for (let i = 0; i < boxes.length && fits; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      if (boxesOverlap(boxes[i], boxes[j])) {
+        fits = false;
+        break;
+      }
+    }
+  }
+
+  return { rings, columns, arrows, fits };
+}
+
+/** The arrow's segments as 3px bars, and its head as a border triangle. */
+function ArrowMark({ arrow }: { arrow: Arrow }) {
+  const { points } = arrow;
+  const segments: CSSProperties[] = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const from = points[index - 1];
+    const to = points[index];
+    const vertical = from.x === to.x;
+    const isLast = index === points.length - 1;
+    // The last segment stops short by the head's length, so the head's tip
+    // is what touches the ring.
+    const trim = isLast ? ARROW_HEAD : 0;
+    if (vertical) {
+      const y0 = Math.min(from.y, to.y) + (to.y < from.y ? trim : 0);
+      const y1 = Math.max(from.y, to.y) - (to.y > from.y ? trim : 0);
+      segments.push({
+        left: from.x - ARROW_STEM / 2,
+        top: y0,
+        width: ARROW_STEM,
+        height: Math.max(0, y1 - y0),
+      });
+    } else {
+      const x0 = Math.min(from.x, to.x) + (to.x < from.x ? trim : 0);
+      const x1 = Math.max(from.x, to.x) - (to.x > from.x ? trim : 0);
+      segments.push({
+        left: x0,
+        top: from.y - ARROW_STEM / 2,
+        width: Math.max(0, x1 - x0),
+        height: ARROW_STEM,
+      });
+    }
+  }
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const direction =
+    last.x === prev.x ? (last.y < prev.y ? "up" : "down") : last.x < prev.x ? "left" : "right";
   const head: CSSProperties =
-    side === "below"
+    direction === "up"
       ? {
+          left: last.x - 8,
+          top: last.y,
           borderLeft: "8px solid transparent",
           borderRight: "8px solid transparent",
           borderBottom: `${ARROW_HEAD}px solid ${ACCENT}`,
         }
-      : side === "above"
+      : direction === "down"
         ? {
+            left: last.x - 8,
+            top: last.y - ARROW_HEAD,
             borderLeft: "8px solid transparent",
             borderRight: "8px solid transparent",
             borderTop: `${ARROW_HEAD}px solid ${ACCENT}`,
           }
-        : side === "right"
+        : direction === "left"
           ? {
+              left: last.x,
+              top: last.y - 8,
               borderTop: "8px solid transparent",
               borderBottom: "8px solid transparent",
               borderRight: `${ARROW_HEAD}px solid ${ACCENT}`,
             }
           : {
+              left: last.x - ARROW_HEAD,
+              top: last.y - 8,
               borderTop: "8px solid transparent",
               borderBottom: "8px solid transparent",
               borderLeft: `${ARROW_HEAD}px solid ${ACCENT}`,
             };
-  const headFirst = side === "below" || side === "right";
-  const stem: CSSProperties = vertical
-    ? { width: 3, backgroundColor: ACCENT }
-    : { height: 3, backgroundColor: ACCENT };
   return (
-    <span
-      className={["absolute flex items-center", vertical ? "flex-col" : "flex-row"].join(" ")}
-      style={wrapper}
-    >
-      {headFirst ? <span className="h-0 w-0" style={head} /> : null}
-      <span className="flex-1" style={stem} />
-      {headFirst ? null : <span className="h-0 w-0" style={head} />}
-    </span>
+    <Fragment>
+      {segments.map((style, index) => (
+        <span key={index} className="absolute" style={{ ...style, backgroundColor: ACCENT }} />
+      ))}
+      <span className="absolute h-0 w-0" style={head} />
+    </Fragment>
   );
 }
 
 /** One of the sheet's cards: a headline, then its rows. */
 function GlanceCard({
-  title,
-  rows,
+  card,
   className,
   style,
 }: {
-  title: string;
-  rows: GlanceRow[];
+  card: HelpCard;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -441,43 +799,10 @@ function GlanceCard({
       className={[GLANCE_CARD_CLASS, "px-3 py-2.5", className].filter(Boolean).join(" ")}
       style={{ border: `2px solid ${GLANCE_LINE}`, ...style }}
     >
-      <GlanceTitle dense>{title}</GlanceTitle>
+      <GlanceTitle dense>{card.title}</GlanceTitle>
       <div className="mt-2">
-        <GlanceRows rows={rows} accent={ACCENT} dense />
+        <GlanceRows rows={card.rows} accent={ACCENT} dense />
       </div>
-    </div>
-  );
-}
-
-/**
- * The one thing down here you can press: the guided tours, offered where people
- * already come looking for help. Cyan, because everything else on this sheet is
- * only there to be read.
- */
-function ToursCard({ onStart }: { onStart: (lessonId: string) => void }) {
-  return (
-    <div
-      className={`${GLANCE_CARD_CLASS} pointer-events-auto px-3 py-2.5`}
-      style={{ border: "2px solid #1c4a56" }}
-    >
-      <GlanceTitle dense>Guided tours</GlanceTitle>
-      <div className="mt-2 flex flex-col gap-1">
-        {TOUR_LESSONS.map((lesson) => (
-          <button
-            key={lesson.id}
-            type="button"
-            onClick={() => onStart(lesson.id)}
-            className="flex items-center gap-2 border border-transparent px-1.5 py-1 text-left text-[12px] leading-tight text-[#a5f3fc] hover:border-cyan-800 hover:bg-cyan-500/10"
-          >
-            <Play className="h-3 w-3 shrink-0" aria-hidden />
-            <span className="flex-1">{lesson.title}</span>
-            <span className="shrink-0 text-[10px] text-[#5e7183]">{lesson.steps.length}</span>
-          </button>
-        ))}
-      </div>
-      <p className="mt-1.5 px-1.5 text-[10px] leading-snug text-[#5e7183]">
-        Press Esc to leave a tour at any point.
-      </p>
     </div>
   );
 }
@@ -494,21 +819,15 @@ const HELP_BUTTON_CLASS =
  * windows get the content and drop the pointing: every card in a column, over a
  * full-screen sheet with one way out.
  */
-function HelpSheet({
-  onClose,
-  onStart,
-}: {
-  onClose: () => void;
-  onStart: (lessonId: string) => void;
-}) {
+function HelpSheet({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-[#101419] font-mono text-[#dbe3ec]">
+    <div className="ui-zoom fixed inset-0 z-[120] flex flex-col bg-[#101419] font-mono text-[#dbe3ec]">
       <div
         className="flex h-11 shrink-0 items-center justify-between px-3"
         style={{ borderBottom: `1px solid ${GLANCE_LINE}` }}
       >
         <span className="text-[12px] font-black uppercase tracking-[0.14em] text-[#aebccd]">
-          What everything does
+          Board help
         </span>
         <button
           type="button"
@@ -521,12 +840,10 @@ function HelpSheet({
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-        <ToursCard onStart={onStart} />
-        <GlanceCard title="Touch moves" rows={TOUCH_MOVES} />
-        {CALLOUTS.map((callout) => (
-          <GlanceCard key={callout.anchor} title={callout.title} rows={callout.rows} />
+        <GlanceCard card={TOUCH_MOVES} />
+        {LINEAR.map((card) => (
+          <GlanceCard key={card.title} card={card} />
         ))}
-        <GlanceCard title="Bottom notices" rows={NOTICES} />
       </div>
     </div>
   );
@@ -535,30 +852,28 @@ function HelpSheet({
 /**
  * The help, folded to fit: one scrollable column growing out of the "?".
  *
- * The glance layer needs a big window - eight cards spread over the screen,
- * each beside the toolbar it names - and between the phone layout and that
- * spread sits a band of small desktop windows where the spread collapses
- * into a pile of overlapping cards. Those windows get this instead: every
- * card in one column beside the button, scrollable, still opened by hover
- * and closed by leaving. Same content, no pointing.
+ * The glance layer needs a big window - a dozen cards spread over the
+ * screen, each beside the toolbar it names - and between the phone layout
+ * and that spread sits a band of small desktop windows where the spread
+ * collapses into a pile of overlapping cards. Those windows get this
+ * instead: every card in one column beside the button, scrollable, still
+ * opened by hover and closed by leaving. Set a target rate or pin a machine count content, no pointing.
  */
 function HelpHoverPanel({
   measured,
   onEnter,
   onLeave,
-  onStart,
 }: {
   measured: Measured;
   onEnter: () => void;
   onLeave: () => void;
-  onStart: (lessonId: string) => void;
 }) {
   const { button, vw, vh } = measured;
   const anchorTop = button ? button.top : vh - 12;
   const anchorLeft = button ? button.left : 12;
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-[120] font-mono"
+      className="ui-zoom pointer-events-none fixed inset-0 z-[120] font-mono"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -572,12 +887,10 @@ function HelpHoverPanel({
           maxHeight: anchorTop - 22,
         }}
       >
-        <ToursCard onStart={onStart} />
-        <GlanceCard title="Mouse and keys" rows={MOVES} />
-        {CALLOUTS.map((callout) => (
-          <GlanceCard key={callout.anchor} title={callout.title} rows={callout.rows} />
+        <GlanceCard card={MOVES} />
+        {LINEAR.map((card) => (
+          <GlanceCard key={card.title} card={card} />
         ))}
-        <GlanceCard title="Bottom notices" rows={NOTICES} />
       </div>
     </div>
   );
@@ -587,81 +900,63 @@ function HelpGlanceSheet({
   measured,
   onEnter,
   onLeave,
-  onStart,
 }: {
   measured: Measured;
   onEnter: () => void;
   onLeave: () => void;
-  onStart: (lessonId: string) => void;
 }) {
-  const { rects, button, vw, vh } = measured;
+  const { button } = measured;
+  const { rings, columns, arrows } = layoutGlance(measured);
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-[120] font-mono"
+      className="ui-zoom pointer-events-none fixed inset-0 z-[120] font-mono"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
       <div className="absolute inset-0 bg-black/60" />
-      {CALLOUTS.map((callout) => {
-        const rect = rects[callout.anchor];
-        if (!rect || callout.glance === false) {
-          return null;
-        }
-        return (
-          <Fragment key={callout.anchor}>
-            <div
-              className="absolute border border-dashed"
-              style={{
-                borderColor: ACCENT_DIM,
-                left: rect.left - RING_PAD,
-                top: rect.top - RING_PAD,
-                width: rect.right - rect.left + RING_PAD * 2,
-                height: rect.bottom - rect.top + RING_PAD * 2,
-              }}
-            />
-            <div className="absolute" style={calloutStyle(callout, rect, vw, vh)}>
-              <div className="relative">
-                <CalloutArrow
-                  side={callout.side}
-                  align={callout.align}
-                  length={CALLOUT_GAP + (callout.offset ?? 0)}
-                />
-                <GlanceCard title={callout.title} rows={callout.rows} />
-              </div>
-            </div>
-          </Fragment>
-        );
-      })}
+      {rings.map((rect, index) => (
+        <div
+          key={index}
+          className="absolute border border-dashed"
+          style={{
+            borderColor: ACCENT_DIM,
+            left: rect.left - RING_PAD,
+            top: rect.top - RING_PAD,
+            width: rect.right - rect.left + RING_PAD * 2,
+            height: rect.bottom - rect.top + RING_PAD * 2,
+          }}
+        />
+      ))}
+      {arrows.map((arrow, index) => (
+        <ArrowMark key={index} arrow={arrow} />
+      ))}
+      {columns.map((column) => (
+        <div
+          key={column.key}
+          className="absolute flex flex-col"
+          style={{ ...column.style, gap: CARD_GAP }}
+        >
+          {column.cards.map((card) => (
+            <GlanceCard key={card.title} card={card} />
+          ))}
+        </div>
+      ))}
       {button ? (
-        <Fragment>
-          {/* A lit stand-in over the real (now dimmed) button, so the corner
-              the sheet grew from stays readable. Hover still lands on the
-              real button underneath. */}
-          <div
-            className="absolute flex items-center justify-center border-2 bg-[var(--mc-49)] font-mono text-[16px] font-black text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]"
-            style={{
-              borderColor: ACCENT,
-              left: button.left,
-              top: button.top,
-              width: button.right - button.left,
-              height: button.bottom - button.top,
-            }}
-          >
-            ?
-          </div>
-          {/* Stacked over the button: the moves you cannot see, then the tours
-              you can press, nearest to the hand that opened this. The notices
-              and plan-card cards stay off this stack - it shares its corner
-              with the plan card's own callout space, and three cards deep it
-              buried the left column's card too. */}
-          <div
-            className="absolute flex w-[360px] flex-col gap-2"
-            style={{ left: button.left, bottom: vh - button.top + 10 }}
-          >
-            <GlanceCard title="Mouse and keys" rows={MOVES} />
-            <ToursCard onStart={onStart} />
-          </div>
-        </Fragment>
+        /* A lit stand-in over the real (now dimmed) button, so the corner
+           the sheet grew from stays readable. Hover still lands on the
+           real button underneath. */
+        <div
+          className="absolute flex items-center justify-center border-2 bg-[var(--mc-49)] font-mono text-[16px] font-black text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]"
+          style={{
+            borderColor: ACCENT,
+            left: button.left,
+            top: button.top,
+            width: button.right - button.left,
+            height: button.bottom - button.top,
+          }}
+        >
+          ?
+        </div>
       ) : null}
     </div>
   );
@@ -676,11 +971,14 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   const show = useCallback(() => {
     window.clearTimeout(hideTimerRef.current);
     const buttonRect = buttonRef.current?.getBoundingClientRect();
+    // Shell px, like the rects: at 130% a 1920 window is 1477 wide here, so
+    // it gets the hover panel, the same as browser zoom gave it.
+    const scale = getUiScale();
     setMeasured({
       rects: measureAnchors(),
       button: buttonRect ? toHelpRect(buttonRect) : undefined,
-      vw: window.innerWidth,
-      vh: window.innerHeight,
+      vw: window.innerWidth / scale,
+      vh: window.innerHeight / scale,
     });
   }, []);
   const scheduleHide = useCallback(() => {
@@ -689,23 +987,13 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   }, []);
   useEffect(() => () => window.clearTimeout(hideTimerRef.current), []);
 
-  // Starting a tour takes the sheet down with it: the tour is about to dim the
-  // same screen and ring things on it, and two glance layers at once is one too
-  // many. It also cannot be hovered away, since the tour blocks the pointer.
-  const startTour = useCallback((lessonId: string) => {
-    window.clearTimeout(hideTimerRef.current);
-    setMeasured(undefined);
-    setSheetOpen(false);
-    startLesson(lessonId);
-  }, []);
-
   if (compact) {
     return (
       <div className="absolute bottom-3 left-3 z-30">
         <button
           type="button"
           onClick={() => setSheetOpen(true)}
-          data-tour-anchor="help"
+          data-help-anchor="help"
           className={HELP_BUTTON_CLASS}
           title="Board help"
           aria-label="Show board help"
@@ -714,7 +1002,7 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
         </button>
         {isSheetOpen && typeof document !== "undefined"
           ? createPortal(
-              <HelpSheet onClose={() => setSheetOpen(false)} onStart={startTour} />,
+              <HelpSheet onClose={() => setSheetOpen(false)} />,
               document.body,
             )
           : null}
@@ -743,7 +1031,7 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
         onClick={show}
         onFocus={show}
         onBlur={scheduleHide}
-        data-tour-anchor="help"
+        data-help-anchor="help"
         className={HELP_BUTTON_CLASS}
         title="Board help"
         aria-label="Show board help"
@@ -753,19 +1041,9 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
       {measured
         ? createPortal(
             fitsGlance ? (
-              <HelpGlanceSheet
-                measured={measured}
-                onEnter={show}
-                onLeave={scheduleHide}
-                onStart={startTour}
-              />
+              <HelpGlanceSheet measured={measured} onEnter={show} onLeave={scheduleHide} />
             ) : (
-              <HelpHoverPanel
-                measured={measured}
-                onEnter={show}
-                onLeave={scheduleHide}
-                onStart={startTour}
-              />
+              <HelpHoverPanel measured={measured} onEnter={show} onLeave={scheduleHide} />
             ),
             document.body,
           )

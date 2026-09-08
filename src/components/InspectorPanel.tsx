@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { MachineShoppingList } from "./MachineShoppingList";
 import { formatCompact } from "@/lib/model";
 import { makeResourceKey } from "@/lib/model/resources";
@@ -31,7 +32,7 @@ import type {
 } from "@/lib/model/types";
 import { calculateSelectionFlow, selectInternalBalances } from "@/lib/solver";
 import { selectTrendSeries, useResourceTrends } from "@/lib/resource-trends";
-import { useFactoryStore } from "@/store/factory-store";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   toggleResourceFavourite,
@@ -292,9 +293,9 @@ export function InspectorPanel() {
   return (
     <aside
       data-help-anchor="inspector"
-      className="flex h-full min-h-[360px] compact:min-h-0 flex-col bg-surface"
+      className="flex h-full min-h-[360px] compact:min-h-0 flex-col bg-[#25272c]"
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <FlowIOPanel />
       </div>
       {/* The build list rides the panel's floor: what to build, at which
@@ -308,6 +309,8 @@ export function InspectorPanel() {
 function FlowIOPanel() {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
+  // Every row prints a rate: follow the rate and power dials.
+  useRateDisplayUnits();
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const setHoveredFlowResourceKey = useFactoryStore((state) => state.setHoveredFlowResourceKey);
   const selectedBoardIds = useFactoryStore((state) => state.selectedBoardIds);
@@ -530,10 +533,10 @@ function FlowIOPanel() {
         // The ring wraps the WHOLE panel, not just the strip: the point is
         // that everything below is about the selection, so the mode has to be
         // readable from anywhere in the list rather than only at the top.
-        "flex min-h-0 flex-1 flex-col rounded border bg-surface-raised",
-        selection
-          ? "border-[var(--selection)] ring-1 ring-[var(--selection-soft)]"
-          : "border-line",
+        // Like the items column: only the controls sit on a card; the list
+        // sits on the column itself.
+        "flex min-h-0 flex-1 flex-col",
+        selection ? "ring-1 ring-inset ring-[var(--selection)]" : "",
       ].join(" ")}
     >
       {selection ? (
@@ -543,7 +546,7 @@ function FlowIOPanel() {
         />
       ) : null}
 
-      <div className="shrink-0 border-b border-line p-1">
+      <div className="mx-2 mt-2 shrink-0 rounded-[6px] border border-neutral-700 bg-[#2a2d33] p-2">
         <div className="mb-1 flex items-center gap-1">
           <ToolbarToggle
             on={workspace.showHiddenResources}
@@ -600,7 +603,7 @@ function FlowIOPanel() {
           <div
             role="group"
             aria-label="Rate display"
-            className="flex h-6 shrink-0 overflow-hidden rounded border border-line-strong"
+            className="flex h-6 shrink-0 overflow-hidden rounded border border-neutral-700"
           >
             <button
               type="button"
@@ -611,7 +614,7 @@ function FlowIOPanel() {
               className={[
                 "px-1.5 text-[9px] font-black leading-none tracking-tight",
                 workspace.netFlowRates
-                  ? "text-fg-muted hover:text-fg"
+                  ? "text-neutral-400 hover:text-neutral-100"
                   : "bg-cyan-500/20 text-cyan-200",
               ].join(" ")}
             >
@@ -624,10 +627,10 @@ function FlowIOPanel() {
               aria-label="Show net rates"
               aria-pressed={workspace.netFlowRates}
               className={[
-                "border-l border-line-strong px-1.5 text-[9px] font-black leading-none tracking-tight",
+                "border-l border-neutral-700 px-1.5 text-[9px] font-black leading-none tracking-tight",
                 workspace.netFlowRates
                   ? "bg-emerald-500/20 text-emerald-200"
-                  : "text-fg-muted hover:text-fg",
+                  : "text-neutral-400 hover:text-neutral-100",
               ].join(" ")}
             >
               NET
@@ -636,7 +639,7 @@ function FlowIOPanel() {
 
           {hiddenCount > 0 ? (
             <span
-              className="ml-auto shrink-0 text-[11px] tabular-nums text-fg-muted"
+              className="ml-auto shrink-0 text-[11px] tabular-nums text-neutral-400"
               title={`${hiddenCount} resource${hiddenCount === 1 ? "" : "s"} hidden`}
             >
               {hiddenCount} hidden
@@ -649,7 +652,7 @@ function FlowIOPanel() {
             title="Hide"
             aria-label="Hide the resources column"
             className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-line-strong text-fg-muted hover:border-cyan-600 hover:text-cyan-400",
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
               hiddenCount > 0 ? "" : "ml-auto",
             ].join(" ")}
           >
@@ -673,14 +676,14 @@ function FlowIOPanel() {
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Filter resources…"
             aria-label="Filter flow resources"
-            className="h-9 w-full rounded border border-line-strong bg-surface pl-2 pr-14 text-base text-fg outline-none placeholder:text-fg-muted focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
+            className="h-9 w-full rounded-[4px] border border-neutral-700 bg-[#17191d] pl-2 pr-14 text-base shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
           />
           {filter ? (
             <button
               type="button"
               onClick={() => setFilter("")}
               aria-label="Clear filter"
-              className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-fg-muted hover:bg-surface-sunken hover:text-fg"
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 hover:bg-[#1b1d21] hover:text-neutral-100"
             >
               {matchCount} ✕
             </button>
@@ -739,7 +742,7 @@ function ToolbarToggle({
       aria-pressed={on}
       className={[
         "flex h-6 w-7 shrink-0 items-center justify-center rounded border",
-        on ? onStyle : "border-line-strong text-fg-muted hover:border-line-strong hover:text-fg",
+        on ? onStyle : "border-neutral-700 text-neutral-400 hover:border-neutral-700 hover:text-neutral-100",
       ].join(" ")}
     >
       {children}
@@ -955,7 +958,10 @@ function FlowVirtualList({
       return;
     }
     overlay.style.visibility = "";
-    overlay.style.top = `${box.top}px`;
+    // The copy is a body portal wearing .ui-zoom: its top/right are shell
+    // pixels, the row's rect and the document width real pixels.
+    const scale = getUiScale();
+    overlay.style.top = `${box.top / scale}px`;
     // clientWidth, not innerWidth: innerWidth counts the width of a classic
     // scrollbar and the `right` of a fixed element is measured from the initial
     // containing block, which does not. That difference is what let the row
@@ -963,7 +969,7 @@ function FlowVirtualList({
     // purpose: an inset "for the scrollbar" left the row's lit edge showing
     // beside its own copy, which read as a second row. The scrollbar problem
     // is solved by the copy being a pointer GHOST instead — see the wrapper.
-    overlay.style.right = `${document.documentElement.clientWidth - box.right}px`;
+    overlay.style.right = `${(document.documentElement.clientWidth - box.right) / scale}px`;
   }, [expandedKey, findExpandedRow]);
 
   /**
@@ -994,9 +1000,13 @@ function FlowVirtualList({
     // Fractional measurement plus slack, never offsetWidth: that rounds to
     // whole pixels, and a round-down of a fractional max-content re-trims
     // the name to "…" — the whole point of the copy is that it never does.
-    const natural = Math.ceil(overlay.getBoundingClientRect().width) + 2;
+    // Rects are real pixels and the copy's width is a shell-pixel style
+    // (it is a body portal wearing .ui-zoom): everything is brought across.
+    const scale = getUiScale();
+    const natural = Math.ceil(overlay.getBoundingClientRect().width / scale) + 2;
+    const rowWidth = box.width / scale;
     overlay.style.width = `${Math.round(
-      Math.min(Math.max(natural, box.width), Math.max(box.right - 12, box.width)),
+      Math.min(Math.max(natural, rowWidth), Math.max(box.right / scale - 12, rowWidth)),
     )}px`;
     overlay.classList.remove("resource-row-measuring");
   }, [findExpandedRow]);
@@ -1101,7 +1111,7 @@ function FlowVirtualList({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
-      className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-2"
     >
       {stickyHeader?.type === "header" ? (
         <FlowSectionHeader
@@ -1155,7 +1165,7 @@ function FlowVirtualList({
             <p
               style={{ height: ROW_HEIGHTS.empty }}
               className={[
-                "flex items-center px-3 text-xs text-fg-muted",
+                "flex items-center px-3 text-xs text-neutral-400",
                 TONE_STYLES[row.section.tone].tint,
               ].join(" ")}
             >
@@ -1229,9 +1239,11 @@ function FlowVirtualList({
               // Where the row was when the pointer reached it, so the first
               // frame is drawn in the right place. From then on the layout
               // effect above owns these two, measured off the row itself.
-              top: expandedRow.top,
-              right: expandedRow.right,
-              "--row-start-width": `${expandedRow.startWidth}px`,
+              // Reported in real pixels by the row; this portal positions in
+              // shell pixels (see positionExpanded).
+              top: expandedRow.top / getUiScale(),
+              right: expandedRow.right / getUiScale(),
+              "--row-start-width": `${expandedRow.startWidth / getUiScale()}px`,
             } as React.CSSProperties
           }
           // One ring around the pair, so the row and its chart read as a
@@ -1243,7 +1255,7 @@ function FlowVirtualList({
           // mark buttons opt back into the pointer (pointer-events-auto on
           // themselves). Hover and dismissal are the underlying rows' and the
           // document watcher's job now, not this element's.
-          className="resource-row-expand pointer-events-none fixed z-[60] overflow-hidden rounded bg-surface-raised shadow-xl ring-1 ring-cyan-500/60"
+          className="resource-row-expand ui-zoom pointer-events-none fixed z-[60] overflow-hidden rounded bg-[#2a2d33] shadow-xl ring-1 ring-cyan-500/60"
         >
           <FlowResourceRow
             balance={expandedRow.balance}
@@ -1337,7 +1349,7 @@ const FlowChartRow = memo(function FlowChartRow({
       <div
         className={[
           "h-full rounded px-1",
-          expanded ? "" : "border border-line bg-surface-sunken/40",
+          expanded ? "" : "border border-neutral-800 bg-[#1b1d21]/40",
         ].join(" ")}
       >
         <TrendSparkline
@@ -1541,7 +1553,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
             full, which is the point, but a name longer than even that has to
             end in an ellipsis rather than run under the rate. */}
         <span className="ml-2 flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-base font-medium text-fg">{name}</span>
+          <span className="min-w-0 truncate text-base font-medium text-neutral-100">{name}</span>
         </span>
 
         <span
@@ -1703,8 +1715,8 @@ function RowMarkButton({
       // The bar around these is pointer-events-none so it can never swallow a
       // click meant for the rate behind it; the buttons opt back in.
       className={[
-        "pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-[13px] leading-none hover:bg-surface-sunken",
-        on ? onClass : "text-fg-muted hover:text-fg",
+        "pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-[13px] leading-none hover:bg-[#1b1d21]",
+        on ? onClass : "text-neutral-400 hover:text-neutral-100",
       ].join(" ")}
     >
       {children}
@@ -1741,9 +1753,9 @@ const TONE_STYLES: Record<
   },
   internal: {
     header:
-      "border-line bg-surface-sunken/90 text-fg-subtle hover:bg-surface",
-    badge: "bg-fg-muted/20 text-fg-subtle",
-    value: "text-fg-subtle",
+      "border-neutral-800 bg-[#1b1d21]/90 text-neutral-300 hover:bg-[#25272c]",
+    badge: "bg-fg-muted/20 text-neutral-300",
+    value: "text-neutral-300",
     // No tint. Internal is the long tail and the one group that means "nothing
     // to see"; painting it too would make the panel a stack of colours with no
     // quiet ground to read the others against.

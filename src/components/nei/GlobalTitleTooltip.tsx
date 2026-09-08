@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { isTouchPointer } from "@/lib/pointer-kind";
+import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
 /**
  * Every browser `title` attribute in the app, rendered as the planner's own
@@ -30,6 +32,7 @@ export function GlobalTitleTooltip() {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<number | undefined>(undefined);
   const pendingRef = useRef<{ lines: string[]; x: number; y: number } | undefined>(undefined);
+  const pointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
 
   useEffect(() => {
     const hide = () => {
@@ -57,12 +60,11 @@ export function GlobalTitleTooltip() {
       );
     };
 
-    const onMove = (event: globalThis.MouseEvent) => {
+    const resolveAt = (target: Element | null, clientX: number, clientY: number, buttons: number) => {
       if (isTouchPointer()) {
         hide();
         return;
       }
-      const target = event.target as Element | null;
       const titled = target?.closest?.(`[title], [${STORED}]`) ?? null;
       if (!titled) {
         hide();
@@ -85,7 +87,7 @@ export function GlobalTitleTooltip() {
         return;
       }
       const text = titled.getAttribute(STORED);
-      if (!text || event.buttons !== 0) {
+      if (!text || buttons !== 0) {
         hide();
         return;
       }
@@ -93,19 +95,47 @@ export function GlobalTitleTooltip() {
       const lines = text.split("\n");
       const panelWidth = panelRef.current?.offsetWidth ?? 260;
       const panelHeight = panelRef.current?.offsetHeight ?? 60;
+      // The panel is a body portal wearing .ui-zoom, so its left/top and its
+      // offset size are shell pixels: the pointer and the window (real
+      // pixels) are brought across by the interface scale (ui-scale.ts).
+      const scale = getUiScale();
       pendingRef.current = {
         lines,
-        x: Math.max(4, Math.min(event.clientX + 12, window.innerWidth - panelWidth - 8)),
-        y: Math.max(4, Math.min(event.clientY + 12, window.innerHeight - panelHeight - 8)),
+        x: Math.max(4, Math.min(clientX / scale + 12, window.innerWidth / scale - panelWidth - 8)),
+        y: Math.max(4, Math.min(clientY / scale + 12, window.innerHeight / scale - panelHeight - 8)),
       };
       if (frameRef.current === undefined) {
         frameRef.current = window.requestAnimationFrame(flush);
       }
     };
+    const onMove = (event: globalThis.MouseEvent) => {
+      pointerRef.current = { x: event.clientX, y: event.clientY };
+      resolveAt(event.target as Element | null, event.clientX, event.clientY, event.buttons);
+    };
+    // A wheel or scroll never hides a tip by itself (Jack, 2026-09-07): a
+    // frame later, once the page has settled, the tip is re-read from
+    // whatever is under the pointer - the same thing keeps it, something
+    // else scrolled in re-targets it, and where the document cannot say
+    // (no elementFromPoint) the tip stays.
+    let settleFrame: number | undefined;
+    const recheckAfterScroll = () => {
+      if (settleFrame !== undefined) {
+        return;
+      }
+      settleFrame = window.requestAnimationFrame(() => {
+        settleFrame = undefined;
+        const pointer = pointerRef.current;
+        if (!pointer || typeof document.elementFromPoint !== "function") {
+          return;
+        }
+        resolveAt(document.elementFromPoint(pointer.x, pointer.y), pointer.x, pointer.y, 0);
+      });
+    };
 
     const options = { capture: true, passive: true } as const;
     document.addEventListener("mousemove", onMove, options);
-    window.addEventListener("wheel", hide, options);
+    window.addEventListener("wheel", recheckAfterScroll, options);
+    window.addEventListener("scroll", recheckAfterScroll, options);
     window.addEventListener("pointerdown", hide, options);
     window.addEventListener("pointercancel", hide, options);
     window.addEventListener("resize", hide, options);
@@ -113,7 +143,11 @@ export function GlobalTitleTooltip() {
     document.documentElement.addEventListener("mouseleave", hide);
     return () => {
       document.removeEventListener("mousemove", onMove, options);
-      window.removeEventListener("wheel", hide, options);
+      window.removeEventListener("wheel", recheckAfterScroll, options);
+      window.removeEventListener("scroll", recheckAfterScroll, options);
+      if (settleFrame !== undefined) {
+        window.cancelAnimationFrame(settleFrame);
+      }
       window.removeEventListener("pointerdown", hide, options);
       window.removeEventListener("pointercancel", hide, options);
       window.removeEventListener("resize", hide, options);
@@ -135,11 +169,11 @@ export function GlobalTitleTooltip() {
     <div
       ref={panelRef}
       data-minecraft-tooltip="true"
-      className="pointer-events-none fixed z-[9999] max-w-[340px] border-2 border-[#2a005f] bg-[#100010] px-2 py-1 font-mono text-[16px] leading-[19px] text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)] [text-shadow:2px_2px_0_#3f3f3f]"
+      className={`${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[340px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
       style={{ left: tip.x, top: tip.y }}
     >
       {tip.lines.map((line, index) => (
-        <div key={`${line}-${index}`} className={index === 0 ? "text-white" : "text-[#aaaaff]"}>
+        <div key={`${line}-${index}`} className={index === 0 ? "text-fg" : "text-fg-subtle"}>
           {line}
         </div>
       ))}

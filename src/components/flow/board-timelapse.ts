@@ -8,6 +8,7 @@ import {
   NODE_GLANCE_LEAVE_ZOOM,
   setNodeDetailGlanceForced,
 } from "./node-detail";
+import { boardZoomScale } from "@/lib/ui-scale";
 
 /**
  * The build timelapse's SCRIPT: the order the board's cards, wires and ink
@@ -879,7 +880,9 @@ function readStoredZoomRange(): { min: number; max: number } {
 }
 
 export function getBoardTimelapseZoomRange(): { min: number; max: number } {
-  return timelapseZoomRange;
+  // Stored at 1:1; the board's zoom carries the interface size (ui-scale.ts).
+  const scale = boardZoomScale();
+  return { min: timelapseZoomRange.min * scale, max: timelapseZoomRange.max * scale };
 }
 
 export function setBoardTimelapseZoomRange(patch: { min?: number; max?: number }): void {

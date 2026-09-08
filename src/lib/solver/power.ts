@@ -6,6 +6,7 @@ import {
   getVoltageTierForEuT,
   getVoltageTierIndex,
   getVoltageTierMaxEuT,
+  getVoltageTierWithinEuT,
   resolveVoltageTier,
 } from "@/lib/model/tiers";
 import type { FactoryNode, MachineTier, Recipe } from "@/lib/model/types";
@@ -14,7 +15,24 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
 type PowerRecipeInput = Partial<
   Pick<Recipe, "machineType" | "machineHandlers" | "machineProfile">
 >;
-type PowerNodeInput = Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType">>;
+type PowerNodeInput = Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType" | "powerEuT">>;
+
+/**
+ * The typed EU/t budget, when the node carries a usable one. A multiblock's
+ * supply is voltage times amps and nothing else (`setProcessingLogicPower`
+ * hands `OverclockCalculator` exactly that product), so a player may name
+ * the product directly instead of building it from hatches. Singleblocks
+ * never have one: their tier is the block.
+ */
+export function getNodePowerBudget(recipe: PowerRecipeInput, node: PowerNodeInput): number | undefined {
+  if (!isMultiblockRecipe(recipe)) {
+    return undefined;
+  }
+  // Zero is a real answer - no supply at all, which the report calls
+  // underpowered - so only an absent or broken value falls back to the pair.
+  const budget = node.powerEuT;
+  return budget !== undefined && Number.isFinite(budget) && budget >= 0 ? budget : undefined;
+}
 
 /**
  * Whether the machine actually running this recipe is a multiblock, which is
@@ -46,6 +64,12 @@ export function getNodeRunTier(
 ): VoltageTier {
   if (!isMultiblockRecipe(recipe)) {
     return getRunVoltageTier(recipe, node.overclockTier);
+  }
+  // A typed budget names its own hatch tier: the highest voltage that fits
+  // inside it. The tier-skip rule and the parallel ordinal read that tier.
+  const budget = getNodePowerBudget(recipe, node);
+  if (budget !== undefined) {
+    return getVoltageTierWithinEuT(budget);
   }
   return resolveVoltageTier(node.overclockTier, getRecipeMinimumVoltageTier(recipe));
 }
@@ -83,6 +107,13 @@ export function getHatchAmps(hatches: number): number {
  */
 export function getNodePowerAmps(recipe: PowerRecipeInput, node: PowerNodeInput): number {
   if (isMultiblockRecipe(recipe)) {
+    // A typed budget is the whole supply: whatever is left over the tier's
+    // voltage is amps, fractional or not - the game multiplies the two back
+    // together before it counts a single overclock.
+    const budget = getNodePowerBudget(recipe, node);
+    if (budget !== undefined) {
+      return budget / getVoltageTierMaxEuT(getVoltageTierWithinEuT(budget));
+    }
     const hatchType = getEnergyHatchType(node.energyHatchType);
     if (hatchType.exotic) {
       return hatchType.amps;
@@ -119,10 +150,22 @@ export function getEffectiveVoltageOrdinal(
   node: PowerNodeInput,
   tier: VoltageTier,
 ): number {
+  const fullPowerPool = getMachineBehaviour(recipe.machineType)?.fullPowerPool === true;
+  const budget = getNodePowerBudget(recipe, node);
+  if (budget !== undefined) {
+    // A typed budget is read as REGULAR hatches of its tier: two amps each
+    // once there is more than one, so the summed voltage is half the
+    // budget, and never under the tier's own voltage (one hatch, one amp).
+    // Mega-style machines count the amps themselves, so the budget stands.
+    const summedVoltage = fullPowerPool
+      ? budget
+      : Math.max(getVoltageTierMaxEuT(tier), budget / 2);
+    return getVoltageTierIndex(getVoltageTierForEuT(summedVoltage));
+  }
   const hatches = getNodeEnergyHatches(recipe, node);
   // Mega-style machines read `getMaxInputEu()`, which counts each regular
   // hatch's full 2 amps; everything else sums hatch voltages alone.
-  const perHatch = getMachineBehaviour(recipe.machineType)?.fullPowerPool ? 2 : 1;
+  const perHatch = fullPowerPool ? 2 : 1;
   const summedVoltage = getVoltageTierMaxEuT(tier) * hatches * perHatch;
   if (!Number.isFinite(summedVoltage)) {
     return getVoltageTierIndex(tier);

@@ -191,10 +191,9 @@ describe("loose cell wires", () => {
     expect(Object.keys(result.edges).sort()).toEqual(["out", "w"]);
   });
 
-  it("a cross-form wire carries nothing once the rule is turned off", () => {
-    // The wire and its ratio survive on the board, but with looseCellWires
-    // off the conversion does not exist: the drinker reads unsupplied, same
-    // as if the wire were not there. Turning the rule back on revives it.
+  it("the rule is always on: a stored off setting changes nothing", () => {
+    // Loose cell wires stopped being a rule on 2026-09-06 (the modes took
+    // over the board's rules): a plan saved with it off converts all the same.
     const result = calculateThroughput(
       project({
         setupRules: { looseCellWires: false },
@@ -209,7 +208,7 @@ describe("loose cell wires", () => {
       { generatedAt: "fixed" },
     );
 
-    expect(result.nodes["taker"].utilization).toBeCloseTo(0);
+    expect(result.nodes["taker"].utilization).toBeCloseTo(1);
   });
 
   it("an edge without the ratio stays inert instead of inventing one", () => {

@@ -1,0 +1,17 @@
+/*
+ * POOL MODE: wires do not exist. The board keeps the edges in the plan (they
+ * come back untouched when the mode goes off) but the two layers that draw
+ * them - the wire SVG and the rate labels - fade out together and stop
+ * answering the pointer. Imported by FactoryFlow.tsx beside the class it
+ * sets (factory-flow-board--pool).
+ */
+.factory-flow-board .react-flow__edges,
+.factory-flow-board .react-flow__edgelabel-renderer {
+  transition: opacity 600ms ease;
+}
+
+.factory-flow-board--pool .react-flow__edges,
+.factory-flow-board--pool .react-flow__edgelabel-renderer {
+  opacity: 0;
+  pointer-events: none;
+}

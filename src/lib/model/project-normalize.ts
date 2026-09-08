@@ -6,6 +6,7 @@ import { dedupeEdgeWires } from "./edge-identity";
 import { isTrashRecipe } from "./trash";
 import { resynthesizePowerRecipes } from "@/lib/power/power-recipe";
 import { snapPositionToGrid, snapSizeUpToGrid } from "@/lib/board-grid";
+import { sectionNodeView, splitSectionHandleId } from "./shared-machine";
 
 /**
  * Everything a project must go through on its way in, whether it arrives from
@@ -30,7 +31,9 @@ export function normalizeLoadedProject(project: FactoryProject): FactoryProject 
                   // saved slotless would otherwise read as a card with no
                   // fluid slot and lose its fuel wire to the cross-form drop.
                   resynthesizePowerRecipes(
-                    normalizeProjectFuelProfiles(renameOpvTier(adoptSetupRules(project))),
+                    normalizeProjectFuelProfiles(
+                      renameOpvTier(adoptSetupRules(requireSolveForPool(project))),
+                    ),
                   ),
                 ),
               ),
@@ -154,16 +157,14 @@ function dropImpossibleEnergyHatchTypes(project: FactoryProject): FactoryProject
  * thing the solve reads and two fields saying the same thing drift.
  */
 function adoptSetupRules(project: FactoryProject): FactoryProject {
-  if (project.assumeBoundaries === undefined) {
+  // THE RULES ARE GONE (2026-09-06): the board's modes do their job and
+  // loose cell wires is always on. Both stored forms are dropped on the way
+  // in so nothing carries them forward; `getSetupRules` ignores them anyway.
+  if (project.assumeBoundaries === undefined && project.setupRules === undefined) {
     return project;
   }
-  const { assumeBoundaries, ...rest } = project;
-  return {
-    ...rest,
-    setupRules: assumeBoundaries
-      ? { freeInputs: true, freeOutputs: true }
-      : (project.setupRules ?? undefined),
-  };
+  const { assumeBoundaries: _legacy, setupRules: _rules, ...rest } = project;
+  return rest;
 }
 
 /**
@@ -279,12 +280,20 @@ function dropCrossFormConnections(project: FactoryProject): FactoryProject {
   // cannot happen is a card with no fluid slot at all on the end of a fluid
   // wire, and that is exactly the shape cross-form connections left behind.
   const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
-  const endpointHandles = (id: string, side: "source" | "target", kind: string): boolean => {
+  const endpointHandles = (
+    id: string,
+    side: "source" | "target",
+    kind: string,
+    handleId: string | undefined,
+  ): boolean => {
     const storage = storagesById.get(id);
     if (storage) {
       return storage.kind === kind;
     }
-    const node = project.nodes.find((entry) => entry.id === id);
+    // The wire's handle names which recipe of a shared machine it lands on;
+    // that section's slots are the ones to ask.
+    const card = project.nodes.find((entry) => entry.id === id);
+    const node = card ? sectionNodeView(card, splitSectionHandleId(handleId).section) : undefined;
     const recipe = node ? recipesById.get(node.recipeId) : undefined;
     if (!recipe) {
       // A pocket card, or a recipe this plan does not carry. Not ours to judge.
@@ -309,8 +318,8 @@ function dropCrossFormConnections(project: FactoryProject): FactoryProject {
       // other, and its stored Canner ratio is fetched, never guessed. The
       // legacy shape this pass hunts had no such field.
       edge.crossForm !== undefined ||
-      (endpointHandles(edge.source, "source", edge.resourceKind) &&
-        endpointHandles(edge.target, "target", edge.resourceKind)),
+      (endpointHandles(edge.source, "source", edge.resourceKind, edge.sourceHandle) &&
+        endpointHandles(edge.target, "target", edge.resourceKind, edge.targetHandle)),
   );
 
   if (!nodesChanged && edges.length === project.edges.length) {
@@ -411,4 +420,16 @@ function snapProjectToGrid(project: FactoryProject): FactoryProject {
         : undefined),
     })),
   };
+}
+
+/**
+ * Pool mode is the deeper solve mode: a plan that says pool without solve
+ * (hand-edited, or saved by a build where the rule did not exist yet)
+ * opens with solve mode on, exactly as the store keeps them.
+ */
+function requireSolveForPool(project: FactoryProject): FactoryProject {
+  if (project.poolMode && !project.solveMode) {
+    return { ...project, solveMode: true };
+  }
+  return project;
 }

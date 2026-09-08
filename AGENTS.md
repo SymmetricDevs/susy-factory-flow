@@ -117,8 +117,9 @@ Working notes for future agents on GTNH Factory Flow.
   Canner's power and time. Do NOT go further than this by default - an
   auto-inserted converter that discarded empty cells was designed and
   rejected in the same session.
-- LOOSE CELL WIRES is the one opt-in beyond it (`SetupRules.looseCellWires`,
-  off by default, in the board-rules sheet): a filled cell and its fluid wire
+- LOOSE CELL WIRES is the one step beyond it, ALWAYS ON since 2026-09-06
+  (it was an opt-in rule in the setup-rules sheet, which is gone; see "The
+  Three Modes"): a filled cell and its fluid wire
   straight together, EITHER WAY ROUND - cell output onto fluid input, fluid
   output onto cell input - and the gesture behaves like any compatible pair
   (green wash, whole-card drops, drags started from either end). The wire
@@ -216,6 +217,30 @@ Working notes for future agents on GTNH Factory Flow.
   beside the anchor, upstream when the click asked who makes, and WIRED on
   the clicked resource alone (`buildResourceEdgesBetweenNodes`) - never on
   byproducts, and not at all when the pick no longer touches that resource.
+- HISTORY (Jack, 2026-09-02): the search keeps BACK and FORWARD stacks in
+  the store (`recipeBrowserBack` / `recipeBrowserForward`, `browseBack` /
+  `browseForward`). Every page change while it is open - a chip click, a
+  refactor press - files the page it replaces; a fresh browse drops the
+  forward branch like a browser; asking for the page already open files
+  nothing; closing the search clears both. Buttons sit by the name filter
+  (head row start on a phone); Alt+Left / Alt+Right walk them, and a bare
+  Backspace outside a text box goes back too.
+- A result card's MACHINE TILE is a key: click hides that machine's recipes
+  (the same toggle as darkening its chip; a generator card's tile hides the
+  Generators chip). Right click the card - or hold the tile on a finger -
+  for the card menu: add to board, hide these, only these
+  (`onSelectOnlyRecipeMap`, an include-selection of one map), show every
+  machine. `useLongPress` in the overlay is the one held-press rule, shared
+  with the chips.
+- The tier ceiling filters GENERATOR cards too, by their `unlock` chip
+  (`powerUnlockWithinTier`); a source with no tier chip is never filtered.
+- The search SOUNDS, the one screen off the canvas that does (Jack asked,
+  2026-09-02; the "canvas only" rule in the sounds memory stands everywhere
+  else): `pageOpen` on mount, `pageTurn` on every browse-key change (chip,
+  refactor, back, forward), `pageClose` only on the close paths (an add
+  closes silently - the card landing is its sound), `tick` for every switch
+  (machine chips, All, rate pills, any/all/only, tier select, swap),
+  `stencilAdd` / `stencilRemove` for conditions. All brush-first and quiet.
 - REFACTOR: the card header's refresh button (`beginRecipeRefactor`) reopens
   the search seeded with every consumed input and every output of that card,
   and the add REPLACES the card in place (`refactorNodeWithRecipe`): wires
@@ -329,6 +354,60 @@ Working notes for future agents on GTNH Factory Flow.
   - Tool choices are per empty TGS input slot; each slot should offer the valid tool categories through an icon menu.
   - TGS tool icons should be real item icons, not text labels.
 
+## Shared Machines (One Card, Several Recipes)
+
+- A card can run SEVERAL recipes on ONE machine (Jack, 2026-09-07), the way
+  a Large Chemical Reactor fed for two reactions does in the game. The
+  model is `src/lib/model/shared-machine.ts`: section 0 is the card's own
+  `recipeId`, sections 1..n are `FactoryNode.extraRecipes`
+  (`{ recipeId, recipeInputOverrides? }`). Machine count, tier, power
+  budget and every config knob are the card's and shared; slots, wires,
+  oredict picks and verdicts are per section.
+- ADDRESSING: a section's port handles wear an `r<n>:` prefix on the
+  ordinary handle id (`sectionHandleId` / `splitSectionHandleId`);
+  `canonicalizeResourceHandleId` keeps the prefix and both handle parsers
+  return `section`. A section's solve node is `card#r<n>`
+  (`sectionNodeId` / `parseSectionNodeId` / `sectionOwnerId`). Anything
+  that resolves "the recipe at this handle" must read the section
+  (`sectionNodeView`), never `node.recipeId` alone: the store's edge
+  builders, `getResourceForHandle`, the drop target, the load funnel and
+  the import remap all do.
+- SOLVE: `expandSharedMachines` (memoized, expands to itself) stands each
+  extra section up as a hidden node with the card's settings and re-points
+  its wires, prefix stripped. It runs first in `calculateThroughput` and
+  inside `getPoolProject`, so every diagnosis sees it. The ONE coupling is
+  the time row in equations-core (`listSharedMachineGroups`): the
+  sections' acts sum to at most one, because each act is that section's
+  share of the machine's time. Solve mode's pin is one equality over the
+  group. NOTHING ELSE is coupled, on purpose: GT5U's ProcessingLogic walks
+  every matching recipe and skips one that fails on output space or
+  voltage, so a starved or clogged section just hands its time to the
+  others. Section results stay in `result.nodes` under their own ids.
+- VERDICT: a section held under its own ceiling because the machine's time
+  is spent reads BUSY (`findBusySharer`), naming the section that took the
+  most; more machines is the fix. `findUnwiredNodeIds` answers with the
+  card, never a section id. The machine list's usage is the sections'
+  shares added up, PEAK the hungriest section's draw, AVERAGE each
+  section's draw weighted by its share.
+- CARD: every section gets a `SectionLabelRow` (name, share, verdict word,
+  remove key) over rails of its own; the picture stays with the first, the
+  rest get the bare arrow. The machine menu lists the INTERSECTION of the
+  sections' handlers (`getSharedMachineHandlers`), no twins section on a
+  shared card, and an "Add a recipe this machine runs" row that opens the
+  search PINNED (`browseMachineRecipes`).
+- SEARCH PIN: `recipeBrowserMachinePin` on the store, opened on the
+  stand-in resource `MACHINE_PIN_RESOURCE_ID` with an empty stencil. The
+  browser scopes the maps to the pin (`effectiveMapSelection`, the stored
+  chip selection stands aside), never sends the stand-in as a resource,
+  and the add goes through `addRecipeToNode` (refused, with a chip
+  apology, when no machine runs both). The overlay shows the pin as a
+  plain card at the head of the stencil: picture, name, "Pinned", nothing
+  to press. There is no manual way to pin.
+- `removeRecipeSection` drops the section's wires and renumbers later
+  sections' handles; removing section 0 promotes the next. Refactor swaps
+  section 0 only. Generators, crop farms and custom rate cards never share.
+  `src/lib/model/shared-machine.test.ts` is the exam.
+
 ## Frontend State And Recipe Context
 
 - Node creation from recipe book must preserve selected context/resource overrides.
@@ -339,10 +418,46 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Tabs, Cameras And Where A Plan Lands
 
-- The Welcome tab's `active` flag is per browser SESSION
-  (`sessionStorage`, `src/lib/tour/welcome-tab.ts`). A reload is not a fresh
-  visit: it must leave you on the tab you were on. `open` and `showOnStartup`
-  are permanent.
+- The guided tours were REMOVED (Jack, 2026-09-02) to make room for a new
+  tutorial; nothing under `src/lib/tour` or `src/components/tour`
+  survives. The board's "?" help corner stays, built from
+  `src/components/help/card-parts.tsx`, and it finds what it rings by the
+  `data-help-anchor` attribute (formerly `data-tour-anchor`).
+- The Welcome tab was REBUILT the same day (`src/components/welcome/`):
+  a hero with the three ways to start, the three moves, your designs, the
+  community's top six setups (opened into a fresh tab) and the latest
+  changelog entry, over `WelcomeBackdrop` - a canvas of ghost cards and
+  wires with packets riding them, paused while hidden, still under reduced
+  motion. Its state is `src/lib/welcome/welcome-tab.ts`, same storage keys
+  as before: `active` is per browser SESSION (a reload leaves you on the tab
+  you were on), `open` and `showOnStartup` are permanent.
+- The help sheet (`BoardHelp.tsx`) is a COMPUTED layout: every card is
+  `CARD_W` (280) wide and cards live in flex columns hung from one ring
+  each. Since 2026-09-07 (Jack's rapid-fire pass): board-left under the
+  build toolbar (Units and history); the CENTRE under the mode switch,
+  ONE "Build, Solve, Pool" card, never three; board-right under the tool
+  row (Board tools) and over the framing dock (Viewport); the corner stack
+  over the "?" (Mouse and keyboard, Plan details, arrowed down at the plan
+  bar); TWO FOOT lanes along the board's bottom middle between those
+  (Machine controls + Board windows, Drawers and tanks + Plan diagnostics -
+  the legends live on the board, never over the inspector); the browser
+  column leads with a LIBRARY card arrowed across the seam at the Library
+  pill, then Resources, then Recipe search; the inspector carries Inputs
+  and outputs at its top and Machines over the machine list (anchor
+  `machines` on MachineShoppingList, under the totals when the list is
+  empty). The drawer rows wear the board's own silhouettes in its tints
+  (`DrawerShapeGlyph`), not word chips. Fallbacks in `layoutGlance`: no
+  room for a centre lane beside the build column takes the build lane and
+  sends Units to the corner stack; no foot lane hangs the foot cards under
+  the centre; and estimated stacks that would land on each other report
+  `fits: false`. Do not go back to per-card offsets. Copy is terse
+  engineering text, no quips (Jack, 2026-09-06). The spread only shows
+  from 1920x1080 CSS px (`GLANCE_MIN_VW/VH`, so browser zoom counts
+  by itself; Jack, 2026-09-07: under 1080p it crams, switch to the panel
+  liberally); smaller windows get the one-column hover panel, phones the
+  full-screen sheet. `compact` is `isCompact` ALONE - the paint fold
+  no longer flips a desktop window into the phone sheet.
+  `help-fit-probe.local.mjs <WxH> <out.png>` screenshots it.
 - Each design tab remembers its own camera:
   `src/lib/designs/design-camera.ts`, localStorage keyed by design id. It is
   deliberately NOT part of the plan - a shared setup carries positions and view
@@ -354,8 +469,8 @@ Working notes for future agents on GTNH Factory Flow.
 - The board has NO `fitView` prop, on purpose. React Flow's fit-on-init waits
   for cards to be measured, so on a page load it fires after the plan arrives
   and stamps over the restored camera. The app frames for itself on every path
-  that puts cards on the board (design store, plan import, blueprint paste,
-  tours); do not add the prop back.
+  that puts cards on the board (design store, plan import, blueprint paste);
+  do not add the prop back.
 
 ## Boards (And Their Minimized State, Formerly Pockets)
 
@@ -450,7 +565,7 @@ Working notes for future agents on GTNH Factory Flow.
   still loses its stops and dragged label, and only ROOT-level ink is
   cleared. Do not resurrect the dump (`removeBoards` on
   `applyBoardArrangement` survives as API only).
-- The arrange button opens a small SHEET (same pattern as Setup Rules
+- The arrange button opens a small SHEET (the pattern the retired Setup Rules key used
   beside it): one setting, "Rearrange inside boards", and the Arrange
   button under it. The setting is a browser preference
   (`gtnh-factory-flow.arrange-tidy-boards.v1`, off by default), never part
@@ -592,6 +707,46 @@ Working notes for future agents on GTNH Factory Flow.
   so Ctrl+G and the button agree. Boards inside boards is a real feature
   and a separate decision; it must not happen by accident from a marquee.
 
+## Interface Size (130 Is The New 100%)
+
+- The planner renders a third larger than it used to (Jack, 2026-09-07:
+  "130 is the new 100%"). `src/lib/ui-scale.ts` owns it: a Settings
+  stepper (Size, minus/plus, 60-200% in tens, Reset) stores a PERCENT of
+  the default (`gtnh-factory-flow.ui-scale.v1`), and the factor is
+  percent x `UI_SCALE_BASE` (1.3) - or x1 on a viewport that is compact
+  at 1:1, so phones keep their size. The boot script in layout.tsx
+  (`uiScaleBootScript`, ui-scale-boot.ts, hook-free so the server layout
+  may import it) stamps `--ui-scale` / `--ui-scale-inverse` and the
+  `data-compact` / `data-snug` attributes before first paint;
+  `UiScaleRestore` keeps them live.
+- HOW: CSS `zoom` on the app shell (`.ui-scale-shell`, the FactoryPlannerApp
+  root), and the BOARD UNZOOMS ITSELF (`.ui-scale-shell .react-flow` at the
+  inverse) because React Flow measures cards and the pointer in two pixel
+  spaces once zoom is involved (probed 2026-09-07: fit framed a plan at a
+  third of its size, wheel zoom drifted, drags ran fast). The board carries
+  the factor through its camera instead: `boardMaxZoom()` /
+  `boardCameraMaxZoom()` in board-camera.ts, the glance thresholds in
+  node-detail.ts compare `zoom / boardZoomScale()`, the timelapse range
+  scales at read time. `BOARD_MIN_ZOOM` is not scaled. Never CSS-zoom the
+  board.
+- TWO PIXEL SPACES, and every measurement must say which: REAL px are
+  `clientX`, `getBoundingClientRect`, `window.innerWidth`, anything inside
+  `.react-flow`, and anything portaled to `document.body` (outside the
+  shell); SHELL px are `offsetWidth`/`clientWidth`/`scrollLeft`/style
+  lengths/ResizeObserver rects/CSS lengths inside the shell. The ratio is
+  `getUiScale()`. A portal to the body keeps its fixed positioning box in
+  real px and wears `.ui-zoom` on its VISUAL box. Pointer deltas applied to
+  shell state divide by the scale; containment tests need nothing.
+- VIEWPORT UNITS are not divided by zoom, so `100vh` inside the shell is
+  taller than the window: use `--ui-vh` / `--ui-vw` / `--ui-dvh`
+  (`max-h-[calc(88*var(--ui-vh))]`), never a bare vh/vw in the shell or in
+  a `.ui-zoom` box.
+- The `compact:` and `snug:` Tailwind variants key on the html attributes,
+  NOT on media queries: the breakpoints (viewport-breakpoints.ts, 900 /
+  560 / 1280) are shell px, so compact-view.ts builds its media queries
+  from the live factor. `getUiScale()` is 1 wherever matchMedia is missing
+  (server, jsdom), so tests see an unzoomed world.
+
 ## Compact Mode (Phones And Small Windows)
 
 - `src/lib/compact-view.ts` owns the switch: `useIsCompactViewport()` /
@@ -648,7 +803,10 @@ Working notes for future agents on GTNH Factory Flow.
 ## The Board Grid
 
 - `src/lib/board-grid.ts` owns `BOARD_GRID = 20` and every card size derived
-  from it. Read the "board grid" section of `ARCHITECTURE.md` before changing
+  from it. A recipe card is 22 cells (440px) wide since 2026-09-06: the
+  machine PICTURE sits between the two rails, where the arrow was (inputs
+  left, outputs right, no arrow), on a window that stretches to the rails
+  and never under 6 cells tall; calm mode keeps the bare arrow. Read the "board grid" section of `ARCHITECTURE.md` before changing
   any size, offset, or padding on the flow board.
 - The grid is always on. There is no snap toggle and no grid button; do not
   reintroduce one.
@@ -660,33 +818,110 @@ Working notes for future agents on GTNH Factory Flow.
 ## Routing Links
 
 - Wires are routed by the grid router (`src/components/flow/grid-edge-router.ts`),
-  one A* solve over every edge at once. Do not reintroduce per-edge candidate
+  ONE solve over every edge at once (Jack's remaster, 2026-09-08: "true
+  cooperation between edge drawing"). Do not reintroduce per-edge candidate
   scoring or hardcoded special-case paths.
-- Routes travel on 20px grid lines and never come within one cell of any card.
-  The only exception is the port stub — the final hop across a card's margin
-  into the port itself.
-- A grid line is a lane with 16 usable px. Wire widths are fractions of a lane
-  (`LANE_FRACTIONS`); wires that fit side by side share a lane with a 2px gap,
-  packed around the line's centre. Riding a shared lane is slightly cheaper
-  than an empty one, so wires travel together and split near destinations.
-- Wires never overlap outside port stubs. Overfull lanes cost heavily, so a
-  latecomer takes the next line over; only at a port, where any number of
-  wires can converge on one row, may they stack — and only on the stub.
+- THE WIRES PLAN TOGETHER, in three moves, all in `solveGridRoutes`:
+  - DOCKS FIRST (`planDocks`): every card's wires are looked at together.
+    A wire's ideal exit is the rim point nearest its far end (nearest
+    point, NOT a ray from the centre - a tall card's centre sends wires
+    out the wrong side). Siblings are sorted round the rim by that point,
+    ties at a corner by the bearing of their destinations, and MATCHED onto
+    the card's real docks in that order (`assignDocks`, a monotone DP
+    matching) so no two of them need to cross each other to leave. Two
+    wires between the same pair of cards are ordered one way at one card
+    and the other at the other, so they run parallel. The plan is soft: a
+    dock costs `dockPlanBias` per pixel of rim from the planned one, docks
+    past `dockPlanWindow` are set aside (the whole rim comes back for a
+    wire that cannot route from the near ones), and a dock another wire
+    already uses costs `dockShare` - never a ban, so wires may stack onto
+    one side of a drawer when that routes best (Jack, 2026-09-08).
+  - FIRST PASS, LONGEST WIRE FIRST: a long wire takes the open lines and
+    the short ones fit in around it, which nests a fan to a row of drawers
+    instead of having the last one climb across all the others.
+  - NEGOTIATION: any wire that ended up crossing another (or overflowing a
+    lane) is ripped up and routed again against the whole finished board,
+    and every spot wires cross at gets dearer each round (`escalate`, a
+    history count in the vertex word). Then SWAPS: two wires leaving one
+    card that still cross trade planned docks and both route again, kept
+    only if the board's crossings fall - a wall beside a card inverts the
+    bearing order and neither wire can fix that alone. Budgeted at
+    `negotiationBudget` reroutes per wire (floor 12), `negotiationRounds`
+    rounds, and a wire whose reroute gives the same route is `stuck` and
+    left alone. Lanes are re-packed from scratch at the end so a wire that
+    packed beside a neighbour that later moved is not left off-centre.
+- The search is an 8-direction A* over the uniform 20px grid inside a
+  window (the wire's box plus `windowPad` cells, grown on failure):
+  horizontal, vertical and the two 45° diagonals, a diagonal step costing
+  `diagonalLength` (root two) straights, no corner cutting (a diagonal
+  needs both orthogonal neighbours free), never within one cell of a card
+  (the margin boundary line itself is legal). The port stub is the only
+  margin crossing. The heuristic is octile distance plus one bend when the
+  goal is not straight ahead - with turns priced, distance alone let the
+  search sweep the whole window. Steps are priced once per attempt into a
+  pooled memo; occupancy (lane widths, passers, negotiation history) is
+  dense typed arrays over the board's extent, not maps - four map lookups
+  per priced step was most of a big board's solve.
+- CLEAN EXITS AND LANDINGS: a wire leaves a port straight along the
+  normal and lands straight, for `cleanCells` cells (2). The search is
+  seeded at the clean point heading outward and at the apron dearer by
+  `earlyTurn`; the goal at the clean point must be reached heading in,
+  the apron takes any arrival at the same surcharge. So a bend or a
+  diagonal right off a card is possible when a wire is walled in, and
+  otherwise never.
+- TURNS COST: a 45° bend `turn45` (35), a 90° corner `turn90` (80), a
+  reversal `reverse` (waypoint excursions only), 135° forbidden. Jack's
+  rules (2026-09-08): turning should cost a lot, a diagonal costs its true
+  length, least turns wins, no wiggling left-right to shave a cell.
+- CROSSINGS COST `crossing` (200) each, counted at grid vertices an
+  earlier wire passes straight through (run ends are corners and do not
+  count; a stub's apron vertex DOES, or a wire riding a card's margin line
+  crossed every stub for free) and, for two diagonals, at cell centres.
+- EVERY DIAL IS LIVE: `src/components/flow/router-tuning.ts` is the one
+  `RouterTuning` object the router, the worker job and the dev menu
+  share; `DEFAULT_ROUTER_TUNING` is the shipped behaviour. The dev menu
+  (shift-click the version chip) has a slider and a number box per dial,
+  Undo/Redo (Ctrl+Z / Ctrl+Shift+Z while the palette has focus, a slider
+  drag folding into one step) and "Re-route all wires". Overrides persist
+  per device (`gtnh-factory-flow.router-tuning.v1`), never in a plan, and
+  ride the solve signature so a change re-solves the board.
+- A grid line is a lane with 16 usable px (10 on a diagonal). Wire widths
+  are fractions of a lane (`LANE_FRACTIONS`); wires that fit side by side
+  share a lane with a 2px gap, packed around the line's centre, a joiner
+  on the side of its own next turn. Sharing costs slightly MORE than an
+  empty lane, so ribbons form a lane apart; a full lane costs heavily, so
+  overlap is never chosen while a detour exists. Only port stubs stack.
+- ONE WIRE PER MATERIAL BETWEEN TWO CARDS (Jack, 2026-09-08): the view's
+  channel grouping in FactoryFlow (`channelEdgeIdsByRepresentative`) now
+  keys on source card, target card and resource alone - a shared machine's
+  two benzene recipes into one card, or into two benzene slots, draw as one
+  wire with the summed rate; the flat edges stay distinct underneath for
+  the solve, and deleting the wire deletes them all.
 - Docking is a VIEW toggle (the anchor button, on by default): free mode
-  attaches a wire wherever on the perimeter routes cheapest (any side,
-  corners and their two neighbouring cells excluded, centre-biased, dock
-  points claimed so no two wires share one); port mode pins wires to the
-  classic fixed ports - inputs left, outputs right, storage side centres.
-  Ports always remain where wires START (drag from a chip) and where the
-  numbers live.
+  offers the whole perimeter (corners and their neighbouring cells
+  excluded: two cells on a big card, ONE on a small one so a drawer's side
+  has three docks, not one); port mode pins wires to the classic fixed
+  ports - inputs left, outputs right, storage side centres. Ports always
+  remain where wires START (drag from a chip) and where the numbers live.
+- Crossing hops (`pointsToHoppedSvgPath`) bump over any pair of
+  non-parallel segments, diagonals included: a run bumps toward the upper
+  side of its own line (a vertical run toward the right).
 - Routing must stay deterministic for the same graph state, independent of
-  zoom and render order (edges are solved in routeIndex order).
+  zoom and render order.
 - Boards past `ASYNC_ROUTE_EDGE_LIMIT` wires solve in a Web Worker
   (`grid-route-solve.ts`); the render serves the installed routes until
-  the answer lands. Same pure function, same routes; only the thread differs.
-  Small boards stay synchronous. Do not put a flat pop cap back in the A*:
-  the cap scales with the window, and a wire that fails is walled in
-  (`SEALED`), not out of budget. See the routing section of ARCHITECTURE.md.
+  the answer lands. Same pure function, same routes, same tuning; only the
+  thread differs. Do not put a flat pop cap back in the A*: the cap scales
+  with the window, and a wire that fails is walled in (`SEALED`), not out
+  of budget. See the routing section of ARCHITECTURE.md.
+- BENCHING: `window.__gtnhRouteSolve` holds the last solve's exact
+  obstacles and requests; `route-capture.local.mjs <plan.json> <out.json>`
+  dumps it for a plan file, `router-replay.local.test.ts` (CAPTURE=...,
+  ROUTES=1) replays one and counts geometric crossings, and
+  `.router-corpus/` holds captures of real community boards. Corpus on
+  2026-09-08 vs the old Hanan router: crossings 4->0, 9->0, 45->20,
+  23->5, 6->1, 43->28, 634->314; time roughly 2.5x (farm-power 1.7s->4.6s,
+  in the worker; hv-oil 51->133ms).
 - Edge rate labels are a VIEW mode, off by default: the tag button in the
   board toolbar shows lean rate pills on the lines. No dragging, no popover.
 
@@ -769,9 +1004,114 @@ Working notes for future agents on GTNH Factory Flow.
   builder and its HiGHS adapter were deleted with the `highs` dependency
   once the production core existed. Scratch harnesses belong in
   `*.local.test.*` files, which the vitest config excludes from the suite.
+- The two ring DIAGNOSES (`death-spiral.ts`, `clog-lock.ts`) stand down
+  for an UNFINISHED SETUP (Jack, 2026-09-02): a member with no power or a
+  bare slot (`findBareSlots` in `bare-slots.ts`, rules-aware) is what stops
+  a ring, so it is never a dead loop; and a clog-lock vent whose every
+  machine taker (through drawers) is dead even in the vented world is
+  withdrawn and the world re-solved until nothing more falls, so a machine
+  feeding a stopped card is never "choking on its surplus". The verdict
+  then reads the neighbours honestly: a card at 0% whose takers have all
+  stopped is CLOGGED with `clog.stoppedTakerName` ("X has stopped. Its own
+  card says why."), a stopped-by-setup taker's ask is never a deficit
+  (no BOTTLENECK at 0%), and the sole-outlet supply uplift is refused for
+  a feeder that cannot ramp, so the fed card reads STARVED and names it.
 - Power stalls are pinned to act 0 INSIDE the LP so the outage propagates by
   conservation. Balance dust snaps at 1e-5 relative (`balances.ts`) because
   LP flows carry solver-precision dust proportional to board scale.
+
+## The Three Modes (Build, Solve, Pool) And The Rules That Went
+
+- TOOLBAR LAYOUT since the rework (Jack, 2026-09-06): LEFT row = undo
+  pair, rate keys, pool mode's product tray (`PoolSpawnKeys`, the whole
+  tray slides in only while pool is on, so no empty plate shows). RIGHT
+  row, left to right = the MODE SWITCH tray, the paint tray (palette,
+  paint, image), arrange, the view tray (annotation tools drop-down, view
+  options), and the BIN last of everything. The mute key and the "Watch
+  it build" door left the board for the Settings dialog (Sound section,
+  a Watch it build section). The generator, custom rate and crop farm
+  spawners left the build tray for the top of the items column
+  (`SpawnKeys`, dressed like the columns' hide keys: no ground, plain
+  hover, no colour). Fold widths are MEASURED numbers in toolbar-fold.ts;
+  re-measure with a probe after touching either row.
+- The board has THREE MODES on one switch (`ModeKeys` in FactoryFlow.tsx:
+  three plated keys, the engaged one pressed, icons coloured in every
+  state, and a thin bar in the engaged mode's colour sliding along the
+  bottom edge; `setBoardMode` in the store),
+  exactly one lit, each handing the planner more of the work (Jack,
+  2026-09-06): BUILD - you set machines, counts and wires, the board
+  reports what flows; SOLVE - you set machines and wires and type what
+  you want, the board counts the machines; POOL - you set machines and
+  type what you want, the board counts, wires and imports. Under the hood
+  build is both flags off, solve is `solveMode`, pool is `solveMode` plus
+  `poolMode`, so old plans open in the right position. Each mode has its
+  own sound (`buildOn`, `solveOn`, `poolOn`) - three separate things, not
+  a ladder. Build's icon is Blocks (Jack rejected the hammer).
+- THE SETUP RULES ARE GONE (Jack, 2026-09-06): no sheet, no key, no
+  `setSetupRules`. Free inputs and free outputs were what the modes now
+  do (build and solve are closed setups, pool imports and banks by
+  itself), and LOOSE CELL WIRES IS ALWAYS ON. `getSetupRules` still
+  exists because ~20 callers ask it, and answers every plan the same:
+  `{freeInputs: false, freeOutputs: false, looseCellWires: true}`. The
+  load funnel drops stored `setupRules` and the legacy `assumeBoundaries`
+  (`adoptSetupRules` in project-normalize.ts); the schema still accepts
+  them so old JSON parses. A test that needs an open boundary calls
+  `closeBoundaries` itself. `src/lib/solver/setup-rules.test.ts` pins all
+  of this. Community plans saved with free inputs/outputs on now solve
+  as closed setups - a known, decided consequence.
+- `FactoryProject.poolMode` (Jack, 2026-09-05) is the DEEPER SOLVE MODE:
+  pool implies solve, and leaving solve leaves it too. You pin product
+  amounts or machine counts; the plan does the rest - counts, imports,
+  outputs, wiring. ONE
+  shared pool per resource: every machine output feeds it, every consumed
+  input drinks from it, surplus banks, and anything NOBODY makes is
+  imported and listed under INPUTS (the pool is a source). Wires DO NOT
+  EXIST in it: the solve drops them whole and the board fades the wire
+  layers (`pool-mode.css`, `factory-flow-board--pool`); they come back
+  untouched when the mode goes off. Port-to-port drags land nothing.
+- The mechanism is `expandPool` in `src/lib/solver/pool-mode.ts`: hidden
+  drawers (`pool:<key>`) and wires (`pool-edge:...`) added to the project
+  before the solve, so conservation, fairness, recycle-before-import and
+  banking apply unchanged. A pool with feeders and takers is an overflow
+  buffer; feeders only, a PRODUCT drain (not byproduct - a byproduct asks
+  for nothing and a machine whose only outlet asks for nothing read "on
+  demand" when it was really starved); takers only, a SOURCE (the import).
+  The expansion is cached per project object and the expanded project
+  expands to itself; the solve keeps the hidden edges and storages in the
+  result so the rails can read them.
+- Everything that walks the graph asks `getPoolProject(project)` first:
+  `deriveNodeVerdict`, `findUnwiredNodeIds`, `buildRailPorts`,
+  `buildLimitLadder`, `findDeathSpirals`, `findClogLocks`. A starved card
+  looks THROUGH a pool to the machine feeding it (`findUpstreamCulprit`).
+- Drawers carry over: a drawer's pool side is `FactoryStorage.poolSide`
+  when set, else what its (ignored) wires said it was for (`poolSideOf`:
+  fed only = drain, drawn only = source, a buffer has no side and is idle).
+  A DRAIN drawer is the plan's declared product (its `drainMode` still says
+  product/byproduct/trash, and `targetPerSecond` is the solve ask). There
+  is NO source key (Jack, 2026-09-05): the pool imports by itself, so a
+  source drawer says nothing. New product drawers come from the build
+  tray's one pool key (`PoolSpawnKeys` -> `addPoolStorage`, through the
+  recipe search's `ItemPickerPopover`) or a drag off a port into empty
+  space (`addStorageForConnection`, side from the port, no wire).
+- CELLS AND FLUIDS are bridged inside the pool: `listPoolCellPairs` names
+  every cell/fluid pair the plan's slots carry in both forms (the search's
+  `isFluidEquivalentToFilledCell` match), the board fetches each cell's
+  litres from the Canner (`fetchLitresPerCell`, `setPoolCellRatios`, stored
+  on the plan as `poolCellRatios`, never guessed), and the expansion adds
+  the loose-wire rule's hidden free Tank per direction - only FROM a side
+  something real feeds, so a form nobody makes still imports instead of
+  two tanks feeding each other.
+- Chrome: the pool key is the third of the `ModeKeys` (Waves icon). Each
+  lit key has its own colour and nothing else changes: build gold
+  `#f5b642`, solve violet `#c78bff` (cyan clashed with pool), pool blue `#6f9cff` (the product key on
+  the build tray lights the same blue while its picker is open). There is
+  NO room light for any mode (Jack, 2026-09-06; the solve and pool auras
+  were removed). Sounds: `buildOn` a latch (tick, then a wooden knock),
+  `solveOn` the shimmer, `poolOn` a drop into water (a bent-up plink and
+  its echo, all high and glassy - the low-swell version "sounded like a
+  fart" and must not come back). The wire layers fade under
+  `factory-flow-board--pool` (pool-mode.css).
+  `src/lib/solver/pool-mode.test.ts` is the exam.
 
 ## Verification
 

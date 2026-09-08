@@ -15,6 +15,7 @@ import {
   getSessionUser,
   isCommunityConfigured,
   makeActorKey,
+  makeVoterKey,
   parseEntryIcon,
 } from "@/lib/server/community";
 import {
@@ -131,7 +132,7 @@ async function listPublicBlueprints(request: Request, url: URL) {
     .slice(0, PUBLIC_BLUEPRINT_PAGE_SIZE)
     .map((row) => rowToBlueprintSummary(row, sessionUser?.id));
   if (deviceId) {
-    await attachMyBlueprintVotes(blueprints, makeActorKey(request, deviceId));
+    await attachMyBlueprintVotes(blueprints, await makeVoterKey(request, deviceId));
   }
 
   const response: BlueprintListResponse = { blueprints, hasMore };

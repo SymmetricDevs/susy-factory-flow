@@ -51,3 +51,70 @@ export function getPowerStructureArt(sourceId: string): string | undefined {
   const id = STRUCTURE_ART_ALIASES[sourceId] ?? sourceId;
   return STRUCTURE_ART_IDS.has(id) ? `/power-art/${id}.png` : undefined;
 }
+
+/**
+ * Structure renders for PROCESSING multiblocks, keyed by the dataset's
+ * machine handler id (`recipe.machineHandlers[].id`), shipped beside the
+ * power renders. Jack supplied the first twenty (2026-09-06) - the ones the
+ * public setups place most, which cover most cards on community boards -
+ * as 1254px renders, re-encoded here at 640px wide, palette PNG. A handler
+ * not in this set wears its controller's item icon, as every multiblock
+ * did before. To add one: drop `<handler-id>.png` in public/power-art and
+ * list the id here.
+ */
+const MACHINE_STRUCTURE_ART_IDS = new Set([
+  "cryogenic-freezer",
+  "dangote-distillus",
+  "distillation-tower",
+  "electric-blast-furnace",
+  "industrial-autoclave",
+  "industrial-centrifuge",
+  "industrial-chemical-bath",
+  "industrial-maceration-stack",
+  "industrial-mixing-machine",
+  "large-chemical-reactor",
+  "large-electric-compressor",
+  "large-fluid-extractor",
+  "large-sifter",
+  "oil-cracking-unit",
+  "steam-grinder",
+  "steam-separator",
+  "steam-squasher",
+  "thermic-heating-device",
+  "vacuum-freezer",
+  "volcanus",
+  // The second batch (2026-09-06): machines whose maps export no handler
+  // list and so were missed by the first sweep, the Pyrolyse Oven first.
+  "boldarnator",
+  "chemical-plant",
+  "coke-oven",
+  "dissolution-tank",
+  "industrial-coke-oven",
+  "industrial-sledgehammer",
+  "multiblock-electrolyzer",
+  "pyrolyse-oven",
+  "vacuum-furnace",
+]);
+
+/**
+ * Recipe-map handlers whose machine is a power source with a render already
+ * (a generator placed as a RECIPE card, off the fuel maps, rather than as a
+ * power card): the handler id spelled the long way, the render's id short.
+ */
+const MACHINE_TO_POWER_ART: Record<string, string> = {
+  "high-temperature-gas-reactor": "htgr",
+  "liquid-fluoride-thorium-reactor": "lftr",
+  "thorium-high-temperature-reactor": "thtr",
+};
+
+export function getMachineStructureArt(handlerId: string | undefined): string | undefined {
+  if (!handlerId) {
+    return undefined;
+  }
+  if (MACHINE_STRUCTURE_ART_IDS.has(handlerId)) {
+    return `/power-art/${handlerId}.png`;
+  }
+  // A power source's render serves its recipe-card handler too (the Large
+  // Naquadah Reactor, the boilers, the heat exchangers share their ids).
+  return getPowerStructureArt(MACHINE_TO_POWER_ART[handlerId] ?? handlerId);
+}

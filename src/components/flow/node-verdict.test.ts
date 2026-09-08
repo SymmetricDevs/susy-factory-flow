@@ -259,6 +259,40 @@ describe("deriveNodeVerdict", () => {
     expect(verdict.binding?.resourceKey).toBe("item:lim");
   });
 
+  it("does not read bottleneck over solver dust at a hundred fusion reactors", () => {
+    // A player's board (2026-09-07): 100 fusion reactors making a million
+    // litres of plasma a second fed one turbine at 1.4%. The wire's ask was
+    // 14077.000014 against 14077 shipped - a fourteen-millionths gap, LP
+    // dust at that scale - and the reactors read BOTTLENECK at 1.4% instead
+    // of on demand.
+    const proj = project({
+      recipes: [
+        { id: "r", name: "Fusion", machineType: "Fusion", minimumTier: "UEV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+      ] as unknown as FactoryProject["recipes"],
+      nodes: [machineNode("N", "r", { machineCount: 100 }), machineNode("C")],
+      edges: [edge("eOut", "N", "C", "plasma"), edge("eIn", "C", "N", "nitinol")],
+    });
+    const result = throughput(
+      {
+        N: nodeResult({
+          utilization: 0.014077,
+          capableUtilization: 1,
+          demandUtilization: 0.014077,
+          inputs: { "item:nitinol": flow("item", "nitinol", 72_000) },
+          outputs: { "item:plasma": flow("item", "plasma", 1_000_000) },
+        }),
+        C: nodeResult({ utilization: 1, capableUtilization: 1, demandUtilization: 1 }),
+      },
+      {
+        eOut: edgeResult({ transferredPerSecond: 14077, demandPerSecond: 14077.000014 }),
+        eIn: edgeResult({ transferredPerSecond: 1013.544, demandPerSecond: 1013.544 }),
+      },
+    );
+
+    const verdict = deriveNodeVerdict(proj, result, "N");
+    expect(verdict.kind).toBe("demand-set");
+  });
+
   it("reads bottleneck with the unmet ask and machines to add", () => {
     const proj = project({
       recipes: [

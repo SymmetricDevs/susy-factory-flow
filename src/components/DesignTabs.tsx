@@ -1,16 +1,22 @@
 "use client";
 
-import { Compass } from "lucide-react";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
+import { Compass, Library } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
+import { openDesigns, type DesignFolder } from "@/lib/designs/design-library";
 import type { EntryIcon } from "@/lib/model/types";
 import { FLUID_ICON_SCALE, ResourceIcon } from "./nei/ResourceIcon";
+import { useLibrarySyncStore } from "@/lib/library/library-sync";
+import { leaveLibrary, openLibrary, useLibraryTab } from "@/lib/library/library-tab";
 import {
   closeWelcomeTab,
   leaveWelcomeTab,
   openWelcomeTab,
   useWelcomeTab,
-} from "@/lib/tour/welcome-tab";
+} from "@/lib/welcome/welcome-tab";
 import { useDesignStore } from "@/store/design-store";
 import { useSolvingBooks } from "@/components/flow/use-solving-books";
 
@@ -23,7 +29,7 @@ const MENU_WIDTH = 230;
 const RUBBER_MAX = 24;
 
 /** Which destructive item is one click from firing, if any. */
-type ArmedAction = "delete" | "right" | "left" | "others";
+type ArmedAction = "right" | "left" | "others";
 
 interface OpenMenu {
   id: string;
@@ -34,18 +40,27 @@ interface OpenMenu {
 }
 
 export function DesignTabs() {
-  const designs = useDesignStore((state) => state.designs);
+  const allDesigns = useDesignStore((state) => state.designs);
+  const folders = useDesignStore((state) => state.folders);
   const activeDesignId = useDesignStore((state) => state.activeDesignId);
   const isHydrated = useDesignStore((state) => state.isHydrated);
   const saveState = useDesignStore((state) => state.saveState);
+  const libraryError = useDesignStore((state) => state.error);
+  const sync = useLibrarySyncStore();
   const switchToDesign = useDesignStore((state) => state.switchToDesign);
   const addDesign = useDesignStore((state) => state.addDesign);
   const copyDesign = useDesignStore((state) => state.copyDesign);
   const renameDesign = useDesignStore((state) => state.renameDesign);
-  const removeDesign = useDesignStore((state) => state.removeDesign);
-  const removeDesigns = useDesignStore((state) => state.removeDesigns);
+  const closeDesign = useDesignStore((state) => state.closeDesign);
+  const closeDesigns = useDesignStore((state) => state.closeDesigns);
   const reorderDesigns = useDesignStore((state) => state.reorderDesigns);
+  const moveDesignToFolder = useDesignStore((state) => state.moveDesignToFolder);
   const welcome = useWelcomeTab();
+  const shelf = useLibraryTab();
+  // The strip is the OPEN designs. The rest live on the shelf.
+  const designs = openDesigns(allDesigns);
+  // Neither page is a design, and exactly one thing in this row looks current.
+  const coveringPage = welcome.active || shelf.active;
 
   const [renamingId, setRenamingId] = useState<string>();
   const [openMenu, setOpenMenu] = useState<OpenMenu>();
@@ -198,7 +213,9 @@ export function DesignTabs() {
       }
       event.preventDefault();
       // Line-mode deltas (some mice on Firefox) arrive in rows, not pixels.
-      const pixels = event.deltaMode === 1 ? delta * 16 : delta;
+      // Wheel deltas are real pixels and scrollLeft is shell pixels: divided
+      // by the interface scale so a notch moves the same strip of tabs.
+      const pixels = (event.deltaMode === 1 ? delta * 16 : delta) / getUiScale();
       const maxScroll = scroller.scrollWidth - scroller.clientWidth;
 
       if (pos === undefined) {
@@ -269,6 +286,10 @@ export function DesignTabs() {
     let trackWidth = 0;
     let lastClientX = startClientX;
     let frame = 0;
+    // The geometry below is measured in real pixels (rects and clientX) and
+    // written back as translate, which is shell pixels: divided by the
+    // interface scale at the two write sites.
+    const scale = getUiScale();
 
     const trackX = (clientX: number) => clientX - track.getBoundingClientRect().left;
 
@@ -290,7 +311,7 @@ export function DesignTabs() {
         -(dragged.mid - reach),
         Math.min(trackWidth - (dragged.mid + reach), trackX(lastClientX) - startTrackX),
       );
-      dragged.el.style.transform = `translateX(${dx}px)`;
+      dragged.el.style.transform = `translateX(${dx / scale}px)`;
 
       // Where the held pill sits, against RESTING midpoints — the DOM never
       // reorders mid-drag, so they stay true. A neighbour yields as soon as
@@ -319,7 +340,7 @@ export function DesignTabs() {
             : position < startIndex && position >= targetIndex
               ? step
               : 0;
-        slot.el.style.transform = shift ? `translateX(${shift}px)` : "";
+        slot.el.style.transform = shift ? `translateX(${shift / scale}px)` : "";
       });
     };
 
@@ -449,9 +470,32 @@ export function DesignTabs() {
           their active state off `welcome.active` too - exactly one tab in this
           row can look current.
         */}
+        {/*
+          The SHELF: every design, open or not, in folders. Not a tab: a fixed
+          square at the head of the row with no name and no close, because it
+          is a place rather than a thing on the strip. It covers the board the
+          way Welcome does.
+        */}
+        <button
+          type="button"
+          onClick={() => openLibrary()}
+          aria-label="Open the library"
+          aria-pressed={shelf.active}
+          data-help-anchor="library"
+          className={[
+            "flex h-6 shrink-0 items-center gap-1 rounded-t border-b-2 px-2 text-xs font-medium",
+            shelf.active
+              ? "border-cyan-500 bg-surface-raised text-fg"
+              : "border-transparent text-fg-muted hover:bg-surface-sunken hover:text-fg",
+          ].join(" ")}
+        >
+          <Library className="h-3 w-3" aria-hidden />
+          Library
+        </button>
+        <span aria-hidden className="h-3.5 w-px shrink-0 bg-line" />
+
         {welcome.open ? (
           <div
-            data-tour-anchor="welcome-tab"
             className={[
               "group flex h-6 shrink-0 items-center rounded-t border-b-2 pl-2 pr-1",
               welcome.active
@@ -461,8 +505,10 @@ export function DesignTabs() {
           >
             <button
               type="button"
-              onClick={openWelcomeTab}
-              title="Welcome"
+              onClick={() => {
+                leaveLibrary();
+                openWelcomeTab();
+              }}
               className="flex items-center gap-1 text-xs font-medium"
             >
               <Compass className="h-3 w-3" aria-hidden />
@@ -472,7 +518,6 @@ export function DesignTabs() {
               type="button"
               onClick={closeWelcomeTab}
               aria-label="Close the Welcome tab"
-              title="Close tab"
               className="ml-1 rounded px-1 text-xs text-fg-muted opacity-0 hover:bg-surface hover:text-fg focus:opacity-100 group-hover:opacity-100"
             >
               ✕
@@ -505,7 +550,7 @@ export function DesignTabs() {
             className="flex w-max select-none items-center gap-1"
           >
             {designs.map((design, index) => {
-              const isActive = design.id === activeDesignId && !welcome.active;
+              const isActive = design.id === activeDesignId && !coveringPage;
 
               return (
                 <Fragment key={design.id}>
@@ -525,6 +570,14 @@ export function DesignTabs() {
                 <div
                   data-design-id={design.id}
                   onPointerDown={(event) => beginTabDrag(event, design.id)}
+                  // Middle click closes, the way every tab strip does. Safe
+                  // now that closing only puts the design on the shelf.
+                  onAuxClick={(event) => {
+                    if (event.button === 1) {
+                      event.preventDefault();
+                      void closeDesign(design.id);
+                    }
+                  }}
                   className={[
                     "group flex h-6 shrink-0 items-center rounded-t border-b-2 pl-2 pr-1",
                     isActive
@@ -555,7 +608,6 @@ export function DesignTabs() {
                         void switchToDesign(design.id);
                       }}
                       onDoubleClick={() => setRenamingId(design.id)}
-                      title={design.name}
                       className="flex max-w-[166px] items-center gap-1.5 text-xs font-medium"
                     >
                       {hasDrawableFace(design.icon) ? <TabFace icon={design.icon} /> : null}
@@ -583,7 +635,9 @@ export function DesignTabs() {
                       setOpenMenu({
                         id: design.id,
                         name: design.name,
-                        left: Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8),
+                        // Real pixels; the menu portal converts to shell
+                        // pixels, so the shell-pixel width is scaled here.
+                        left: Math.min(rect.left, window.innerWidth - MENU_WIDTH * getUiScale() - 8),
                         top: rect.bottom + 4,
                       });
                     }}
@@ -622,7 +676,6 @@ export function DesignTabs() {
             leaveWelcomeTab();
             void addDesign();
           }}
-          title="New design"
           aria-label="New design"
           className="shrink-0 rounded px-2 py-0.5 text-sm text-fg-muted hover:bg-surface-sunken hover:text-fg"
         >
@@ -630,8 +683,27 @@ export function DesignTabs() {
         </button>
 
         {/* Everything from here is pinned to the right edge. */}
-        <span className="ml-auto shrink-0 pl-1 text-[11px] text-fg-muted">
-          {saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Saved"}
+        {/* A library that failed to load or save says so here, in red, rather
+            than leaving an empty strip to explain itself. */}
+        <span
+          className={[
+            "ml-auto max-w-[360px] shrink-0 truncate pl-1 text-[11px]",
+            libraryError || sync.state === "error" ? "text-red-400" : "text-fg-muted",
+          ].join(" ")}
+        >
+          {libraryError
+            ? libraryError
+            : saveState === "saving"
+              ? "Saving…"
+              : saveState === "error"
+                ? "Save failed"
+                : sync.state === "syncing"
+                  ? "Syncing…"
+                  : sync.state === "error"
+                    ? `Sync failed: ${sync.message ?? ""}`
+                    : sync.state === "idle"
+                      ? "Synced"
+                      : "Saved"}
         </span>
       </div>
 
@@ -645,6 +717,8 @@ export function DesignTabs() {
             designs.map((design) => design.id),
             openMenu.id,
           )}
+          folders={folders}
+          folderId={allDesigns.find((design) => design.id === openMenu.id)?.folderId}
           onClose={closeMenu}
           onArm={setArmed}
           onRename={() => {
@@ -655,12 +729,16 @@ export function DesignTabs() {
             void copyDesign(openMenu.id);
             closeMenu();
           }}
-          onDelete={() => {
-            void removeDesign(openMenu.id);
+          onMoveToFolder={(folderId) => {
+            void moveDesignToFolder(openMenu.id, folderId);
+            closeMenu();
+          }}
+          onCloseTab={() => {
+            void closeDesign(openMenu.id);
             closeMenu();
           }}
           onCloseMany={(ids) => {
-            void removeDesigns(ids, openMenu.id);
+            void closeDesigns(ids, openMenu.id);
             closeMenu();
           }}
         />
@@ -677,56 +755,34 @@ function DesignMenu({
   menu,
   armed,
   neighbours,
+  folders,
+  folderId,
   onClose,
   onArm,
   onRename,
   onDuplicate,
-  onDelete,
+  onMoveToFolder,
+  onCloseTab,
   onCloseMany,
 }: {
   menu: OpenMenu;
   armed?: ArmedAction;
   neighbours: { left: string[]; right: string[]; others: string[] };
+  folders: DesignFolder[];
+  folderId?: string;
   onClose: () => void;
   onArm: (action: ArmedAction) => void;
   onRename: () => void;
   onDuplicate: () => void;
-  onDelete: () => void;
+  onMoveToFolder: (folderId: string | undefined) => void;
+  onCloseTab: () => void;
   onCloseMany: (ids: string[]) => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    // Capture phase, and pointerdown rather than mousedown: the board's pan
-    // handler stops the event dead on the way up (d3-zoom calls
-    // stopImmediatePropagation), so a bubble-phase listener here never heard a
-    // press on the canvas and the menu just sat there. Pointer events also
-    // cover a finger without waiting for the synthesized mouse press.
-    document.addEventListener("pointerdown", closeOnOutsideClick, true);
-    document.addEventListener("keydown", closeOnEscape);
-    // A fixed menu does not travel with the strip, so it is dismissed rather
-    // than left floating somewhere it no longer points at.
-    window.addEventListener("scroll", onClose, true);
-    window.addEventListener("resize", onClose);
-
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsideClick, true);
-      document.removeEventListener("keydown", closeOnEscape);
-      window.removeEventListener("scroll", onClose, true);
-      window.removeEventListener("resize", onClose);
-    };
-  }, [onClose]);
+  // The one dropdown rule (use-dropdown-dismiss.ts): press outside, Escape,
+  // wheel, scroll, resize, a board pan, or the mouse drifting away.
+  useDropdownDismiss(true, { refs: [menuRef], onClose, fade: true });
 
   // The menu only ever opens from a click, so this is really just a guard for
   // any render that happens without a DOM.
@@ -739,22 +795,48 @@ function DesignMenu({
       ref={menuRef}
       role="menu"
       aria-label={`Design options for ${menu.name}`}
-      style={{ left: menu.left, top: menu.top, width: MENU_WIDTH }}
-      className="fixed z-[100] overflow-hidden rounded border border-line bg-surface-raised shadow-lg"
+      // A body portal wearing .ui-zoom positions in shell pixels: the
+      // real-pixel anchor is divided by the interface scale.
+      style={{ left: menu.left / getUiScale(), top: menu.top / getUiScale(), width: MENU_WIDTH }}
+      className="ui-zoom fixed z-[100] overflow-hidden rounded border border-line bg-surface-raised shadow-lg"
     >
       <MenuItem label="Rename" onClick={onRename} />
       <MenuItem label="Duplicate" onClick={onDuplicate} />
+      {folders.length > 0 ? (
+        <>
+          <div className="mt-1 border-t border-line px-2 pb-0.5 pt-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-fg-muted">
+            Add to collection
+          </div>
+          {folders.map((folder) => (
+            <MenuItem
+              key={folder.id}
+              label={folder.name}
+              indent
+              checked={folderId === folder.id}
+              onClick={() => onMoveToFolder(folder.id)}
+            />
+          ))}
+          <MenuItem
+            label="No collection"
+            indent
+            checked={!folderId}
+            onClick={() => onMoveToFolder(undefined)}
+          />
+          <div className="mt-1 border-t border-line" />
+        </>
+      ) : null}
 
       {/*
-        Every item below closes designs for good, so each one arms on the first
-        click and fires on the second — two steps rather than a native confirm
-        dialog, because closing cannot be undone and the second click lands
-        where the first did. Labels stay short enough to sit on one line; a
-        count in the label pushed them onto two.
+        Closing puts designs on the shelf, so every close fires on one click;
+        the bulk ones still arm first because a stray click on "close other
+        tabs" empties the strip, and getting it back means a trip to the
+        shelf. Labels stay short enough to sit on one line; a count in the
+        label pushed them onto two.
 
         An item with nothing to close is left out rather than shown disabled;
         on the first or last tab half this menu would otherwise be dead text.
       */}
+      <MenuItem label="Close" onClick={onCloseTab} />
       {neighbours.left.length > 0 ? (
         <BulkCloseItem
           label="Close tabs to left"
@@ -780,11 +862,8 @@ function DesignMenu({
         />
       ) : null}
 
-      {armed === "delete" ? (
-        <MenuItem label="Confirm close" tone="danger" onClick={onDelete} />
-      ) : (
-        <MenuItem label="Close" tone="danger" onClick={() => onArm("delete")} />
-      )}
+      {/* No Delete here: a tab is just a tab. Deleting a design for good is
+          the library's job, where the design is a thing rather than a tab. */}
     </div>,
     document.body,
   );
@@ -832,10 +911,14 @@ function MenuItem({
   label,
   onClick,
   tone = "default",
+  indent,
+  checked,
 }: {
   label: string;
   onClick: () => void;
   tone?: "default" | "danger";
+  indent?: boolean;
+  checked?: boolean;
 }) {
   return (
     <button
@@ -843,11 +926,13 @@ function MenuItem({
       role="menuitem"
       onClick={onClick}
       className={[
-        "block w-full whitespace-nowrap px-2 py-1.5 text-left text-xs hover:bg-surface-sunken",
+        "flex w-full items-center gap-1.5 whitespace-nowrap px-2 py-1.5 text-left text-xs hover:bg-surface-sunken",
+        indent ? "pl-4" : "",
         tone === "danger" ? "text-red-400" : "text-fg",
       ].join(" ")}
     >
-      {label}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {checked ? <span className="text-cyan-300">✓</span> : null}
     </button>
   );
 }

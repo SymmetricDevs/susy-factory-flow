@@ -371,26 +371,60 @@ describe("reactors and endgame", () => {
     expect(model.outputs.some((flow) => flow.name === "Uranium-233")).toBe(true);
   });
 
-  it("runs the Vacuum Reactor uranium design at the wiki's 43,600 EU/t", () => {
-    const model = compute("vacuum-reactor", { design: "uranium" });
+  it("runs the Vacuum Reactor's quad uranium layout at the workbook's 43,600 EU/t", () => {
+    const model = compute("vacuum-reactor", { fuel: "uranium-4", coolant: "he-360k" });
     expect(model.euPerTick).toBe(43_600);
     // 40 quad rods over their 20,000 s lifespan, burned to depleted rods.
-    expect(model.inputs).toEqual([
-      { name: "Quad Fuel Rod (Uranium)", perSecond: 40 / 20_000, unit: "item" },
-    ]);
-    expect(model.outputs).toEqual([
-      { name: "Quad Fuel Rod (Depleted Uranium)", perSecond: 40 / 20_000, unit: "item" },
-    ]);
+    expect(model.inputs[0]).toEqual({ name: "Quad Fuel Rod (Uranium)", perSecond: 40 / 20_000, unit: "item" });
+    expect(model.outputs[0]).toEqual({
+      name: "Quad Fuel Rod (Depleted Uranium)",
+      perSecond: 40 / 20_000,
+      unit: "item",
+    });
+    expect(model.outputs[1]).toEqual(model.inputs[1]);
+    expect(resolvePowerResource("360k He Coolant Cell")?.kind).toBe("item");
+    expect(resolvePowerResource("10k Coolant Cell")?.kind).toBe("item");
     expect(resolvePowerResource("Quad Fuel Rod (Uranium)")?.kind).toBe("item");
+    expect(resolvePowerResource("Fuel Rod (Depleted Tiberium)")?.kind).toBe("item");
     expect(resolvePowerResource("The Core (Depleted)")?.kind).toBe("item");
+    // Sheet: average cell decay 813.7 Hu/s, minimum coolant lifespan 267.9 s.
+    expect(model.stats.find((line) => line.label === "Cell heat")?.value).toBe("813.71/s avg, 1,344/s max");
+    expect(model.stats.find((line) => line.label === "Coolant lifespan")?.value).toBe(
+      "267.86 s min, 442.42 s avg",
+    );
+    // Sheet W14: 1.9 cells a minute to recool, so the cells are real ports -
+    // hot out, cold in, one item id for both - for a placed freezer to close.
+    expect(model.stats.find((line) => line.label === "Cells to recool")?.value).toBe("1.9 a minute");
+    expect(model.inputs[1]).toEqual({ name: "360k He Coolant Cell", perSecond: expect.closeTo(14 / 442.42, 3), unit: "item" });
   });
 
-  it("flags the hot Vacuum Reactor designs and prices The Core at 4.98M EU/t", () => {
-    const mox = compute("vacuum-reactor", { design: "mox" });
-    expect(mox.warnings?.some((line) => line.includes("98% Core Temp"))).toBe(true);
-    const core = compute("vacuum-reactor", { design: "core-40" });
-    expect(core.euPerTick).toBe(4_979_200);
-    expect(core.inputs).toEqual([{ name: "The Core", perSecond: 40 / 100_000, unit: "item" }]);
+  it("prices every Vacuum Reactor rod from the mod source, MOX by core temp", () => {
+    expect(compute("vacuum-reactor", { fuel: "thorium-4" }).euPerTick).toBe(8_720);
+    expect(compute("vacuum-reactor", { fuel: "uranium-1" }).euPerTick).toBe(50 * (4 * 2 + 14 * 3 + 22 * 4));
+    // The Core: 32 cells, 17 pulses, 200 EU a pulse - 4,979,200 on the layout.
+    expect(compute("vacuum-reactor", { fuel: "the-core" }).euPerTick).toBe(4_979_200);
+    // MOX rods multiply by 1 + heatBonus x core temp: MOX 1.5, HD Plutonium 6.
+    const mox = compute("vacuum-reactor", { fuel: "mox-4", coreTemp: "98" });
+    expect(mox.euPerTick).toBeCloseTo(43_600 * (1 + 1.5 * 0.98), 6);
+    expect(mox.warnings?.some((line) => line.includes("melts at 100%"))).toBe(true);
+    expect(compute("vacuum-reactor", { fuel: "high-density-plutonium-4", coreTemp: "98" }).euPerTick).toBeCloseTo(
+      43_600 * (1 + 6 * 0.98),
+      6,
+    );
+    expect(compute("vacuum-reactor", { fuel: "mox-4", coreTemp: "0" }).euPerTick).toBe(43_600);
+    expect(compute("vacuum-reactor", { fuel: "uranium-4" }).warnings?.some((line) => line.includes("melts"))).toBe(false);
+  });
+
+  it("flags a Vacuum Reactor coolant cell that bursts and pins the ports per second", () => {
+    // Excited uranium on 10k cells: the hottest cell takes more heat a
+    // second than it holds.
+    const burst = compute("vacuum-reactor", { fuel: "excited-uranium-4", coolant: "coolant-10k" });
+    expect(burst.warnings?.some((line) => line.includes("bursts"))).toBe(true);
+    // The cell ports run at 14 cells per average lifespan; a quad uranium
+    // layout heats the average 360k cell out in 442.4 s.
+    const model = compute("vacuum-reactor", { fuel: "uranium-4", coolant: "he-360k" });
+    expect(model.inputs[1].perSecond).toBeCloseTo(14 / (360_000 / 813.7142857), 6);
+    expect(compute("vacuum-reactor", {}).stats.some((line) => line.label === "Freezers")).toBe(false);
   });
 
   it("multiplies the LNR by coolant and booster (5.85M EU/t)", () => {
@@ -402,6 +436,49 @@ describe("reactors and endgame", () => {
     expect(model.euPerTick).toBeCloseTo(975000 * 1.5 * 4, 4);
     expect(model.inputs.some((flow) => flow.name === "Liquid Air" && flow.perSecond === 2400)).toBe(
       true,
+    );
+  });
+
+  // Game: FuelRecipeLoader getFluidOrGas(1) per recipe; MTELargeNaquadahReactor
+  // burns pall litres (booster multiplier) over NaquadahFuelTime ticks.
+  // Wiki Large_Naquadah_Reactor summary table pins the boosted L/s figures.
+  it("burns 1 L of LNR fuel per recipe, not 1000 L (wiki EU/L and L/s)", () => {
+    const base = compute("large-naquadah-reactor", {
+      fuel: "Naq Fuel Mk-I",
+      coolant: "None",
+      booster: "None",
+    });
+    // 1 L / 3 s; the old formula used 1000 L and reported 333.33 L/s.
+    expect(base.inputs.find((flow) => flow.name === "Naq Fuel Mk-I")?.perSecond).toBeCloseTo(1 / 3, 6);
+    expect(base.outputs[0]?.perSecond).toBeCloseTo(1 / 3, 6);
+
+    // Wiki: Mk-I + Cryotheum + Molten Naquadah (x4) -> 1.33 L/s fuel.
+    const wikiMkI = compute("large-naquadah-reactor", {
+      fuel: "Naq Fuel Mk-I",
+      coolant: "Cryotheum",
+      booster: "Molten Naquadah",
+    });
+    expect(wikiMkI.euPerTick).toBeCloseTo(975000 * 2.75 * 4, 4);
+    expect(wikiMkI.inputs.find((flow) => flow.name === "Naq Fuel Mk-I")?.perSecond).toBeCloseTo(
+      4 / 3,
+      6,
+    );
+    expect(wikiMkI.inputs.find((flow) => flow.name === "Cryotheum")?.perSecond).toBe(1000);
+    expect(wikiMkI.inputs.find((flow) => flow.name === "Molten Naquadah")?.perSecond).toBe(20);
+
+    // Wiki / Discord: Mk-VI + Temporal Fluid + Enlarged Fluid (x64) -> 5.33 L/s.
+    const wikiMkVI = compute("large-naquadah-reactor", {
+      fuel: "Naq Fuel Mk-VI",
+      coolant: "Tachyon Rich Temporal Fluid",
+      booster: "Spatially Enlarged Fluid",
+    });
+    expect(wikiMkVI.euPerTick).toBeCloseTo(2_077_795_200 * 5 * 64, 0);
+    expect(wikiMkVI.inputs.find((flow) => flow.name === "Naq Fuel Mk-VI")?.perSecond).toBeCloseTo(
+      64 / 12,
+      6,
+    );
+    expect(wikiMkVI.inputs.find((flow) => flow.name === "Tachyon Rich Temporal Fluid")?.perSecond).toBe(
+      20,
     );
   });
 

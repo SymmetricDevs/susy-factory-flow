@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { BOARD_IMAGE_MAX_BYTES } from "@/lib/community/types";
-import { PLAN_PREVIEW_BUCKET } from "@/lib/server/plan-preview";
+import { PLAN_PREVIEW_BUCKET, getPlanPreviewPng } from "@/lib/server/plan-preview";
 import {
   getCommunityDb,
   getSessionUser,
@@ -113,4 +113,23 @@ export async function POST(
       { status: 500 },
     );
   }
+}
+
+/**
+ * The photograph itself, for the library's preview page. Anyone may look:
+ * it is the same picture every chat unfurl already shows.
+ */
+export async function GET(_request: Request, context: { params: Promise<{ planId: string }> }) {
+  const { planId } = await context.params;
+  const png = await getPlanPreviewPng(planId);
+  if (!png) {
+    return NextResponse.json({ error: "No preview." }, { status: 404 });
+  }
+  return new NextResponse(new Uint8Array(png), {
+    headers: {
+      "Content-Type": "image/png",
+      // Re-sharing overwrites in place, so a short cache keeps it honest.
+      "Cache-Control": "public, max-age=300",
+    },
+  });
 }

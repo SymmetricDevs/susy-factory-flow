@@ -9,6 +9,10 @@ import {
 } from "next/font/google";
 import localFont from "next/font/local";
 import { APP_FONT_STORAGE_KEY, DEFAULT_APP_FONT } from "@/lib/app-font";
+import { AppFontRestore } from "@/components/AppFontRestore";
+import { UiScaleRestore } from "@/components/UiScaleRestore";
+import { uiScaleBootScript } from "@/lib/ui-scale-boot";
+import { COMPACT_MAX_HEIGHT, COMPACT_MAX_WIDTH, SNUG_MAX_WIDTH } from "@/lib/viewport-breakpoints";
 import { Analytics } from "./Analytics";
 import { AnalyticsHeartbeat } from "./AnalyticsHeartbeat";
 import { WhatsNewGate } from "@/components/WhatsNewGate";
@@ -88,7 +92,7 @@ const openDyslexic = localFont({
 
 /*
  * Restamps the saved font choice before anything paints, so a reload never
- * flashes Monocraft at someone who switched away from it. Unknown or absent
+ * flashes the default font at someone who switched away from it. Unknown or absent
  * values simply match no CSS rule and land on the default; setAppFont owns
  * the real validation.
  */
@@ -98,6 +102,17 @@ const appFontBootScript = `try{var f=localStorage.getItem(${JSON.stringify(
   DEFAULT_APP_FONT,
 )})document.documentElement.setAttribute("data-app-font",f)}catch(e){}`;
 
+/*
+ * Stamps the interface size (ui-scale.ts) and the compact/snug viewport
+ * attributes before first paint, for the same reason: a page that painted at
+ * one size and snapped to another would flash on every load.
+ */
+const uiScaleBoot = uiScaleBootScript({
+  compactMaxWidth: COMPACT_MAX_WIDTH,
+  compactMaxHeight: COMPACT_MAX_HEIGHT,
+  snugMaxWidth: SNUG_MAX_WIDTH,
+});
+
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://gtnhplanner.com";
 
 export const metadata: Metadata = {
@@ -105,7 +120,7 @@ export const metadata: Metadata = {
   applicationName: "GTNH Planner",
   title: "GTNH Planner | GregTech New Horizons Factory Calculator",
   description:
-    "Plan and optimize GregTech: New Horizons factories on an interactive flowchart. Full recipe data for GTNH 2.8.4 and 2.9, throughput and power calculation, machine ratios, and community-shared plans.",
+    "Plan and optimize GregTech: New Horizons factories on an interactive flowchart. Full recipe data for GTNH 2.9, throughput and power calculation, machine ratios, and community-shared plans.",
   alternates: {
     canonical: "/",
   },
@@ -131,7 +146,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "GTNH Planner | GregTech New Horizons Factory Calculator",
     description:
-      "Free factory planner for GregTech: New Horizons with full recipe data for GTNH 2.8.4 and 2.9. Draw production chains, balance machine ratios, find bottlenecks, and share plans with the community.",
+      "Free factory planner for GregTech: New Horizons with full recipe data for GTNH 2.9. Draw production chains, balance machine ratios, find bottlenecks, and share plans with the community.",
     siteName: "GTNH Planner",
     type: "website",
     url: "/",
@@ -140,7 +155,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "GTNH Planner | GregTech New Horizons Factory Calculator",
     description:
-      "Free factory planner for GregTech: New Horizons with full recipe data for GTNH 2.8.4 and 2.9. Draw production chains, balance machine ratios, find bottlenecks, and share plans with the community.",
+      "Free factory planner for GregTech: New Horizons with full recipe data for GTNH 2.9. Draw production chains, balance machine ratios, find bottlenecks, and share plans with the community.",
   },
   icons: {
     icon: [
@@ -215,6 +230,7 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: appFontBootScript }} />
+        <script dangerouslySetInnerHTML={{ __html: uiScaleBoot }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
@@ -222,7 +238,12 @@ export default function RootLayout({
         {children}
         {/* Above the app rather than inside it: what changed is a fact about
             the whole planner, not about whichever tab happens to be open. */}
-        <WhatsNewGate />
+        <div className="ui-zoom">
+          <WhatsNewGate />
+        </div>
+        {/* Puts the saved font back if anything took it off after the boot
+            script above; see the component. */}
+        <AppFontRestore />
         {/* Every `title` attribute in the app, worn as the planner's own
             tooltip: the browser's grey box never renders again. */}
         <GlobalTitleTooltip />

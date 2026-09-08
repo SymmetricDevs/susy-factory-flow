@@ -27,6 +27,8 @@
  * exactly the viewport-dependent routing ARCHITECTURE.md forbids.
  */
 
+import { boardZoomScale } from "@/lib/ui-scale";
+
 export const NODE_DETAIL_FULL = 0;
 export const NODE_DETAIL_GLANCE = 1;
 
@@ -53,10 +55,14 @@ export function getNodeDetailLevel(zoom: number, current: NodeDetailLevel): Node
   if (!Number.isFinite(zoom) || zoom <= 0) {
     return current;
   }
-  if (zoom < NODE_GLANCE_ENTER_ZOOM) {
+  // The thresholds are written for a 1:1 interface; the board's zoom carries
+  // the interface size (ui-scale.ts), so the lettering falls under eight
+  // pixels at 0.6 times that.
+  const apparent = zoom / boardZoomScale();
+  if (apparent < NODE_GLANCE_ENTER_ZOOM) {
     return NODE_DETAIL_GLANCE;
   }
-  if (zoom >= NODE_GLANCE_LEAVE_ZOOM) {
+  if (apparent >= NODE_GLANCE_LEAVE_ZOOM) {
     return NODE_DETAIL_FULL;
   }
   return current;

@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { planContentFingerprint } from "@/lib/community/plan-fingerprint";
 import { syncSharedPlanAddress } from "@/lib/community/shared-link";
-import { useWelcomeTab } from "@/lib/tour/welcome-tab";
+import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { useFactoryStore } from "@/store/factory-store";
 
 /**
@@ -28,14 +27,10 @@ export function SharedAddressSync() {
   const isWelcomeCoveringBoard = useWelcomeTab().active;
 
   useEffect(() => {
+    // A linked design IS its post, so the address may carry the post's id
+    // whenever the board is showing.
     const linkedPlanId = project.metadata?.communityPlanId;
-    const baseline = project.metadata?.communityFingerprint;
-    const isShareable =
-      !isWelcomeCoveringBoard &&
-      Boolean(linkedPlanId) &&
-      Boolean(baseline) &&
-      planContentFingerprint(project) === baseline;
-    syncSharedPlanAddress(isShareable ? linkedPlanId : undefined);
+    syncSharedPlanAddress(!isWelcomeCoveringBoard && linkedPlanId ? linkedPlanId : undefined);
   }, [project, isWelcomeCoveringBoard]);
 
   return null;

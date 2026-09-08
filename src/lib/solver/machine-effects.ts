@@ -132,6 +132,7 @@ export function getMachineOutputMultiplier(
       node.machineConfigTiers,
       node.machineHandlerId,
       cropStats.minSeedBedTier,
+      cropStats.subSoil !== undefined,
     );
     // A machine-only crop grown in the world drops NOTHING on harvest (the
     // guide's rule: they grow and spread, but only a spade gets seeds out),
@@ -390,6 +391,7 @@ export function getMachineDurationMultiplier(
       node.machineConfigTiers,
       node.machineHandlerId,
       cropStats.minSeedBedTier,
+      cropStats.subSoil !== undefined,
     );
     const env = cropsNhHarvesterEnvironment(
       setup,

@@ -117,7 +117,7 @@ export function IconPicker({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[70vh] w-full max-w-sm flex-col rounded-[6px] border border-neutral-600 bg-[#25272c] p-3 text-neutral-100 shadow-xl"
+        className="flex max-h-[calc(70*var(--ui-vh))] w-full max-w-sm flex-col rounded-[6px] border border-neutral-600 bg-[#25272c] p-3 text-neutral-100 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-2 flex items-center justify-between">

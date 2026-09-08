@@ -5,14 +5,17 @@ import {
   getCommunityDb,
   isCommunityConfigured,
   makeActorKey,
+  makeVoterKey,
 } from "@/lib/server/community";
+import { invalidatePlanListCache } from "@/lib/server/plan-list-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * Casts, switches, or (when re-sending the same value) retracts a vote.
- * Votes are keyed by hashed IP + device id — anonymous but deduplicated.
+ * Votes are keyed by account or device id (see makeVoterKey); the IP only
+ * feeds the rate limit.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ planId: string }> }) {
   if (!isCommunityConfigured()) {
@@ -32,23 +35,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ pla
     if (!(await checkRateLimit(actorKey, "vote", 60, 60 * 10))) {
       return NextResponse.json({ error: "Voting too fast. Slow down." }, { status: 429 });
     }
+    const voterKey = await makeVoterKey(request, deviceId);
 
     const db = getCommunityDb();
     const { data: existing } = await db
       .from("community_votes")
       .select("value")
       .eq("plan_id", planId)
-      .eq("voter_key", actorKey)
+      .eq("voter_key", voterKey)
       .maybeSingle();
 
     let myVote: 1 | -1 | undefined;
     if (existing && existing.value === value) {
-      await db.from("community_votes").delete().eq("plan_id", planId).eq("voter_key", actorKey);
+      await db.from("community_votes").delete().eq("plan_id", planId).eq("voter_key", voterKey);
       myVote = undefined;
     } else {
       const { error } = await db
         .from("community_votes")
-        .upsert({ plan_id: planId, voter_key: actorKey, value });
+        .upsert({ plan_id: planId, voter_key: voterKey, value });
       if (error) {
         throw new Error(error.message);
       }
@@ -77,6 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pla
       throw new Error(updateError.message);
     }
 
+    invalidatePlanListCache();
     const response: CommunityVoteResponse = {
       upvotes: upvotes ?? 0,
       downvotes: downvotes ?? 0,

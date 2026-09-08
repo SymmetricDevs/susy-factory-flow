@@ -291,10 +291,13 @@ function ceilLog4(ratio: number): number {
  * which quietly favours the player. Everything truncates, singleblock or not.
  *
  * Below one tick, a machine cannot run a recipe faster than the game's clock.
- * A multiblock spends the leftover on extra parallels instead, so its
- * throughput keeps climbing and modelling it as a fractional duration gives
- * the same answer. A singleblock has no parallels to spend it on, so it sits
- * at one tick and the rest is simply lost.
+ * A multiblock spends the leftover on extra parallels instead: ParallelHelper
+ * multiplies its parallels by `calculateMultiplierUnderOneTick`, which is
+ * `ceil(1 / duration)`, so 0.625 ticks runs TWO recipes a tick (not 1.6) and
+ * 0.156 runs seven. Rounding the duration DOWN to the nearest natural
+ * fraction (1/2, 1/7) reproduces that once the parallels are multiplied in.
+ * A singleblock has no parallels to spend it on, so it sits at one tick and
+ * the rest is simply lost.
  */
 export function quantiseDurationToTicks(durationTicks: number, subTickCapable: boolean): number {
   if (!Number.isFinite(durationTicks) || durationTicks <= 0) {
@@ -303,7 +306,7 @@ export function quantiseDurationToTicks(durationTicks: number, subTickCapable: b
   if (durationTicks > 1) {
     return Math.floor(durationTicks);
   }
-  return subTickCapable ? durationTicks : 1;
+  return subTickCapable ? 1 / Math.ceil(1 / durationTicks) : 1;
 }
 
 /**

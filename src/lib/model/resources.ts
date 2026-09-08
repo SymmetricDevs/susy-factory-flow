@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { rateMultiplierForKind, rateSuffixForKind } from "./rate-unit";
 import { getCropsNhStats } from "./passive-production";
+import { isFreeRecipeInput } from "./free-input";
 
 export function makeResourceKey(kind: ResourceKind, resourceId: string): ResourceKey {
   return `${kind}:${resourceId}` as ResourceKey;
@@ -205,8 +206,13 @@ export function getChanceMultiplier(
 }
 
 export function isRecipeInputConsumed(
-  input: Pick<ResourceAmount, "id"> & { consumed?: boolean },
+  input: Pick<ResourceAmount, "id"> & { kind?: string; consumed?: boolean },
 ): boolean {
+  // A free-in-the-game placeholder (see free-input.ts) is nothing anyone
+  // supplies, so every rule that skips a circuit skips it too.
+  if (isFreeRecipeInput(input)) {
+    return false;
+  }
   return input.consumed !== false;
 }
 

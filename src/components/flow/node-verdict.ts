@@ -218,6 +218,16 @@ export interface NodeVerdict {
 /** Half a percent: below this, converged solver states are just float noise. */
 const VERDICT_EPSILON = 0.005;
 const RATE_EPSILON = 1e-6;
+/**
+ * A shortfall is real only against the size of the ask. LP flows carry
+ * solver dust proportional to board scale (balances.ts snaps at 1e-5
+ * relative), and a hundred fusion reactors at a million litres a second
+ * carried a fourteen-millionths gap that read as BOTTLENECK at 1.4%.
+ */
+const SHORTFALL_RELATIVE_EPSILON = 1e-5;
+function isMaterialShortfall(missing: number, reference: number): boolean {
+  return missing > Math.max(RATE_EPSILON, Math.abs(reference) * SHORTFALL_RELATIVE_EPSILON);
+}
 
 function clamp01(value: number | undefined, fallback: number): number {
   if (value === undefined || !Number.isFinite(value)) {
@@ -545,7 +555,7 @@ function findHeldOutputClog(
       taken += result.edges[edge.id]?.transferredPerSecond ?? 0;
     }
     const made = flow.amountPerSecond * wanted;
-    if (made - taken <= RATE_EPSILON) {
+    if (!isMaterialShortfall(made - taken, made)) {
       continue;
     }
     const named = rankHeldTaker(project, result, takers);
@@ -920,7 +930,7 @@ export function deriveNodeVerdict(
   // at its level - and blaming the least-oversupplied input then produced
   // "gets 2,000/s, wants 100/s, so you are short", which is nonsense. No
   // genuinely short input means no shortage story: the line is pacing it.
-  if (!binding || binding.shortfallPerSecond <= RATE_EPSILON) {
+  if (!binding || !isMaterialShortfall(binding.shortfallPerSecond, binding.neededPerSecond)) {
     if (!deficit) {
       return { kind: "paced", pct };
     }
@@ -1214,7 +1224,7 @@ function findWorstOutputDeficit(
     }
     const wanted = honestEdgeAskPerSecond(edgeResult, targetResult, edge);
     const missing = Math.max(0, wanted - (edgeResult.transferredPerSecond ?? 0));
-    if (missing <= RATE_EPSILON) {
+    if (!isMaterialShortfall(missing, wanted)) {
       continue;
     }
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
@@ -1231,7 +1241,7 @@ function findWorstOutputDeficit(
       nodeResult.outputs[key as keyof typeof nodeResult.outputs]?.amountPerSecond ?? 0;
     wantedByKey.set(key, Math.max(wantedByKey.get(key) ?? 0, ask));
     const missing = Math.max(0, ask - nameplate * utilization);
-    if (missing > RATE_EPSILON) {
+    if (isMaterialShortfall(missing, ask)) {
       missingByKey.set(key, Math.max(missingByKey.get(key) ?? 0, missing));
     }
   }

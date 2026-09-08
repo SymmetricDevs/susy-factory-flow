@@ -199,6 +199,21 @@ describe("the shared time row", () => {
     expect(result.edges["l"]!.transferredPerSecond).toBeCloseTo(0.5, 3);
   });
 
+  it("still splits evenly when an unrelated dead card sits on the board", () => {
+    // Jack's Electrolyzer board (2026-09-07): an unwired second tower pinned
+    // the fairness stage's worst-off level at zero, and at zero the simplex
+    // had parked one recipe of the shared card at zero too - so the card
+    // read 100/0 with a phantom clog lock on a millionth of a litre.
+    const proj = board();
+    proj.recipes = [...proj.recipes, recipe("lonely", [["oil", 1]], [["tar", 1]])];
+    proj.nodes = [...proj.nodes, node("dead", "lonely")];
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    expect(result.nodes["dead"]!.utilization).toBeCloseTo(0, 4);
+    expect(result.nodes["card"]!.utilization).toBeCloseTo(0.5, 3);
+    expect(result.nodes["card#r1"]!.utilization).toBeCloseTo(0.5, 3);
+    expect(deriveNodeVerdict(proj, result, "card").kind).not.toBe("clog-lock");
+  });
+
   it("lets a section run flat out when the other has nothing to do", () => {
     const proj = board();
     // Unwire the light section's product: it has nowhere to go, so the

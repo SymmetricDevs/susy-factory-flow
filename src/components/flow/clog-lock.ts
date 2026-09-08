@@ -220,13 +220,28 @@ function build(project: FactoryProject, result: ThroughputResult | undefined): C
   // board runs without is not part of the lock and is dropped. What survives
   // is the minimal set of wires that genuinely need a drawer.
   {
+    // A vent is only a vent when it is MATERIAL against the port's own
+    // rate. The vent solve skips the fairness stage, so its vertex can
+    // differ from the books' by solver dust alone (a shared machine's two
+    // recipes at 100/0 in one, 50/50 in the other), and a machine "revived"
+    // by shedding a millionth of a litre is not choking on a surplus.
+    const material = (nodeId: string, key: string, perSecond: number) => {
+      const nameplate = result.nodes[nodeId]?.outputs[key as ResourceKey]?.amountPerSecond ?? 0;
+      return perSecond > Math.max(1e-9, nameplate * 1e-6);
+    };
     const candidates = [...(vented.ventPerSecond?.entries() ?? [])]
       .filter(([nodeId]) => revived.has(nodeId))
       .flatMap(([nodeId, byKey]) => [...byKey.entries()].map(([key, perSecond]) => ({
         port: `${nodeId}|${key}`,
+        nodeId,
+        key,
         perSecond,
       })))
+      .filter((candidate) => material(candidate.nodeId, candidate.key, candidate.perSecond))
       .sort((left, right) => left.perSecond - right.perSecond);
+    if (candidates.length === 0) {
+      return EMPTY_INDEX;
+    }
     const keep = new Set(candidates.map((candidate) => candidate.port));
     const mustRun = [...revived];
     for (const candidate of candidates) {

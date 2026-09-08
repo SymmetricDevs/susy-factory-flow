@@ -577,8 +577,34 @@ export function solveEquationsCore(
         });
       };
       let shrank = false;
-      for (const id of [...pool]) {
-        if ((solved.x[actVar.get(id)!] ?? 0) <= t + 1e-6) {
+      const atLevel = [...pool].filter((id) => (solved.x[actVar.get(id)!] ?? 0) <= t + 1e-6);
+      // A ZERO round is special. A machine that cannot run at all (a bare
+      // slot, no power, a dead feeder) pins the worst-off level at zero, and
+      // at zero the simplex is free to park OTHER machines at zero too - a
+      // shared machine's second recipe, one twin of a pair - even though
+      // they could be lifted. Flooring everything at zero then locked those
+      // in, and an Electrolyzer running two recipes read 100/0 with a
+      // phantom clog lock instead of 50/50. So at zero, only the machines
+      // that truly cannot rise leave the pool: the structurally pinned ones
+      // outright, and the rest after one solve each asking how high that
+      // machine alone can go under the locks so far.
+      if (t <= 1e-6) {
+        for (const id of atLevel) {
+          const stuck =
+            pinnedZero.has(id) ||
+            nodes[id]?.powerStalled === true ||
+            (() => {
+              const lifted = solveWithEscalation(`lift-${round}`, new Map([[actVar.get(id)!, 1]]));
+              return !lifted || lifted.status !== "optimal" || (lifted.x[actVar.get(id)!] ?? 0) <= 1e-6;
+            })();
+          if (stuck) {
+            floorAt(id);
+            pool.delete(id);
+            shrank = true;
+          }
+        }
+      } else {
+        for (const id of atLevel) {
           floorAt(id);
           pool.delete(id);
           shrank = true;

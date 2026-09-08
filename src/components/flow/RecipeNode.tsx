@@ -1544,7 +1544,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   ? ["24px", "24px"]
                   : isCropFarmNode
                     ? ["24px", "24px", "24px", "24px"]
-                    : ["24px", "24px", "24px"]),
+                    : canShareMachine
+                      ? ["24px", "24px", "24px", "24px"]
+                      : ["24px", "24px", "24px"]),
               "minmax(0,1fr)",
               // The tier chip, with its hatch sister fused on the left when
               // the machine is a multiblock that takes energy hatches. The
@@ -1597,6 +1599,23 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   aria-label="Refactor node"
                 >
                   <RefreshCw aria-hidden className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              {canShareMachine ? (
+                // The second door to the machine menu's last row: one more
+                // recipe on this machine, in the head row's own key style,
+                // beside the key that swaps the recipe.
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    browseMachineRecipes(projectNode.id);
+                  }}
+                  className="flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+                  title="Add another recipe to this machine"
+                  aria-label="Add another recipe to this machine"
+                >
+                  <Plus aria-hidden className="h-3.5 w-3.5" />
                 </button>
               ) : null}
               {isCropFarmNode && !isCropFarmPlaceholder ? (
@@ -2293,24 +2312,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                           )}
                           {programmedCircuit && !isSharedMachine ? (
                             <CircuitChip circuit={programmedCircuit} />
-                          ) : null}
-                          {canShareMachine ? (
-                            // The second door to the same action as the
-                            // machine menu's last row: a bare plus at the
-                            // foot of the recipes, taking no room of its own.
-                            <MinecraftTooltip content="Add another recipe to this machine">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  browseMachineRecipes(projectNode.id);
-                                }}
-                                aria-label="Add another recipe to this machine"
-                                className="nodrag flex w-5 shrink-0 items-center justify-center self-stretch text-[var(--mc-ink-muted)] hover:text-white"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
-                            </MinecraftTooltip>
                           ) : null}
                         </>
                       ) : null}

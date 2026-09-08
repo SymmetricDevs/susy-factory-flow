@@ -2677,11 +2677,11 @@ function verdictWord(
     // it set the speed. Nothing here needs fixing.
     case "paced":
       return { word: "paced", tone: "fine" };
-    // Held back by the other recipes on the same machine: nothing is short
-    // and nothing is jammed, the machine is full. Red, since more machines
-    // is the fix, as for a bottleneck.
+    // The rest of the machine's time went to its other recipes: nothing is
+    // short and nothing is jammed, so it wears the plain tone. Two recipes
+    // at 50% each is the machine doing exactly its job.
     case "busy":
-      return { word: "busy", tone: "bottleneck" };
+      return { word: "sharing", tone: "fine" };
     case "balanced":
       return { word: isCustomRate ? "at the dial" : "full", tone: "fine" };
     case "unwired":

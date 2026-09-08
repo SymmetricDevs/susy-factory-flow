@@ -1208,7 +1208,11 @@ function resolveGridRouteEndpoints(
       const side: GridSide = edgeSide === Position.Left ? "left" : "right";
       const measured = getMeasuredSlotEndpoint({ nodeId, handleId, edgeSide });
       if (measured) {
-        return [{ x: measured.x, y: measured.y, side }];
+        // Whole pixels: a DOM measurement under the UI zoom jitters by a
+        // fraction of a pixel between paints, and the router is a
+        // deterministic function of its inputs - a quarter pixel on one
+        // dock sent two identical arranges down different paths.
+        return [{ x: Math.round(measured.x), y: Math.round(measured.y), side }];
       }
       // Unmeasured (first paint of a culled node): the card edge at a
       // plausible port height until the real measurement lands.
@@ -1549,6 +1553,16 @@ function buildArrangeJudge(cardIds: readonly string[]): ArrangeInput["judge"] | 
     sourceCardId: input.sourceNodeId,
     targetCardId: input.targetNodeId,
   }));
+  // The judge's exact inputs at the moment of the arrange, for the audit
+  // tool (tools/audit-board.mjs) to save beside the result.
+  if (typeof window !== "undefined") {
+    (window as unknown as { __gtnhArrangeJudgeInput?: unknown }).__gtnhArrangeJudgeInput = {
+      obstacles,
+      requests,
+      tuning: getRouterTuning(),
+      cardIds: [...cardIds],
+    };
+  }
   return makeRouteJudge(obstacles, requests, getRouterTuning());
 }
 
@@ -11852,7 +11866,9 @@ function measuredPortOffsetY(
     return undefined;
   }
   const measured = getMeasuredSlotEndpoint({ nodeId, handleId, edgeSide });
-  return measured ? measured.y - geometry.y : undefined;
+  // Whole pixels: the measurement jitters by a fraction of a pixel between
+  // paints, and the arrange must be the same function of the same board.
+  return measured ? Math.round(measured.y - geometry.y) : undefined;
 }
 
 /**
@@ -12303,6 +12319,13 @@ function computeAutoArrangement(
   // only when every card on the level is a plain card (no boards).
   const rootIsPlain = root.cards.every((card) => !isPocketId(project, card.id));
   const judge = rootIsPlain ? buildArrangeJudge(root.cards.map((card) => card.id)) : undefined;
+  if (typeof window !== "undefined") {
+    (window as unknown as { __gtnhArrangeInput?: unknown }).__gtnhArrangeInput = {
+      cards: root.cards,
+      wires: root.wires,
+      taste,
+    };
+  }
   const arranged = arrangeBoard({ cards: root.cards, wires: root.wires, taste, judge });
   moves.push(...arranged.moves);
 

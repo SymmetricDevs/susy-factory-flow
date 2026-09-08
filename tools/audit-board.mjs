@@ -43,7 +43,7 @@ try {
     let previous, stableSince = Date.now();
     const deadline = Date.now() + 180000;
     while (Date.now() < deadline) {
-      const snapshot = await page.evaluate(() => ({ input: window.__gtnhRouteSolve, displayed: window.__gtnhReadDisplayedRoutes(), nodes: window.__gtnhFlow.getNodes() }));
+      const snapshot = await page.evaluate(() => ({ input: window.__gtnhRouteSolve, displayed: window.__gtnhReadDisplayedRoutes(), nodes: window.__gtnhFlow.getNodes(), judgeInput: window.__gtnhArrangeJudgeInput ?? null, arrangeInput: window.__gtnhArrangeInput ?? null }));
       const key = JSON.stringify(snapshot);
       const ids = new Set(snapshot.displayed.routes.map((r) => r.edgeId));
       const complete = snapshot.displayed.routes.length === snapshot.input.requests.length &&

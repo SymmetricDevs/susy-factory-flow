@@ -8966,7 +8966,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
               <Network className="mt-[1px] h-4 w-4 shrink-0" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[12px] font-black uppercase">Keep boards</span>
+                  <span className="font-mono text-[12px] font-black uppercase">Keep boards on rearrange</span>
                   <span
                     className={[
                       "font-mono text-[10px] font-black tracking-[1px]",
@@ -8975,9 +8975,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
                   >
                     {arrange.keepBoards ? "ON" : "OFF"}
                   </span>
-                </span>
-                <span className="font-mono text-[11px] leading-snug opacity-80">
-                  On, boards you drew stay as they are and are only placed. Off, every board is dumped and everything is arranged.
                 </span>
               </span>
             </button>

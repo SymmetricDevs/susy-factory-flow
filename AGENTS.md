@@ -564,8 +564,8 @@ Working notes for future agents on GTNH Factory Flow.
   and the arrange lays out one flat set of cards; `applyBoardArrangement`
   gets `removeBoards` = every board id, so the boards go in the arrange's
   own undo entry and the members ride `moves`.
-- KEEP BOARDS is the switch (the arrange SHEET: one setting, "Keep
-  boards", and the Arrange button under it). A browser preference
+- KEEP BOARDS ON REARRANGE is the switch (the arrange SHEET: one setting,
+  no subtext, and the Arrange button under it). A browser preference
   (`gtnh-factory-flow.arrange-keep-boards.v1`, OFF by default), never part
   of the plan. ON is the old lock: a board someone drew is sealed - its
   contents are never rearranged, its frame keeps its size, name, paper and

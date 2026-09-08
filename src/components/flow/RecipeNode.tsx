@@ -3181,17 +3181,13 @@ function SharedMachineRails({
       </MinecraftTooltip>
     );
   };
-  // The rule belongs to the recipe BELOW it: a cell of air under the line,
-  // then the reading sitting on its own ports. The first recipe has no line
-  // over it (the head row is that) and only the reading's cell.
+  // One cell over every recipe holding its reading and its key, nothing
+  // more: the space and the tiles already say where one recipe ends and
+  // the next begins (Jack, 2026-09-07: no line, less margin).
   const rule = (entry: (typeof sections)[number], withKey: boolean) => (
     <div
-      className={[
-        "flex items-end pb-0.5",
-        withKey ? "justify-end" : "justify-start",
-        entry.section > 0 ? "border-t-2 border-[var(--mc-33)]" : "",
-      ].join(" ")}
-      style={{ height: entry.section > 0 ? SECTION_RULE_HEIGHT * 2 : SECTION_RULE_HEIGHT }}
+      className={["flex items-end pb-0.5", withKey ? "justify-end" : "justify-start"].join(" ")}
+      style={{ height: SECTION_RULE_HEIGHT }}
     >
       {withKey ? null : reading(entry)}
       {withKey ? (

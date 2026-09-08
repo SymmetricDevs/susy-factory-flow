@@ -11800,7 +11800,7 @@ function estimateNodeCardSize(
     }
     const effective = getEffectiveNodeRecipe(sectionRecipe, view);
     const rows = Math.max(1, effective.inputs.length, effective.outputs.length);
-    rails += cells(2) * rows + (shared ? (section > 0 ? cells(2) : cells(1)) : 0);
+    rails += cells(2) * rows + (shared ? cells(1) : 0);
   }
   // Title row + machine strip + the port rails + footer, plus one spare row
   // of slack for a config panel.

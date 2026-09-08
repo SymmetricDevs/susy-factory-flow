@@ -1924,7 +1924,13 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           {isSharedMachine ? (
             <SharedMachineRails
               nodeId={projectNode.id}
-              sections={[{ section: 0, rails }, ...sectionRails]}
+              sections={[
+                { section: 0, rails, verdict, powerStalled: result?.powerStalled === true },
+                ...sectionRails.map((entry) => ({
+                  ...entry,
+                  powerStalled: entry.result?.powerStalled === true,
+                })),
+              ]}
               pending={pendingResourceConnection}
               onRemove={(section) => removeRecipeSection(projectNode.id, section)}
               picture={
@@ -2118,6 +2124,17 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                           verdict={cardVerdict}
                           isCustomRate={isCustomRateNode}
                           powerStall={powerReport}
+                          shares={
+                            isSharedMachine
+                              ? [
+                                  { name: recipe.name, pct: Math.min(100, (result?.utilization ?? 0) * 100) },
+                                  ...sectionRails.map((entry) => ({
+                                    name: entry.recipe.name,
+                                    pct: Math.min(100, (entry.result?.utilization ?? 0) * 100),
+                                  })),
+                                ]
+                              : undefined
+                          }
                         />
                       ) : null}
                       {!isCustomRateNode ? (
@@ -2695,6 +2712,12 @@ function UsageStat({
   isCustomRate?: boolean;
   /** Set when the power setup cannot start the build; owns the word AND the hover. */
   powerStall?: NodePowerReport;
+  /**
+   * A SHARED MACHINE: the number is the recipes' shares of its time added
+   * up, and the machine has no one reason, so the reason cell goes and the
+   * hover shows the add-up instead. Each recipe's own reason sits on its row.
+   */
+  shares?: Array<{ name: string; pct: number }>;
 }) {
   const stalled = powerStall !== undefined && powerStall.state !== "ok";
   const state = verdictWord(verdict, isCustomRate, stalled);
@@ -2703,7 +2726,15 @@ function UsageStat({
   return (
     <MinecraftTooltip
       content={
-        stalled && powerStall ? (
+        shares ? (
+          <RecipeTooltip
+            view={{
+              title: "Machine time",
+              rows: shares.map((share) => ({ label: share.name, value: formatPct(share.pct) + "%" })),
+              reason: `${formatPct(Math.min(100, shares.reduce((sum, share) => sum + share.pct, 0)))}% of the machine's time is spent. Each recipe's row says why it runs at its share.`,
+            }}
+          />
+        ) : stalled && powerStall ? (
           // The power restriction replaces the flow reading outright: whatever
           // the wires would say, nothing runs until the power fits.
           <RecipeTooltip
@@ -2746,6 +2777,8 @@ function UsageStat({
             )}
           </div>
         </div>
+        {shares ? null : (
+        <>
         <div className="my-0.5 w-px shrink-0 bg-[var(--mc-47)]" />
         {/* verdict-reason-cell: on an unwired card the WHOLE cell breathes,
             label and all, not just the word inside it. */}
@@ -2765,6 +2798,8 @@ function UsageStat({
             {state.word}
           </div>
         </div>
+        </>
+        )}
       </div>
     </MinecraftTooltip>
   );
@@ -3006,18 +3041,45 @@ function SharedMachineRails({
   onRemove,
 }: {
   nodeId: string;
-  sections: Array<{ section: number; rails: { inputs: RailPort[]; outputs: RailPort[] } }>;
+  sections: Array<{
+    section: number;
+    rails: { inputs: RailPort[]; outputs: RailPort[] };
+    verdict: NodeVerdict;
+    powerStalled: boolean;
+  }>;
   pending: ComponentProps<typeof PortRail>["pending"];
   picture?: ReactNode;
   onRemove: (section: number) => void;
 }) {
   const rowsOf = (entry: (typeof sections)[number]) =>
     Math.max(1, entry.rails.inputs.length, entry.rails.outputs.length);
+  // The rule over a recipe carries the recipe's own reading: its share of
+  // the machine's time and why it runs at that (the same word and hover a
+  // card's footer gives a one-recipe machine). The machine below has no one
+  // reason any more; each recipe has its own, here.
+  const reading = (entry: (typeof sections)[number]) => {
+    const state = verdictWord(entry.verdict, false, entry.powerStalled);
+    const showPct = entry.verdict.kind !== "off" && entry.verdict.kind !== "no-recipe";
+    return (
+      <MinecraftTooltip content={<VerdictHoverContent verdict={entry.verdict} isCustomRate={false} />}>
+        <span className="flex min-w-0 items-baseline gap-1.5 pl-1 text-[12px] leading-[16px] tabular-nums">
+          {showPct ? <span className="font-bold">{formatPct(entry.verdict.pct)}%</span> : null}
+          <span className={["truncate uppercase tracking-[0.4px]", VERDICT_WORD_CLASS[state.tone]].join(" ")}>
+            {state.word}
+          </span>
+        </span>
+      </MinecraftTooltip>
+    );
+  };
   const rule = (entry: (typeof sections)[number], withKey: boolean) => (
     <div
-      className="flex items-center justify-end border-t-2 border-[var(--mc-33)]"
+      className={[
+        "flex items-center border-t-2 border-[var(--mc-33)]",
+        withKey ? "justify-end" : "justify-start",
+      ].join(" ")}
       style={{ height: SECTION_RULE_HEIGHT }}
     >
+      {withKey ? null : reading(entry)}
       {withKey ? (
         <MinecraftTooltip content="Take this recipe off the machine">
           <button

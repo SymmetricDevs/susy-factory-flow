@@ -2706,6 +2706,7 @@ function UsageStat({
   verdict,
   isCustomRate = false,
   powerStall,
+  shares,
 }: {
   nodeId: string;
   verdict: NodeVerdict;

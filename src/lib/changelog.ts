@@ -76,6 +76,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "In Pool, nothing needs a wire: every resource is shared, anything nobody makes is imported and listed under Inputs.",
       "The setup rules sheet is gone and a filled cell and its fluid always wire together.",
       "A chevron by the card's name opens the machine list, which also offers other recipes that take and make the same items, every card wears its machine's picture, and tooltips state rates, requirements and the gestures on offer.",
+      "One machine can run several recipes: the machine list's last row adds another recipe to the card, each with its own ports, and they share the machine's time.",
       "A shorter top bar: share, import and export sit under one key, the version chip opens the release notes, and the generator, custom rate and crop farm keys moved to the top of the items column.",
       "The board's ? help points at the Library, the mode switch and the machine list, and draws each drawer as its own shape.",
       "The planner reads in Inter and a third larger; Settings has the font and a size stepper.",

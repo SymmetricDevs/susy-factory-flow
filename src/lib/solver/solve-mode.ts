@@ -1,6 +1,7 @@
 import type { FactoryProject, NodeThroughputResult, ResourceKey } from "@/lib/model/types";
 import { makeResourceKey } from "@/lib/model/resources";
 import { getStorageRoles } from "@/lib/model/storage-role";
+import { listSharedMachineGroups } from "@/lib/model/shared-machine";
 import { isPoolEdgeId } from "./pool-mode";
 import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
@@ -264,13 +265,25 @@ export function solveSolveMode(
   // PINS: run exactly this many machines - one equality per pinned node,
   // act = pinned / built. Conservation then scales the rest of the line
   // around it, feeders and eaters both.
+  // A shared machine's pin is the card's: its sections' time shares add up
+  // to the pinned count, one equality over the whole group.
+  const sharedGroups = listSharedMachineGroups(machineIds);
   for (const pin of pins) {
-    const act = actVar.get(pin.nodeId);
-    if (act === undefined || !(pin.machines > 0)) {
+    if (!(pin.machines > 0)) {
+      continue;
+    }
+    const coefficients = new Map<number, number>();
+    for (const id of sharedGroups.get(pin.nodeId) ?? [pin.nodeId]) {
+      const act = actVar.get(id);
+      if (act !== undefined) {
+        coefficients.set(act, 1);
+      }
+    }
+    if (coefficients.size === 0) {
       continue;
     }
     const built = Math.max(1, countByNode.get(pin.nodeId) ?? 1);
-    equalities.push({ coefficients: new Map([[act, 1]]), rhs: pin.machines / built });
+    equalities.push({ coefficients, rhs: pin.machines / built });
   }
 
   // Defense: a flow variable in no row would be free to grow without bound.

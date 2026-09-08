@@ -37,7 +37,13 @@ import type {
   ResourceKind,
 } from "@/lib/model/types";
 import { formatBoardDump } from "./flow/board-dump";
-import { makeResourceHandleId, parseResourceHandleId } from "./flow/resource-handles";
+import {
+  makeResourceHandleId,
+  parseResourceHandleId,
+  sectionHandleId,
+  splitSectionHandleId,
+} from "./flow/resource-handles";
+import { sectionNodeView } from "@/lib/model/shared-machine";
 import { isEditableKeyboardTarget } from "./flow/keyboard";
 import {
   extractProjectJsonFromPng,
@@ -601,10 +607,15 @@ function remapMigratedRecipeReferences(
   const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
   const nodes = project.nodes.map((node) => {
     const migratedId = recipeIdMigration.get(node.recipeId);
-    if (!migratedId) {
-      return node;
-    }
-    return carryNodeOntoMigratedRecipe(node, recipesById.get(migratedId));
+    const carried = migratedId
+      ? carryNodeOntoMigratedRecipe(node, recipesById.get(migratedId))
+      : node;
+    // A shared machine's extra recipes migrate by id like the first.
+    const extras = carried.extraRecipes?.map((extra) => {
+      const extraId = recipeIdMigration.get(extra.recipeId);
+      return extraId ? { ...extra, recipeId: extraId } : extra;
+    });
+    return extras ? { ...carried, extraRecipes: extras } : carried;
   });
   const nodesById = new Map(nodes.map((node) => [node.id, node] as const));
   const originalNodesById = new Map(project.nodes.map((node) => [node.id, node] as const));
@@ -649,8 +660,8 @@ function refreshImportedProjectEdgeHandles(
 ): FactoryEdge {
   const sourceNode = nodesById.get(edge.source);
   const targetNode = nodesById.get(edge.target);
-  const sourceRecipe = sourceNode ? recipesById.get(sourceNode.recipeId) : undefined;
-  const targetRecipe = targetNode ? recipesById.get(targetNode.recipeId) : undefined;
+  const sourceRecipe = sectionRecipeAt(sourceNode, edge.sourceHandle, recipesById);
+  const targetRecipe = sectionRecipeAt(targetNode, edge.targetHandle, recipesById);
   const sourceStorage = storagesById.get(edge.source);
   const targetStorage = storagesById.get(edge.target);
 
@@ -709,8 +720,9 @@ function remapMigratedRecipeEdgeHandles(
     return edge;
   }
 
-  const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
-  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
+  const migratedRecipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
+  const sourceRecipe = sectionRecipeAt(sourceNode, edge.sourceHandle, migratedRecipesById);
+  const targetRecipe = sectionRecipeAt(targetNode, edge.targetHandle, migratedRecipesById);
 
   return {
     ...edge,
@@ -737,7 +749,37 @@ function remapMigratedRecipeEdgeHandles(
   };
 }
 
+/**
+ * A shared machine's section prefix (`r2:`) rides through the remap untouched:
+ * the handle behind it is repaired against that section's recipe and the
+ * prefix put back.
+ */
 function remapRecipeHandle(
+  recipe: Recipe,
+  prefixedHandleId: string | undefined,
+  expectedSide: "input" | "output",
+  resourceKind: ResourceKind,
+  resourceId: string,
+): string | undefined {
+  const { section, handleId } = splitSectionHandleId(prefixedHandleId);
+  const bare = remapBareRecipeHandle(recipe, handleId, expectedSide, resourceKind, resourceId);
+  return bare === undefined ? undefined : sectionHandleId(section, bare);
+}
+
+/** The recipe a wire's end reads at a card: the section its handle names. */
+function sectionRecipeAt(
+  node: FactoryProject["nodes"][number] | undefined,
+  handleId: string | undefined,
+  recipesById: Map<string, Recipe>,
+): Recipe | undefined {
+  if (!node) {
+    return undefined;
+  }
+  const view = sectionNodeView(node, splitSectionHandleId(handleId).section);
+  return recipesById.get(view.recipeId);
+}
+
+function remapBareRecipeHandle(
   recipe: Recipe,
   handleId: string | undefined,
   expectedSide: "input" | "output",

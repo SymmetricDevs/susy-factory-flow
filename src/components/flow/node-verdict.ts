@@ -15,7 +15,8 @@ import { findBareSlots } from "./bare-slots";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { collectTrashNodeIds } from "@/lib/model/trash";
 import { describeStorage, getStorageRole, getStorageRoles } from "@/lib/model/storage-role";
-import { makeResourceHandleId } from "./resource-handles";
+import { makeResourceHandleId, sectionHandleId } from "./resource-handles";
+import { sectionOwnerId } from "@/lib/model/shared-machine";
 import { getSetupRules, type ResolvedSetupRules } from "@/lib/model/setup-rules";
 import { energyPerUnit } from "@/lib/model/rate-unit";
 
@@ -80,7 +81,8 @@ export type NodeVerdictKind =
   | "clog-lock"
   | "demand-set"
   | "paced"
-  | "balanced";
+  | "balanced"
+  | "busy";
 
 /**
  * The two supply-short states. Both mean "the inputs, not this card, set the
@@ -115,6 +117,17 @@ export interface NodeVerdict {
   kind: NodeVerdictKind;
   /** Clamped display percentage, 0-100. */
   pct: number;
+  /**
+   * Busy: this recipe shares its machine with others (shared-machine.ts) and
+   * the machine's time is spent. The section that took the most of it.
+   */
+  busy?: {
+    sharerName: string;
+    /** That section's share of the machine's time, display percent. */
+    sharerPct: number;
+    /** How many other recipes the machine runs. */
+    sharers: number;
+  };
   /** Starved/blocked: the input that pins the machine below what's asked. */
   binding?: {
     resourceKey: string;
@@ -850,6 +863,16 @@ export function deriveNodeVerdict(
     return deficit ? { kind: "bottleneck", pct, deficit } : { kind: "balanced", pct };
   }
 
+  // SHARED MACHINE: a recipe held below what its inputs and takers allow
+  // because the machine's time went to the other recipes on it. The card
+  // names the section that took the most, and more machines is the fix.
+  if (utilization < Math.min(capable, demand) - VERDICT_EPSILON) {
+    const busy = findBusySharer(project, result, nodeId, utilization);
+    if (busy) {
+      return { kind: "busy", pct, busy, deficit };
+    }
+  }
+
   // Below full speed with a hungry taker, BOTTLENECK is only true if this
   // card could actually ramp. When another wired output has no home for
   // the extra, it cannot, and the honest word is CLOGGED naming that
@@ -915,6 +938,48 @@ export function deriveNodeVerdict(
 }
 
 /**
+ * The recipe that took a shared machine's time, when this section is held
+ * below its own ceiling by the machine being full. Undefined for a card that
+ * shares nothing, or whose sections together leave time to spare.
+ */
+function findBusySharer(
+  project: FactoryProject,
+  result: ThroughputResult | undefined,
+  nodeId: string,
+  utilization: number,
+): NodeVerdict["busy"] | undefined {
+  if (!result) {
+    return undefined;
+  }
+  const owner = sectionOwnerId(nodeId);
+  const members = project.nodes.filter(
+    (entry) => entry.id !== nodeId && sectionOwnerId(entry.id) === owner,
+  );
+  if (members.length === 0) {
+    return undefined;
+  }
+  let total = utilization;
+  let top: { name: string; share: number } | undefined;
+  const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+  for (const member of members) {
+    const share = clamp01(result.nodes[member.id]?.utilization, 0);
+    total += share;
+    if (!top || share > top.share) {
+      const recipe = recipesById.get(member.recipeId);
+      top = { name: recipe?.name ?? "another recipe", share };
+    }
+  }
+  if (total < 1 - VERDICT_EPSILON || !top) {
+    return undefined;
+  }
+  return {
+    sharerName: top.name,
+    sharerPct: Math.round(top.share * 100),
+    sharers: members.length,
+  };
+}
+
+/**
  * Every card with a slot still to connect, in one pass over the board.
  *
  * Deliberately not `deriveNodeVerdict` per node: that runs the death-spiral
@@ -970,7 +1035,12 @@ export function findUnwiredNodeIds(
       findBareSlots(nodeResult, incoming, outgoing, rules) ||
       (hasSlots && incoming.length === 0 && outgoing.length === 0)
     ) {
-      ids.push(node.id);
+      // A shared machine's section answers as its card: the card is what
+      // the notice rings and flies to.
+      const owner = sectionOwnerId(node.id);
+      if (!ids.includes(owner)) {
+        ids.push(owner);
+      }
     }
   }
   return ids;
@@ -1614,7 +1684,11 @@ export function buildRailPorts(
   nodeId: string,
   displayRecipe: Pick<Recipe, "inputs" | "outputs">,
   verdict: NodeVerdict,
+  /** A shared machine section: its ports wear this section prefix on their handles. */
+  options?: { handleSection?: number },
 ): { inputs: RailPort[]; outputs: RailPort[] } {
+  const handleFor = (side: "input" | "output", resource: { kind: ResourceKind; id: string }) =>
+    sectionHandleId(options?.handleSection ?? 0, makeResourceHandleId(side, resource));
   project = getPoolProject(project);
   const nodeResult = result?.nodes[nodeId];
   const utilization = clamp01(nodeResult?.utilization, 0);
@@ -1836,7 +1910,7 @@ export function buildRailPorts(
         kind,
         resourceId,
         displayName: displayName ?? resource?.displayName ?? resourceId,
-        handleId: makeResourceHandleId(side, { kind, id: resourceId }),
+        handleId: handleFor(side, { kind, id: resourceId }),
         resource,
         connected,
         unsupplied: isInput && !connected && !freeSide,
@@ -1895,7 +1969,7 @@ export function buildRailPorts(
           kind: resource.kind,
           resourceId: resource.id,
           displayName: resource.displayName ?? resource.id,
-          handleId: makeResourceHandleId(side, { kind: resource.kind, id: resource.id }),
+          handleId: handleFor(side, { kind: resource.kind, id: resource.id }),
           resource,
           connected: false,
           unsupplied: false,

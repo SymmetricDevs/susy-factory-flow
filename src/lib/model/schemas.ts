@@ -327,6 +327,15 @@ export const factoryNodeSchema = z.object({
   machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),
   settingsCollapsed: z.boolean().optional(),
   recipeInputOverrides: z.record(z.string().min(1), recipeInputSchema).optional(),
+  // More recipes the same machine runs (shared-machine.ts), sections 1..n.
+  extraRecipes: z
+    .array(
+      z.object({
+        recipeId: z.string().min(1),
+        recipeInputOverrides: z.record(z.string().min(1), recipeInputSchema).optional(),
+      }),
+    )
+    .optional(),
   // Solve mode's pin: run exactly this many machines; absent = solver's choice.
   solvePin: z.number().nonnegative().optional(),
   targetOutput: targetRateSchema.optional(),

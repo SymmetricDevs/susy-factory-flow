@@ -317,6 +317,12 @@ export interface TargetRate {
 /** Which way a custom rate card faces: it makes the resource, or it drinks it. */
 export type CustomRateMode = "supply" | "request";
 
+/** One more recipe on a card's machine; see `FactoryNode.extraRecipes`. */
+export interface FactoryNodeRecipeSection {
+  recipeId: string;
+  recipeInputOverrides?: Record<string, RecipeInput>;
+}
+
 export interface FactoryNode {
   id: string;
   recipeId: string;
@@ -361,6 +367,15 @@ export interface FactoryNode {
   /** Settings panel folded shut. A view choice, kept so it survives a reload. */
   settingsCollapsed?: boolean;
   recipeInputOverrides?: Record<string, RecipeInput>;
+  /**
+   * More recipes the SAME machine runs (`shared-machine.ts`): a Large
+   * Chemical Reactor fed for two reactions is one card with two sections.
+   * Each section keeps its own slots, wires and oredict picks; the machine
+   * count, tier and every config knob are the card's and shared. Section 0
+   * is `recipeId` above; these are sections 1..n, and their port handles
+   * wear an `r<n>:` prefix. Absent or empty means an ordinary one-recipe card.
+   */
+  extraRecipes?: FactoryNodeRecipeSection[];
   /**
    * Solve mode's pin: run EXACTLY this many machines, and solve the rest of
    * the line around it ("I want 20 LGTs; what feeds them"). Absent means the

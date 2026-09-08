@@ -49,6 +49,7 @@ import {
   selectRuntimeCalculationVariant,
 } from "./runtime-calculation";
 import { closeBoundaries } from "./close-boundaries";
+import { expandSharedMachines } from "../model/shared-machine";
 import { expandPool } from "./pool-mode";
 import { getSetupRules } from "../model/setup-rules";
 import { solveEquationsCore } from "./equations-core";
@@ -79,6 +80,11 @@ export function calculateThroughput(
   // spends a free source only after every real wire (its recycle-before-
   // importing stage), so nothing the player drew is bypassed.
   const rules = getSetupRules(project);
+  // SHARED MACHINES (shared-machine.ts): a card running several recipes is
+  // solved as one hidden node per recipe, coupled by one time row in the
+  // books. The sections stay in the result under their own ids so the card
+  // can read each of them back. Expanded first so the pool sees them.
+  project = expandSharedMachines(project);
   // POOL MODE (pool-mode.ts) replaces the boundary rules: every output
   // already has somewhere to go (its pool) and every input is fed from
   // the pool or stays honestly short. The hidden pool drawers and wires

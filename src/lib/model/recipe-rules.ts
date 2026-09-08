@@ -395,7 +395,7 @@ function resolveMachineConfigTierControl(
   };
 }
 
-function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): string {
+export function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): string {
   return recipe.source?.recipeMap ?? recipe.machineType;
 }
 

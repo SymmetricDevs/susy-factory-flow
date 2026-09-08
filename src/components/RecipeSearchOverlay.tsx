@@ -39,7 +39,8 @@ import { formatCompact } from "@/lib/model/resources";
 import { playBoardSound } from "@/lib/board-sounds";
 import { ENERGY_READING_TEXT } from "./flow/flow-explainers";
 import { GT_TIER_COLORS } from "./flow/tier-colors";
-import type { RecipeInputPicks, TierFilter } from "@/store/factory-store";
+import type { RecipeBrowserMachinePin, RecipeInputPicks, TierFilter } from "@/store/factory-store";
+import { machineIconAtTier, useMachineHandlerIconEntries, useRecipeMapIcons } from "./flow/machine-icons";
 import {
   applyAlternativeCycleFace,
   getAlternativeCycleFaces,
@@ -236,6 +237,7 @@ export function RecipeSearchOverlay({
   onForward,
   contextResource,
   searchPickerResources,
+  machinePin,
 }: {
   clauses: StencilClause[];
   takesOp: RecipeQuerySideOp;
@@ -278,7 +280,15 @@ export function RecipeSearchOverlay({
     query: string,
     signal: AbortSignal,
   ) => Promise<DatasetResourceIndexEntry[]>;
+  /** SHARED MACHINES: the search is pinned to one card's machine; only its recipes show and the add joins that card. */
+  machinePin?: RecipeBrowserMachinePin;
 }) {
+  const machineIconEntries = useMachineHandlerIconEntries();
+  const recipeMapIcons = useRecipeMapIcons();
+  const machinePinIcon = machinePin
+    ? (machineIconAtTier(machinePin.handlerId ? machineIconEntries.get(machinePin.handlerId) : undefined, machinePin.tier) ??
+      (machinePin.recipeMaps[0] ? recipeMapIcons.get(machinePin.recipeMaps[0]) : undefined))
+    : undefined;
   const panelRef = useRef<HTMLElement>(null);
   const layout = useRecipeSearchViewport();
   // A phone (or any window the app calls compact) gets the search FULL
@@ -1179,7 +1189,11 @@ export function RecipeSearchOverlay({
                     <div className="grid min-h-[260px] place-items-center border-2 border-[var(--mc-47)] bg-[var(--mc-71)] p-3 text-sm shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
                       {asksWhatTakesPower
                         ? "Nearly every machine takes power, so that list would be the whole pack. Search for what makes power instead."
-                        : "No matching recipes."}
+                        : machinePin && clauses.length === 0 && query.trim() === ""
+                          ? `Pick an item or type a name. Only recipes the ${machinePin.label} runs will show.`
+                          : machinePin
+                            ? `Nothing the ${machinePin.label} runs matches.`
+                            : "No matching recipes."}
                     </div>
                   )
                 ) : (
@@ -1288,6 +1302,31 @@ export function RecipeSearchOverlay({
             onPointerDown={(event) => event.stopPropagation()}
           >
               <div className="flex items-stretch gap-2 compact:gap-1">
+                {machinePin ? (
+                  /* THE MACHINE PIN: the search came from a card's "add a
+                     recipe" key, so that machine is the whole question. Its
+                     picture, its name, one word. Nothing to press: there is
+                     no other way to pin one, and closing the search ends it. */
+                  <div className="flex w-[150px] shrink-0 flex-col items-center justify-center gap-1 border-2 border-[var(--mc-33)] bg-[var(--mc-71)] p-2 text-center compact:w-[110px]">
+                    <span className="flex h-12 w-12 items-center justify-center">
+                      {machinePinIcon ? (
+                        <ResourceIcon
+                          resource={{ ...machinePinIcon, amount: 1 }}
+                          size="sm"
+                          bare
+                          showAmount={false}
+                          tooltip={false}
+                          className="!h-12 !w-12"
+                          iconPixelSize={machineArtPixels(48)}
+                        />
+                      ) : null}
+                    </span>
+                    <span className="w-full truncate text-[13px] font-bold">{machinePin.label}</span>
+                    <span className="text-[11px] uppercase tracking-wide text-[var(--mc-ink-muted)]">
+                      Pinned
+                    </span>
+                  </div>
+                ) : null}
                 <StencilSide
                   label="Takes"
                   role="takes"

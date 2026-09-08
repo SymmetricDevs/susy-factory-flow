@@ -185,6 +185,7 @@ export function MachineMenu({
   twins,
   mapIcons,
   onUseTwin,
+  onAddRecipe,
 }: {
   recipe: Recipe;
   /** The card's node: a steam machine's litres are read at its settings. */
@@ -205,6 +206,8 @@ export function MachineMenu({
   /** Recipe map -> the map's machine, the face for a twin whose handler has no family icon. */
   mapIcons?: ReadonlyMap<string, MachineHandlerIcon>;
   onUseTwin?: (twin: RecipeTwin) => void;
+  /** SHARED MACHINES: opens the search pinned to this machine, so another recipe can join the card. */
+  onAddRecipe?: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   // The menu PORTALS to the body, like the crop and hatch menus: inside the
@@ -414,6 +417,24 @@ export function MachineMenu({
               );
             })}
         </>
+      ) : null}
+      {onAddRecipe ? (
+        /* SHARED MACHINES: one machine, several recipes. The row opens the
+           search pinned to this machine; the pick joins this card. */
+        <button
+          type="button"
+          role="option"
+          aria-selected={false}
+          onMouseEnter={() => onHover(undefined)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onAddRecipe();
+          }}
+          className="mx-3 mt-1.5 flex w-[calc(100%-24px)] items-center gap-4 border-t-2 border-[var(--mc-33)] px-0 py-2 pt-3 text-left text-[17px] leading-[24px] text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white"
+        >
+          <span className="flex h-9 w-9 items-center justify-center text-[24px] font-black leading-none">+</span>
+          <span className="min-w-0 truncate">Add a recipe this machine runs</span>
+        </button>
       ) : null}
     </div>
   ) : null;

@@ -8,6 +8,18 @@ import {
   dedupeEdgeWires,
   findDuplicateEdge,
 } from "@/lib/model/edge-identity";
+import { recipeMapName } from "@/lib/model/recipe-rules";
+import {
+  edgeSectionAt,
+  getSharedMachineHandlers,
+  isSharedMachineNode,
+  listNodeRecipeIds,
+  listNodeSections,
+  sectionHandleId,
+  sectionNodeView,
+  sharedHandlersWith,
+  splitSectionHandleId,
+} from "@/lib/model/shared-machine";
 import { normalizeLoadedProject } from "@/lib/model/project-normalize";
 import { playBoardSound, quietBoardSoundsFor, suppressBoardSound } from "@/lib/board-sounds";
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
@@ -165,6 +177,12 @@ interface FactoryStore {
   /** Set while the search is a REFACTOR: the add replaces this node in place. */
   recipeBrowserRefactorNodeId?: string;
   /**
+   * Set while the search is PINNED to a card's machine (shared-machine.ts):
+   * only that machine's recipes show, and the add joins the card as a new
+   * section instead of placing a new one.
+   */
+  recipeBrowserMachinePin?: RecipeBrowserMachinePin;
+  /**
    * Bumped by every refactor press, so each one is a FRESH browse: the
    * card's settings may have changed since last time, and stencil edits
    * keyed to the previous press must not resurrect over the new seed.
@@ -298,6 +316,29 @@ interface FactoryStore {
     options?: { machineHandlerId?: string },
   ) => void;
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
+  /**
+   * SHARED MACHINES (shared-machine.ts). Opens the recipe search with this
+   * card's machine PINNED: only that machine's recipes can show, and the add
+   * joins the card instead of placing a new one.
+   */
+  browseMachineRecipes: (nodeId: string) => void;
+  /** Lifts the machine pin; the open search becomes an ordinary one. */
+  clearMachinePin: () => void;
+  /**
+   * Puts one more recipe on a card's machine as a new section. Refused (false)
+   * when no machine runs both it and what the card already has.
+   */
+  addRecipeToNode: (
+    nodeId: string,
+    recipe: Recipe,
+    options?: { resource?: RecipeInputContextResource; inputPicks?: RecipeInputPicks },
+  ) => boolean;
+  /**
+   * Takes one recipe off a card's machine, its wires with it. Removing the
+   * first section promotes the next; a card's last section is the card, so
+   * that one is refused (delete the card instead).
+   */
+  removeRecipeSection: (nodeId: string, section: number) => void;
   /** Drops an empty crop source node; a crop is picked on the node itself. */
   addCropFarmNode: () => void;
   /** The power source picker overlay (src/lib/power). */
@@ -703,7 +744,7 @@ export function captureBoardSelection(
     return undefined;
   }
 
-  const recipeIds = new Set(nodes.map((node) => node.recipeId));
+  const recipeIds = new Set(nodes.flatMap((node) => listNodeRecipeIds(node)));
   // Snapshotted, not referenced: the capture must not change when the
   // originals are edited or deleted afterwards.
   return structuredClone({
@@ -738,12 +779,34 @@ export interface RecipeBrowserResource {
   anchorNodeId?: string;
 }
 
+/**
+ * The recipe search pinned to one card's machine: what the pin chip shows,
+ * which maps may appear, and the card the add joins.
+ */
+export interface RecipeBrowserMachinePin {
+  nodeId: string;
+  /** The machine's name, as the chip reads it. */
+  label: string;
+  /** The recipe maps that machine runs; the search is scoped to these. */
+  recipeMaps: string[];
+  /** The machine family and the card's tier, for the pin card's picture. */
+  handlerId?: string;
+  tier?: string;
+}
+
+/**
+ * The stand-in resource a pinned browse opens on: the search needs a
+ * resource to be open at all, and a pinned one starts with no condition.
+ */
+export const MACHINE_PIN_RESOURCE_ID = "factoryflow:machine-pin";
+
 /** One page of the recipe search, as the back and forward stacks hold it. */
 export interface RecipeBrowserHistoryEntry {
   resource: RecipeBrowserResource;
   mode: RecipeBrowserMode;
   seed?: RecipeSeedClause[];
   refactorNodeId?: string;
+  machinePin?: RecipeBrowserMachinePin;
   seedNonce: number;
 }
 
@@ -756,6 +819,7 @@ function currentBrowserPage(state: {
   recipeBrowserMode: RecipeBrowserMode;
   recipeBrowserSeed?: RecipeSeedClause[];
   recipeBrowserRefactorNodeId?: string;
+  recipeBrowserMachinePin?: RecipeBrowserMachinePin;
   recipeBrowserSeedNonce: number;
 }): RecipeBrowserHistoryEntry | undefined {
   if (!state.recipeBrowserResource) {
@@ -766,6 +830,7 @@ function currentBrowserPage(state: {
     mode: state.recipeBrowserMode,
     seed: state.recipeBrowserSeed,
     refactorNodeId: state.recipeBrowserRefactorNodeId,
+    machinePin: state.recipeBrowserMachinePin,
     seedNonce: state.recipeBrowserSeedNonce,
   };
 }
@@ -800,6 +865,7 @@ function browserPageState(page: RecipeBrowserHistoryEntry) {
     recipeBrowserMode: page.mode,
     recipeBrowserSeed: page.seed,
     recipeBrowserRefactorNodeId: page.refactorNodeId,
+    recipeBrowserMachinePin: page.machinePin,
     recipeBrowserSeedNonce: page.seedNonce,
     selectedNodeId: page.resource.anchorNodeId,
   };
@@ -858,6 +924,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   recipeBrowserMode: "recipes",
   recipeBrowserSeed: undefined,
   recipeBrowserRefactorNodeId: undefined,
+  recipeBrowserMachinePin: undefined,
   recipeBrowserSeedNonce: 0,
   recipeBrowserBack: [],
   recipeBrowserForward: [],
@@ -1021,10 +1088,18 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
             ...contextualInputOverrides,
             ...node.recipeInputOverrides,
           };
+          // A shared machine's extra recipes follow a migration by id too.
+          const extraRecipes = node.extraRecipes?.map((extra) => {
+            const refreshedExtra = refreshedFor(extra.recipeId);
+            return refreshedExtra && refreshedExtra.id !== extra.recipeId
+              ? { ...extra, recipeId: refreshedExtra.id }
+              : extra;
+          });
           const nextNode: FactoryNode = {
             ...node,
             // A migrated recipe has a new id; the node follows it.
             ...(refreshedRecipe.id !== node.recipeId ? { recipeId: refreshedRecipe.id } : {}),
+            ...(extraRecipes ? { extraRecipes } : {}),
             ...(Object.keys(nextRecipeInputOverrides).length
               ? { recipeInputOverrides: nextRecipeInputOverrides }
               : {}),
@@ -1097,6 +1172,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         // resource and an add places a new card.
         recipeBrowserSeed: undefined,
         recipeBrowserRefactorNodeId: undefined,
+        recipeBrowserMachinePin: undefined,
         recipeBrowserBack: repeat
           ? state.recipeBrowserBack
           : pushBrowserPage(state.recipeBrowserBack, leaving),
@@ -1142,6 +1218,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       recipeBrowserResource: undefined,
       recipeBrowserSeed: undefined,
       recipeBrowserRefactorNodeId: undefined,
+      recipeBrowserMachinePin: undefined,
       recipeBrowserBack: [],
       recipeBrowserForward: [],
       recipeSearch: "",
@@ -1227,6 +1304,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         recipeBrowserMode: "recipes" as const,
         recipeBrowserSeed: seed,
         recipeBrowserRefactorNodeId: nodeId,
+        recipeBrowserMachinePin: undefined,
         recipeBrowserSeedNonce: state.recipeBrowserSeedNonce + 1,
         // A refactor press is a page too: the search it replaces (if one
         // was open) is one step back.
@@ -1450,6 +1528,180 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       );
       return withProjectHistory(state, {
         project,
+        lastResult: solveBooks(project),
+      });
+    });
+  },
+  browseMachineRecipes: (nodeId) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      const recipe = state.project.recipes.find((entry) => entry.id === node?.recipeId);
+      if (!node || !recipe) {
+        return state;
+      }
+      const recipesById = new Map(state.project.recipes.map((entry) => [entry.id, entry]));
+      const handlers = getSharedMachineHandlers(node, recipesById);
+      const handler =
+        handlers.find((entry) => entry.id === node.machineHandlerId) ?? handlers[0];
+      const label = handler?.label ?? recipe.machineType;
+      // The maps the card's recipes live on: one, nearly always, and the
+      // search is scoped to them.
+      const recipeMaps = Array.from(
+        new Set(
+          listNodeRecipeIds(node)
+            .map((id) => recipesById.get(id))
+            .filter((entry): entry is Recipe => Boolean(entry))
+            .map((entry) => recipeMapName(entry)),
+        ),
+      );
+      return {
+        recipeBrowserResource: {
+          kind: "item" as const,
+          id: MACHINE_PIN_RESOURCE_ID,
+          displayName: label,
+          anchorNodeId: nodeId,
+        },
+        recipeBrowserMode: "recipes" as const,
+        recipeBrowserSeed: undefined,
+        recipeBrowserRefactorNodeId: undefined,
+        recipeBrowserMachinePin: { nodeId, label, recipeMaps, handlerId: handler?.id, tier: node.overclockTier },
+        recipeBrowserSeedNonce: state.recipeBrowserSeedNonce + 1,
+        recipeBrowserBack: pushBrowserPage(state.recipeBrowserBack, currentBrowserPage(state)),
+        recipeBrowserForward: [],
+        selectedNodeId: nodeId,
+      };
+    });
+  },
+  clearMachinePin: () => {
+    set((state) =>
+      state.recipeBrowserMachinePin ? { recipeBrowserMachinePin: undefined } : state,
+    );
+  },
+  addRecipeToNode: (nodeId, recipe, options) => {
+    let added = false;
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      if (!node) {
+        return state;
+      }
+      const primary = state.project.recipes.find((entry) => entry.id === node.recipeId);
+      // Generators, crop farms and custom rate cards own their recipe and
+      // run nothing else; the same goes for the pick.
+      const ownsRecipe = (entry: Recipe | undefined) =>
+        !entry || isPowerRecipe(entry) || isCropFarmRecipe(entry) || isCustomRateRecipe(entry);
+      if (ownsRecipe(primary) || ownsRecipe(recipe)) {
+        return state;
+      }
+      const lookup = (id: string) =>
+        id === recipe.id ? recipe : state.project.recipes.find((entry) => entry.id === id);
+      const shared = sharedHandlersWith(node, lookup, recipe);
+      if (shared.length === 0) {
+        return state;
+      }
+      // The card's machine must run the newcomer: keep it when it does,
+      // else the first machine that runs everything on the card.
+      const handler = shared.find((entry) => entry.id === node.machineHandlerId) ?? shared[0];
+      const recipeInputOverrides = mergeRecipeInputOverrides(
+        options?.resource ? buildRecipeInputOverrides(recipe, options.resource) : undefined,
+        buildRecipeInputPickOverrides(recipe, options?.inputPicks),
+      );
+      const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
+      const project = touchProject({
+        ...state.project,
+        recipes: recipeAlreadyInProject
+          ? state.project.recipes.map((entry) =>
+              entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+            )
+          : [...state.project.recipes, recipe],
+        nodes: state.project.nodes.map((entry) =>
+          entry.id === nodeId
+            ? {
+                ...entry,
+                machineHandlerId: handler.id,
+                extraRecipes: [
+                  ...(entry.extraRecipes ?? []),
+                  {
+                    recipeId: recipe.id,
+                    ...(recipeInputOverrides && Object.keys(recipeInputOverrides).length > 0
+                      ? { recipeInputOverrides }
+                      : {}),
+                  },
+                ],
+              }
+            : entry,
+        ),
+      });
+      added = true;
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: nodeId,
+        placedBoardIds: [nodeId],
+        placedBoardToken: state.placedBoardToken + 1,
+        lastResult: solveBooks(project),
+      });
+    });
+    return added;
+  },
+  removeRecipeSection: (nodeId, section) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      if (!node || !isSharedMachineNode(node) || section < 0) {
+        return state;
+      }
+      const extras = node.extraRecipes ?? [];
+      if (section > extras.length) {
+        return state;
+      }
+      // The wires on the removed section go; the ones on later sections
+      // move down one, so they keep naming the recipe they were drawn to.
+      const renumber = (handleId: string | undefined): string | undefined => {
+        if (!handleId) {
+          return handleId;
+        }
+        const { section: at, handleId: bare } = splitSectionHandleId(handleId);
+        return at > section && bare ? sectionHandleId(at - 1, bare) : handleId;
+      };
+      const edges = state.project.edges
+        .filter(
+          (edge) =>
+            !(edge.source === nodeId && edgeSectionAt(edge, nodeId, "source") === section) &&
+            !(edge.target === nodeId && edgeSectionAt(edge, nodeId, "target") === section),
+        )
+        .map((edge) =>
+          edge.source === nodeId || edge.target === nodeId
+            ? {
+                ...edge,
+                sourceHandle: edge.source === nodeId ? renumber(edge.sourceHandle) : edge.sourceHandle,
+                targetHandle: edge.target === nodeId ? renumber(edge.targetHandle) : edge.targetHandle,
+              }
+            : edge,
+        );
+      const nextNode: FactoryNode =
+        section === 0
+          ? {
+              ...node,
+              recipeId: extras[0]!.recipeId,
+              recipeInputOverrides: extras[0]!.recipeInputOverrides,
+              extraRecipes: extras.length > 1 ? extras.slice(1) : undefined,
+            }
+          : {
+              ...node,
+              extraRecipes:
+                extras.length > 1
+                  ? extras.filter((_extra, index) => index !== section - 1)
+                  : undefined,
+            };
+      const project = touchProject(
+        pruneOrphanStorages({
+          ...state.project,
+          nodes: state.project.nodes.map((entry) => (entry.id === nodeId ? nextNode : entry)),
+          edges,
+        }),
+      );
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: nodeId,
+        selectedRecipeId: nextNode.recipeId,
         lastResult: solveBooks(project),
       });
     });
@@ -4210,46 +4462,101 @@ function buildResourceEdgesBetweenNodes(
 ): FactoryEdge[] {
   const sourceNode = project.nodes.find((node) => node.id === sourceNodeId);
   const targetNode = project.nodes.find((node) => node.id === targetNodeId);
-  const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
-  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
-
-  if (!sourceNode || !targetNode || !sourceRecipe || !targetRecipe) {
+  if (!sourceNode || !targetNode) {
     return [];
   }
 
   const matchesResource = (slot: ResourceAmount) =>
     (slot.kind === resource.kind && slot.id === resource.id) ||
     resourceMatchesInput(resource, slot);
-  const effectiveSource = applyRecipeInputOverrides(sourceRecipe, sourceNode);
-  const effectiveTarget = applyRecipeInputOverrides(targetRecipe, targetNode);
   const edges: FactoryEdge[] = [];
 
-  effectiveSource.outputs.forEach((output, outputIndex) => {
-    if (!matchesResource(output)) {
-      return;
+  // Every section of each card is a candidate end: a shared machine's
+  // second recipe takes the wire as readily as its first.
+  for (const source of listNodeSections(sourceNode)) {
+    const sourceRecipe = project.recipes.find((recipe) => recipe.id === source.node.recipeId);
+    if (!sourceRecipe) {
+      continue;
     }
-    effectiveTarget.inputs.forEach((input, inputIndex) => {
-      if (
-        !isRecipeInputConsumed(input) ||
-        !resourceMatchesInput(output, input) ||
-        !matchesResource(input)
-      ) {
-        return;
+    const effectiveSource = applyRecipeInputOverrides(sourceRecipe, source.node);
+    for (const target of listNodeSections(targetNode)) {
+      const targetRecipe = project.recipes.find((recipe) => recipe.id === target.node.recipeId);
+      if (!targetRecipe) {
+        continue;
       }
-      edges.push({
-        id: createId("edge"),
-        source: sourceNode.id,
-        target: targetNode.id,
-        sourceHandle: makeResourceHandleId("output", output, outputIndex),
-        targetHandle: makeResourceHandleId("input", input, inputIndex),
-        resourceKind: output.kind,
-        resourceId: output.id,
-        label: resourceLabel(output),
+      const effectiveTarget = applyRecipeInputOverrides(targetRecipe, target.node);
+      effectiveSource.outputs.forEach((output, outputIndex) => {
+        if (!matchesResource(output)) {
+          return;
+        }
+        effectiveTarget.inputs.forEach((input, inputIndex) => {
+          if (
+            !isRecipeInputConsumed(input) ||
+            !resourceMatchesInput(output, input) ||
+            !matchesResource(input)
+          ) {
+            return;
+          }
+          edges.push({
+            id: createId("edge"),
+            source: sourceNode.id,
+            target: targetNode.id,
+            sourceHandle: sectionHandleId(
+              source.section,
+              makeResourceHandleId("output", output, outputIndex),
+            ),
+            targetHandle: sectionHandleId(
+              target.section,
+              makeResourceHandleId("input", input, inputIndex),
+            ),
+            resourceKind: output.kind,
+            resourceId: output.id,
+            label: resourceLabel(output),
+          });
+        });
       });
-    });
-  });
+    }
+  }
 
   return dedupeEdgeWires(edges);
+}
+
+/**
+ * The section of a card a handle names, seen as its own node (the card
+ * itself for a bare handle). Undefined when the card is gone or the section
+ * no longer exists, which is how a wire onto a removed recipe reads invalid.
+ */
+function nodeSectionForHandle(
+  project: FactoryProject,
+  nodeId: string,
+  handleId: string | undefined,
+): FactoryNode | undefined {
+  const node = project.nodes.find((entry) => entry.id === nodeId);
+  if (!node) {
+    return undefined;
+  }
+  const { section } = splitSectionHandleId(handleId);
+  if (section > 0 && !node.extraRecipes?.[section - 1]) {
+    return undefined;
+  }
+  return sectionNodeView(node, section);
+}
+
+/** The card with one section's oredict picks replaced. */
+function withSectionInputOverrides(
+  node: FactoryNode,
+  section: number,
+  recipeInputOverrides: Record<string, RecipeInput> | undefined,
+): FactoryNode {
+  if (section === 0) {
+    return { ...node, recipeInputOverrides };
+  }
+  return {
+    ...node,
+    extraRecipes: (node.extraRecipes ?? []).map((extra, index) =>
+      index === section - 1 ? { ...extra, recipeInputOverrides } : extra,
+    ),
+  };
 }
 
 /**
@@ -4277,8 +4584,12 @@ function refactorNodeToState(
   const spawnHandler = options?.machineHandlerId
     ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
     : undefined;
+  // A shared machine's refactor swaps its FIRST recipe; the other sections
+  // and their wires stand.
   const touching = state.project.edges.filter(
-    (edge) => edge.source === nodeId || edge.target === nodeId,
+    (edge) =>
+      (edge.source === nodeId && edgeSectionAt(edge, nodeId, "source") === 0) ||
+      (edge.target === nodeId && edgeSectionAt(edge, nodeId, "target") === 0),
   );
   const carried: FactoryEdge[] = [];
   for (const edge of touching) {
@@ -4341,7 +4652,7 @@ function refactorNodeToState(
         : entry,
     ),
     edges: [
-      ...state.project.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+      ...state.project.edges.filter((edge) => !touching.includes(edge)),
       ...carried,
     ],
   };
@@ -4550,7 +4861,10 @@ function applyEdgeInputOverride(
   > &
     Partial<Pick<ResourceAmount, "amount">>,
 ): FactoryProject {
-  const targetNode = project.nodes.find((node) => node.id === edge.target);
+  // The pick lands on the SECTION the wire names: a shared machine's second
+  // recipe keeps its own oredict choices.
+  const targetSection = splitSectionHandleId(edge.targetHandle).section;
+  const targetNode = nodeSectionForHandle(project, edge.target, edge.targetHandle);
   const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
   if (!targetNode || !targetRecipe) {
     return project;
@@ -4605,14 +4919,11 @@ function applyEdgeInputOverride(
   return {
     ...project,
     nodes: project.nodes.map((node) =>
-      node.id === targetNode.id
-        ? {
-            ...node,
-            recipeInputOverrides: {
-              ...node.recipeInputOverrides,
-              [String(inputIndex)]: override,
-            },
-          }
+      node.id === edge.target
+        ? withSectionInputOverrides(node, targetSection, {
+            ...targetNode.recipeInputOverrides,
+            [String(inputIndex)]: override,
+          })
         : node,
     ),
   };
@@ -4647,8 +4958,10 @@ function pruneInvalidEdgesAndOrphanStorages(project: FactoryProject): FactoryPro
 }
 
 function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): boolean {
-  const sourceNode = project.nodes.find((node) => node.id === edge.source);
-  const targetNode = project.nodes.find((node) => node.id === edge.target);
+  // Each end is read as the SECTION its handle names; a wire onto a recipe
+  // that has since left the card finds no section and goes with it.
+  const sourceNode = nodeSectionForHandle(project, edge.source, edge.sourceHandle);
+  const targetNode = nodeSectionForHandle(project, edge.target, edge.targetHandle);
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
   const targetStorage = (project.storages ?? []).find((storage) => storage.id === edge.target);
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
@@ -4772,8 +5085,10 @@ function buildEdgeBetweenNodes(
     targetHandle?: string;
   },
 ): FactoryEdge | undefined {
-  const sourceNode = project.nodes.find((node) => node.id === sourceNodeId);
-  const targetNode = project.nodes.find((node) => node.id === targetNodeId);
+  // A handle names the section of a shared machine the wire lands on; the
+  // gesture's card is read as that section. No handle means the card's own.
+  const sourceNode = nodeSectionForHandle(project, sourceNodeId, selectedResource?.sourceHandle);
+  const targetNode = nodeSectionForHandle(project, targetNodeId, selectedResource?.targetHandle);
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === sourceNodeId);
   const targetStorage = (project.storages ?? []).find((storage) => storage.id === targetNodeId);
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
@@ -4873,8 +5188,8 @@ function buildEdgeBetweenNodes(
 
     return {
       id: createId("edge"),
-      source: sourceNode.id,
-      target: targetNode.id,
+      source: sourceNodeId,
+      target: targetNodeId,
       sourceHandle: selectedResource.sourceHandle,
       targetHandle: selectedResource.targetHandle,
       resourceKind: selectedResource.kind,
@@ -4904,8 +5219,8 @@ function buildEdgeBetweenNodes(
 
   return {
     id: createId("edge"),
-    source: sourceNode.id,
-    target: targetNode.id,
+    source: sourceNodeId,
+    target: targetNodeId,
     sourceHandle: selectedResource?.sourceHandle,
     targetHandle: selectedResource?.targetHandle,
     resourceKind: matchedOutput.kind,
@@ -4948,33 +5263,48 @@ function buildCompatibleEdgesBetweenNodes(
 ): FactoryEdge[] {
   const sourceNode = project.nodes.find((node) => node.id === sourceNodeId);
   const targetNode = project.nodes.find((node) => node.id === targetNodeId);
-  const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
-  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
-
-  if (!sourceNode || !targetNode || !sourceRecipe || !targetRecipe) {
+  if (!sourceNode || !targetNode) {
     return [];
   }
 
   const edges: FactoryEdge[] = [];
 
-  sourceRecipe.outputs.forEach((output, outputIndex) => {
-    targetRecipe.inputs.forEach((input, inputIndex) => {
-      if (!isRecipeInputConsumed(input) || !resourceMatchesInput(output, input)) {
-        return;
+  for (const source of listNodeSections(sourceNode)) {
+    const sourceRecipe = project.recipes.find((recipe) => recipe.id === source.node.recipeId);
+    if (!sourceRecipe) {
+      continue;
+    }
+    for (const target of listNodeSections(targetNode)) {
+      const targetRecipe = project.recipes.find((recipe) => recipe.id === target.node.recipeId);
+      if (!targetRecipe) {
+        continue;
       }
+      sourceRecipe.outputs.forEach((output, outputIndex) => {
+        targetRecipe.inputs.forEach((input, inputIndex) => {
+          if (!isRecipeInputConsumed(input) || !resourceMatchesInput(output, input)) {
+            return;
+          }
 
-      edges.push({
-        id: createId("edge"),
-        source: sourceNode.id,
-        target: targetNode.id,
-        sourceHandle: makeResourceHandleId("output", output, outputIndex),
-        targetHandle: makeResourceHandleId("input", input, inputIndex),
-        resourceKind: output.kind,
-        resourceId: output.id,
-        label: resourceLabel(output),
+          edges.push({
+            id: createId("edge"),
+            source: sourceNode.id,
+            target: targetNode.id,
+            sourceHandle: sectionHandleId(
+              source.section,
+              makeResourceHandleId("output", output, outputIndex),
+            ),
+            targetHandle: sectionHandleId(
+              target.section,
+              makeResourceHandleId("input", input, inputIndex),
+            ),
+            resourceKind: output.kind,
+            resourceId: output.id,
+            label: resourceLabel(output),
+          });
+        });
       });
-    });
-  });
+    }
+  }
 
   // Slots, not rows: a recipe holding the same resource in two output slots and
   // a taker holding it in two input slots pairs up four ways, and all four land
@@ -5188,13 +5518,16 @@ function parseResourceHandleId(handleId?: string | null):
       kind: ResourceKind;
       resourceId: string;
       slotIndex?: number;
+      /** The shared machine section the port belongs to; 0 for the card's own recipe. */
+      section: number;
     }
   | undefined {
   if (!handleId) {
     return undefined;
   }
 
-  const [side, kind, encodedResourceId, encodedSlotIndex] = handleId.split(":");
+  const { section, handleId: bare } = splitSectionHandleId(handleId);
+  const [side, kind, encodedResourceId, encodedSlotIndex] = (bare ?? "").split(":");
   if (
     (side !== "input" && side !== "output") ||
     (kind !== "item" && kind !== "fluid") ||
@@ -5207,6 +5540,7 @@ function parseResourceHandleId(handleId?: string | null):
     side,
     kind,
     resourceId: decodeURIComponent(encodedResourceId),
+    section,
     slotIndex:
       encodedSlotIndex !== undefined && encodedSlotIndex.trim() !== ""
         ? Number.parseInt(encodedSlotIndex, 10)

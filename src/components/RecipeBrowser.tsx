@@ -16,7 +16,7 @@ import type {
 } from "@/lib/datasets/recipe-query";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
 import { resourceMatchesInput } from "@/lib/model";
-import { useFactoryStore } from "@/store/factory-store";
+import { MACHINE_PIN_RESOURCE_ID, useFactoryStore } from "@/store/factory-store";
 import { useDesignStore } from "@/store/design-store";
 import { leaveWelcomeTab, readWelcomeTabState } from "@/lib/welcome/welcome-tab";
 import type { RecipeInputPicks, TierFilter } from "@/store/factory-store";
@@ -75,6 +75,8 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   const browserSeed = useFactoryStore((state) => state.recipeBrowserSeed);
   const refactorNodeId = useFactoryStore((state) => state.recipeBrowserRefactorNodeId);
   const seedNonce = useFactoryStore((state) => state.recipeBrowserSeedNonce);
+  const machinePin = useFactoryStore((state) => state.recipeBrowserMachinePin);
+  const addRecipeToNode = useFactoryStore((state) => state.addRecipeToNode);
   const selectedRecipeId = useFactoryStore((state) => state.selectedRecipeId);
   const setRecipeSearch = useFactoryStore((state) => state.setRecipeSearch);
   const setHighlightSearch = useFactoryStore((state) => state.setHighlightSearch);
@@ -105,6 +107,12 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   // ones. Stored rather than derived so a map unselected on one search stays
   // unselected on the next, even across searches where it never appears.
   const [mapSelection, setMapSelection] = useState<RecipeMapSelection | undefined>(undefined);
+  // PINNED to a machine: the search is scoped to that machine's maps and the
+  // stored chip selection stands aside until the pin comes off.
+  const effectiveMapSelection = useMemo<RecipeMapSelection | undefined>(
+    () => (machinePin ? { mode: "include", maps: machinePin.recipeMaps } : mapSelection),
+    [machinePin, mapSelection],
+  );
   // The master switch: what the whole left panel is FOR right now — finding
   // items to build with, stamping saved blueprints, or browsing the network's
   // shared setups. One at a time, full column each; the old bottom-strip
@@ -228,16 +236,16 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       recipeMapTabs.map((tab) => ({
         ...tab,
         count: recipeMapCounts[tab.id],
-        selected: isMapSelectedIn(mapSelection, tab.id),
+        selected: isMapSelectedIn(effectiveMapSelection, tab.id),
       })),
-    [mapSelection, recipeMapCounts, recipeMapTabs],
+    [effectiveMapSelection, recipeMapCounts, recipeMapTabs],
   );
 
   // The All chip reads from what is on screen: lit when every listed chip is
   // selected, whatever out-of-view maps the stored selection also carries.
   const allRecipeMapsSelected = useMemo(
-    () => recipeMaps.every((recipeMap) => isMapSelectedIn(mapSelection, recipeMap)),
-    [mapSelection, recipeMaps],
+    () => recipeMaps.every((recipeMap) => isMapSelectedIn(effectiveMapSelection, recipeMap)),
+    [effectiveMapSelection, recipeMaps],
   );
 
   // Opening the search seeds the stencil with exactly the question the click
@@ -250,6 +258,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
         // settings may have changed, and old stencil edits must not
         // resurrect over the new seed.
         refactorNodeId ? `refactor:${refactorNodeId}:${seedNonce}` : "",
+        machinePin ? `pin:${machinePin.nodeId}:${seedNonce}` : "",
         browserResource.kind,
         browserResource.id,
         browserMode,
@@ -261,6 +270,11 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
     }
     if (browserSeed?.length) {
       return browserSeed.map((clause) => ({ ...clause }));
+    }
+    // A pinned browse starts with no condition: the machine is the whole
+    // question, and its stand-in resource is not a thing to search for.
+    if (browserResource.id === MACHINE_PIN_RESOURCE_ID) {
+      return [];
     }
     return [
       {
@@ -545,6 +559,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       const currentRefactorNodeId = welcomeCovered
         ? undefined
         : currentState.recipeBrowserRefactorNodeId;
+      const currentMachinePin = welcomeCovered ? undefined : currentState.recipeBrowserMachinePin;
       const anchorNodeId = welcomeCovered ? undefined : currentResource?.anchorNodeId;
       const contextResource = getRecipeAddContextResource(
         currentResource,
@@ -558,7 +573,16 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       const pendingId = beginRecipeAdd(recipeSummary.name);
       try {
         const recipe = await getFullRecipe(recipeSummary.id, Boolean(currentResource));
-        if (currentRefactorNodeId) {
+        if (currentMachinePin) {
+          // The pinned machine's card takes the pick as one more recipe.
+          if (!addRecipeToNode(currentMachinePin.nodeId, recipe, { inputPicks })) {
+            failRecipeAdd(
+              pendingId,
+              `No machine runs both ${recipeSummary.name} and what ${currentMachinePin.label} already has.`,
+            );
+            return;
+          }
+        } else if (currentRefactorNodeId) {
           // The refactor's landing: the pick replaces the card it came from.
           refactorNodeWithRecipe(currentRefactorNodeId, recipe, { machineHandlerId });
         } else if (anchorNodeId && contextResource) {
@@ -587,6 +611,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       activeResource,
       addConnectedNodeForRecipe,
       addNodeForRecipe,
+      addRecipeToNode,
       beginRecipeAdd,
       browserMode,
       clearResourceBrowser,
@@ -658,7 +683,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       });
     }
 
-    const cacheKey = getRecipeQueryKey(mapSelection, recipePage);
+    const cacheKey = getRecipeQueryKey(effectiveMapSelection, recipePage);
     const cached = getCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey);
     if (cached) {
       return scheduleAfterPaint(() => {
@@ -695,18 +720,21 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
         selectedDatasetVersion,
         {
           query,
-          resource: activeResource
-            ? {
-                kind: activeResource.kind,
-                id: activeResource.id,
-              }
-            : undefined,
+          // A pinned browse's stand-in resource is not a question for the
+          // dataset; the pin scopes the maps and the stencil asks the rest.
+          resource:
+            activeResource && activeResource.id !== MACHINE_PIN_RESOURCE_ID
+              ? {
+                  kind: activeResource.kind,
+                  id: activeResource.id,
+                }
+              : undefined,
           mode: browserMode,
           clauses: queryClauses.length > 0 ? queryClauses : undefined,
           takesOp,
           makesOp,
           allMaps: true,
-          mapSelection,
+          mapSelection: effectiveMapSelection,
           maxTier,
           offset: recipePage * RECIPE_QUERY_LIMIT,
           limit: RECIPE_QUERY_LIMIT,
@@ -756,7 +784,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
     datasetManifestUrl,
     getRecipeQueryKey,
     makesOp,
-    mapSelection,
+    effectiveMapSelection,
     maxTier,
     queryClauses,
     recipePage,
@@ -862,6 +890,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
           onForward={browseForward}
           contextResource={activeResource}
           searchPickerResources={searchPickerResources}
+          machinePin={machinePin}
         />
       ) : null}
     </>

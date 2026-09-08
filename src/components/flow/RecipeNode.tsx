@@ -2,12 +2,14 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
+  Fragment,
   memo,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -21,6 +23,7 @@ import {
   Plus,
   RefreshCw,
   Sprout,
+  X,
   Zap,
 } from "lucide-react";
 import type {
@@ -113,6 +116,12 @@ import {
   resourceLabel,
   type MachineConfigTierControl,
 } from "@/lib/model";
+import {
+  getSharedMachineHandlers,
+  isSharedMachineNode,
+  listNodeSections,
+  sectionNodeId,
+} from "@/lib/model/shared-machine";
 import {
   CUSTOM_RATE_ANY_RESOURCE_ID,
   getCustomRateDial,
@@ -319,6 +328,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     state.datasetManifest?.versions.find((entry) => entry.id === state.selectedDatasetVersionId),
   );
   const updateNode = useFactoryStore((state) => state.updateNode);
+  const browseMachineRecipes = useFactoryStore((state) => state.browseMachineRecipes);
+  const removeRecipeSection = useFactoryStore((state) => state.removeRecipeSection);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const dataset = useFactoryStore((state) => state.dataset);
@@ -550,7 +561,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   }, [dataset, previewedNode, recipe]);
 
   const {
-    machineHandlers,
+    machineHandlers: recipeMachineHandlers,
     selectedMachineHandler,
     nodeRecipe,
     effectiveRecipe,
@@ -581,6 +592,43 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     energyHatchType,
     powerInfo,
   } = derived;
+  // SHARED MACHINE (shared-machine.ts): a card running several recipes.
+  // The machine list is what runs EVERY recipe on it; each extra recipe is
+  // a section with rails of its own below the first.
+  const isSharedMachine = isSharedMachineNode(projectNode);
+  const liveRecipes = useFactoryStore((state) => state.project.recipes);
+  const machineHandlers = useMemo(
+    () =>
+      isSharedMachine
+        ? getSharedMachineHandlers(projectNode, (id) =>
+            id === recipe.id ? recipe : liveRecipes.find((entry) => entry.id === id),
+          )
+        : recipeMachineHandlers,
+    [isSharedMachine, liveRecipes, projectNode, recipe, recipeMachineHandlers],
+  );
+  const extraSections = useMemo(
+    () =>
+      listNodeSections(projectNode)
+        .slice(1)
+        .map(({ section, node }) => {
+          const sectionRecipe = liveRecipes.find((entry) => entry.id === node.recipeId);
+          if (!sectionRecipe) {
+            return undefined;
+          }
+          const sectionNodeRecipe = applyRecipeInputOverrides(sectionRecipe, node);
+          const sectionEffective = applyMachineHandlerToRecipe(sectionNodeRecipe, node);
+          const stats = getOverclockedRecipeStats(sectionNodeRecipe, node);
+          const adjusted = applyMachineOutputMultipliers(sectionEffective, node, stats.tier);
+          return {
+            section,
+            node,
+            recipe: sectionRecipe,
+            display: { ...sectionEffective, ...adjusted, ...stats },
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined),
+    [liveRecipes, projectNode],
+  );
   // The chip's own art: the concrete hatch item this tier-and-family pair
   // names, from the once-per-dataset catalog.
   const hatchChipEntry = tierControl
@@ -613,6 +661,39 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     overclockedRecipe,
     verdict,
   );
+  // Each extra section reads its own solve node (`card#rN`) for verdict and
+  // rails; its handles wear the section prefix so wires know the section.
+  const sectionRails = extraSections.map((entry) => {
+    const id = sectionNodeId(projectNode.id, entry.section);
+    const sectionVerdict = deriveNodeVerdict(liveProject, lastResult, id);
+    return {
+      ...entry,
+      id,
+      verdict: sectionVerdict,
+      result: lastResult?.nodes[id],
+      rails: buildRailPorts(liveProject, lastResult, id, entry.display, sectionVerdict, {
+        handleSection: entry.section,
+      }),
+    };
+  });
+  // The card's usage is the machine's: every section's share of its time
+  // added up. The word is the first section's unless the machine is full.
+  const sharedUsage = isSharedMachine
+    ? sectionRails.reduce(
+        (sum, entry) => sum + Math.min(1, entry.result?.utilization ?? 0),
+        Math.min(1, result?.utilization ?? 0),
+      )
+    : undefined;
+  const cardVerdict: NodeVerdict =
+    sharedUsage !== undefined && verdict.kind !== "off" && verdict.kind !== "no-recipe"
+      ? {
+          ...verdict,
+          pct: Math.min(100, sharedUsage * 100),
+          ...(sharedUsage >= 0.995 && (verdict.kind === "busy" || verdict.kind === "paced" || verdict.kind === "demand-set")
+            ? { kind: "balanced" as const }
+            : {}),
+        }
+      : verdict;
   const powerStalled = powerReport !== undefined && powerReport.state !== "ok";
   // The picture window's material: the workbook render for a multiblock,
   // the machine item for a singleblock. Both are map lookups. The Industrial
@@ -736,6 +817,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             // to wire, so it must not be listed as a handle to await.
             ...rails.inputs.filter((port) => !port.free).map((port) => port.handleId),
             ...rails.outputs.map((port) => port.handleId),
+            ...sectionRails.flatMap((entry) => [
+              ...entry.rails.inputs.filter((port) => !port.free).map((port) => port.handleId),
+              ...entry.rails.outputs.map((port) => port.handleId),
+            ]),
           ],
   );
   const updateTier = (direction: -1 | 1) => {
@@ -1005,7 +1090,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         failRecipeAdd(pendingId, error instanceof Error ? error.message : "The recipe could not be loaded.");
       });
   };
-  const hasMachineMenu = (hasMachinePicker || hasTwins) && !calmMode;
+  // A card whose machine can take another recipe: everything but the
+  // generators, crop farms and custom rate cards, which own their recipe.
+  const canShareMachine = !powerInfo && !isCropFarmNode && !isCustomRateNode && !calmMode;
+  const hasMachineMenu = (hasMachinePicker || hasTwins || canShareMachine) && !calmMode;
   const cycleMachineHandler = (direction: -1 | 1) => {
     const ordered = orderMachineHandlers(machineHandlers);
     const index = Math.max(0, ordered.findIndex((handler) => handler.id === selectedMachineHandler.id));
@@ -1597,9 +1685,20 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 onHover={setPreviewHandlerId}
                 onUse={updateMachineHandler}
                 onClose={() => setCompareOpen(false)}
-                twins={twins}
+                // A shared machine lists no twins: the card is no longer one
+                // recipe to swap for another.
+                twins={isSharedMachine ? undefined : twins}
                 mapIcons={recipeMapIcons}
                 onUseTwin={useTwin}
+                onAddRecipe={
+                  canShareMachine
+                    ? () => {
+                        setCompareOpen(false);
+                        setPreviewHandlerId(undefined);
+                        browseMachineRecipes(projectNode.id);
+                      }
+                    : undefined
+                }
               />
             ) : null}
           </div>
@@ -1815,6 +1914,32 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           // health that the recipe canvas used to duplicate. Recipe identity
           // lives in the header (name hover = full machine stats) and in the
           // port icons (click = recipes, right-click = uses).
+          <>
+          {/* A SHARED MACHINE (Jack, 2026-09-07): the recipes stack on one
+              pair of rails, inputs left and outputs right, each under a
+              thin rule with the key that takes it off the machine, and the
+              picture sits between the rails spanning all of them - one
+              machine, not a pile of cards. No names: the ports say what
+              each recipe is. */}
+          {isSharedMachine ? (
+            <SharedMachineRails
+              nodeId={projectNode.id}
+              sections={[{ section: 0, rails }, ...sectionRails]}
+              pending={pendingResourceConnection}
+              onRemove={(section) => removeRecipeSection(projectNode.id, section)}
+              picture={
+                !calmMode && hasPowerPicture ? (
+                  <PowerStructureWindow
+                    art={powerArt}
+                    icon={powerMachineIcon ?? previewMachineIcon}
+                    tint="#8a8f99"
+                    inline
+                    pickedFor={`${previewHandler.id}@${pictureTier}:${machineIconEntries.get(previewHandler.id)?.tiers?.length ?? 0}`}
+                  />
+                ) : undefined
+              }
+            />
+          ) : (
           <div
             className={[
               "flex items-start gap-1",
@@ -1870,6 +1995,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               />
             )}
           </div>
+          )}
+          </>
           )}
           {/* The dial is on the card whether it holds a resource or not: an
               empty card still has a number and a direction, and they are what
@@ -1988,7 +2115,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                       {!solveMode ? (
                         <UsageStat
                           nodeId={projectNode.id}
-                          verdict={verdict}
+                          verdict={cardVerdict}
                           isCustomRate={isCustomRateNode}
                           powerStall={powerReport}
                         />
@@ -2052,7 +2179,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                           {solveMode ? (
                             <SolvedMachinesStat
                               label={isCropProductionNode ? "Seeds" : "Machines"}
-                              needed={result?.theoreticalMachinesRequired}
+                              // A shared machine's count is the sum of its
+                              // sections' time shares.
+                              needed={
+                                isSharedMachine
+                                  ? sectionRails.reduce(
+                                      (sum, entry) => sum + (entry.result?.theoreticalMachinesRequired ?? 0),
+                                      result?.theoreticalMachinesRequired ?? 0,
+                                    )
+                                  : result?.theoreticalMachinesRequired
+                              }
                               pinned={projectNode.solvePin}
                               onPin={(solvePin) => updateNode(projectNode.id, { solvePin })}
                             />
@@ -2450,6 +2586,11 @@ function verdictWord(
     // it set the speed. Nothing here needs fixing.
     case "paced":
       return { word: "paced", tone: "fine" };
+    // Held back by the other recipes on the same machine: nothing is short
+    // and nothing is jammed, the machine is full. Red, since more machines
+    // is the fix, as for a bottleneck.
+    case "busy":
+      return { word: "busy", tone: "bottleneck" };
     case "balanced":
       return { word: isCustomRate ? "at the dial" : "full", tone: "fine" };
     case "unwired":
@@ -2846,6 +2987,97 @@ function FreePortRow({ port }: { port: RailPort }) {
  * muted, saying plainly that there is nothing to wire here. Inert on
  * purpose - it is the absence of a port, not a port.
  */
+/** One cell: the rule over a shared machine's recipe, with its remove key. */
+const SECTION_RULE_HEIGHT = BOARD_GRID;
+
+/**
+ * A SHARED MACHINE's rails: every recipe's inputs stacked on the left, every
+ * recipe's outputs stacked on the right, the machine's picture between them
+ * spanning the lot. Each recipe sits under a one-cell rule (so the rows
+ * below stay on the grid) whose right end carries the key that takes it off
+ * the machine. A recipe's two sides are padded to the same height, so its
+ * inputs and outputs face each other across the picture.
+ */
+function SharedMachineRails({
+  nodeId,
+  sections,
+  pending,
+  picture,
+  onRemove,
+}: {
+  nodeId: string;
+  sections: Array<{ section: number; rails: { inputs: RailPort[]; outputs: RailPort[] } }>;
+  pending: ComponentProps<typeof PortRail>["pending"];
+  picture?: ReactNode;
+  onRemove: (section: number) => void;
+}) {
+  const rowsOf = (entry: (typeof sections)[number]) =>
+    Math.max(1, entry.rails.inputs.length, entry.rails.outputs.length);
+  const rule = (entry: (typeof sections)[number], withKey: boolean) => (
+    <div
+      className="flex items-center justify-end border-t-2 border-[var(--mc-33)]"
+      style={{ height: SECTION_RULE_HEIGHT }}
+    >
+      {withKey ? (
+        <MinecraftTooltip content="Take this recipe off the machine">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove(entry.section);
+            }}
+            aria-label="Remove this recipe from the machine"
+            className="nodrag -mt-0.5 flex h-4 w-4 items-center justify-center text-[var(--mc-ink-muted)] hover:text-white"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </MinecraftTooltip>
+      ) : null}
+    </div>
+  );
+  return (
+    <div className="flex items-stretch justify-between gap-1">
+      <div className="flex shrink-0 flex-col">
+        {sections.map((entry) => (
+          <Fragment key={entry.section}>
+            {rule(entry, false)}
+            <div style={{ minHeight: rowsOf(entry) * PORT_ROW_HEIGHT_PX }}>
+              {entry.rails.inputs.length > 0 ? (
+                <PortRail nodeId={nodeId} side="input" ports={entry.rails.inputs} pending={pending} />
+              ) : (
+                <NoFlowRow label="No input" side="input" />
+              )}
+            </div>
+          </Fragment>
+        ))}
+      </div>
+      {picture ? (
+        <div className="flex min-h-[120px] min-w-0 flex-1 items-stretch self-stretch">{picture}</div>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center justify-center self-stretch text-[15px] font-black text-[var(--mc-ink-muted)]">
+          →
+        </div>
+      )}
+      <div className="flex shrink-0 flex-col">
+        {sections.map((entry) => (
+          <Fragment key={entry.section}>
+            {rule(entry, true)}
+            <div style={{ minHeight: rowsOf(entry) * PORT_ROW_HEIGHT_PX }}>
+              {entry.rails.outputs.length > 0 ? (
+                <PortRail nodeId={nodeId} side="output" ports={entry.rails.outputs} pending={pending} />
+              ) : (
+                <NoFlowRow label="No output" side="output" />
+              )}
+            </div>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PORT_ROW_HEIGHT_PX = BOARD_GRID * 2;
+
 function NoFlowRow({ label, side }: { label: string; side: "input" | "output" }) {
   // Input chips are 140px and output rows 176 (chip + coupling): the stand-in
   // must match its side's width or it shoves the other rail off the card.

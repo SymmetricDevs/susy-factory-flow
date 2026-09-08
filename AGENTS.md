@@ -354,6 +354,60 @@ Working notes for future agents on GTNH Factory Flow.
   - Tool choices are per empty TGS input slot; each slot should offer the valid tool categories through an icon menu.
   - TGS tool icons should be real item icons, not text labels.
 
+## Shared Machines (One Card, Several Recipes)
+
+- A card can run SEVERAL recipes on ONE machine (Jack, 2026-09-07), the way
+  a Large Chemical Reactor fed for two reactions does in the game. The
+  model is `src/lib/model/shared-machine.ts`: section 0 is the card's own
+  `recipeId`, sections 1..n are `FactoryNode.extraRecipes`
+  (`{ recipeId, recipeInputOverrides? }`). Machine count, tier, power
+  budget and every config knob are the card's and shared; slots, wires,
+  oredict picks and verdicts are per section.
+- ADDRESSING: a section's port handles wear an `r<n>:` prefix on the
+  ordinary handle id (`sectionHandleId` / `splitSectionHandleId`);
+  `canonicalizeResourceHandleId` keeps the prefix and both handle parsers
+  return `section`. A section's solve node is `card#r<n>`
+  (`sectionNodeId` / `parseSectionNodeId` / `sectionOwnerId`). Anything
+  that resolves "the recipe at this handle" must read the section
+  (`sectionNodeView`), never `node.recipeId` alone: the store's edge
+  builders, `getResourceForHandle`, the drop target, the load funnel and
+  the import remap all do.
+- SOLVE: `expandSharedMachines` (memoized, expands to itself) stands each
+  extra section up as a hidden node with the card's settings and re-points
+  its wires, prefix stripped. It runs first in `calculateThroughput` and
+  inside `getPoolProject`, so every diagnosis sees it. The ONE coupling is
+  the time row in equations-core (`listSharedMachineGroups`): the
+  sections' acts sum to at most one, because each act is that section's
+  share of the machine's time. Solve mode's pin is one equality over the
+  group. NOTHING ELSE is coupled, on purpose: GT5U's ProcessingLogic walks
+  every matching recipe and skips one that fails on output space or
+  voltage, so a starved or clogged section just hands its time to the
+  others. Section results stay in `result.nodes` under their own ids.
+- VERDICT: a section held under its own ceiling because the machine's time
+  is spent reads BUSY (`findBusySharer`), naming the section that took the
+  most; more machines is the fix. `findUnwiredNodeIds` answers with the
+  card, never a section id. The machine list's usage is the sections'
+  shares added up, PEAK the hungriest section's draw, AVERAGE each
+  section's draw weighted by its share.
+- CARD: every section gets a `SectionLabelRow` (name, share, verdict word,
+  remove key) over rails of its own; the picture stays with the first, the
+  rest get the bare arrow. The machine menu lists the INTERSECTION of the
+  sections' handlers (`getSharedMachineHandlers`), no twins section on a
+  shared card, and an "Add a recipe this machine runs" row that opens the
+  search PINNED (`browseMachineRecipes`).
+- SEARCH PIN: `recipeBrowserMachinePin` on the store, opened on the
+  stand-in resource `MACHINE_PIN_RESOURCE_ID` with an empty stencil. The
+  browser scopes the maps to the pin (`effectiveMapSelection`, the stored
+  chip selection stands aside), never sends the stand-in as a resource,
+  and the add goes through `addRecipeToNode` (refused, with a chip
+  apology, when no machine runs both). The overlay shows the pin as a
+  plain card at the head of the stencil: picture, name, "Pinned", nothing
+  to press. There is no manual way to pin.
+- `removeRecipeSection` drops the section's wires and renumbers later
+  sections' handles; removing section 0 promotes the next. Refactor swaps
+  section 0 only. Generators, crop farms and custom rate cards never share.
+  `src/lib/model/shared-machine.test.ts` is the exam.
+
 ## Frontend State And Recipe Context
 
 - Node creation from recipe book must preserve selected context/resource overrides.

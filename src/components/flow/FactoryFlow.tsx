@@ -254,7 +254,9 @@ import {
   makeResourceHandleId,
   parseResourceHandleId,
   type ResourceHandleSide,
+  sectionHandleId,
 } from "./resource-handles";
+import { listNodeSections, sectionNodeView, splitSectionHandleId } from "@/lib/model/shared-machine";
 import {
   edgeUnit,
   formatEdgeRateLabelFrom,
@@ -3955,7 +3957,7 @@ export function FactoryFlow() {
 
           const sourceHandleIds =
             resource?.sourceHandle && resource.kind && resource.id
-              ? getRepeatedOutputHandleIds(project, source, resource)
+              ? getRepeatedOutputHandleIds(project, source, resource, resource.sourceHandle)
               : [];
           const shouldBatchRepeatedOutputs =
             resource?.sourceHandle &&
@@ -10483,23 +10485,29 @@ function inferRepeatedOutputHandleIds(project: FactoryProject, edge: FactoryEdge
     return [];
   }
 
-  return getRepeatedOutputHandleIds(project, edge.source, {
-    kind: edge.resourceKind,
-    id: edge.resourceId,
-  });
+  return getRepeatedOutputHandleIds(
+    project,
+    edge.source,
+    { kind: edge.resourceKind, id: edge.resourceId },
+    edge.sourceHandle,
+  );
 }
 
 function getRepeatedOutputHandleIds(
   project: FactoryProject,
   sourceNodeId: string,
   resource: Pick<ResourceAmount, "kind" | "id">,
+  /** The dragged handle: it names which section of a shared machine the slots belong to. */
+  sourceHandle?: string,
 ) {
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === sourceNodeId);
   if (sourceStorage) {
     return [];
   }
 
-  const sourceNode = project.nodes.find((node) => node.id === sourceNodeId);
+  const card = project.nodes.find((node) => node.id === sourceNodeId);
+  const section = splitSectionHandleId(sourceHandle).section;
+  const sourceNode = card ? sectionNodeView(card, section) : undefined;
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
   if (!sourceRecipe) {
     return [];
@@ -10508,7 +10516,7 @@ function getRepeatedOutputHandleIds(
   return sourceRecipe.outputs
     .map((output, outputIndex) =>
       output.kind === resource.kind && output.id === resource.id
-        ? makeResourceHandleId("output", output, outputIndex)
+        ? sectionHandleId(section, makeResourceHandleId("output", output, outputIndex))
         : undefined,
     )
     .filter((handleId): handleId is string => Boolean(handleId));
@@ -11704,6 +11712,7 @@ function measuredPortOffsetY(
 function estimateNodeCardSize(
   node: FactoryNode,
   recipe: Recipe | undefined,
+  project: Pick<FactoryProject, "recipes">,
 ): { width: number; height: number } {
   if (recipe && isTrashRecipe(recipe)) {
     return { width: TRASH_NODE_WIDTH, height: TRASH_NODE_HEIGHT };
@@ -11711,11 +11720,23 @@ function estimateNodeCardSize(
   if (!recipe) {
     return { width: RECIPE_NODE_WIDTH, height: cells(14) };
   }
-  const effective = getEffectiveNodeRecipe(recipe, node);
-  const rows = Math.max(1, effective.inputs.length, effective.outputs.length);
+  // A shared machine stacks one rail block per recipe, each under a one-cell
+  // rule; each section counts its own rows.
+  const shared = (node.extraRecipes?.length ?? 0) > 0;
+  let rails = 0;
+  for (const { section, node: view } of listNodeSections(node)) {
+    const sectionRecipe =
+      section === 0 ? recipe : project.recipes.find((entry) => entry.id === view.recipeId);
+    if (!sectionRecipe) {
+      continue;
+    }
+    const effective = getEffectiveNodeRecipe(sectionRecipe, view);
+    const rows = Math.max(1, effective.inputs.length, effective.outputs.length);
+    rails += cells(2) * rows + (shared ? cells(1) : 0);
+  }
   // Title row + machine strip + the port rails + footer, plus one spare row
   // of slack for a config panel.
-  return { width: RECIPE_NODE_WIDTH, height: cells(4) + cells(2) * rows + cells(4) };
+  return { width: RECIPE_NODE_WIDTH, height: cells(4) + Math.max(cells(2), rails) + cells(4) };
 }
 
 /**
@@ -11859,7 +11880,7 @@ function computeAutoArrangement(
         pushCard(
           node.id,
           node.position,
-          estimateNodeCardSize(node, recipe),
+          estimateNodeCardSize(node, recipe, project),
           recipe && isTrashRecipe(recipe) ? "storage" : "machine",
         );
       }
@@ -13042,13 +13063,29 @@ function findNodeDropTargetOnSide(
     return undefined;
   }
 
-  const candidates = side === "input" ? contextualRecipe.inputs : contextualRecipe.outputs;
-  const match = (candidates ?? []).find(
-    (candidate) =>
-      (side === "output" || isRecipeInputConsumed(candidate)) && acceptsLoose(candidate),
-  );
+  // Every section of a shared machine offers its ports; the first that
+  // takes the drop names the section in its handle.
+  for (const { section, node: view } of listNodeSections(node)) {
+    const sectionRecipe =
+      section === 0 ? contextualRecipe : (() => {
+        const raw = project.recipes.find((entry) => entry.id === view.recipeId);
+        return raw ? getEffectiveNodeRecipe(raw, view) : undefined;
+      })();
+    if (!sectionRecipe) {
+      continue;
+    }
+    const candidates = side === "input" ? sectionRecipe.inputs : sectionRecipe.outputs;
+    const match = (candidates ?? []).find(
+      (candidate) =>
+        (side === "output" || isRecipeInputConsumed(candidate)) && acceptsLoose(candidate),
+    );
+    if (match) {
+      const resolved = port(match);
+      return { ...resolved, handleId: sectionHandleId(section, resolved.handleId) };
+    }
+  }
 
-  return match ? port(match) : undefined;
+  return undefined;
 }
 
 /**
@@ -13440,7 +13477,9 @@ function getDraggedResourceForHandle(
     };
   }
 
-  const node = project.nodes.find((entry) => entry.id === nodeId);
+  // The handle names the section of a shared machine it sits on.
+  const card = project.nodes.find((entry) => entry.id === nodeId);
+  const node = card ? sectionNodeView(card, handle.section) : undefined;
   const recipe = project.recipes.find((entry) => entry.id === node?.recipeId);
   if (!node || !recipe) {
     return undefined;
@@ -13498,7 +13537,8 @@ function getResourceForHandle(
     };
   }
 
-  const node = project.nodes.find((entry) => entry.id === nodeId);
+  const card = project.nodes.find((entry) => entry.id === nodeId);
+  const node = card ? sectionNodeView(card, handle.section) : undefined;
   const recipe = project.recipes.find((entry) => entry.id === node?.recipeId);
   if (!node || !recipe) {
     return undefined;

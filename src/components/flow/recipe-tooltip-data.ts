@@ -114,6 +114,10 @@ export function buildStatusTooltip(verdict: NodeVerdict, mode: TooltipMode): Rec
     case "clog-lock": return { ...view, title: "Recycling output blocked", reason: "Surplus output prevents the recycling loop from running." };
     case "demand-set": return { ...view, title: verdict.pct <= 0.05 ? "No demand" : "Demand met", reason: "Production matches current demand." };
     case "paced": return { ...view, title: "Production balanced", reason: "Supply and demand determine the operating rate." };
+    case "busy": return { ...view, title: "Machine time shared", reason: verdict.busy
+      ? `${verdict.busy.sharerName} takes ${verdict.busy.sharerPct}% of this machine's time.`
+      : "Other recipes on this machine take its time.",
+      requirement: "Add machines to run every recipe at full rate." };
     case "balanced": return { ...view, title: "Full capacity", reason: "Current demand is met." };
   }
 }

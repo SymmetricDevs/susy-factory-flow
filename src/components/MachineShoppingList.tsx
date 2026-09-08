@@ -37,6 +37,7 @@ import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { getEnergyHatchType } from "@/lib/machines/energy-hatches";
 import { getHatchAmps } from "@/lib/solver/power";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
+import { listNodeSections } from "@/lib/model/shared-machine";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 
 type VoltageTier = Exclude<MachineTier, "DEMO">;
@@ -194,11 +195,34 @@ export function MachineShoppingList() {
       // time-averaged burn is the nameplate figure times its solved usage.
       // At exactly 0% it never starts, so even PEAK bills it nothing; any
       // usage above zero still spikes to the full draw when it runs.
+      // A SHARED MACHINE (shared-machine.ts) runs several recipes in turn:
+      // its usage is its sections' time shares added up, its PEAK draw the
+      // hungriest section's, its AVERAGE each section's draw weighted by
+      // that section's share.
+      const sections = listNodeSections(node).map(({ node: view }) => {
+        const sectionRecipe = recipesById.get(view.recipeId);
+        return {
+          report:
+            sectionRecipe && !steam && hasPowerReport(sectionRecipe)
+              ? getNodePowerReport(sectionRecipe, view)
+              : undefined,
+          usage: Math.min(1, Math.max(0, lastResult.nodes[view.id]?.utilization ?? 1)),
+        };
+      });
       const usage = Math.min(
         1,
-        Math.max(0, lastResult.nodes[node.id]?.utilization ?? 1),
+        sections.reduce((sum, section) => sum + section.usage, 0),
       );
       const runningCount = usage > 0 ? count : 0;
+      const sharedPeakDrawEuT = report
+        ? Math.max(...sections.map((section) => section.report?.drawEuT ?? 0), report.drawEuT)
+        : undefined;
+      const sharedAvgEuT = report
+        ? sections.reduce(
+            (sum, section) => sum + (section.report?.drawEuT ?? 0) * count * section.usage,
+            0,
+          )
+        : undefined;
       // A generator's contribution: positive EU/t is GENERATION (the green
       // column); the parasitic machines (DEHP, fusion, the pebble reactors)
       // run a NEGATIVE figure, which is honestly just consumption and bills
@@ -234,7 +258,7 @@ export function MachineShoppingList() {
           : 0;
       })();
       const euT = report
-        ? report.drawEuT * runningCount
+        ? (sharedPeakDrawEuT ?? report.drawEuT) * runningCount
         : cropEuT !== undefined
           ? usage > 0
             ? cropEuT
@@ -272,7 +296,7 @@ export function MachineShoppingList() {
       group.nodeIds.push(node.id);
       if (euT !== undefined) {
         group.euT = (group.euT ?? 0) + euT;
-        group.avgEuT = (group.avgEuT ?? 0) + euT * usage;
+        group.avgEuT = (group.avgEuT ?? 0) + (sharedAvgEuT ?? euT * usage);
       }
       if (steamLs !== undefined) {
         group.steamLs = (group.steamLs ?? 0) + steamLs;

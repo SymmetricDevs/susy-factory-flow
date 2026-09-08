@@ -6,6 +6,7 @@ import {
 } from "../model/resources";
 import { applyRecipeInputOverrides } from "../model/recipe-input-overrides";
 import { applyMachineHandlerToRecipe } from "../model/recipe-rules";
+import { expandSharedMachines } from "../model/shared-machine";
 import { poolSideOf } from "../model/storage-role";
 import type {
   FactoryProject,
@@ -122,7 +123,10 @@ const expansionCache = new WeakMap<FactoryProject, PoolExpansion>();
 
 /** The graph the solve and the diagnoses read: expanded in pool mode, the plan itself otherwise. */
 export function getPoolProject(project: FactoryProject): FactoryProject {
-  return project.poolMode ? expandPool(project).project : project;
+  // Shared machines expand first (one hidden node per recipe section), so
+  // the pool and every diagnosis see the same graph the solve ran on.
+  const expanded = expandSharedMachines(project);
+  return expanded.poolMode ? expandPool(expanded).project : expanded;
 }
 
 export function expandPool(project: FactoryProject): PoolExpansion {

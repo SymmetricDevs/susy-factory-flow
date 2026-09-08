@@ -5,6 +5,7 @@ import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
 import { type LinearProgram, type LpSolution } from "./simplex";
 import { solveLpAuto } from "./lp-engine";
+import { listSharedMachineGroups } from "@/lib/model/shared-machine";
 import { isPoolEdgeId } from "./pool-mode";
 
 /**
@@ -212,6 +213,22 @@ export function solveEquationsCore(
       coefficients: new Map([[actVar.get(id)!, 1]]),
       rhs: nodes[id]!.powerStalled ? 0 : 1,
     });
+  }
+  // SHARED MACHINES: the sections of one card time-share its machine. Each
+  // section's act is its share of the machine's time (its nameplate already
+  // carries the whole count), so the shares sum to at most one. That is the
+  // only thing the game couples between recipes on one machine.
+  for (const group of listSharedMachineGroups(machineIds).values()) {
+    const coefficients = new Map<number, number>();
+    for (const id of group) {
+      const act = actVar.get(id);
+      if (act !== undefined) {
+        coefficients.set(act, 1);
+      }
+    }
+    if (coefficients.size > 1) {
+      upperBounds.push({ coefficients, rhs: 1 });
+    }
   }
   // Necessity probes: these machines must run at least a hair, or the solve
   // reports infeasible - which is the probe's whole answer.

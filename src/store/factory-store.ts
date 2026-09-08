@@ -564,6 +564,13 @@ interface FactoryStore {
    * one: nothing may sit in two boards at once.
    */
   wrapSelectionInBoard: (ids: string[], name?: string) => string | undefined;
+  /**
+   * SHARED MACHINES: fold several cards that one machine could run into ONE
+   * card. The first keeps its place and settings; the others' recipes join
+   * it as sections and their wires follow. Returns the surviving card's id,
+   * or undefined when no machine runs everything (nothing changes then).
+   */
+  combineNodesIntoMachine: (ids: string[]) => string | undefined;
   /** Unwrap a board: members surface where they stand, the frame goes. */
   dissolvePocket: (pocketId: string) => void;
   renamePocket: (pocketId: string, name: string) => void;
@@ -3113,6 +3120,91 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       });
     });
     return pastedIds;
+  },
+  combineNodesIntoMachine: (ids) => {
+    let hostId: string | undefined;
+    set((state) => {
+      const chosen = new Set(ids);
+      const cards = state.project.nodes.filter((node) => chosen.has(node.id));
+      if (cards.length < 2) {
+        return state;
+      }
+      const recipesById = new Map(state.project.recipes.map((recipe) => [recipe.id, recipe]));
+      const ownsRecipe = (recipe: Recipe | undefined) =>
+        !recipe || isPowerRecipe(recipe) || isCropFarmRecipe(recipe) || isCustomRateRecipe(recipe);
+      if (cards.some((card) => ownsRecipe(recipesById.get(card.recipeId)))) {
+        return state;
+      }
+      // One machine must run every recipe on every card.
+      let handlers = getSharedMachineHandlers(cards[0]!, recipesById);
+      for (const card of cards.slice(1)) {
+        const ids = new Set(getSharedMachineHandlers(card, recipesById).map((handler) => handler.id));
+        handlers = handlers.filter((handler) => ids.has(handler.id));
+      }
+      if (handlers.length === 0) {
+        return state;
+      }
+      const host = cards[0]!;
+      const handler =
+        handlers.find((entry) => entry.id === host.machineHandlerId) ?? handlers[0]!;
+      // The other cards' recipes become the host's next sections, in
+      // order, and every wire on them moves to the host under the section
+      // it now is.
+      const extraRecipes = [...(host.extraRecipes ?? [])];
+      const moved = new Map<string, Map<number, number>>();
+      for (const card of cards.slice(1)) {
+        const sectionMap = new Map<number, number>();
+        for (const { section, node: view } of listNodeSections(card)) {
+          sectionMap.set(section, 1 + extraRecipes.length);
+          extraRecipes.push({
+            recipeId: view.recipeId,
+            ...(view.recipeInputOverrides ? { recipeInputOverrides: view.recipeInputOverrides } : {}),
+          });
+        }
+        moved.set(card.id, sectionMap);
+      }
+      const rehome = (nodeId: string, handleId: string | undefined) => {
+        const sectionMap = moved.get(nodeId);
+        if (!sectionMap) {
+          return { nodeId, handleId };
+        }
+        const { section, handleId: bare } = splitSectionHandleId(handleId);
+        const target = sectionMap.get(section) ?? sectionMap.get(0)!;
+        return { nodeId: host.id, handleId: bare ? sectionHandleId(target, bare) : handleId };
+      };
+      const edges = state.project.edges.map((edge) => {
+        const source = rehome(edge.source, edge.sourceHandle);
+        const target = rehome(edge.target, edge.targetHandle);
+        return source.nodeId === edge.source && target.nodeId === edge.target
+          ? edge
+          : {
+              ...edge,
+              source: source.nodeId,
+              sourceHandle: source.handleId,
+              target: target.nodeId,
+              targetHandle: target.handleId,
+            };
+      });
+      const project = touchProject(
+        pruneOrphanStorages({
+          ...state.project,
+          nodes: state.project.nodes
+            .filter((node) => node.id === host.id || !moved.has(node.id))
+            .map((node) =>
+              node.id === host.id ? { ...node, machineHandlerId: handler.id, extraRecipes } : node,
+            ),
+          edges: dedupeEdgeWires(edges),
+        }),
+      );
+      hostId = host.id;
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: host.id,
+        selectedRecipeId: host.recipeId,
+        lastResult: solveBooks(project),
+      });
+    });
+    return hostId;
   },
   wrapSelectionInBoard: (ids, name) => {
     let createdBoardId: string | undefined;

@@ -38,6 +38,7 @@ import {
   AppWindow,
   Ban,
   Box,
+  Combine,
   Cable,
   Grid2x2,
   Anchor,
@@ -256,7 +257,9 @@ import {
   type ResourceHandleSide,
   sectionHandleId,
 } from "./resource-handles";
-import { listNodeSections, sectionNodeView, splitSectionHandleId } from "@/lib/model/shared-machine";
+import { getSharedMachineHandlers, listNodeSections, sectionNodeView, splitSectionHandleId } from "@/lib/model/shared-machine";
+import { isPowerRecipe } from "@/lib/power/power-recipe";
+import { isCropFarmRecipe } from "@/lib/model/passive-production";
 import {
   edgeUnit,
   formatEdgeRateLabelFrom,
@@ -1864,6 +1867,7 @@ export function FactoryFlow() {
   // click a pocket. The board wears it — banner up top, pockets ringed.
   const overwritePicking = useBlueprintStore((state) => state.overwritePicking);
   const wrapSelectionInBoard = useFactoryStore((state) => state.wrapSelectionInBoard);
+  const combineNodesIntoMachine = useFactoryStore((state) => state.combineNodesIntoMachine);
   const expandPocket = useFactoryStore((state) => state.expandPocket);
   const paintPocket = useFactoryStore((state) => state.paintPocket);
   const setPendingBoardSelection = useFactoryStore((state) => state.setPendingBoardSelection);
@@ -4994,6 +4998,45 @@ export function FactoryFlow() {
     selectedNodeIds,
   ]);
 
+  // SHARED MACHINES: several selected cards that one machine could run can
+  // fold into one card. Only recipe cards count (no drawers, boards or
+  // notes in the selection), none may own its recipe, and one machine must
+  // run every recipe across them.
+  const selectionCanCombine = useMemo(() => {
+    if (selectedNodeIds.length < 2) {
+      return false;
+    }
+    const chosen = new Set(selectedNodeIds);
+    const cards = project.nodes.filter((node) => chosen.has(node.id));
+    if (cards.length !== selectedNodeIds.length) {
+      return false;
+    }
+    const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
+    let handlers: ReturnType<typeof getSharedMachineHandlers> | undefined;
+    for (const card of cards) {
+      const recipe = recipesById.get(card.recipeId);
+      if (!recipe || isPowerRecipe(recipe) || isCropFarmRecipe(recipe) || isCustomRateRecipe(recipe)) {
+        return false;
+      }
+      const own = getSharedMachineHandlers(card, recipesById);
+      const ids = new Set(own.map((handler) => handler.id));
+      handlers = handlers ? handlers.filter((handler) => ids.has(handler.id)) : own;
+      if (handlers.length === 0) {
+        return false;
+      }
+    }
+    return true;
+  }, [project.nodes, project.recipes, selectedNodeIds]);
+  const combineSelectedMachines = useCallback((): boolean => {
+    const hostId = combineNodesIntoMachine(selectedNodeIds);
+    if (!hostId) {
+      return false;
+    }
+    setSelectedNodeIds([hostId]);
+    setSelectedEdgeIds([]);
+    return true;
+  }, [combineNodesIntoMachine, selectedNodeIds, setSelectedEdgeIds, setSelectedNodeIds]);
+
   const wrapSelectedBoardItems = useCallback((): boolean => {
     if (selectedNodeIds.length === 0) {
       return false;
@@ -6516,6 +6559,8 @@ export function FactoryFlow() {
         selectionCount={selectedNodeIds.length}
         canWrap={selectionCanWrap}
         onWrap={wrapSelectedBoardItems}
+        canCombine={selectionCanCombine}
+        onCombine={combineSelectedMachines}
       />
       <SmartViewToolbar
         glanceMode={boardView.glanceMode}
@@ -6869,7 +6914,9 @@ function actionBarPosition(compact: boolean, second: boolean): string {
   if (compact) {
     return second ? "bottom-28" : "bottom-16";
   }
-  return second ? "top-14" : "top-3";
+  // Under the toolbar rows, not over them: at top-3 the bar sat on the mode
+  // switch whenever the board was narrow enough for the two to meet.
+  return second ? "top-28" : "top-16";
 }
 
 /**
@@ -6881,14 +6928,19 @@ const SelectionActionsBar = memo(function SelectionActionsBar({
   selectionCount,
   canWrap,
   onWrap,
+  canCombine,
+  onCombine,
 }: {
   selectionCount: number;
   /** False when something selected is already on a board, or is one. */
   canWrap: boolean;
   onWrap: () => boolean;
+  /** True when one machine could run every selected card's recipes (shared-machine.ts). */
+  canCombine: boolean;
+  onCombine: () => boolean;
 }) {
   const isCompact = useIsCompactViewport();
-  if (selectionCount < 2 || !canWrap) {
+  if (selectionCount < 2 || (!canWrap && !canCombine)) {
     return null;
   }
 
@@ -6902,6 +6954,21 @@ const SelectionActionsBar = memo(function SelectionActionsBar({
         actionBarPosition(isCompact, false),
       ].join(" ")}
     >
+      {canCombine ? (
+        // SHARED MACHINES: the one coloured key on the bar (Jack asked for
+        // it), in the pool's blue: the cards fold into one machine that runs
+        // all of their recipes, wires following.
+        <button
+          type="button"
+          onClick={onCombine}
+          title="One machine runs all of these recipes"
+          className="flex h-9 items-center gap-1.5 whitespace-nowrap border-2 border-[#3d5fb8] bg-[#2f4a8f] px-3 font-mono text-[12px] font-bold text-white shadow-[inset_2px_2px_0_#6f9cff,inset_-2px_-2px_0_#1e2f5c] hover:brightness-110"
+        >
+          <Combine className="h-4 w-4" />
+          Combine {selectionCount} into one machine
+        </button>
+      ) : null}
+      {canWrap ? (
       <button
         type="button"
         onClick={onWrap}
@@ -6915,6 +6982,7 @@ const SelectionActionsBar = memo(function SelectionActionsBar({
         <Box className="h-4 w-4" />
         Wrap {selectionCount} in a board
       </button>
+      ) : null}
     </div>
   );
 });

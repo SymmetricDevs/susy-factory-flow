@@ -481,6 +481,9 @@ interface CellBounds {
   height: number;
 }
 
+/** The direction a passer axis runs in, for the corner test. */
+const CORNER_AXIS_DIRECTION = [0, 2, 1, 3] as const;
+
 class LaneOccupancy {
   private cells = new Map<number, LaneClaim[]>();
   /** Claimed stroke per axis per vertex: index axis * cellCount + cell. */
@@ -494,6 +497,8 @@ class LaneOccupancy {
   private runsByEdge = new Map<string, ClaimedRun[]>();
   private corners = new Map<number, Array<{ edgeId: string; a: number; b: number }>>();
   private cornersByEdge = new Map<string, number[]>();
+  /** Corners per vertex, dense: most vertices have none, and the search asks at every expansion. */
+  private cornerCount: Uint16Array;
 
   markCorner(x: number, y: number, incoming: number, outgoing: number, edgeId: string) {
     if (incoming === outgoing) return;
@@ -501,6 +506,7 @@ class LaneOccupancy {
     const list = this.corners.get(cell) ?? [];
     list.push({ edgeId, a: (incoming + 4) % 8, b: outgoing });
     this.corners.set(cell, list);
+    if (cell >= 0) this.cornerCount[cell] += 1;
     const owned = this.cornersByEdge.get(edgeId) ?? [];
     owned.push(cell);
     this.cornersByEdge.set(edgeId, owned);
@@ -509,20 +515,27 @@ class LaneOccupancy {
   /** A wire may cross a bend too: compare the two pairs of outgoing rays. */
   cornerCrossings(x: number, y: number, incoming: number, outgoing: number): number {
     const cell = this.cellOf(x, y);
-    const corners = this.corners.get(cell);
+    // The common case, answered from two dense reads: nothing bends or
+    // passes here. The search asks this eight times per pop.
     const word = cell < 0 ? 0 : this.vertices[cell];
-    if (!corners && word === 0) return 0;
+    const bends = cell < 0 ? (this.corners.get(cell)?.length ?? 0) : this.cornerCount[cell];
+    if (word === 0 && bends === 0) return 0;
     const a = (incoming + 4) % 8, b = outgoing;
-    const between = (d: number) => ((d - a + 8) % 8) < ((b - a + 8) % 8);
+    if (a === b) return 0;
+    const span = (b - a + 8) % 8;
     let count = 0;
-    for (const c of corners ?? []) {
-      if (a === c.a || a === c.b || b === c.a || b === c.b || a === b) continue;
-      if (between(c.a) !== between(c.b)) count++;
+    if (bends > 0) {
+      for (const c of this.corners.get(cell) ?? []) {
+        if (a === c.a || a === c.b || b === c.a || b === c.b) continue;
+        if (((c.a - a + 8) % 8 < span) !== ((c.b - a + 8) % 8 < span)) count++;
+      }
     }
-    for (let axis = 0; axis < 4; axis++) {
-      const c = [0, 2, 1, 3][axis], d = c + 4;
-      if (a === c || a === d || b === c || b === d || a === b) continue;
-      if (between(c) !== between(d)) count += (word >>> (axis * PASSER_BITS)) & PASSER_MASK;
+    if (word !== 0) {
+      for (let axis = 0; axis < 4; axis++) {
+        const c = CORNER_AXIS_DIRECTION[axis], d = c + 4;
+        if (a === c || a === d || b === c || b === d) continue;
+        if (((c - a + 8) % 8 < span) !== ((d - a + 8) % 8 < span)) count += (word >>> (axis * PASSER_BITS)) & PASSER_MASK;
+      }
     }
     return count;
   }
@@ -538,6 +551,7 @@ class LaneOccupancy {
     this.totals = new Float32Array(4 * this.cellCount);
     this.vertices = new Int32Array(this.cellCount);
     this.centres = new Int32Array(this.cellCount);
+    this.cornerCount = new Uint16Array(this.cellCount);
   }
 
   /** Dense index of a vertex, or -1 outside the board's extent. */
@@ -781,6 +795,7 @@ class LaneOccupancy {
   /** Rips a wire up: its lane claims and passers are forgotten. */
   release(edgeId: string) {
     for (const cell of this.cornersByEdge.get(edgeId) ?? []) {
+      if (cell >= 0) this.cornerCount[cell] -= 1;
       const remaining = (this.corners.get(cell) ?? []).filter((c) => c.edgeId !== edgeId);
       if (remaining.length) this.corners.set(cell, remaining);
       else this.corners.delete(cell);
@@ -2236,47 +2251,35 @@ function routeWithinWindow(
 
     let heapSize = 0;
     let seq = 0;
-    const heapLess = (leftIndex: number, rightIndex: number): boolean => {
-      const df = searchHeapF[leftIndex] - searchHeapF[rightIndex];
-      if (df !== 0) {
-        return df < 0;
-      }
-      const dg = searchHeapG[leftIndex] - searchHeapG[rightIndex];
-      if (dg !== 0) {
-        return dg < 0;
-      }
-      return searchHeapSeq[leftIndex] < searchHeapSeq[rightIndex];
-    };
-    const heapSwap = (leftIndex: number, rightIndex: number) => {
-      const f = searchHeapF[leftIndex];
-      searchHeapF[leftIndex] = searchHeapF[rightIndex];
-      searchHeapF[rightIndex] = f;
-      const g = searchHeapG[leftIndex];
-      searchHeapG[leftIndex] = searchHeapG[rightIndex];
-      searchHeapG[rightIndex] = g;
-      const state = searchHeapState[leftIndex];
-      searchHeapState[leftIndex] = searchHeapState[rightIndex];
-      searchHeapState[rightIndex] = state;
-      const entrySeq = searchHeapSeq[leftIndex];
-      searchHeapSeq[leftIndex] = searchHeapSeq[rightIndex];
-      searchHeapSeq[rightIndex] = entrySeq;
+    // The open set: a binary heap on (f, g, seq), seq unique - so the pop
+    // order is a total order and any correct heap yields the same route.
+    // Sifting moves a HOLE instead of swapping four arrays at every level,
+    // which halved the heap's share of a solve.
+    const before = (f: number, g: number, s: number, i: number): boolean => {
+      const fi = searchHeapF[i];
+      if (f !== fi) return f < fi;
+      const gi = searchHeapG[i];
+      if (g !== gi) return g < gi;
+      return s < searchHeapSeq[i];
     };
     const push = (f: number, g: number, state: number) => {
       ensureSearchHeapCapacity(heapSize + 1);
       let i = heapSize;
+      heapSize += 1;
+      const s = (seq += 1);
+      while (i > 0) {
+        const parent = (i - 1) >> 1;
+        if (!before(f, g, s, parent)) break;
+        searchHeapF[i] = searchHeapF[parent];
+        searchHeapG[i] = searchHeapG[parent];
+        searchHeapState[i] = searchHeapState[parent];
+        searchHeapSeq[i] = searchHeapSeq[parent];
+        i = parent;
+      }
       searchHeapF[i] = f;
       searchHeapG[i] = g;
       searchHeapState[i] = state;
-      searchHeapSeq[i] = seq += 1;
-      heapSize += 1;
-      while (i > 0) {
-        const parent = (i - 1) >> 1;
-        if (!heapLess(i, parent)) {
-          break;
-        }
-        heapSwap(parent, i);
-        i = parent;
-      }
+      searchHeapSeq[i] = s;
     };
     let popF = 0;
     let popG = 0;
@@ -2290,27 +2293,29 @@ function routeWithinWindow(
       popState = searchHeapState[0];
       heapSize -= 1;
       if (heapSize > 0) {
-        searchHeapF[0] = searchHeapF[heapSize];
-        searchHeapG[0] = searchHeapG[heapSize];
-        searchHeapState[0] = searchHeapState[heapSize];
-        searchHeapSeq[0] = searchHeapSeq[heapSize];
+        const f = searchHeapF[heapSize];
+        const g = searchHeapG[heapSize];
+        const state = searchHeapState[heapSize];
+        const s = searchHeapSeq[heapSize];
         let i = 0;
         for (;;) {
-          const leftChild = i * 2 + 1;
-          const rightChild = leftChild + 1;
-          let smallest = i;
-          if (leftChild < heapSize && heapLess(leftChild, smallest)) {
-            smallest = leftChild;
+          let child = i * 2 + 1;
+          if (child >= heapSize) break;
+          const right = child + 1;
+          if (right < heapSize && before(searchHeapF[right], searchHeapG[right], searchHeapSeq[right], child)) {
+            child = right;
           }
-          if (rightChild < heapSize && heapLess(rightChild, smallest)) {
-            smallest = rightChild;
-          }
-          if (smallest === i) {
-            break;
-          }
-          heapSwap(i, smallest);
-          i = smallest;
+          if (before(f, g, s, child)) break;
+          searchHeapF[i] = searchHeapF[child];
+          searchHeapG[i] = searchHeapG[child];
+          searchHeapState[i] = searchHeapState[child];
+          searchHeapSeq[i] = searchHeapSeq[child];
+          i = child;
         }
+        searchHeapF[i] = f;
+        searchHeapG[i] = g;
+        searchHeapState[i] = state;
+        searchHeapSeq[i] = s;
       }
       return true;
     };

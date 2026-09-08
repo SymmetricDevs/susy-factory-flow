@@ -35,7 +35,7 @@ export interface JudgeVerdict {
 }
 
 /** What the judges have done so far, for benches. */
-export const judgeStats = { full: 0, fullMs: 0, quick: 0, quickMs: 0, loose: 0, pinned: 0 };
+export const judgeStats = { full: 0, fullMs: 0, quick: 0, quickMs: 0, loose: 0, pinned: 0, prepMs: 0, verdictMs: 0 };
 
 export function makeRouteJudge(
   restingObstacles: readonly GridObstacle[],
@@ -77,7 +77,9 @@ export function makeRouteJudge(
     return { obstacles, requests };
   };
   const verdict = (routes: Iterable<GridRoutedEdge>): JudgeVerdict => {
+    const started = performance.now();
     const measure = measureRoutes(routes);
+    judgeStats.verdictMs += performance.now() - started;
     return { ...measure, points: routePoints(measure, tuning) };
   };
   const full = (positions: JudgePositions): JudgeVerdict => {
@@ -105,6 +107,7 @@ export function makeRouteJudge(
     if (!base) {
       return full(positions);
     }
+    const prepStarted = performance.now();
     // Which cards moved between the base and this layout?
     const moved = new Set<string>();
     for (const o of restingObstacles) {
@@ -148,6 +151,7 @@ export function makeRouteJudge(
         pinned.push({ request: baseRequests.get(request.edgeId) ?? request, route });
       }
     }
+    judgeStats.prepMs += performance.now() - prepStarted;
     const started = performance.now();
     // The loose wires negotiate briefly: the pinned ones cannot yield, so
     // long rounds only re-fight the same crossings.

@@ -405,10 +405,6 @@ export function energySupplyChipText(familyId: string | undefined, hatches: numb
  * the card's own setting tiles; how far it has climbed toward the next win;
  * and the number itself at the bottom.
  */
-/** The list shows this many whole hatch rows; the rest scroll. A row is h-7. */
-const HATCH_LIST_ROWS = 11;
-const HATCH_ROW_HEIGHT = 28;
-
 export function EnergyHatchCalculator({
   anchor,
   recipe,
@@ -462,13 +458,12 @@ export function EnergyHatchCalculator({
             <span className="w-[72px] shrink-0 text-right">Equals</span>
             <span className="w-[52px] shrink-0" />
           </div>
-          {/* A framed box exactly nine rows tall: the list never cuts a row in
-              half at rest, and the scrollbar reads as the box's edge rather
-              than a stray line against the panel. */}
-          <div
-            className="recipe-search-scroll min-h-0 overflow-y-scroll border border-[var(--mc-47)] bg-[var(--mc-93)] px-1"
-            style={{ height: HATCH_LIST_ROWS * HATCH_ROW_HEIGHT }}
-          >
+          {/* A framed scroll box that takes whatever height the right column
+              sets: the panel is as tall as the ladder, the bar and the
+              supply row, and the list fills the rest with no gap under
+              either column. The frame is what makes the scrollbar read as
+              the box's edge rather than a stray line against the panel. */}
+          <div className="recipe-search-scroll min-h-0 flex-1 basis-0 overflow-y-scroll border border-[var(--mc-47)] bg-[var(--mc-93)] px-1">
             {visible.map((row, index) => (
               <HatchRowView
                 key={row.key}

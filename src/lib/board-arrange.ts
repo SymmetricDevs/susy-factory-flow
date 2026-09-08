@@ -164,6 +164,8 @@ export interface ArrangeInput {
   ) => {
     crossings: number;
     length: number;
+    /** Length plus bends and crossings at the router's prices: the score. */
+    points: number;
     /** Where wires cross, with the two wire ids, when the judge knows. */
     events?: Array<{ point: { x: number; y: number }; edges: [string, string] }>;
   };
@@ -352,7 +354,7 @@ export function arrangeBoard(input: ArrangeInput): ArrangeResult {
   const finalChallenger = verdict(polishedChallenger);
   const better =
     finalChallenger.crossings < finalPlain.crossings ||
-    (finalChallenger.crossings === finalPlain.crossings && finalChallenger.length < finalPlain.length);
+    (finalChallenger.crossings === finalPlain.crossings && finalChallenger.points < finalPlain.points);
   return better ? polishedChallenger : polishedPlain;
 }
 
@@ -370,7 +372,12 @@ export function arrangeBoard(input: ArrangeInput): ArrangeResult {
 function polishWithJudge(
   input: ArrangeInput,
   result: ArrangeResult,
-  verdict: { crossings: number; length: number; events?: Array<{ point: { x: number; y: number }; edges: [string, string] }> },
+  verdict: {
+    crossings: number;
+    length: number;
+    points: number;
+    events?: Array<{ point: { x: number; y: number }; edges: [string, string] }>;
+  },
   which: "first" | "second" = "first",
 ): ArrangeResult {
   const judge = input.judge;
@@ -545,18 +552,18 @@ function polishWithJudge(
         budget -= 1;
         report();
         if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
-          console.log("try", id.slice(0, 14), candidate.x, candidate.y, "quick", quick.crossings, Math.round(quick.length), "best", best.crossings, Math.round(best.length));
+          console.log("try", id.slice(0, 14), candidate.x, candidate.y, "quick", quick.crossings, Math.round(quick.points), "best", best.crossings, Math.round(best.points));
         }
         // A crossing fewer is always worth the full verdict; a length gain
         // must be real (two percent) to be worth one.
         if (
           quick.crossings < best.crossings ||
-          (quick.crossings === best.crossings && quick.length < best.length * 0.98)
+          (quick.crossings === best.crossings && quick.points < best.points * 0.98)
         ) {
           const next = judge(positions);
           if (
             next.crossings < best.crossings ||
-            (next.crossings === best.crossings && next.length < best.length - 1)
+            (next.crossings === best.crossings && next.points < best.points - 1)
           ) {
             best = next;
             base = new Map(positions);
@@ -620,12 +627,12 @@ function polishWithJudge(
           report();
           if (
             quick.crossings < best.crossings ||
-            (quick.crossings === best.crossings && quick.length < best.length * 0.98)
+            (quick.crossings === best.crossings && quick.points < best.points * 0.98)
           ) {
             const next = judge(positions);
             if (
               next.crossings < best.crossings ||
-              (next.crossings === best.crossings && next.length < best.length - 1)
+              (next.crossings === best.crossings && next.points < best.points - 1)
             ) {
               best = next;
               base = new Map(positions);
@@ -644,7 +651,7 @@ function polishWithJudge(
   const final = judge(positions);
   const keep =
     final.crossings < start.verdict.crossings ||
-    (final.crossings === start.verdict.crossings && final.length < start.verdict.length);
+    (final.crossings === start.verdict.crossings && final.points < start.verdict.points);
   const chosen = keep ? positions : start.positions;
   return {
     ...result,

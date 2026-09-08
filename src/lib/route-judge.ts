@@ -21,6 +21,7 @@ import {
   type PinnedRoute,
 } from "@/components/flow/grid-edge-router";
 import { BOARD_GRID } from "@/lib/board-grid";
+import { routePoints } from "@/lib/route-metrics";
 import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "@/components/flow/router-tuning";
 
 export type JudgePositions = ReadonlyMap<string, { x: number; y: number }>;
@@ -28,6 +29,8 @@ export type JudgePositions = ReadonlyMap<string, { x: number; y: number }>;
 export interface JudgeVerdict {
   crossings: number;
   length: number;
+  /** Length plus bends and crossings at the router's prices: the score. */
+  points: number;
   events: Array<{ point: { x: number; y: number }; edges: [string, string] }>;
 }
 
@@ -73,11 +76,15 @@ export function makeRouteJudge(
     }));
     return { obstacles, requests };
   };
+  const verdict = (routes: Iterable<GridRoutedEdge>): JudgeVerdict => {
+    const measure = measureRoutes(routes);
+    return { ...measure, points: routePoints(measure, tuning) };
+  };
   const full = (positions: JudgePositions): JudgeVerdict => {
     const key = keyOf(positions);
     const cached = fullByKey.get(key);
     if (cached) {
-      return measureRoutes(cached.routes.values());
+      return verdict(cached.routes.values());
     }
     const { obstacles, requests } = place(positions);
     const started = performance.now();
@@ -88,7 +95,7 @@ export function makeRouteJudge(
     if (fullByKey.size > 64) {
       fullByKey.delete(fullByKey.keys().next().value!);
     }
-    return measureRoutes(routes.values());
+    return verdict(routes.values());
   };
   return (positions, options) => {
     if (!options?.quick || !options.base) {
@@ -106,7 +113,7 @@ export function makeRouteJudge(
       if (a.x !== b.x || a.y !== b.y) moved.add(o.id);
     }
     if (moved.size === 0) {
-      return measureRoutes(base.routes.values());
+      return verdict(base.routes.values());
     }
     const { obstacles, requests } = place(positions);
     const movedRects = obstacles.filter((o) => moved.has(o.id)).map((o) => ({
@@ -149,6 +156,6 @@ export function makeRouteJudge(
     judgeStats.quickMs += performance.now() - started;
     judgeStats.loose += loose.length;
     judgeStats.pinned += pinned.length;
-    return measureRoutes(routes.values());
+    return verdict(routes.values());
   };
 }

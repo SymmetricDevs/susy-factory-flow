@@ -277,11 +277,14 @@ import {
   type GridSide,
   type GridRouteRequest,
   type GridObstacle,
+  type GridRoutedEdge,
   measureRoutes,
 } from "./grid-edge-router";
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
 import type { ArrangeInput } from "@/lib/board-arrange";
 import { makeRouteJudge } from "@/lib/route-judge";
+import { routePoints } from "@/lib/route-metrics";
+import { registerBoardGeometryReader, registerBoardScoreReader } from "./board-score";
 import { arrangeInWorker, type ArrangeProgress } from "@/lib/arrange-solve";
 import type { ArrangeJudgeInput } from "@/lib/arrange-job";
 import {
@@ -1439,6 +1442,61 @@ function ensureGridSolve() {
     };
     // Read the installed geometry on demand, never re-solve a benchmark's
     // approximation. The signature gate lets probes wait for the worker.
+    registerBoardScoreReader(() => {
+      const routes: GridRoutedEdge[] = [];
+      let settled = gridSolveSignature === gridSolveWantedSignature;
+      for (const input of publishedGridRouteEdges) {
+        const entry = directRouteCache.get(input.edgeId);
+        if (!entry) {
+          settled = false;
+          continue;
+        }
+        if (entry.signature !== gridSolveSignature) settled = false;
+        routes.push({ edgeId: input.edgeId, points: entry.route.points });
+      }
+      const measured = measureRoutes(routes);
+      return {
+        crossings: measured.crossings,
+        length: measured.length,
+        points: routePoints(measured, getRouterTuning()),
+        bends45: measured.bends45,
+        bends90: measured.bends90 + 3 * measured.bendsSharp,
+        wires: routes.length,
+        settled,
+      };
+    });
+    // The board's geometry as the router sees it: for the layout string
+    // (dev menu -> Score -> Copy layout), enough to rebuild the routing
+    // problem offline.
+    registerBoardGeometryReader(() => {
+      const project = useFactoryStore.getState().project;
+      const cards: Array<{ id: string; x: number; y: number; width: number; height: number; role: "machine" | "storage" | "board" }> = [];
+      const seen = new Set<string>();
+      const take = (id: string, role: "machine" | "storage" | "board") => {
+        const rect = getMeasuredNodeBoundsById(id);
+        if (!rect || seen.has(id)) return;
+        seen.add(id);
+        cards.push({ id, x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top, role });
+      };
+      for (const node of project.nodes) take(node.id, "machine");
+      for (const storage of project.storages ?? []) take(storage.id, "storage");
+      for (const pocket of project.pockets ?? []) take(pocket.id, "board");
+      const wires = publishedGridRouteEdges
+        .filter((input) => seen.has(input.sourceNodeId) && seen.has(input.targetNodeId))
+        .map((input) => ({
+          id: input.edgeId,
+          source: input.sourceNodeId,
+          target: input.targetNodeId,
+          sourcePortY: input.sourceSlotEndpoint
+            ? measuredPortOffsetY(input.sourceNodeId, input.sourceHandleId ?? undefined, Position.Right)
+            : undefined,
+          targetPortY: input.targetSlotEndpoint
+            ? measuredPortOffsetY(input.targetNodeId, input.targetHandleId ?? undefined, Position.Left)
+            : undefined,
+          width: Math.min(input.routingWidth, LANE_CAPACITY),
+        }));
+      return { cards, wires };
+    });
     (window as unknown as { __gtnhReadDisplayedRoutes?: unknown }).__gtnhReadDisplayedRoutes = () => ({
       signature: gridSolveSignature,
       wantedSignature: gridSolveWantedSignature,

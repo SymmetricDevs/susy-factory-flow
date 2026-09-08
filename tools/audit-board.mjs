@@ -6,9 +6,28 @@ import { dirname, join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import { auditRoutes } from './route-audit.mjs';
 
-const [input, prefixArg, action] = process.argv.slice(2);
-if (!input || !prefixArg || (action && action !== '--arrange')) throw new Error('Usage: node tools/audit-board.mjs <plan.json> <output-prefix> [--arrange]');
+const args = process.argv.slice(2);
+const layoutAt = args.indexOf('--layout');
+const layoutFile = layoutAt >= 0 ? args.splice(layoutAt, 2)[1] : undefined;
+const [input, prefixArg, action] = args;
+if (!input || !prefixArg || (action && action !== '--arrange')) throw new Error('Usage: node tools/audit-board.mjs <plan.json> <output-prefix> [--arrange] [--layout <layout.json>]');
 const plan = JSON.parse(readFileSync(input, 'utf8'));
+if (layoutFile) {
+  // A layout string (dev menu -> Score -> Copy layout): plan id, cards by
+  // id prefix, top-lefts in cells. Applied here so the audit reads the
+  // board exactly as the player laid it out.
+  const layout = JSON.parse(readFileSync(layoutFile, 'utf8'));
+  const cards = [...plan.nodes, ...(plan.storages ?? []), ...(plan.pockets ?? [])];
+  let placed = 0;
+  for (const [key, [cx, cy]] of Object.entries(layout.c)) {
+    const matches = cards.filter((card) => card.id.startsWith(key));
+    if (matches.length !== 1) continue;
+    matches[0].position = { x: cx * 20, y: cy * 20 };
+    placed += 1;
+  }
+  for (const edge of plan.edges) delete edge.waypoints;
+  console.error(`layout: placed ${placed} of ${cards.length} cards`);
+}
 const prefix = resolve(prefixArg);
 mkdirSync(dirname(prefix), { recursive: true });
 const cache = join(process.env.LOCALAPPDATA ?? '', 'ms-playwright');

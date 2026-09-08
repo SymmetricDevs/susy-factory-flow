@@ -57,6 +57,8 @@ import {
   type RouterTuning,
 } from "./flow/router-tuning";
 import { useFactoryStore } from "@/store/factory-store";
+import { readBoardGeometry, readBoardScore, type BoardScore } from "./flow/board-score";
+import { decodeLayout, encodeLayout } from "@/lib/board-layout-string";
 import { getUiScale } from "@/lib/ui-scale";
 
 /**
@@ -110,6 +112,69 @@ export function DevMenu({
   };
   const [forceGlance, setForceGlance] = useState(() => isNodeDetailGlanceForced());
   const [holdEnding, setHoldEnding] = useState(() => getBoardTimelapseHoldEnding());
+  // The board's score, read off the displayed wires every half second
+  // while the menu is open: crossings first, wire length second.
+  const [score, setScore] = useState<BoardScore | undefined>(() => readBoardScore());
+  useEffect(() => {
+    const tick = () => setScore(readBoardScore());
+    tick();
+    const timer = window.setInterval(tick, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+  const [layoutNote, setLayoutNote] = useState<string | undefined>(undefined);
+  const copyLayout = async () => {
+    const project = useFactoryStore.getState().project;
+    const geometry = readBoardGeometry();
+    const current = readBoardScore();
+    const text = encodeLayout({
+      planId: project.id,
+      cards:
+        geometry?.cards ??
+        [...project.nodes, ...(project.storages ?? [])].map((card) => ({
+          id: card.id,
+          x: card.position.x,
+          y: card.position.y,
+        })),
+      wires: geometry?.wires,
+      score: current
+        ? { crossings: current.crossings, length: current.length, points: current.points }
+        : undefined,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setLayoutNote(`Layout copied: ${text.length} characters.`);
+    } catch {
+      window.prompt("Copy this layout string:", text);
+      setLayoutNote(undefined);
+    }
+  };
+  const pasteLayout = async () => {
+    let text: string | null = null;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      text = window.prompt("Paste a layout string:");
+    }
+    if (!text) return;
+    const state = useFactoryStore.getState();
+    try {
+      const decoded = decodeLayout(text.trim(), state.project);
+      if (decoded.moves.length === 0) {
+        setLayoutNote("No card on this plan matched that layout.");
+        return;
+      }
+      state.applyBoardArrangement({
+        moves: decoded.moves,
+        resetEdgeIds: state.project.edges.map((edge) => edge.id),
+      });
+      useFactoryStore.getState().frameBoardNodes();
+      setLayoutNote(
+        `Placed ${decoded.moves.length} cards${decoded.unknown.length ? `, ${decoded.unknown.length} unknown keys skipped` : ""}${decoded.missing.length ? `, ${decoded.missing.length} cards not in the layout` : ""}${decoded.otherPlan ? " (layout was made for another plan)" : ""}.`,
+      );
+    } catch (error) {
+      setLayoutNote(error instanceof Error ? error.message : String(error));
+    }
+  };
   // The wire router's dials. Every change re-solves the board live.
   const [tuning, setTuning] = useState<RouterTuning>(() => getRouterTuning());
   const patchTuning = (patch: Partial<RouterTuning>) => {
@@ -478,6 +543,59 @@ export function DevMenu({
             >
               Play
             </button>
+          </div>
+
+          <div className="mt-2 rounded border border-line px-3 py-2.5">
+            <span className="block text-base leading-tight text-fg">Score</span>
+            <span className="mt-0.5 block text-xs text-fg-muted">
+              The board as drawn: crossings first, wire second. Versus mode: copy your layout
+              to send it, paste one to see it here.
+            </span>
+            <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded border border-line px-2 py-1.5">
+                <div className="text-2xl font-black tabular-nums leading-none text-fg">
+                  {score ? score.crossings : "-"}
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-wide text-fg-subtle">crossings</div>
+              </div>
+              <div className="rounded border border-line px-2 py-1.5">
+                <div className="text-2xl font-black tabular-nums leading-none text-fg">
+                  {score ? Math.round(score.points).toLocaleString() : "-"}
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-wide text-fg-subtle">points</div>
+              </div>
+              <div className="rounded border border-line px-2 py-1.5">
+                <div className="text-2xl font-black tabular-nums leading-none text-fg">
+                  {score ? score.wires : "-"}
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-wide text-fg-subtle">
+                  {score && !score.settled ? "wires, routing" : "wires"}
+                </div>
+              </div>
+            </div>
+            {score ? (
+              <p className="mt-2 text-xs tabular-nums text-fg-subtle">
+                {Math.round(score.length).toLocaleString()} px of wire, {score.bends45} bends of 45°,{" "}
+                {score.bends90} of 90°, priced at the Wires dials below. Lower is better.
+              </p>
+            ) : null}
+            <div className="mt-2.5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void copyLayout()}
+                className="flex-1 rounded border border-cyan-700 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-500/20"
+              >
+                Copy layout
+              </button>
+              <button
+                type="button"
+                onClick={() => void pasteLayout()}
+                className="flex-1 rounded border border-line px-3 py-1.5 text-sm text-fg-muted hover:border-line-strong hover:text-fg"
+              >
+                Paste layout
+              </button>
+            </div>
+            {layoutNote ? <p className="mt-2 text-xs text-fg-muted">{layoutNote}</p> : null}
           </div>
 
           <div className="mt-2 rounded border border-line px-3 py-2.5">

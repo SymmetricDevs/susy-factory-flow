@@ -21,10 +21,12 @@ try {
   page.on('pageerror', (e) => errors.push(String(e)));
   const url = process.env.AUDIT_URL ?? 'http://localhost:3000';
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.evaluate((p) => {
+  await page.evaluate(([p, tuning]) => {
     localStorage.setItem('gtnh-factory-flow.project.v2', JSON.stringify(p));
+    // AUDIT_TUNING: a JSON patch of router dials to test a device's setting.
+    if (tuning) localStorage.setItem('gtnh-factory-flow.router-tuning.v1', tuning);
     sessionStorage.setItem('gtnh-factory-flow-welcome-left', '1');
-  }, plan);
+  }, [plan, process.env.AUDIT_TUNING ?? null]);
   await page.reload({ waitUntil: 'load' });
   // Wait for matching inputs and ALL installed paths, not a guessed delay
   // or a fresh call to solveGridRoutes with potentially different settings.
@@ -64,6 +66,10 @@ try {
     if (await folded.isVisible()) await folded.click({ timeout: 10000 });
     await page.getByRole('button', { name: 'View options', exact: true }).click({ timeout: 10000 });
     await page.getByRole('button', { name: 'Arrange the board', exact: true }).click({ timeout: 180000 });
+    // The arrange runs in a worker behind a loader; wait for the loader to
+    // leave before reading the board, however long the judged arrange takes.
+    await page.waitForTimeout(500);
+    await page.locator('[role="status"][aria-live="polite"]').waitFor({ state: 'detached', timeout: 600000 }).catch(() => {});
   }
   const snapshot = await settled();
   if (errors.length) throw new Error(errors.join('\n'));

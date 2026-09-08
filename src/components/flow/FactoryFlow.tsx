@@ -282,6 +282,8 @@ import {
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
 import type { ArrangeInput } from "@/lib/board-arrange";
 import { makeRouteJudge } from "@/lib/route-judge";
+import { arrangeInWorker, type ArrangeProgress } from "@/lib/arrange-solve";
+import type { ArrangeJudgeInput } from "@/lib/arrange-job";
 import {
   ASYNC_ROUTE_EDGE_LIMIT,
   routeWorkerAvailable,
@@ -1180,6 +1182,8 @@ function publishGridRouteEdges(edges: GridRouteEdgeInput[], freeDock: boolean) {
 function resolveGridRouteEndpoints(
   input: GridRouteEdgeInput,
   end: "source" | "target",
+  /** Free-dock or fixed-port docks; the board's current setting by default. */
+  freeDock: boolean = publishedGridFreeDock,
 ): GridEndpoint[] {
   const nodeId = end === "source" ? input.sourceNodeId : input.targetNodeId;
   const rect = getMeasuredNodeBoundsById(nodeId);
@@ -1199,7 +1203,7 @@ function resolveGridRouteEndpoints(
   // Fixed-port mode (the anchor toggle, off): wires attach the classic way —
   // machine inputs on the left at their port row, outputs on the right, and
   // storage/trash cards on whichever side centre routes best.
-  if (!publishedGridFreeDock || isSelfLoop) {
+  if (!freeDock || isSelfLoop) {
     const isSlot = end === "source" ? input.sourceSlotEndpoint : input.targetSlotEndpoint;
     if (isSlot) {
       const handleId = end === "source" ? input.sourceHandleId : input.targetHandleId;
@@ -1513,6 +1517,12 @@ setRouteSolveSink(installSolvedRoutes);
  * their own to shift) or when no wire has resolvable ends.
  */
 function buildArrangeJudge(cardIds: readonly string[]): ArrangeInput["judge"] | undefined {
+  const input = buildArrangeJudgeInput(cardIds);
+  return input ? makeRouteJudge(input.obstacles, input.requests, input.tuning) : undefined;
+}
+
+/** The judge's inputs, serialisable: what the arrange worker builds its judge from. */
+function buildArrangeJudgeInput(cardIds: readonly string[]): ArrangeJudgeInput | undefined {
   const ids = new Set(cardIds);
   const inputs = publishedGridRouteEdges.filter(
     (input) => ids.has(input.sourceNodeId) && ids.has(input.targetNodeId),
@@ -1522,8 +1532,10 @@ function buildArrangeJudge(cardIds: readonly string[]): ArrangeInput["judge"] | 
   }
   const base: Array<{ input: GridRouteEdgeInput; sources: GridEndpoint[]; targets: GridEndpoint[] }> = [];
   for (const input of inputs) {
-    const sources = resolveGridRouteEndpoints(input, "source");
-    const targets = resolveGridRouteEndpoints(input, "target");
+    // Free docks, whatever the board's anchor setting: the arrange turns
+    // free docking on when it lands, so the judge must see that board.
+    const sources = resolveGridRouteEndpoints(input, "source", true);
+    const targets = resolveGridRouteEndpoints(input, "target", true);
     if (sources.length === 0 || targets.length === 0) {
       continue;
     }
@@ -1555,15 +1567,14 @@ function buildArrangeJudge(cardIds: readonly string[]): ArrangeInput["judge"] | 
   }));
   // The judge's exact inputs at the moment of the arrange, for the audit
   // tool (tools/audit-board.mjs) to save beside the result.
+  const input: ArrangeJudgeInput = { obstacles, requests, tuning: getRouterTuning() };
   if (typeof window !== "undefined") {
     (window as unknown as { __gtnhArrangeJudgeInput?: unknown }).__gtnhArrangeJudgeInput = {
-      obstacles,
-      requests,
-      tuning: getRouterTuning(),
+      ...input,
       cardIds: [...cardIds],
     };
   }
-  return makeRouteJudge(obstacles, requests, getRouterTuning());
+  return input;
 }
 
 function clearDirectRoutes() {
@@ -5544,18 +5555,20 @@ export function FactoryFlow() {
   // Auto-arrange: lay the visible level out left to right and reframe. Reads
   // the store at click time so the callback stays stable — the toolbar it
   // lives on must not re-render per project edit.
-  const handleAutoArrange = useCallback((options: { tidyBoardInteriors: boolean }) => {
+  // The arrange in flight, for the loader; undefined when none is.
+  const [arrangeProgress, setArrangeProgress] = useState<ArrangeProgress | undefined>(undefined);
+  const arrangeRunningRef = useRef(false);
+  const handleAutoArrange = useCallback(async (options: { tidyBoardInteriors: boolean }) => {
+    // One at a time: a second click while one runs is a second click.
+    if (arrangeRunningRef.current) {
+      return;
+    }
+    arrangeRunningRef.current = true;
+    setArrangeProgress({ seq: 0, stage: "Reading the board", done: 0, total: 1 });
     const state = useFactoryStore.getState();
-    const {
-      moves,
-      wireRoutes,
-      resetEdgeIds,
-      staleInkIds,
-      boardSizes,
-      addBoards,
-      setOwners,
-      setBoardThemes,
-    } = computeAutoArrangement(
+    let computed: Awaited<ReturnType<typeof computeAutoArrangement>>;
+    try {
+      computed = await computeAutoArrangement(
         state.project,
         state.lastResult,
         // Tight spacing and normal island splitting, always: the dials that
@@ -5565,10 +5578,31 @@ export function FactoryFlow() {
           islands: "normal",
         },
         options,
+        (progress) => setArrangeProgress(progress),
       );
+    } catch (error) {
+      console.error("arrange failed", error);
+      arrangeRunningRef.current = false;
+      setArrangeProgress(undefined);
+      return;
+    }
+    arrangeRunningRef.current = false;
+    setArrangeProgress(undefined);
+    const {
+      moves,
+      wireRoutes,
+      resetEdgeIds,
+      staleInkIds,
+      boardSizes,
+      addBoards,
+      setOwners,
+      setBoardThemes,
+    } = computed;
     if (moves.length === 0) {
       return;
     }
+    // The board may have changed while the arrange ran; apply to the
+    // current store, which is what applyBoardArrangement reads.
     // An arranged board is read through three switches, so the arrange sets
     // them: lines weighted by volume, wires docking freely, rate pills off.
     writeBoardView({ lineThicknessMode: true, freeDockMode: true, lineLabelsMode: false });
@@ -6627,6 +6661,38 @@ export function FactoryFlow() {
       {/* Toggled from the dev menu (shift-click the version chip). Sits above
           the help button; see PerfHud.tsx. */}
       <PerfHud />
+      {arrangeProgress ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center"
+        >
+          <div className="pointer-events-auto w-80 max-w-[calc(100*var(--ui-vw)-32px)] rounded-lg border border-line-strong bg-surface px-5 py-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden
+                className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent"
+              />
+              <span className="text-base font-semibold leading-tight text-fg">Arranging the board</span>
+            </div>
+            <p className="mt-2 text-xs text-fg-muted">{arrangeProgress.stage}</p>
+            <div className="mt-2 h-1 w-full overflow-hidden rounded bg-surface-raised">
+              <div
+                className="h-full bg-cyan-500 transition-[width] duration-150"
+                style={{
+                  width: `${Math.round(
+                    (100 * Math.min(arrangeProgress.done, arrangeProgress.total)) /
+                      Math.max(arrangeProgress.total, 1),
+                  )}%`,
+                }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-fg-subtle">
+              Every move is checked against the real wires, which takes a moment on a busy board.
+            </p>
+          </div>
+        </div>
+      ) : null}
       {timelapseActive ? (
         // Settings live in the dev menu, set BEFORE the run; this only ends
         // it (as do Esc and any click on the board).
@@ -11939,7 +12005,7 @@ function estimateNodeCardSize(
  */
 const ZONE_PAPERS: readonly string[] = BOARD_PAPER_IDS;
 
-function computeAutoArrangement(
+async function computeAutoArrangement(
   baseProject: FactoryProject,
   result: ThroughputResult | undefined,
   taste: ArrangeTaste,
@@ -11952,7 +12018,8 @@ function computeAutoArrangement(
      */
     tidyBoardInteriors: boolean;
   },
-): {
+  onProgress?: (progress: ArrangeProgress) => void,
+): Promise<{
   moves: Array<{ id: string; position: { x: number; y: number } }>;
   wireRoutes: Array<{ id: string; waypoints: Array<{ x: number; y: number }> }>;
   resetEdgeIds: string[];
@@ -11961,7 +12028,7 @@ function computeAutoArrangement(
   addBoards: FactoryPocket[];
   setOwners: Array<{ id: string; pocketId?: string }>;
   setBoardThemes: Array<{ id: string; theme: string }>;
-} {
+}> {
   const recipesById = new Map(baseProject.recipes.map((recipe) => [recipe.id, recipe]));
   // Frames refitted by the interior passes, read by every OUTER pass so a
   // parent sizes its nested board by the frame it is about to wear.
@@ -12318,7 +12385,9 @@ function computeAutoArrangement(
   // The judge routes the real wires at each candidate layout; it exists
   // only when every card on the level is a plain card (no boards).
   const rootIsPlain = root.cards.every((card) => !isPocketId(project, card.id));
-  const judge = rootIsPlain ? buildArrangeJudge(root.cards.map((card) => card.id)) : undefined;
+  const judgeInput = rootIsPlain
+    ? buildArrangeJudgeInput(root.cards.map((card) => card.id))
+    : undefined;
   if (typeof window !== "undefined") {
     (window as unknown as { __gtnhArrangeInput?: unknown }).__gtnhArrangeInput = {
       cards: root.cards,
@@ -12326,7 +12395,12 @@ function computeAutoArrangement(
       taste,
     };
   }
-  const arranged = arrangeBoard({ cards: root.cards, wires: root.wires, taste, judge });
+  // The judged arrange is dozens of route solves; it runs in a worker so
+  // the page keeps breathing, and reports where it is for the loader.
+  const { result: arranged } = await arrangeInWorker(
+    { cards: root.cards, wires: root.wires, taste, judgeInput },
+    onProgress,
+  );
   moves.push(...arranged.moves);
 
   // How far each locked top-level board moved: waypoints pinned on wires

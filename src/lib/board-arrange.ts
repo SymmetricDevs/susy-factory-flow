@@ -172,6 +172,8 @@ export interface ArrangeInput {
    * (default 60). Each is a full solve of the board's wires.
    */
   polishBudget?: number;
+  /** Where the arrange is, as it goes: for a loader on the board. */
+  onProgress?: (progress: { stage: string; done: number; total: number }) => void;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -328,11 +330,14 @@ interface Block {
  * unjudged.
  */
 export function arrangeBoard(input: ArrangeInput): ArrangeResult {
+  input.onProgress?.({ stage: "Laying the board out", done: 0, total: 1 });
   const plain = arrangeBoardOnce(input, false);
   if (!input.judge || input.cards.length < 2) {
     return plain;
   }
+  input.onProgress?.({ stage: "Trying a second layout", done: 0, total: 1 });
   const challenger = arrangeBoardOnce(input, true);
+  input.onProgress?.({ stage: "Routing both layouts", done: 0, total: 1 });
   const verdict = (result: ArrangeResult) =>
     input.judge!(new Map(result.moves.map((move) => [move.id, move.position])));
   const plainVerdict = verdict(plain);
@@ -340,8 +345,9 @@ export function arrangeBoard(input: ArrangeInput): ArrangeResult {
   // Both layouts are polished - they start from different structures and
   // the polish is greedy, so each can reach a place the other cannot - and
   // the better finished board wins: fewer crossings, then shorter wire.
-  const polishedPlain = polishWithJudge(input, plain, plainVerdict);
-  const polishedChallenger = polishWithJudge(input, challenger, challengerVerdict);
+  const polishedPlain = polishWithJudge(input, plain, plainVerdict, "first");
+  const polishedChallenger = polishWithJudge(input, challenger, challengerVerdict, "second");
+  input.onProgress?.({ stage: "Choosing the better board", done: 1, total: 1 });
   const finalPlain = verdict(polishedPlain);
   const finalChallenger = verdict(polishedChallenger);
   const better =
@@ -365,12 +371,21 @@ function polishWithJudge(
   input: ArrangeInput,
   result: ArrangeResult,
   verdict: { crossings: number; length: number; events?: Array<{ point: { x: number; y: number }; edges: [string, string] }> },
+  which: "first" | "second" = "first",
 ): ArrangeResult {
   const judge = input.judge;
   if (!judge || verdict.crossings === 0) {
     return result;
   }
-  let budget = input.polishBudget ?? 100;
+  const fullBudget = input.polishBudget ?? 100;
+  let budget = fullBudget;
+  const report = () =>
+    input.onProgress?.({
+      stage: `Moving cards off crossings (${which} layout), ${verdict.crossings} to start`,
+      done: fullBudget - budget,
+      total: fullBudget,
+    });
+  report();
   const sizeById = new Map(input.cards.map((card) => [card.id, { width: card.width, height: card.height }]));
   const wiresOf = new Map<string, ArrangeWire[]>();
   for (const wire of input.wires) {
@@ -528,6 +543,7 @@ function polishWithJudge(
         }
         const quick = judge(positions, { quick: true, base });
         budget -= 1;
+        report();
         if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
           console.log("try", id.slice(0, 14), candidate.x, candidate.y, "quick", quick.crossings, Math.round(quick.length), "best", best.crossings, Math.round(best.length));
         }
@@ -601,6 +617,7 @@ function polishWithJudge(
         if (legal) {
           const quick = judge(positions, { quick: true, base });
           budget -= 1;
+          report();
           if (
             quick.crossings < best.crossings ||
             (quick.crossings === best.crossings && quick.length < best.length * 0.98)

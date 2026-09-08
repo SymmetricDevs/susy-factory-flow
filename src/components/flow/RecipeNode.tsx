@@ -3061,11 +3061,26 @@ function SharedMachineRails({
   const reading = (entry: (typeof sections)[number]) => {
     const state = verdictWord(entry.verdict, false, entry.powerStalled);
     const showPct = entry.verdict.kind !== "off" && entry.verdict.kind !== "no-recipe";
+    // The footer's usage tile in miniature: the same bordered, inset plate,
+    // a usage cell and a reason cell divided by a hairline, at a size that
+    // fits in one grid cell over the ports.
     return (
       <MinecraftTooltip content={<VerdictHoverContent verdict={entry.verdict} isCustomRate={false} />}>
-        <span className="flex min-w-0 items-baseline gap-1.5 pl-1 text-[12px] leading-[16px] tabular-nums">
-          {showPct ? <span className="font-bold">{formatPct(entry.verdict.pct)}%</span> : null}
-          <span className={["truncate uppercase tracking-[0.4px]", VERDICT_WORD_CLASS[state.tone]].join(" ")}>
+        <span className="flex h-[18px] min-w-0 items-stretch border border-[var(--mc-47)] bg-[var(--mc-71)] shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
+          {showPct ? (
+            <>
+              <span className="flex items-center px-1.5 text-[11px] font-bold leading-none tabular-nums">
+                {formatPct(entry.verdict.pct)}%
+              </span>
+              <span className="my-0.5 w-px shrink-0 bg-[var(--mc-47)]" />
+            </>
+          ) : null}
+          <span
+            className={[
+              "flex min-w-0 items-center truncate px-1.5 text-[10px] uppercase leading-none tracking-[0.4px]",
+              VERDICT_WORD_CLASS[state.tone],
+            ].join(" ")}
+          >
             {state.word}
           </span>
         </span>

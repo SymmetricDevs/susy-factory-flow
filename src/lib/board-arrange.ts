@@ -73,6 +73,11 @@ export interface ArrangeWire {
    * out straighter. Absent means 1.
    */
   weight?: number;
+  /**
+   * The stroke the wire routes at, in px. The optimiser weighs wires by it
+   * exactly as the router's points do (wireWeight in route-metrics.ts).
+   */
+  width?: number;
 }
 
 /** Ink (boxes, zones, notes, arrows): follows the cards it was written over. */
@@ -294,6 +299,7 @@ interface WireLink {
   fromAnchor: number;
   toAnchor: number;
   weight: number;
+  width?: number;
 }
 
 interface Placement {
@@ -690,6 +696,7 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
       fromAnchor: wire.sourcePortY ?? from.card.height / 2,
       toAnchor: wire.targetPortY ?? to.card.height / 2,
       weight: Math.max(wire.weight ?? 1, 0.01),
+      width: wire.width,
     });
   }
 
@@ -1724,19 +1731,38 @@ function layoutIsland(
         source: link.from.card.id,
         target: link.to.card.id,
         weight: link.weight,
+        width: link.width,
         sourcePortY: link.fromAnchor,
         targetPortY: link.toAnchor,
       }));
     if (optimizeWires.length > 0) {
+      // The host's judge sees the whole board; the island's finalists are
+      // laid where the island stands today (its cards' top-left corner) so
+      // the rest of the board keeps its distance from them.
+      let originX = Infinity;
+      let originY = Infinity;
+      for (const id of ids) {
+        const slot = slotOfId(id);
+        originX = Math.min(originX, slot.card.x);
+        originY = Math.min(originY, slot.card.y);
+      }
+      const hostJudge = _judge;
       const optimized = optimizeIslandLayout(optimizeCards, optimizeWires, {
         rowGapCells: Math.round(ROW_GAP / BOARD_GRID),
         sectionGapCells: Math.round(SECTION_GAP / BOARD_GRID),
         columnGapCells: Math.round(COLUMN_GAP_MIN / BOARD_GRID),
         satellitePadCells: Math.round(SATELLITE_PAD / BOARD_GRID),
-        // With a host judge, the finished layouts are judged for real in
-        // arrangeBoard, so the island's finalists go by proxy score alone;
-        // without one, the optimiser's own stand-in picks among them.
-        judge: _judge ? false : undefined,
+        // The real router confirms the finalists (Jack, 2026-09-08: the
+        // proxy searches, the router confirms): the host's judge when
+        // there is one, the optimiser's own stand-in otherwise.
+        judge: hostJudge
+          ? (positions) =>
+              hostJudge(
+                new Map(
+                  [...positions].map(([id, p]) => [id, { x: p.x + originX, y: p.y + originY }]),
+                ),
+              ).points
+          : undefined,
       });
       if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
         console.log("finalists", JSON.stringify(optimized.finalists), "before", Math.round(optimized.before), "after", Math.round(optimized.after));

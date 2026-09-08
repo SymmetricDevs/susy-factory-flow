@@ -80,6 +80,7 @@ it("scores a layout string and answers with the arranger's", { timeout: 900000 }
       target: wire.target,
       sourcePortY: wire.sourcePortY,
       targetPortY: wire.targetPortY,
+      width: wire.width,
     })),
     origin: { x: 0, y: 0 },
     taste: { spacing: "compact" },

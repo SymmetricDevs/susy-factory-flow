@@ -594,7 +594,8 @@ Working notes for future agents on GTNH Factory Flow.
   reference: 1 crossing, 12,745 px (`artifacts/route-audit/oil-manual`).
 - HOW `arrangeBoard` WORKS NOW: the plain column pass AND a challenger
   (`board-arrange-optimize.ts`: annealing over column order / offsets /
-  row air / satellite slides against a router-shaped proxy score) are
+  row air / satellite slides / column hops / moves to a partner's side,
+  against a PROXY that scores in the router's own points - see below) are
   each POLISHED (`polishWithJudge`) and the better finished board wins by
   the judge, ON POINTS ALONE (Jack, 2026-09-08: a crossing is already
   priced into the points at the crossing dial, and "if it leads to edges
@@ -639,19 +640,38 @@ Working notes for future agents on GTNH Factory Flow.
   weighted links by log10 of the flow. Effect on the numbers: a board's
   points rose by roughly the average weight (Jack's oil-jack4 8,388 ->
   12,401 at 3 crossings), so compare boards only at one metric version.
-- Numbers on the oil board at the shipped dials (2026-09-08, weighted):
-  Jack's hand layout `artifacts/route-audit/oil-jack4.layout.json` 3
-  crossings / 12,401 pts / 6,880 px; the arranger's answer to it 3 /
-  18,809 pts / 10,400 px; unweighted the same day 8,388 vs 12,134. The
-  in-app Arrange of his plan (`oil-v8` audit, unweighted) 2 crossings
-  / 10,703 px. The arranger LOSES ON WIRE: a machine fed only by a source
-  drawer is ranked into column one and stands ~50 cells from the consumer
-  it shares its output drawer with (Jack puts it beside the consumer), and
-  a drawer shared by two machines stacked in one column is parked in
-  another column instead of the row gap between them. Alternating
-  `slideTowardWires` / `relaxSharedStorages` was tried and made it
-  worse. Open: a rank that pulls drawer-fed machines to their consumers,
-  in-column shared drawers, multi-card polish moves, and time (~16-25 s).
+- THE PROXY SPEAKS POINTS (Jack, 2026-09-08: "bring the points into
+  stage one"). `board-arrange-optimize.ts` scores a trial layout the way
+  the router will: every wire's proxy path (rim point FACING the far card
+  - side chosen by the gap between the two rectangles, never by the far
+  centre, and facing sides with overlapping dock ranges line up on one
+  row for the straight shot; clean stubs only as far as half the room
+  ahead; one centred diagonal) priced as length + bends at turn45/turn90 +
+  a detour estimate per card it would run through (two corners plus half
+  the card's shorter side), all times the wire's `wireWeight`; crossings
+  at the crossing dial weighing the heavier wire. NEVER pin the proxy to
+  fixed port rows again - docking is free, and pinning drew a 30-cell
+  zigzag where the router draws 5 cells straight and ranked Jack's layout
+  below the arranger's. `src/lib/proxy-score.local.test.ts`
+  (LAYOUTS=a,b,... PERWIRE=1) prints proxy vs router per layout and per
+  wire; on the oil board the proxy is now within ~5% of the router on
+  every layout tried. Finalists are one per column STRUCTURE (six), the
+  real router judges them on points (the host's judge, shifted to the
+  island's current corner) and the fewest real points wins.
+- THE SEARCH MAY DRAW LEVEL WITH A DRAWER: a machine may hop into any
+  column flow allows, and may share a column with a drawer it trades with
+  (`mayStandIn`, `reach` 0 for a storage partner, 1 for a machine) but
+  never pass beyond it; a drawer may stand anywhere between its first and
+  last partner's column, those included. This is what lets two machines
+  trading through drawers stack in one column with the drawers in the gap
+  between them - Jack's oil board - and it took the arranger's answer from
+  18k to 12.8k points in one step.
+- Numbers on the oil board at the shipped dials (2026-09-08, weighted
+  points): Jack's hand layout `artifacts/route-audit/oil-jack4.layout.json`
+  3 crossings / 12,401 pts / 6,880 px; the arranger's answer
+  (`oil-answer9`) 4 / 12,842 pts / 6,940 px, structurally his board, in
+  ~19 s offline. Before the proxy rework the answer was 3 / 18,809 /
+  10,400. Open: the last crossing, time.
 - The board title bar has a paint button (palette in a NodeToolbar portal,
   because the frame's own layer sits under the cards); the paint TOOL works
   on boards too. Both go through `paintPocket`.

@@ -12063,6 +12063,10 @@ async function computeAutoArrangement(
               ? measuredPortOffsetY(edge.target, edge.targetHandle, Position.Left)
               : boundaryPortY.get(`${edge.id}:${targetRep}`),
           weight: 1 + Math.log10(1 + Math.max(transferred, 0)),
+          width: Math.min(
+            publishedEdgeStrokeWidths.get(edge.id) ?? DEFAULT_EDGE_STROKE_WIDTH,
+            LANE_CAPACITY,
+          ),
         });
       }
       return { cards, wires, sizeById };

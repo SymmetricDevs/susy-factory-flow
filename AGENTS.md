@@ -577,9 +577,33 @@ Working notes for future agents on GTNH Factory Flow.
 - NO ZONES (Jack, 2026-09-08: "drop island support, board wrapping and
   whatnot"). The arrange no longer wraps islands in fresh "Zone N" boards;
   `addBoards` / `setOwners` from `computeAutoArrangement` are always empty
-  now (the plumbing stays for the locked-board bookkeeping). Islands are
-  still a layout TECHNIQUE inside `arrangeBoard` - groups that trade
-  through a wire or two stand apart - they just get no frame.
+  now (the plumbing stays for the locked-board bookkeeping).
+- ISLANDS ARE EMERGENT (Jack, 2026-09-08, branch arrange-emergent-islands:
+  "how do we make this behaviour emergent?"). The rule that cut a branch
+  hanging on by a wire or two off as its own island (`splitLooseClusters`,
+  `ISLAND_CUT_MAX`, the `islands` taste) is GONE; one connected web is one
+  island, and disconnected webs are still separate blocks. What parts a
+  cluster from the main body is `src/lib/board-arrange-air.ts`: two cards
+  three or more wire hops apart (a one-partner drawer standing in for its
+  machine) are STRANGERS, and every card pays `islandAir` points per pixel
+  its NEAREST stranger stands closer than six cells. Partners attract
+  through their wire's length, two-hop cards are neutral, so a dense
+  cluster on one bridge wire drifts out until the bridge's extra length
+  balances the air, and a lone card stays put. Per card, not per pair, so
+  the dial means the same on nine cards as on ninety. The term is in the
+  objective EVERYWHERE the arranger decides - the optimiser's proxy, the
+  finalists' judged points, the polish, plain-vs-challenger - so the judge
+  never undoes what the search found; the dev menu's SCORE stays pure
+  routing points. Without a router judge, `arrangeBoard` now picks between
+  the plain pass and the challenger by `scoreLayoutProxy`. The optimiser's
+  state grew a per-column horizontal pad (islands part sideways too) and a
+  group move (a card and its partners shift together). Dial: `islandAir`
+  (Arrange group of the dev menu, default 0.5, 0 packs tight); the worker
+  gets the host's tuning through `ArrangeInput.tuning`. Cost on the oil
+  board (a single dense community, where air only hurts): 12,842 pts at 0,
+  ~13,500 at 0.5, ~14,900 at 1. Exam: "emergent islands" in
+  board-arrange.test.ts (a hub feeding two clusters stands them apart;
+  dial 0 packs them).
 - THE ARRANGE IS BENCHMARKED, and the benchmark is Jack's (2026-09-08):
   total crossings of the board's real wires first, total wire length
   second, readability assumed to follow. COUNT CROSSINGS THE RIGHT WAY:

@@ -58,7 +58,8 @@ it("scores a layout string and answers with the arranger's", { timeout: 900000 }
       strokeWidth: wire.width ?? 6,
     };
   });
-  const judge = makeRouteJudge(obstacles, requests, DEFAULT_ROUTER_TUNING);
+  const tuning = { ...DEFAULT_ROUTER_TUNING, ...JSON.parse(process.env.TUNING ?? "{}") };
+  const judge = makeRouteJudge(obstacles, requests, tuning);
   const theirs = judge(new Map(obstacles.map((o) => [o.id, { x: o.left, y: o.top }])));
   console.log(
     `player: crossings ${theirs.crossings} points ${Math.round(theirs.points)} length ${Math.round(theirs.length)}` +
@@ -85,6 +86,7 @@ it("scores a layout string and answers with the arranger's", { timeout: 900000 }
     origin: { x: 0, y: 0 },
     taste: { spacing: "compact" },
     judge,
+    tuning,
   });
   const positions = new Map(arranged.moves.map((move) => [move.id, move.position]));
   const mine = judge(positions);

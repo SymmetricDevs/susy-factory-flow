@@ -55,6 +55,13 @@ export interface RouterTuning {
   windowPad: number;
   /** Padding of the wide retry rung a route that paid for a crossing gets, in cells. */
   wideRungCells: number;
+  /**
+   * ARRANGE: price per pixel, per pair, that two STRANGER cards (three or
+   * more wire hops apart) pay for standing closer than six cells. This is
+   * the whole of how islands happen (board-arrange-air.ts); zero packs the
+   * board as tight as the wires allow.
+   */
+  islandAir: number;
 }
 
 export const DEFAULT_ROUTER_TUNING: RouterTuning = {
@@ -80,6 +87,7 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   longestFirst: true,
   windowPad: 4,
   wideRungCells: 30,
+  islandAir: 0.5,
 };
 
 export interface RouterTuningField {
@@ -91,7 +99,7 @@ export interface RouterTuningField {
   min?: number;
   max?: number;
   step?: number;
-  group: "Costs" | "Turns" | "Crossings" | "Docks" | "Negotiation" | "Search";
+  group: "Costs" | "Turns" | "Crossings" | "Docks" | "Negotiation" | "Search" | "Arrange";
 }
 
 /** The dials in the order the dev menu shows them. */
@@ -118,6 +126,7 @@ export const ROUTER_TUNING_FIELDS: RouterTuningField[] = [
   { key: "diagonalLaneCapacity", label: "Diagonal lane width", hint: "Usable stroke pixels in a diagonal lane.", kind: "number", min: 4, max: 16, step: 1, group: "Search" },
   { key: "wideRungCells", label: "Wide retry", hint: "Cells of search window a route that paid for a crossing gets on its retry.", kind: "number", min: 0, max: 80, step: 2, group: "Search" },
   { key: "windowPad", label: "Search pad", hint: "Cells of search window round a wire's ends before it grows.", kind: "number", min: 2, max: 40, step: 1, group: "Search" },
+  { key: "islandAir", label: "Island air", hint: "Points per pixel a card pays for its nearest unrelated card standing within six cells. Zero packs tight.", kind: "number", min: 0, max: 5, step: 0.1, group: "Arrange" },
 ];
 
 const STORAGE_KEY = "gtnh-factory-flow.router-tuning.v1";

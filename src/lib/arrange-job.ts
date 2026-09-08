@@ -61,6 +61,7 @@ export function runArrangeJob(
     taste: job.taste,
     origin: job.origin,
     judge,
+    tuning: job.judgeInput?.tuning,
     onProgress: onProgress
       ? (progress) => onProgress({ seq: job.seq, ...progress })
       : undefined,

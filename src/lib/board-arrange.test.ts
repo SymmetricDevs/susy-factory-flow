@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_ROUTER_TUNING } from "@/components/flow/router-tuning";
 import {
   arrangeBoard,
   type ArrangeCard,
@@ -476,4 +477,64 @@ describe("arrangeBoard", () => {
     expectNoOverlaps(cards, moves);
   });
 
+});
+
+describe("emergent islands", () => {
+  // One hub feeds two dense clusters of four. Nothing names either cluster
+  // an island: the clusters part because their cards are strangers to each
+  // other (three or more hops apart) and strangers owe each other air. With
+  // the dial at zero the same board packs tight.
+  const cards = [
+    card("hub"),
+    card("a1"),
+    card("a2"),
+    card("a3"),
+    card("a4"),
+    card("b1"),
+    card("b2"),
+    card("b3"),
+    card("b4"),
+  ];
+  const wires = [
+    wire("hub", "a1"),
+    wire("a1", "a2"),
+    wire("a1", "a3"),
+    wire("a2", "a4"),
+    wire("a3", "a4"),
+    wire("hub", "b1"),
+    wire("b1", "b2"),
+    wire("b1", "b3"),
+    wire("b2", "b4"),
+    wire("b3", "b4"),
+  ];
+  const gapBetween = (moves: ArrangeMove[]) => {
+    const p = positionsById(moves);
+    const box = (ids: string[]) => ({
+      left: Math.min(...ids.map((id) => p.get(id)!.x)),
+      right: Math.max(...ids.map((id) => p.get(id)!.x + 360)),
+      top: Math.min(...ids.map((id) => p.get(id)!.y)),
+      bottom: Math.max(...ids.map((id) => p.get(id)!.y + 280)),
+    });
+    const a = box(["a1", "a2", "a3", "a4"]);
+    const b = box(["b1", "b2", "b3", "b4"]);
+    return Math.max(b.left - a.right, a.left - b.right, b.top - a.bottom, a.top - b.bottom);
+  };
+
+  it("two clusters off one hub stand apart from each other", () => {
+    const result = arrangeBoard({ cards, wires, origin: { x: 0, y: 0 } });
+    expectNoOverlaps(cards, result.moves);
+    expect(gapBetween(result.moves)).toBeGreaterThanOrEqual(4 * BOARD_GRID);
+  });
+
+  it("with the air dial at zero the same board packs tighter", () => {
+    const airy = arrangeBoard({ cards, wires, origin: { x: 0, y: 0 } });
+    const tight = arrangeBoard({
+      cards,
+      wires,
+      origin: { x: 0, y: 0 },
+      tuning: { ...DEFAULT_ROUTER_TUNING, islandAir: 0 },
+    });
+    expectNoOverlaps(cards, tight.moves);
+    expect(gapBetween(tight.moves)).toBeLessThan(gapBetween(airy.moves));
+  });
 });

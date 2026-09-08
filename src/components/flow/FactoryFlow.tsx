@@ -5509,11 +5509,10 @@ export function FactoryFlow() {
       computed = await computeAutoArrangement(
         state.project,
         state.lastResult,
-        // Tight spacing and normal island splitting, always: the dials that
-        // existed for these were both ever set one way.
+        // Tight spacing, always: the dial for it was only ever set one way.
+        // Islands are emergent now (board-arrange-air.ts), no dial.
         {
           spacing: "compact",
-          islands: "normal",
         },
         options,
         (progress) => setArrangeProgress(progress),

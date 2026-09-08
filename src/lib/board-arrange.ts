@@ -30,7 +30,14 @@
  */
 
 import { BOARD_GRID, cells, snapToGrid } from "./board-grid";
-import { optimizeIslandLayout, type OptimizeCard } from "./board-arrange-optimize";
+import {
+  optimizeIslandLayout,
+  routerPrices,
+  scoreLayoutProxy,
+  type OptimizeCard,
+} from "./board-arrange-optimize";
+import { makeAirTerm } from "./board-arrange-air";
+import type { RouterTuning } from "@/components/flow/router-tuning";
 
 /** A card to place: its id, footprint, and where it sits today. */
 export interface ArrangeCard {
@@ -129,13 +136,6 @@ export interface ArrangeResult {
 export interface ArrangeTaste {
   /** How much air everything gets. */
   spacing?: "compact" | "normal" | "roomy";
-  /**
-   * How eagerly a loosely-attached cluster becomes its own island: "off"
-   * keeps every connected web whole, "normal" splits branches hanging on
-   * by up to two wires, "eager" splits up to three and allows smaller
-   * islands.
-   */
-  islands?: "off" | "normal" | "eager";
 }
 
 export interface ArrangeInput {
@@ -179,6 +179,12 @@ export interface ArrangeInput {
    * (default 60). Each is a full solve of the board's wires.
    */
   polishBudget?: number;
+  /**
+   * The router's dials: the proxy prices its paths with them and the
+   * `islandAir` dial sets how much air strangers owe each other. Read from
+   * the tuning store when absent (the worker passes the host's).
+   */
+  tuning?: RouterTuning;
   /** Where the arrange is, as it goes: for a loader on the board. */
   onProgress?: (progress: { stage: string; done: number; total: number }) => void;
 }
@@ -210,11 +216,10 @@ let ROW_GAP = cells(2);
 let SECTION_GAP = cells(4);
 /** Air around a whole island. Generous: separateness is the point. */
 let ISLAND_GAP = cells(12);
-/** A branch touching the rest through this many wires or fewer splits off;
- * negative turns splitting off entirely. */
-let ISLAND_CUT_MAX = 2;
-/** A split-off island must be at least this many cards, satellites included. */
-let ISLAND_MIN_CARDS = 4;
+/** The router's prices for this arrange (set by arrangeBoard). */
+let ARRANGE_PRICES: RouterTuning | undefined;
+/** The air owed between strangers at a set of positions (set by arrangeBoard). */
+let ARRANGE_AIR: (positions: ReadonlyMap<string, { x: number; y: number }>) => number = () => 0;
 /** Air between a satellite and the card it rides (horizontal). */
 let SATELLITE_PAD = cells(2);
 /** Air between satellites stacked on one side. */
@@ -232,9 +237,6 @@ function applyTaste(taste: ArrangeTaste | undefined): void {
   // Wide enough that two islands' grounds plus both their two-cell no-go
   // collars fit between any pair with room left over.
   ISLAND_GAP = cells(spacing === "compact" ? 10 : spacing === "roomy" ? 16 : 12);
-  const islands = taste?.islands ?? "normal";
-  ISLAND_CUT_MAX = islands === "off" ? -1 : islands === "eager" ? 3 : 2;
-  ISLAND_MIN_CARDS = islands === "eager" ? 3 : 4;
   SATELLITE_PAD = cells(spacing === "compact" ? 1 : 2);
   SATELLITE_STACK_GAP = cells(spacing === "compact" ? 0 : 1);
 }
@@ -339,11 +341,44 @@ interface Block {
  * judge the plain pass stands: the optimiser's proxy is not to be trusted
  * unjudged.
  */
-export function arrangeBoard(input: ArrangeInput): ArrangeResult {
+export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
+  // ISLANDS ARE EMERGENT (Jack, 2026-09-08). The one readability term on
+  // top of the router's points is the air strangers owe each other
+  // (board-arrange-air.ts), and it is in the objective EVERYWHERE - the
+  // proxy the search runs on, the finalists the router judges, the polish
+  // and the choice between the plain pass and the challenger - so the
+  // judge never undoes what the search found. The player's score in the
+  // dev menu stays pure routing points.
+  ARRANGE_PRICES = rawInput.tuning ?? routerPrices();
+  ARRANGE_AIR = makeAirTerm(rawInput.cards, rawInput.wires, ARRANGE_PRICES.islandAir);
+  const airOf = (positions: ReadonlyMap<string, { x: number; y: number }>) => ARRANGE_AIR(positions);
+  const input: ArrangeInput = rawInput.judge
+    ? {
+        ...rawInput,
+        judge: (positions, options) => {
+          const verdict = rawInput.judge!(positions, options);
+          return { ...verdict, points: verdict.points + airOf(positions) };
+        },
+      }
+    : rawInput;
   input.onProgress?.({ stage: "Laying the board out", done: 0, total: 1 });
   const plain = arrangeBoardOnce(input, false);
-  if (!input.judge || input.cards.length < 2) {
+  if (input.cards.length < 2) {
     return plain;
+  }
+  if (!input.judge) {
+    // No router at hand: the proxy chooses between the plain pass and the
+    // challenger, the way it chose among the challenger's own trials.
+    const challenger = arrangeBoardOnce(input, true);
+    const proxy = (result: ArrangeResult) =>
+      scoreLayoutProxy(
+        input.cards,
+        input.wires.map((wire) => ({ ...wire })),
+        new Map(result.moves.map((move) => [move.id, move.position])),
+        ARRANGE_PRICES!,
+        airOf,
+      );
+    return proxy(challenger) < proxy(plain) ? challenger : plain;
   }
   input.onProgress?.({ stage: "Trying a second layout", done: 0, total: 1 });
   const challenger = arrangeBoardOnce(input, true);
@@ -747,17 +782,12 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
     members.sort((a, b) => a.index - b.index);
     const componentSet = new Set(members);
     const componentLinks = mainLinks.filter((link) => componentSet.has(link.from));
-    const satelliteCount = new Map<CardSlot, number>();
-    for (const plan of satellitePlans.values()) {
-      if (componentSet.has(plan.anchor)) {
-        satelliteCount.set(plan.anchor, (satelliteCount.get(plan.anchor) ?? 0) + 1);
-      }
-    }
-    // One connected web is not one island. A branch that trades with the
-    // rest of the graph through a wire or two is its own island standing
-    // beside the main line, not a wing of it - so loose clusters split off,
-    // recursively, and only the wires between them travel.
-    for (const group of splitLooseClusters(members, componentLinks, satelliteCount)) {
+    // One connected web is one island. Loose clusters used to be cut off
+    // by a rule here (a branch hanging on by a wire or two); now they part
+    // from the main body inside the search, because strangers owe each
+    // other air (board-arrange-air.ts) - and only as far as that air is
+    // worth against the bridge wire's length.
+    for (const group of [members]) {
       const groupSet = new Set(group);
       const groupLinks = componentLinks.filter(
         (link) => groupSet.has(link.from) && groupSet.has(link.to),
@@ -1287,137 +1317,6 @@ function planSatellites(
 }
 
 /**
- * Split one connected component into visually separate islands wherever the
- * graph is barely holding together. The spanning tree (heaviest wires
- * claimed first) proposes every branch as a candidate; a branch big enough
- * to stand alone, leaving enough behind, and touching the rest through at
- * most ISLAND_CUT_MAX wires, is cut off - then both halves are offered the
- * same treatment again. Card counts include the satellites riding along,
- * so a crop farm wearing three drawers is a station, not a stray.
- */
-function splitLooseClusters(
-  members: CardSlot[],
-  links: WireLink[],
-  satelliteCount: ReadonlyMap<CardSlot, number>,
-): CardSlot[][] {
-  if (ISLAND_CUT_MAX < 0) {
-    return [members];
-  }
-  const effective = (slots: readonly CardSlot[]) =>
-    slots.reduce((sum, slot) => sum + 1 + (satelliteCount.get(slot) ?? 0), 0);
-  const groups: CardSlot[][] = [];
-  const queue: CardSlot[][] = [members];
-  while (queue.length > 0) {
-    const group = queue.shift()!;
-    const branch = findLooseBranch(group, links, effective);
-    if (!branch) {
-      groups.push(group);
-      continue;
-    }
-    const inBranch = new Set(branch);
-    const rest = group.filter((slot) => !inBranch.has(slot));
-    queue.push(rest, branch);
-  }
-  return groups;
-}
-
-function findLooseBranch(
-  group: CardSlot[],
-  links: WireLink[],
-  effective: (slots: readonly CardSlot[]) => number,
-): CardSlot[] | undefined {
-  if (effective(group) < ISLAND_MIN_CARDS * 2) {
-    return undefined;
-  }
-  const inGroup = new Set(group);
-  const groupLinks = links.filter((link) => inGroup.has(link.from) && inGroup.has(link.to));
-
-  const paired = new Map<CardSlot, Map<CardSlot, number>>();
-  const add = (a: CardSlot, b: CardSlot, weight: number) => {
-    let row = paired.get(a);
-    if (!row) {
-      row = new Map();
-      paired.set(a, row);
-    }
-    row.set(b, (row.get(b) ?? 0) + weight);
-  };
-  for (const link of groupLinks) {
-    add(link.from, link.to, link.weight);
-    add(link.to, link.from, link.weight);
-  }
-
-  // One spanning tree only offers the branches visible from its root, and
-  // the natural seam is often not among them - so trees are grown from
-  // three corners of the group, and every subtree of every tree is a
-  // candidate. The winner is the LOOSEST cut, then the SMALLEST branch
-  // that can stand alone: peeling the small clean cluster first leaves the
-  // recursion to find the rest, where grabbing the biggest used to tear
-  // straight through the middle of chains.
-  const roots = [...new Set([group[0], group[Math.floor(group.length / 2)], group[group.length - 1]])];
-  let best: { cut: number; size: number; minIndex: number; branch: CardSlot[] } | undefined;
-  for (const root of roots) {
-    const children = new Map<CardSlot, CardSlot[]>();
-    {
-      const visited = new Set<CardSlot>([root]);
-      const stack = [root];
-      while (stack.length > 0) {
-        const slot = stack.pop()!;
-        const near = [...(paired.get(slot) ?? [])]
-          .map(([other, weight]) => ({ other, weight }))
-          .sort((a, b) => b.weight - a.weight || a.other.index - b.other.index);
-        for (let i = near.length - 1; i >= 0; i -= 1) {
-          const { other } = near[i];
-          if (!visited.has(other)) {
-            visited.add(other);
-            push(children, slot, other);
-            stack.push(other);
-          }
-        }
-      }
-    }
-    for (const start of group) {
-      if (start === root) {
-        continue;
-      }
-      const branch = [start];
-      for (let head = 0; head < branch.length; head += 1) {
-        for (const child of children.get(branch[head]) ?? []) {
-          branch.push(child);
-        }
-      }
-      const inBranch = new Set(branch);
-      const branchSize = effective(branch);
-      const restSize = effective(group) - branchSize;
-      if (branchSize < ISLAND_MIN_CARDS || restSize < ISLAND_MIN_CARDS) {
-        continue;
-      }
-      let cut = 0;
-      for (const link of groupLinks) {
-        if (inBranch.has(link.from) !== inBranch.has(link.to)) {
-          cut += 1;
-        }
-      }
-      if (cut > ISLAND_CUT_MAX) {
-        continue;
-      }
-      const minIndex = branch.reduce((min, slot) => Math.min(min, slot.index), Infinity);
-      if (
-        !best ||
-        cut < best.cut ||
-        (cut === best.cut && branchSize < best.size) ||
-        (cut === best.cut && branchSize === best.size && minIndex < best.minIndex)
-      ) {
-        best = { cut, size: branchSize, minIndex, branch };
-      }
-    }
-  }
-  if (!best) {
-    return undefined;
-  }
-  return best.branch.sort((a, b) => a.index - b.index);
-}
-
-/**
  * The wires of every two-card loop (A feeds B, B feeds A). Those pairs are
  * drawn STACKED - same column, one above the other - the way players draw
  * an electrolyzer trading with its reactor, so their wires stay off the
@@ -1763,6 +1662,8 @@ function layoutIsland(
                 ),
               ).points
           : undefined,
+        prices: ARRANGE_PRICES,
+        air: ARRANGE_AIR,
       });
       if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
         console.log("finalists", JSON.stringify(optimized.finalists), "before", Math.round(optimized.before), "after", Math.round(optimized.after));

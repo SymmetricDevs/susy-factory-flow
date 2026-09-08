@@ -653,7 +653,7 @@ export function DevMenu({
             >
               Re-route all wires
             </button>
-            {(["Turns", "Crossings", "Negotiation", "Docks", "Costs", "Search"] as const).map(
+            {(["Turns", "Crossings", "Negotiation", "Docks", "Costs", "Search", "Arrange"] as const).map(
               (group) => (
                 <div key={group} className="mt-2.5">
                   <span className="block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { getUiScale } from "@/lib/ui-scale";
 import type { FactoryNode, MachineHandler, Recipe } from "@/lib/model/types";
 import { getNodeSteamReport } from "@/lib/solver/power-report";
@@ -299,25 +300,20 @@ export function MachineMenu({
     [handlers, node, recipe],
   );
 
-  // Anywhere outside, or Escape, closes it. Capture phase so canvas handlers
-  // that stop propagation cannot swallow the click; the chevron manages its
-  // own toggle, so a click on it is left alone.
+  // Closes the way every dropdown does (use-dropdown-dismiss.ts): a press
+  // outside, Escape, a wheel or scroll elsewhere, the camera moving, and a
+  // mouse drifting away fades it out. The name bar is the anchor: a click
+  // there is its own toggle, and a wheel there walks the machines.
+  const barRef = useRef<Element | null>(null);
   useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Element | null;
-      if (target?.closest?.("[data-machine-menu-toggle]")) return;
-      if (!rootRef.current?.contains(event.target as Node)) onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [onClose]);
+    barRef.current = anchorRef.current?.parentElement ?? null;
+  }, []);
+  useDropdownDismiss(true, {
+    refs: [rootRef, barRef],
+    onClose,
+    insideSelector: "[data-machine-menu-toggle]",
+    fade: true,
+  });
 
   const menu = anchorAt ? (
     <div

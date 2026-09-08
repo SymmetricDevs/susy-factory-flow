@@ -6956,13 +6956,13 @@ const SelectionActionsBar = memo(function SelectionActionsBar({
     >
       {canCombine ? (
         // SHARED MACHINES: the one coloured key on the bar (Jack asked for
-        // it), in the pool's blue: the cards fold into one machine that runs
-        // all of their recipes, wires following.
+        // it), in the selection's own blue (--selection): the cards fold
+        // into one machine that runs all of their recipes, wires following.
         <button
           type="button"
           onClick={onCombine}
           title="One machine runs all of these recipes"
-          className="flex h-9 items-center gap-1.5 whitespace-nowrap border-2 border-[#3d5fb8] bg-[#2f4a8f] px-3 font-mono text-[12px] font-bold text-white shadow-[inset_2px_2px_0_#6f9cff,inset_-2px_-2px_0_#1e2f5c] hover:brightness-110"
+          className="flex h-9 items-center gap-1.5 whitespace-nowrap border-2 border-[var(--selection)] bg-[#0b5563] px-3 font-mono text-[12px] font-bold text-white shadow-[inset_2px_2px_0_var(--selection-soft),inset_-2px_-2px_0_#063640] hover:brightness-110"
         >
           <Combine className="h-4 w-4" />
           Combine {selectionCount} into one machine

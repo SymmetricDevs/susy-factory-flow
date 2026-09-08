@@ -64,6 +64,23 @@ function distanceToRect(x: number, y: number, rect: DOMRect): number {
   return Math.hypot(dx, dy);
 }
 
+/**
+ * Distance from a point to an element AND its children. Most callers hand
+ * over a small `relative` wrapper (the button) whose menu is an `absolute`
+ * child hanging under it, and a bounding box does not cover absolutely
+ * positioned children - so measured against the wrapper alone, a pointer
+ * walking down a tall menu read as drifting away and closed it before it
+ * reached the bottom row.
+ */
+function distanceToElement(x: number, y: number, element: Element): number {
+  let nearest = distanceToRect(x, y, element.getBoundingClientRect());
+  for (const child of element.children) {
+    if (nearest === 0) break;
+    nearest = Math.min(nearest, distanceToRect(x, y, child.getBoundingClientRect()));
+  }
+  return nearest;
+}
+
 export function useDropdownDismiss(open: boolean, options: DropdownDismissOptions): void {
   const { fade, ignoreCameraMove, insideSelector } = options;
   const refs = options.refs;
@@ -84,8 +101,10 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     const close = () => {
       if (closed) return;
       closed = true;
-      const element = panel();
-      if (element) element.style.opacity = "";
+      // The opacity is NOT restored here: onClose unmounts the menu on a
+      // later commit, so restoring it now painted one solid frame of a
+      // panel that had faded almost to nothing. The effect cleanup restores
+      // it once the menu is gone.
       onClose();
     };
 
@@ -107,11 +126,14 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     const onResize = () => close();
     const onPointerMove = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
-      let nearest = Number.POSITIVE_INFINITY;
+      // Over the panel or its anchor, however deep: that is distance zero,
+      // whatever the boxes say.
+      let nearest = isInside(event.target, opts) ? 0 : Number.POSITIVE_INFINITY;
       for (const ref of refs) {
+        if (nearest === 0) break;
         const element = ref.current;
         if (!element) continue;
-        nearest = Math.min(nearest, distanceToRect(event.clientX, event.clientY, element.getBoundingClientRect()));
+        nearest = Math.min(nearest, distanceToElement(event.clientX, event.clientY, element));
       }
       if (!Number.isFinite(nearest)) return;
       const element = panel();

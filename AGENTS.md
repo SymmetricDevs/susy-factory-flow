@@ -818,33 +818,110 @@ Working notes for future agents on GTNH Factory Flow.
 ## Routing Links
 
 - Wires are routed by the grid router (`src/components/flow/grid-edge-router.ts`),
-  one A* solve over every edge at once. Do not reintroduce per-edge candidate
+  ONE solve over every edge at once (Jack's remaster, 2026-09-08: "true
+  cooperation between edge drawing"). Do not reintroduce per-edge candidate
   scoring or hardcoded special-case paths.
-- Routes travel on 20px grid lines and never come within one cell of any card.
-  The only exception is the port stub — the final hop across a card's margin
-  into the port itself.
-- A grid line is a lane with 16 usable px. Wire widths are fractions of a lane
-  (`LANE_FRACTIONS`); wires that fit side by side share a lane with a 2px gap,
-  packed around the line's centre. Riding a shared lane is slightly cheaper
-  than an empty one, so wires travel together and split near destinations.
-- Wires never overlap outside port stubs. Overfull lanes cost heavily, so a
-  latecomer takes the next line over; only at a port, where any number of
-  wires can converge on one row, may they stack — and only on the stub.
+- THE WIRES PLAN TOGETHER, in three moves, all in `solveGridRoutes`:
+  - DOCKS FIRST (`planDocks`): every card's wires are looked at together.
+    A wire's ideal exit is the rim point nearest its far end (nearest
+    point, NOT a ray from the centre - a tall card's centre sends wires
+    out the wrong side). Siblings are sorted round the rim by that point,
+    ties at a corner by the bearing of their destinations, and MATCHED onto
+    the card's real docks in that order (`assignDocks`, a monotone DP
+    matching) so no two of them need to cross each other to leave. Two
+    wires between the same pair of cards are ordered one way at one card
+    and the other at the other, so they run parallel. The plan is soft: a
+    dock costs `dockPlanBias` per pixel of rim from the planned one, docks
+    past `dockPlanWindow` are set aside (the whole rim comes back for a
+    wire that cannot route from the near ones), and a dock another wire
+    already uses costs `dockShare` - never a ban, so wires may stack onto
+    one side of a drawer when that routes best (Jack, 2026-09-08).
+  - FIRST PASS, LONGEST WIRE FIRST: a long wire takes the open lines and
+    the short ones fit in around it, which nests a fan to a row of drawers
+    instead of having the last one climb across all the others.
+  - NEGOTIATION: any wire that ended up crossing another (or overflowing a
+    lane) is ripped up and routed again against the whole finished board,
+    and every spot wires cross at gets dearer each round (`escalate`, a
+    history count in the vertex word). Then SWAPS: two wires leaving one
+    card that still cross trade planned docks and both route again, kept
+    only if the board's crossings fall - a wall beside a card inverts the
+    bearing order and neither wire can fix that alone. Budgeted at
+    `negotiationBudget` reroutes per wire (floor 12), `negotiationRounds`
+    rounds, and a wire whose reroute gives the same route is `stuck` and
+    left alone. Lanes are re-packed from scratch at the end so a wire that
+    packed beside a neighbour that later moved is not left off-centre.
+- The search is an 8-direction A* over the uniform 20px grid inside a
+  window (the wire's box plus `windowPad` cells, grown on failure):
+  horizontal, vertical and the two 45° diagonals, a diagonal step costing
+  `diagonalLength` (root two) straights, no corner cutting (a diagonal
+  needs both orthogonal neighbours free), never within one cell of a card
+  (the margin boundary line itself is legal). The port stub is the only
+  margin crossing. The heuristic is octile distance plus one bend when the
+  goal is not straight ahead - with turns priced, distance alone let the
+  search sweep the whole window. Steps are priced once per attempt into a
+  pooled memo; occupancy (lane widths, passers, negotiation history) is
+  dense typed arrays over the board's extent, not maps - four map lookups
+  per priced step was most of a big board's solve.
+- CLEAN EXITS AND LANDINGS: a wire leaves a port straight along the
+  normal and lands straight, for `cleanCells` cells (2). The search is
+  seeded at the clean point heading outward and at the apron dearer by
+  `earlyTurn`; the goal at the clean point must be reached heading in,
+  the apron takes any arrival at the same surcharge. So a bend or a
+  diagonal right off a card is possible when a wire is walled in, and
+  otherwise never.
+- TURNS COST: a 45° bend `turn45` (35), a 90° corner `turn90` (80), a
+  reversal `reverse` (waypoint excursions only), 135° forbidden. Jack's
+  rules (2026-09-08): turning should cost a lot, a diagonal costs its true
+  length, least turns wins, no wiggling left-right to shave a cell.
+- CROSSINGS COST `crossing` (200) each, counted at grid vertices an
+  earlier wire passes straight through (run ends are corners and do not
+  count; a stub's apron vertex DOES, or a wire riding a card's margin line
+  crossed every stub for free) and, for two diagonals, at cell centres.
+- EVERY DIAL IS LIVE: `src/components/flow/router-tuning.ts` is the one
+  `RouterTuning` object the router, the worker job and the dev menu
+  share; `DEFAULT_ROUTER_TUNING` is the shipped behaviour. The dev menu
+  (shift-click the version chip) has a slider and a number box per dial,
+  Undo/Redo (Ctrl+Z / Ctrl+Shift+Z while the palette has focus, a slider
+  drag folding into one step) and "Re-route all wires". Overrides persist
+  per device (`gtnh-factory-flow.router-tuning.v1`), never in a plan, and
+  ride the solve signature so a change re-solves the board.
+- A grid line is a lane with 16 usable px (10 on a diagonal). Wire widths
+  are fractions of a lane (`LANE_FRACTIONS`); wires that fit side by side
+  share a lane with a 2px gap, packed around the line's centre, a joiner
+  on the side of its own next turn. Sharing costs slightly MORE than an
+  empty lane, so ribbons form a lane apart; a full lane costs heavily, so
+  overlap is never chosen while a detour exists. Only port stubs stack.
+- ONE WIRE PER MATERIAL BETWEEN TWO CARDS (Jack, 2026-09-08): the view's
+  channel grouping in FactoryFlow (`channelEdgeIdsByRepresentative`) now
+  keys on source card, target card and resource alone - a shared machine's
+  two benzene recipes into one card, or into two benzene slots, draw as one
+  wire with the summed rate; the flat edges stay distinct underneath for
+  the solve, and deleting the wire deletes them all.
 - Docking is a VIEW toggle (the anchor button, on by default): free mode
-  attaches a wire wherever on the perimeter routes cheapest (any side,
-  corners and their two neighbouring cells excluded, centre-biased, dock
-  points claimed so no two wires share one); port mode pins wires to the
-  classic fixed ports - inputs left, outputs right, storage side centres.
-  Ports always remain where wires START (drag from a chip) and where the
-  numbers live.
+  offers the whole perimeter (corners and their neighbouring cells
+  excluded: two cells on a big card, ONE on a small one so a drawer's side
+  has three docks, not one); port mode pins wires to the classic fixed
+  ports - inputs left, outputs right, storage side centres. Ports always
+  remain where wires START (drag from a chip) and where the numbers live.
+- Crossing hops (`pointsToHoppedSvgPath`) bump over any pair of
+  non-parallel segments, diagonals included: a run bumps toward the upper
+  side of its own line (a vertical run toward the right).
 - Routing must stay deterministic for the same graph state, independent of
-  zoom and render order (edges are solved in routeIndex order).
+  zoom and render order.
 - Boards past `ASYNC_ROUTE_EDGE_LIMIT` wires solve in a Web Worker
   (`grid-route-solve.ts`); the render serves the installed routes until
-  the answer lands. Same pure function, same routes; only the thread differs.
-  Small boards stay synchronous. Do not put a flat pop cap back in the A*:
-  the cap scales with the window, and a wire that fails is walled in
-  (`SEALED`), not out of budget. See the routing section of ARCHITECTURE.md.
+  the answer lands. Same pure function, same routes, same tuning; only the
+  thread differs. Do not put a flat pop cap back in the A*: the cap scales
+  with the window, and a wire that fails is walled in (`SEALED`), not out
+  of budget. See the routing section of ARCHITECTURE.md.
+- BENCHING: `window.__gtnhRouteSolve` holds the last solve's exact
+  obstacles and requests; `route-capture.local.mjs <plan.json> <out.json>`
+  dumps it for a plan file, `router-replay.local.test.ts` (CAPTURE=...,
+  ROUTES=1) replays one and counts geometric crossings, and
+  `.router-corpus/` holds captures of real community boards. Corpus on
+  2026-09-08 vs the old Hanan router: crossings 4->0, 9->0, 45->20,
+  23->5, 6->1, 43->28, 634->314; time roughly 2.5x (farm-power 1.7s->4.6s,
+  in the worker; hv-oil 51->133ms).
 - Edge rate labels are a VIEW mode, off by default: the tag button in the
   board toolbar shows lean rate pills on the lines. No dragging, no popover.
 

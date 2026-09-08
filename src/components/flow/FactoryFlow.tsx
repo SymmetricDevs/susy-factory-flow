@@ -277,6 +277,7 @@ import {
   type GridSide,
   type GridRouteRequest,
 } from "./grid-edge-router";
+import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
 import {
   ASYNC_ROUTE_EDGE_LIMIT,
   routeWorkerAvailable,
@@ -776,11 +777,13 @@ type ResourceEdgeData = {
   /** This wire is part of a jam whose surplus has nowhere to go. */
   isClogLock?: boolean;
   /**
-   * Collapsed-pocket channels: convergence keeps several flat wires crossing
-   * one boundary with the same resource, but the card advertises ONE channel
-   * per resource, so the view draws one wire. Set on the representative edge
-   * only — every flat edge id the drawn wire stands for, itself included.
-   * Rates on the wire are the channel's sums; deleting it deletes them all.
+   * Channels: two cards never show two wires of one material between them.
+   * Several flat edges with the same resource between the same two cards
+   * (a shared machine's two benzene recipes into one card, two benzene
+   * slots on one card, wires crossing a minimized board's border) draw as
+   * ONE wire. Set on the representative edge only — every flat edge id the
+   * drawn wire stands for, itself included. Rates on the wire are the
+   * channel's sums; deleting it deletes them all.
    */
   mergedEdgeIds?: string[];
   /**
@@ -1234,19 +1237,24 @@ function resolveGridRouteEndpoints(
   // Corners and their neighbourhoods are off limits: a wire hanging off the
   // very corner of a card reads as clipped through it. Docks start two
   // cells in from each corner — close is fine, corner is not.
-  const cornerKeepOut = 2 * BOARD_GRID;
+  // A small card (a drawer is 5 by 4 cells) keeps only one cell off its
+  // corners, or its short sides would offer a single dock each and every
+  // second wire would be sent round the back.
+  const keepOutFor = (span: number) => (span < 6 * BOARD_GRID ? BOARD_GRID : 2 * BOARD_GRID);
   // The window's true top: side docks exist only below it, and the corner
   // keep-out measures from IT — the window's corner, not the phantom box's.
   const dockTop = top;
   const centerX = (left + right) / 2;
   const centerY = (dockTop + bottom) / 2;
   const candidates: GridEndpoint[] = [];
-  for (let x = left + cornerKeepOut; x <= right - cornerKeepOut; x += step) {
+  const keepOutX = keepOutFor(right - left);
+  const keepOutY = keepOutFor(bottom - dockTop);
+  for (let x = left + keepOutX; x <= right - keepOutX; x += step) {
     const penalty = Math.abs(x - centerX) * DOCK_CENTER_BIAS;
     candidates.push({ x, y: top, side: "top", penalty });
     candidates.push({ x, y: bottom, side: "bottom", penalty });
   }
-  for (let y = dockTop + cornerKeepOut; y <= bottom - cornerKeepOut; y += step) {
+  for (let y = dockTop + keepOutY; y <= bottom - keepOutY; y += step) {
     const penalty = Math.abs(y - centerY) * DOCK_CENTER_BIAS;
     candidates.push({ x: left, y, side: "left", penalty }, { x: right, y, side: "right", penalty });
   }
@@ -1336,6 +1344,8 @@ function ensureGridSolve() {
         waypoints: input.waypoints,
         exemptObstacleIds: input.throughBoardIds,
         homeObstacleIds: input.homeBoardIds,
+        sourceCardId: input.sourceNodeId,
+        targetCardId: input.targetNodeId,
       });
       orderByEdge.set(input.edgeId, input.order);
       describe = `${waypointPart}|${sources
@@ -1371,7 +1381,8 @@ function ensureGridSolve() {
     )
     .join(";");
 
-  const signature = `${publishedGridFreeDock ? "free" : "ports"}::${sweep.hash}::${framesPart}::${parts.join(";")}`;
+  const tuning = getRouterTuning();
+  const signature = `${publishedGridFreeDock ? "free" : "ports"}::${routerTuningKey(tuning)}::${sweep.hash}::${framesPart}::${parts.join(";")}`;
   if (signature === gridSolveSignature || signature === gridSolveWantedSignature) {
     return;
   }
@@ -1395,6 +1406,8 @@ function ensureGridSolve() {
       waypoints: input.waypoints,
       exemptObstacleIds: input.throughBoardIds,
       homeObstacleIds: input.homeBoardIds,
+      sourceCardId: input.sourceNodeId,
+      targetCardId: input.targetNodeId,
     });
     orderByEdge.set(input.edgeId, input.order);
   }
@@ -1403,18 +1416,27 @@ function ensureGridSolve() {
     ...sweep.bounds.map((entry) => ({ id: entry.id, ...entry.bounds })),
     ...frames.map((entry) => ({ id: entry.id, ...entry.bounds })),
   ];
+  // The solve's exact inputs, for probes and router benches
+  // (`router-bench.local.test.ts` replays a dumped capture).
+  if (typeof window !== "undefined") {
+    (window as unknown as { __gtnhRouteSolve?: unknown }).__gtnhRouteSolve = {
+      signature,
+      obstacles,
+      requests,
+    };
+  }
   // A big board routes in the worker (`grid-route-solve.ts`): this render
   // keeps serving the routes already installed - `gridSolveSignature` does
   // not move until the answer lands - and `installSolvedRoutes` re-issues
   // the edges then. A small board still solves right here, synchronously,
   // so its wires never lag a frame behind the card they are attached to.
   if (requests.length > ASYNC_ROUTE_EDGE_LIMIT && routeWorkerAvailable()) {
-    scheduleRouteSolve({ signature, seq, obstacles, requests });
+    scheduleRouteSolve({ signature, seq, obstacles, requests, tuning });
     return;
   }
   gridSolveSignature = signature;
   gridSolveInstalledSeq = seq;
-  const solved = solveGridRoutes(obstacles, requests);
+  const solved = solveGridRoutes(obstacles, requests, undefined, tuning);
   for (const [edgeId, routed] of solved) {
     if (routed.points.length < 2) {
       deleteDirectRoute(edgeId);
@@ -2225,6 +2247,21 @@ export function FactoryFlow() {
       routeSolveRerender = undefined;
     };
   }, []);
+  // A dev-menu dial moved: every route is stale. The tuning is part of the
+  // solve signature, so clearing the cache is enough to force the re-solve.
+  useEffect(
+    () =>
+      subscribeRouterTuning(() => {
+        // Throw every route away and make the next render solve again:
+        // the cache goes, the input stamp moves so the fast-path gate
+        // cannot short-circuit, and the worker's pending answer (if any)
+        // is superseded by the fresh request.
+        clearDirectRoutes();
+        gridSolveInputsStamp += 1;
+        setLayoutVersion((version) => version + 1);
+      }),
+    [],
+  );
   // Bumped whenever a paste/wrap/blueprint-load hands the selection to
   // fresh cards. React Flow keeps its band-selection GROUP RECTANGLE up
   // through that handoff, parked over the new card and eating every click —
@@ -3085,21 +3122,14 @@ export function FactoryFlow() {
     // resource) group: the first flat edge is the representative, the rest
     // are skipped, the rates are summed. Handles play no part: a minimized
     // board has no ports to tell its wires apart by.
-    const channelKeyFor = (
-      edge: FactoryEdge,
-      sourceRep: string,
-      targetRep: string,
-      sourceIsPocket: boolean,
-      targetIsPocket: boolean,
-    ) =>
-      [
-        sourceRep,
-        targetRep,
-        edge.resourceKind,
-        edge.resourceId,
-        sourceIsPocket ? "" : (canonicalizeResourceHandleId(edge.sourceHandle) ?? ""),
-        targetIsPocket ? "" : (canonicalizeResourceHandleId(edge.targetHandle) ?? ""),
-      ].join("|");
+    const channelKeyFor = (edge: FactoryEdge, sourceRep: string, targetRep: string) =>
+      // Handles do not enter the key on purpose: two cards never show two
+      // wires of one material between them (Jack, 2026-09-08). A shared
+      // machine making benzene in two recipes, both wired into one card -
+      // or into two benzene slots of one card - is ONE benzene wire on the
+      // board, its rate the sum. The flat edges stay distinct underneath
+      // for the solve; deleting the wire deletes them all.
+      [sourceRep, targetRep, edge.resourceKind, edge.resourceId].join("|");
 
     channelEdgeIdsByRepresentative.clear();
     const channelSkip = new Set<string>();
@@ -3113,12 +3143,7 @@ export function FactoryFlow() {
         if (!sourceRep || !targetRep || sourceRep === targetRep) {
           continue;
         }
-        const sourceIsPocket = sourceRep !== edge.source;
-        const targetIsPocket = targetRep !== edge.target;
-        if (!sourceIsPocket && !targetIsPocket) {
-          continue;
-        }
-        const key = channelKeyFor(edge, sourceRep, targetRep, sourceIsPocket, targetIsPocket);
+        const key = channelKeyFor(edge, sourceRep, targetRep);
         const group = groups.get(key);
         if (group) {
           group.ids.push(edge.id);
@@ -11059,11 +11084,13 @@ function collectHoppedRouteSegments(
 }
 
 /**
- * Like pointsToSvgPath, but wherever an orthogonal segment properly crosses
- * one of the given (earlier-routed) segments, the line lifts over it in a
- * small semicircular bump - the classic schematic hop that makes crossings
- * legible instead of a flat X. Horizontal runs bump upward, vertical runs
- * bump toward the left, so the same crossing always reads the same way.
+ * Like pointsToSvgPath, but wherever a segment properly crosses one of the
+ * given (earlier-routed) segments, the line lifts over it in a small
+ * semicircular bump - the classic schematic hop that makes crossings
+ * legible instead of a flat X. Any two straight runs that are not parallel
+ * can cross, diagonals included. A run bumps toward the upper side of its
+ * own line (a vertical run toward the right), so the same crossing always
+ * reads the same way.
  */
 function pointsToHoppedSvgPath(
   points: Array<{ x: number; y: number }>,
@@ -11080,56 +11107,45 @@ function pointsToHoppedSvgPath(
 
   const first = points[0]!;
   let path = `M ${first.x},${first.y}`;
+  // The other line must properly OVERSHOOT this one on both sides: a
+  // segment that merely ends a pixel or two past the line (T-junctions at
+  // docks, lane-adjacent turns) reads as a touch, not a crossing, and a
+  // hump there looks like it sits over nothing.
+  const OVERSHOOT = 4;
   for (let index = 1; index < points.length; index += 1) {
     const from = points[index - 1]!;
     const to = points[index]!;
-    const horizontal = Math.abs(from.y - to.y) < 0.01;
-    const vertical = Math.abs(from.x - to.x) < 0.01;
-    if ((!horizontal && !vertical) || (horizontal && vertical)) {
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length < 2) {
       path += ` L ${to.x},${to.y}`;
       continue;
     }
+    const ux = (to.x - from.x) / length;
+    const uy = (to.y - from.y) / length;
 
-    // A crossing near a bend still gets its bump: the arc is CLAMPED into
-    // the run (asymmetric if it must be) rather than shrunk away. Routes
-    // turn beside ports and cross right after the corner, and the old
-    // shrink-to-nothing rule silently dropped exactly those hops — a flat X
-    // in the one place two wires are guaranteed to meet.
+    // Crossings as distances along this run from its start. A crossing
+    // near a bend still gets its bump: the arc is CLAMPED into the run
+    // (asymmetric if it must be) rather than shrunk away.
     const crossings: Array<{ at: number; radius: number }> = [];
-    const low = horizontal ? Math.min(from.x, to.x) : Math.min(from.y, to.y);
-    const high = horizontal ? Math.max(from.x, to.x) : Math.max(from.y, to.y);
-    // The other line must properly OVERSHOOT this one on both sides: a
-    // segment that merely ends a pixel or two past the line (T-junctions at
-    // docks, lane-adjacent turns) reads as a touch, not a crossing, and a
-    // hump there looks like it sits over nothing.
-    const OVERSHOOT = 4;
     for (const segment of otherSegments) {
-      const segmentHorizontal = Math.abs(segment.start.y - segment.end.y) < 0.01;
-      const segmentVertical = Math.abs(segment.start.x - segment.end.x) < 0.01;
-      if (horizontal && segmentVertical) {
-        const crossAt = segment.start.x;
-        const otherLow = Math.min(segment.start.y, segment.end.y);
-        const otherHigh = Math.max(segment.start.y, segment.end.y);
-        if (
-          crossAt > low + 1 &&
-          crossAt < high - 1 &&
-          from.y > otherLow + OVERSHOOT &&
-          from.y < otherHigh - OVERSHOOT
-        ) {
-          crossings.push({ at: crossAt, radius: hopRadiusFor(ownWidth, segment.width) });
-        }
-      } else if (vertical && segmentHorizontal) {
-        const crossAt = segment.start.y;
-        const otherLow = Math.min(segment.start.x, segment.end.x);
-        const otherHigh = Math.max(segment.start.x, segment.end.x);
-        if (
-          crossAt > low + 1 &&
-          crossAt < high - 1 &&
-          from.x > otherLow + OVERSHOOT &&
-          from.x < otherHigh - OVERSHOOT
-        ) {
-          crossings.push({ at: crossAt, radius: hopRadiusFor(ownWidth, segment.width) });
-        }
+      const vx = segment.end.x - segment.start.x;
+      const vy = segment.end.y - segment.start.y;
+      const otherLength = Math.hypot(vx, vy);
+      if (otherLength < 1) {
+        continue;
+      }
+      const denominator = ux * vy - uy * vx;
+      if (Math.abs(denominator) < 1e-6) {
+        continue;
+      }
+      const wx = segment.start.x - from.x;
+      const wy = segment.start.y - from.y;
+      // t is pixels along this run (u is unit); the fraction along the
+      // other segment (v is its whole vector) is scaled to pixels too.
+      const t = (wx * vy - wy * vx) / denominator;
+      const s = ((wx * uy - wy * ux) / denominator) * otherLength;
+      if (t > 1 && t < length - 1 && s > OVERSHOOT && s < otherLength - OVERSHOOT) {
+        crossings.push({ at: t, radius: hopRadiusFor(ownWidth, segment.width) });
       }
     }
 
@@ -11138,40 +11154,39 @@ function pointsToHoppedSvgPath(
       continue;
     }
 
-    const direction = horizontal ? Math.sign(to.x - from.x) : Math.sign(to.y - from.y);
-    crossings.sort((left, right) => (left.at - right.at) * direction);
+    crossings.sort((left, right) => left.at - right.at);
     const merged: Array<{ at: number; radius: number }> = [];
     for (const crossing of crossings) {
       const previous = merged[merged.length - 1];
-      if (!previous || Math.abs(crossing.at - previous.at) > previous.radius + crossing.radius + 2) {
+      if (!previous || crossing.at - previous.at > previous.radius + crossing.radius + 2) {
         merged.push(crossing);
       }
     }
 
+    // The side the bump rises to: the upper normal of the line, or the
+    // right-hand one when the line is vertical.
+    let nx = -uy;
+    let ny = ux;
+    if (ny > 1e-6 || (Math.abs(ny) <= 1e-6 && nx < 0)) {
+      nx = -nx;
+      ny = -ny;
+    }
+    // SVG sweep=1 is clockwise on screen; the arc bulges toward the normal
+    // when the chord's cross product with it is negative.
+    const sweep = ux * ny - uy * nx < 0 ? 1 : 0;
     for (const crossing of merged) {
-      // Clamp the bump's feet inside the run; a crossing tight against a
-      // corner gets an asymmetric arc (a taller radius over a shorter
-      // chord) instead of no arc at all.
-      const bumpLow = Math.max(low + 0.5, crossing.at - crossing.radius);
-      const bumpHigh = Math.min(high - 0.5, crossing.at + crossing.radius);
+      const bumpLow = Math.max(0.5, crossing.at - crossing.radius);
+      const bumpHigh = Math.min(length - 0.5, crossing.at + crossing.radius);
       const chord = bumpHigh - bumpLow;
       if (chord < 4) {
         continue;
       }
       const radius = Math.max(crossing.radius, chord / 2 + 0.1);
-      const beforeAt = direction > 0 ? bumpLow : bumpHigh;
-      const afterAt = direction > 0 ? bumpHigh : bumpLow;
-      if (horizontal) {
-        // SVG sweep=1 is clockwise on screen: traveling east that arcs over
-        // the top; traveling west needs sweep=0 for the same upward bump.
-        const sweep = direction > 0 ? 1 : 0;
-        path += ` L ${beforeAt},${from.y} A ${radius} ${radius} 0 0 ${sweep} ${afterAt},${from.y}`;
-      } else {
-        // Traveling south, clockwise (sweep 1) bulges toward the right;
-        // traveling north, sweep 0 keeps the bump on that same side.
-        const sweep = direction > 0 ? 1 : 0;
-        path += ` L ${from.x},${beforeAt} A ${radius} ${radius} 0 0 ${sweep} ${from.x},${afterAt}`;
-      }
+      const ax = from.x + ux * bumpLow;
+      const ay = from.y + uy * bumpLow;
+      const bx = from.x + ux * bumpHigh;
+      const by = from.y + uy * bumpHigh;
+      path += ` L ${ax},${ay} A ${radius} ${radius} 0 0 ${sweep} ${bx},${by}`;
     }
     path += ` L ${to.x},${to.y}`;
   }

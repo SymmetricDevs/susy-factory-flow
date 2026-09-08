@@ -6,6 +6,7 @@ import {
   type GridRouteRequest,
   type GridSide,
 } from "./grid-edge-router";
+import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "./router-tuning";
 
 /**
  * The route solve JOB: what a solve is, how it crosses to the worker and
@@ -22,7 +23,7 @@ import {
 
 
 /** Boards past this many wires route in the worker instead of in render. */
-export const ASYNC_ROUTE_EDGE_LIMIT = 60;
+export const ASYNC_ROUTE_EDGE_LIMIT = 20;
 
 export interface RouteSolveJob {
   /** The board's own routing signature, echoed back with the answer. */
@@ -31,6 +32,8 @@ export interface RouteSolveJob {
   seq: number;
   obstacles: GridObstacle[];
   requests: GridRouteRequest[];
+  /** The dials the main thread is routing with; the worker uses the same. */
+  tuning?: RouterTuning;
 }
 
 export interface RouteSolveResult {
@@ -52,6 +55,7 @@ export interface EncodedRouteSolveJob {
   signature: string;
   seq: number;
   obstacles: GridObstacle[];
+  tuning?: RouterTuning;
   edges: Array<{
     edgeId: string;
     order: number;
@@ -61,6 +65,8 @@ export interface EncodedRouteSolveJob {
     waypoints?: GridPoint[];
     exemptObstacleIds?: readonly string[];
     homeObstacleIds?: readonly string[];
+    sourceCardId?: string;
+    targetCardId?: string;
   }>;
   endpoints: Float64Array;
 }
@@ -100,9 +106,11 @@ export function encodeRouteSolveJob(job: RouteSolveJob): EncodedRouteSolveJob {
       waypoints: request.waypoints,
       exemptObstacleIds: request.exemptObstacleIds,
       homeObstacleIds: request.homeObstacleIds,
+      sourceCardId: request.sourceCardId,
+      targetCardId: request.targetCardId,
     });
   }
-  return { signature: job.signature, seq: job.seq, obstacles: job.obstacles, edges, endpoints };
+  return { signature: job.signature, seq: job.seq, obstacles: job.obstacles, tuning: job.tuning, edges, endpoints };
 }
 
 export function decodeRouteSolveJob(encoded: EncodedRouteSolveJob): RouteSolveJob {
@@ -143,6 +151,8 @@ export function decodeRouteSolveJob(encoded: EncodedRouteSolveJob): RouteSolveJo
       waypoints: edge.waypoints,
       exemptObstacleIds: edge.exemptObstacleIds,
       homeObstacleIds: edge.homeObstacleIds,
+      sourceCardId: edge.sourceCardId,
+      targetCardId: edge.targetCardId,
     };
   });
   return {
@@ -150,13 +160,14 @@ export function decodeRouteSolveJob(encoded: EncodedRouteSolveJob): RouteSolveJo
     seq: encoded.seq,
     obstacles: encoded.obstacles,
     requests,
+    tuning: encoded.tuning,
   };
 }
 
 /** Runs the job right here; the worker and the fallback both call this. */
 export function runRouteSolveJob(job: RouteSolveJob): RouteSolveResult {
   const started = performance.now();
-  const solved = solveGridRoutes(job.obstacles, job.requests);
+  const solved = solveGridRoutes(job.obstacles, job.requests, undefined, job.tuning ?? DEFAULT_ROUTER_TUNING);
   const orderByEdge = new Map(job.requests.map((request) => [request.edgeId, request.order]));
   const routes: RouteSolveResult["routes"] = [];
   for (const [edgeId, routed] of solved) {

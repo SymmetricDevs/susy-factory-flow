@@ -2,36 +2,41 @@
  * The grid edge router.
  *
  * Wires live on the same 20px grid the cards are built from (`board-grid.ts`):
- * every straight run of every wire travels along a grid line, and no run ever
- * comes within one cell of a card. The one sanctioned exception is the port
- * stub — the last hop from a card's margin to the port itself, which by
- * definition has to cross the margin.
+ * every straight run of every wire travels along a grid line - horizontal,
+ * vertical, or one of the two 45° diagonals through the grid's vertices -
+ * and no run ever comes within one cell of a card. The one sanctioned
+ * exception is the port stub: the last hop from a card's margin to the port
+ * itself, which by definition has to cross the margin.
  *
- * A grid line is a LANE with 16 usable pixels of width. Wires are fractions
- * of a lane (a full pipe is 16px, never the whole 20 — two full pipes in
- * neighbouring lanes keep 4px of daylight), and wires whose fractions fit
- * side by side SHARE the lane: a ¼ wire and a ½ wire ride the same line with
- * a 2px gap between them, packed around the line's centre. The A* cost makes
- * riding an occupied-but-not-full lane slightly CHEAPER than an empty one, so
- * wires heading the same way find each other, travel together as a ribbon,
- * and peel off near their destinations. A full lane costs heavily instead,
- * which pushes latecomers into the next line over — overlap is never chosen
- * while any separated path exists. Only the port stubs may stack, because
- * arbitrarily many wires can meet one port and a port row is one lane tall.
+ * A grid line is a LANE with a usable width (16px on the orthogonal lines,
+ * 10px on the closer-packed diagonals). Wires are fractions of a lane, and
+ * wires whose fractions fit side by side SHARE the lane, packed around the
+ * line's centre with a 2px gap. A full lane costs heavily, which pushes
+ * latecomers into the next line over - overlap is never chosen while any
+ * separated path exists. Only the port stubs may stack, because arbitrarily
+ * many wires can meet one port.
+ *
+ * THE WIRES PLAN TOGETHER. Each wire is one A* over the grid, but the solve
+ * is one thing: docks are planned per card before anything routes
+ * (`planDocks`), every crossing of an earlier wire costs (`T.crossing`), and
+ * wires that still cross are ripped up and routed again against the finished
+ * board with the contested spots dearer each round (negotiation). See
+ * `solveGridRoutes`.
  *
  * Everything here is a pure function of its inputs: flow-space geometry in,
- * polylines out. No DOM, no React, no viewport — the same inputs give the
+ * polylines out. No DOM, no React, no viewport - the same inputs give the
  * same routes at every zoom, which is the routing invariant ARCHITECTURE.md
  * demands. The host feeds it published geometry and caches the result by
  * content fingerprint.
  */
 
 import { BOARD_GRID } from "@/lib/board-grid";
+import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "./router-tuning";
 
 /** One cell of clearance between any wire run and any card. */
 export const WIRE_NODE_MARGIN = BOARD_GRID;
 
-/** Usable stroke pixels inside one lane; the rest is guaranteed daylight. */
+/** Usable stroke pixels inside one orthogonal lane; the rest is daylight. */
 export const LANE_CAPACITY = 16;
 
 /** Breathing room between two wires sharing a lane. */
@@ -39,7 +44,7 @@ export const LANE_GAP = 2;
 
 /**
  * The widths wires are allowed to draw at: fractions of a lane, bottoming
- * out at ¼ (4px) — anything thinner read as a scratch, not a wire. Eight
+ * out at ¼ (4px) - anything thinner read as a scratch, not a wire. Eight
  * steps rather than four: the heat scale already blends rank with log
  * magnitude so 5k vs 10k stays distinguishable even with 100k on the
  * board, and a coarse menu was throwing that resolution away at the last
@@ -59,7 +64,7 @@ export const LANE_FRACTIONS = [
 /**
  * Normalized flow heat (0..1) → the stroke width for dynamic-width mode.
  * Heat maps onto the menu by INDEX, evenly, so every step gets an equal
- * slice of the scale — thresholding by fraction value clustered most of
+ * slice of the scale - thresholding by fraction value clustered most of
  * the range onto the widest steps.
  */
 export function laneWidthForHeat(heat: number): number {
@@ -92,17 +97,16 @@ export interface GridEndpoint {
   y: number;
   side: GridSide;
   /**
-   * Extra cost for choosing this dock, in pixel-equivalents. The host uses
-   * it for the centre bias: docks near the middle of a side are free, docks
-   * out toward the corners pay — so a wire attaches near-centre whenever
-   * that costs less than the penalty, including taking a turn to do it.
+   * Extra cost for choosing this dock, in pixel-equivalents. The router
+   * plans docks itself when it knows which card an end belongs to
+   * (`planDocks`); this is the host's own preference otherwise.
    */
   penalty?: number;
   /**
    * How much further INTO the card the drawn wire continues past the
    * routing anchor, along the side's inward normal. The recipe card's
    * machine tab zone is part of the routed box (wires keep their one-cell
-   * clearance over the tabs) but its top edge is phantom — the painted
+   * clearance over the tabs) but its top edge is phantom - the painted
    * window starts lower. Routing math (aprons, lane graph, dock claims)
    * stays on the anchor; only the final drawn stub crosses the zone and
    * lands on the card's true edge.
@@ -112,11 +116,21 @@ export interface GridEndpoint {
 
 export interface GridRouteRequest {
   edgeId: string;
-  /** Deterministic priority: lower routes first and claims lanes first. */
+  /** Deterministic tiebreak between wires the solve order cannot separate. */
   order: number;
   /** Candidate endpoints; the router picks the pair that routes cheapest. */
   sources: GridEndpoint[];
   targets: GridEndpoint[];
+  /**
+   * Which card each end belongs to. With these the router plans DOCKS per
+   * card before routing anything: every wire leaving a card is handed a
+   * preferred spot on the perimeter facing where it is going, siblings
+   * spread around the rim in bearing order so they never have to cross at
+   * the card (`planDocks`). Without them the endpoints' own `penalty` is
+   * all the dock preference there is.
+   */
+  sourceCardId?: string;
+  targetCardId?: string;
   /** Stroke this wire draws at, in px. Must be ≤ LANE_CAPACITY. */
   strokeWidth: number;
   /**
@@ -128,14 +142,14 @@ export interface GridRouteRequest {
   /**
    * Obstacles THIS wire is allowed to pass through: the open board frames
    * its endpoints live inside. A wire into a board member has to cross that
-   * board's border somewhere, so the frame cannot block it — while every
+   * board's border somewhere, so the frame cannot block it - while every
    * frame the wire has no business in stays as solid as a card.
    */
   exemptObstacleIds?: readonly string[];
   /**
-   * The frames holding BOTH of this wire's ends — the rooms it lives in.
+   * The frames holding BOTH of this wire's ends - the rooms it lives in.
    * A wire between two cards on the same board has no business leaving it,
-   * so wandering outside these costs (`COST_OUTSIDE_HOME`), while the
+   * so wandering outside these costs (`T.costOutsideHome`), while the
    * frames it is only passing OUT of charge for loitering instead. Always
    * a subset of `exemptObstacleIds`.
    */
@@ -147,75 +161,145 @@ export interface GridRoutedEdge {
   points: GridPoint[];
 }
 
+/** What a solve did, for tests and benches. Filled when passed in. */
+export interface GridSolveStats {
+  /** Wire crossings on the finished board, as the router counts them. */
+  crossings: number;
+  /** Wires the negotiation ripped up and routed again. */
+  rerouted: number;
+  /** Wires that got the boxed-in L instead of a legal route. */
+  fallbacks: number;
+  /** Search work: A* pops, steps priced, window searches run. */
+  pops?: number;
+  priced?: number;
+  searches?: number;
+  /** Time spent in the first pass and in negotiation, ms. */
+  firstPassMs?: number;
+  negotiationMs?: number;
+  /** Per wire: the crossings the router counts against it, and its dock plan. */
+  perEdge?: Record<string, { crossings: number; overflowed: boolean; fallback: boolean }>;
+}
+
+/** Search-work counters, reset per solve; read into the stats at the end. */
+let workPops = 0;
+let workPriced = 0;
+let workSearches = 0;
+
 /* ------------------------------------------------------------------ */
 /* Tuning                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Cost per pixel on an empty lane. */
-const COST_EMPTY = 1;
 /**
- * Cost per pixel on a lane that already carries wires this one FITS beside.
- * ABOVE the empty cost on purpose: travelling together means the next lane
- * over (20px apart — still reads as a ribbon), not riding 2px off another
- * wire's shoulder. Squeezing into an occupied lane is what a wire does when
- * the free lanes nearby are blocked or long detours, not its first choice.
- */
-const COST_SHARED = 1.3;
-/**
- * Cost per pixel on a lane this wire does NOT fit into. High enough that any
- * one-lane detour (two turns + a cell over and back) beats overlapping for
- * more than a couple of cells, low enough that a wire boxed in on every side
- * still routes instead of failing.
- */
-const COST_OVERFLOW = 6;
-/**
- * Cost per pixel spent inside a board frame this wire is on its way OUT of.
+ * Every cost and limit comes from a `RouterTuning` (router-tuning.ts):
+ * the shipped numbers are `DEFAULT_ROUTER_TUNING`, the dev menu turns them
+ * live, and the worker is handed the same object. Costs are in PIXELS of
+ * travel on an empty lane, so "a 90° corner costs 80" means a wire will go
+ * 80px out of its way to avoid one. The rules the numbers encode:
  *
- * A wire with one end in a board has to cross that border, but it should
- * cross it and be gone: left at the plain rate it would happily run the
- * length of the frame's own edge line (an empty lane like any other) before
- * turning out, which draws the wire along the board's rim and reads as the
- * board leaking. At this rate the shortest way out always beats the scenic
- * one.
- */
-const COST_INSIDE_EXEMPT = 3;
-/**
- * Cost per pixel spent OUTSIDE a frame that holds both of this wire's ends.
+ * - Sharing a lane costs a little MORE than an empty one, so wires travel
+ *   in ribbons a lane apart rather than on each other's shoulders; a full
+ *   lane costs a lot, so overlap is never chosen while a detour exists.
+ * - A 45° bend is well under a 90° corner, so corners get cut with a
+ *   diagonal whenever there is room; a reversal is dear and only waypoint
+ *   excursions ever pay it.
+ * - A wire leaves a port straight and lands straight for `cleanCells`
+ *   cells; bending inside that run costs `earlyTurn` on top of the turn.
+ * - Crossing another wire costs more than a couple of turns, and the
+ *   negotiation makes contested spots dearer each round.
+ * - Docks are planned per card; leaving the plan costs per pixel of rim.
  *
- * The mirror of the rule above, and the reason it needs one: a wire between
- * two cards on the same board pays the leaving-rate on the stretch inside
- * but nothing out in the open, so it would duck out of the board and come
- * back in — which is precisely the thing a board is drawn to say does not
- * happen. Inside its own room the wire travels at the plain rate; stepping
- * out costs, so it only does that when the room leaves it no path at all.
+ * Solves are synchronous and never nested, so the active tuning lives in
+ * module scope for the duration of one solve, like the pools do.
  */
-const COST_OUTSIDE_HOME = 3;
-/** Cost of one 90° turn, in pixel-equivalents. */
-const TURN_COST = 30;
-/**
- * A* gives up after this many pops, or after every state in the window has
- * been popped a couple of times over, whichever is LARGER, and the caller
- * falls back. The bound has to scale with the window: with a consistent
- * heuristic a state is settled once, so a search that has not finished
- * within the window's own state count is boxed in, not lost. The old flat
- * 40k cap was smaller than a busy board's window (~80k states), so long
- * wires between boards failed on size alone, grew the window, failed again,
- * and were drawn as L's straight through cards - after burning a quarter
- * second each.
- */
+let T: RouterTuning = DEFAULT_ROUTER_TUNING;
+
+/** A* gives up after this many pops, or two per state, whichever is larger. */
 const MIN_ASTAR_POPS = 40_000;
 const ASTAR_POPS_PER_STATE = 2;
+/** The search window grows by this when a wire cannot route inside it. */
+const WINDOW_GROWTH = 2.5;
+/** Heuristic weight of the wide rung (see routeWithinWindow). 1: plain A*. */
+const BOARD_RUNG_WEIGHT = 1;
+/**
+ * Padding of the wide rung, in cells: enough to go over the top of a tall
+ * card, bounded so a huge board does not make every retry a search of the
+ * whole board (that was a minute of solve on a 292-wire board).
+ */
+const WIDE_RUNG_CELLS = 30;
+/**
+ * Search work the solve may spend, in A* pops per wire on the board. The
+ * first pass may take the wide rung only while under half of it; the
+ * negotiation runs while under all of it. Past that the board keeps what
+ * it has: a busy board's last few crossings are not worth seconds.
+ * Deterministic, unlike a clock.
+ */
+const NEGOTIATION_POPS_PER_WIRE = 40_000;
+
+/* ------------------------------------------------------------------ */
+/* Directions                                                          */
+/* ------------------------------------------------------------------ */
+
+/** The eight directions, clockwise from east (screen y points down). */
+const DIR_DX = [1, 1, 0, -1, -1, -1, 0, 1] as const;
+const DIR_DY = [0, 1, 1, 1, 0, -1, -1, -1] as const;
+const DIR_E = 0;
+const DIR_S = 2;
+const DIR_W = 4;
+const DIR_N = 6;
+/** Axis of each direction: 0 h, 1 v, 2 falling diagonal (x-y), 3 rising (x+y). */
+const DIR_AXIS = [0, 2, 1, 3, 0, 2, 1, 3] as const;
+type Axis = 0 | 1 | 2 | 3;
+/** Length of a step in each direction, in px; rebuilt per solve from the tuning. */
+const DIR_LENGTH = new Float64Array(8);
+/** Cost of turning from one direction to another; NaN forbids the turn. Per solve. */
+const TURN_COSTS = new Float64Array(64);
+let DIAGONAL_LENGTH = BOARD_GRID * Math.SQRT2;
+
+function applyTuning(tuning: RouterTuning) {
+  T = tuning;
+  DIAGONAL_LENGTH = BOARD_GRID * tuning.diagonalLength;
+  for (let dir = 0; dir < 8; dir += 1) {
+    DIR_LENGTH[dir] = (dir & 1) === 1 ? DIAGONAL_LENGTH : BOARD_GRID;
+  }
+  for (let from = 0; from < 8; from += 1) {
+    for (let to = 0; to < 8; to += 1) {
+      const diff = (to - from + 8) % 8;
+      TURN_COSTS[from * 8 + to] =
+        diff === 0
+          ? 0
+          : diff === 1 || diff === 7
+            ? tuning.turn45
+            : diff === 2 || diff === 6
+              ? tuning.turn90
+              : diff === 4
+                ? tuning.reverse
+                : Number.NaN;
+    }
+  }
+}
+
+function outwardDirection(side: GridSide): number {
+  switch (side) {
+    case "left":
+      return DIR_W;
+    case "right":
+      return DIR_E;
+    case "top":
+      return DIR_N;
+    case "bottom":
+      return DIR_S;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Pooled search state                                                 */
+/* ------------------------------------------------------------------ */
 
 /**
- * Pooled A* state, shared by every leg of every edge of every solve.
- *
- * The window's state count is xLines × yLines × 4 directions — five-figure
- * on a busy board — and searchLeg used to allocate and memset three fresh
- * full-size arrays per leg, per edge, per window-growth retry: megabytes of
- * churn to route one wire. The pool reuses one set of arrays and skips the
- * memset entirely with generation stamps: a state whose stamp is not this
- * leg's generation simply has not been written yet, and its first access
- * initialises it to the same Infinity / -1 the fill() used to. Solves are
+ * Pooled A* state, shared by every leg of every edge of every solve. The
+ * pool reuses one set of arrays and skips the memset entirely with
+ * generation stamps: a state whose stamp is not this leg's generation has
+ * not been written yet, and its first access initialises it. Solves are
  * synchronous and never nested, so module scope is safe.
  */
 let searchPoolCapacity = 0;
@@ -224,8 +308,6 @@ let searchPoolStamp = new Int32Array(0);
 let searchPoolG = new Float64Array(0);
 let searchPoolCameFrom = new Int32Array(0);
 let searchPoolStartOf = new Int32Array(0);
-/** The binary heap, flattened: object entries and destructuring swaps were
- * an allocation per push and per sift step. */
 let searchHeapF = new Float64Array(0);
 let searchHeapG = new Float64Array(0);
 let searchHeapState = new Int32Array(0);
@@ -241,7 +323,6 @@ function acquireSearchGeneration(stateCount: number): number {
     searchPoolGeneration = 0;
   }
   searchPoolGeneration += 1;
-  // A wrapped stamp would alias a decades-old leg; reset well before that.
   if (searchPoolGeneration >= 0x7ffffffe) {
     searchPoolStamp.fill(0);
     searchPoolGeneration = 1;
@@ -267,38 +348,38 @@ function ensureSearchHeapCapacity(size: number) {
   searchHeapState = nextState;
   searchHeapSeq = nextSeq;
 }
-/**
- * The run-cost memo, pooled the same way. A RUN is the stretch between two
- * neighbouring vertices of the window graph, and its cost (blocked, or
- * distance x lane factor x frame penalty) depends on nothing that changes
- * while one wire is being routed: occupancy is claimed only after the final
- * leg. So each run is priced once per routing attempt and every leg, every
- * direction and every revisit reads the price back. Before this the A* re-ran
- * the blocked-interval scan, the occupancy walk over every cell of the run
- * and the frame tests on every single expansion.
- */
-let runPoolCapacity = 0;
-let runPoolGeneration = 0;
-let runPoolStamp = new Int32Array(0);
-let runPoolCost = new Float64Array(0);
 
-function acquireRunGeneration(runCount: number): number {
-  if (runCount > runPoolCapacity) {
-    runPoolCapacity = Math.max(runCount, runPoolCapacity * 2, 4096);
-    runPoolStamp = new Int32Array(runPoolCapacity);
-    runPoolCost = new Float64Array(runPoolCapacity);
-    runPoolGeneration = 0;
+/**
+ * The step-cost memo, pooled the same way. A STEP is the hop between two
+ * neighbouring grid vertices, and its cost (blocked, or length x lane
+ * factor x frame penalty, plus crossings) depends on nothing that changes
+ * while one wire is being routed: occupancy is claimed only after the final
+ * leg. So each step is priced once per routing attempt, and every leg,
+ * direction and revisit reads the price back. Steps are undirected and
+ * keyed by their lower vertex: four per vertex (E, SE, S, SW).
+ */
+let stepPoolCapacity = 0;
+let stepPoolGeneration = 0;
+let stepPoolStamp = new Int32Array(0);
+let stepPoolCost = new Float64Array(0);
+
+function acquireStepGeneration(stepCount: number): number {
+  if (stepCount > stepPoolCapacity) {
+    stepPoolCapacity = Math.max(stepCount, stepPoolCapacity * 2, 4096);
+    stepPoolStamp = new Int32Array(stepPoolCapacity);
+    stepPoolCost = new Float64Array(stepPoolCapacity);
+    stepPoolGeneration = 0;
   }
-  runPoolGeneration += 1;
-  if (runPoolGeneration >= 0x7ffffffe) {
-    runPoolStamp.fill(0);
-    runPoolGeneration = 1;
+  stepPoolGeneration += 1;
+  if (stepPoolGeneration >= 0x7ffffffe) {
+    stepPoolStamp.fill(0);
+    stepPoolGeneration = 1;
   }
-  return runPoolGeneration;
+  return stepPoolGeneration;
 }
 
-/** A run is blocked: it enters a card's margin. */
-const RUN_BLOCKED = -1;
+/** A step is blocked: it enters a card's margin or cuts a corner. */
+const STEP_BLOCKED = -1;
 
 /** The reachability flood's visited stamps and queue, pooled per vertex. */
 let floodPoolCapacity = 0;
@@ -321,20 +402,29 @@ function acquireFloodGeneration(vertexCount: number): number {
   return floodPoolGeneration;
 }
 
+/** Per-vertex flags for the window, pooled: blocked, in an exempt frame, in a home frame. */
+let cellPoolCapacity = 0;
+let cellBlocked = new Uint8Array(0);
+let cellExempt = new Uint8Array(0);
+let cellHome = new Uint8Array(0);
+
+function ensureCellPool(vertexCount: number) {
+  if (vertexCount > cellPoolCapacity) {
+    cellPoolCapacity = Math.max(vertexCount, cellPoolCapacity * 2, 4096);
+    cellBlocked = new Uint8Array(cellPoolCapacity);
+    cellExempt = new Uint8Array(cellPoolCapacity);
+    cellHome = new Uint8Array(cellPoolCapacity);
+  }
+}
+
 /**
  * routeWithinWindow's answer when no path exists AND no larger window could
  * hold one: an end is walled in by the cards around it (a drawer packed
  * against its neighbours, a card wedged into a corner). Growing the window
- * adds lines only OUTSIDE the current one, so a region the flood could not
- * walk to the current border from is sealed at every size. Before this the
- * router searched three windows, each sixteen times the area of the last,
- * to learn the same thing three times.
+ * adds cells only OUTSIDE the current one, so a region the flood could not
+ * walk to the current border from is sealed at every size.
  */
 const SEALED = "sealed";
-
-/** Search-window padding around the endpoints, then the growth factor. */
-const WINDOW_PAD = 400;
-const WINDOW_GROWTH = 4;
 
 /* ------------------------------------------------------------------ */
 /* Occupancy: who is already riding which stretch of which line        */
@@ -345,45 +435,105 @@ interface LaneClaim {
   hi: number;
 }
 
+const KEY_OFFSET = 1 << 20;
+const KEY_SPAN = 1 << 21;
+/** The packed vertex word: four 6-bit passer counts by axis, then 4 bits of history. */
+const PASSER_BITS = 6;
+const PASSER_MASK = (1 << PASSER_BITS) - 1;
+const HISTORY_SHIFT = 4 * PASSER_BITS;
+const HISTORY_MASK = 15;
+
+interface ClaimedRun {
+  axis: Axis;
+  /** Vertex coordinates in cells, first and last vertex of the run. */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 /**
- * Claims are tracked per CELL of a line (each 20px stretch), because two
- * wires can share a line for part of its length and part company later —
- * capacity is a property of a stretch, not of the whole line.
+ * Lane claims are tracked per VERTEX of a line (each 20px stretch), because
+ * two wires can share a line for part of its length and part company
+ * later - capacity is a property of a stretch, not of the whole line.
+ * Passers are tracked per vertex (and per cell centre for the diagonals,
+ * which cross each other between vertices) so a step can ask how many
+ * wires it would cross. Everything a wire holds is remembered against it
+ * so it can be ripped up for a reroute.
  */
-/**
- * Cell keys are one integer, not a string: the A* asks about lane occupancy
- * for every run it considers, millions of times on a busy board, and a
- * string key per cell per ask was most of the routing cost. Lines are
- * multiples of BOARD_GRID and cells are already integers; both are offset
- * to stay non-negative and packed below 2^53.
- */
-const LANE_KEY_LINE_OFFSET = 1 << 20;
-const LANE_KEY_LINE_SPAN = 1 << 21;
-const LANE_KEY_CELL_OFFSET = 1 << 21;
-const LANE_KEY_CELL_SPAN = 1 << 22;
+/** The board's extent in cells: what the dense occupancy arrays cover. */
+interface CellBounds {
+  x0: number;
+  y0: number;
+  width: number;
+  height: number;
+}
 
 class LaneOccupancy {
   private cells = new Map<number, LaneClaim[]>();
-  /** Total claimed stroke per cell, kept alongside so usedWidth never sums. */
-  private totals = new Map<number, number>();
+  /** Claimed stroke per axis per vertex: index axis * cellCount + cell. */
+  private totals: Float32Array;
+  /** Packed passer words per vertex and per cell centre. */
+  private vertices: Int32Array;
+  private centres: Int32Array;
+  private cellCount: number;
+  private claimsByEdge = new Map<string, Array<{ key: number; cell: number; axis: Axis; claim: LaneClaim }>>();
+  private passersByEdge = new Map<string, Array<{ centre: boolean; axis: Axis; cell: number }>>();
+  private runsByEdge = new Map<string, ClaimedRun[]>();
 
-  private key(axis: "h" | "v", line: number, cell: number): number {
-    const lineIndex = Math.round(line / BOARD_GRID) + LANE_KEY_LINE_OFFSET;
-    return (
-      ((axis === "h" ? 1 : 0) * LANE_KEY_LINE_SPAN + lineIndex) * LANE_KEY_CELL_SPAN +
-      (cell + LANE_KEY_CELL_OFFSET)
-    );
+  constructor(private bounds: CellBounds) {
+    this.cellCount = bounds.width * bounds.height;
+    this.totals = new Float32Array(4 * this.cellCount);
+    this.vertices = new Int32Array(this.cellCount);
+    this.centres = new Int32Array(this.cellCount);
   }
 
-  claimsFor(axis: "h" | "v", line: number, from: number, to: number): LaneClaim[] {
-    // Inclusive at aligned ends (floor, not ceil-1): two runs that MEET at a
-    // grid vertex share that boundary cell, so a run rejoining a line right
-    // where another ends packs beside it instead of re-centring onto it.
-    const lo = Math.floor(Math.min(from, to) / BOARD_GRID);
-    const hi = Math.floor(Math.max(from, to) / BOARD_GRID);
+  /** Dense index of a vertex, or -1 outside the board's extent. */
+  private cellOf(x: number, y: number): number {
+    const xi = x - this.bounds.x0;
+    const yi = y - this.bounds.y0;
+    if (xi < 0 || yi < 0 || xi >= this.bounds.width || yi >= this.bounds.height) {
+      return -1;
+    }
+    return xi * this.bounds.height + yi;
+  }
+
+  /** Cells are keyed by axis, line and position along the line, in cells. */
+  private laneKey(axis: Axis, x: number, y: number): number {
+    let line: number;
+    switch (axis) {
+      case 0:
+        line = y;
+        break;
+      case 1:
+        line = x;
+        break;
+      case 2:
+        line = x - y;
+        break;
+      default:
+        line = x + y;
+    }
+    const along = axis === 1 ? y : x;
+    return (axis * KEY_SPAN + line + KEY_OFFSET) * KEY_SPAN + (along + KEY_OFFSET);
+  }
+
+  /** Total stroke already claimed on the busier of a step's two vertices. */
+  usedWidth(axis: Axis, x0: number, y0: number, x1: number, y1: number): number {
+    const ca = this.cellOf(x0, y0);
+    const cb = this.cellOf(x1, y1);
+    const a = ca < 0 ? 0 : this.totals[axis * this.cellCount + ca];
+    const b = cb < 0 ? 0 : this.totals[axis * this.cellCount + cb];
+    return a > b ? a : b;
+  }
+
+  claimsAlong(run: ClaimedRun): LaneClaim[] {
     const merged: LaneClaim[] = [];
-    for (let cell = lo; cell <= hi; cell += 1) {
-      const claims = this.cells.get(this.key(axis, line, cell));
+    const dx = Math.sign(run.x1 - run.x0);
+    const dy = Math.sign(run.y1 - run.y0);
+    const steps = Math.max(Math.abs(run.x1 - run.x0), Math.abs(run.y1 - run.y0));
+    for (let i = 0; i <= steps; i += 1) {
+      const claims = this.cells.get(this.laneKey(run.axis, run.x0 + dx * i, run.y0 + dy * i));
       if (claims) {
         merged.push(...claims);
       }
@@ -391,62 +541,248 @@ class LaneOccupancy {
     return merged;
   }
 
-  /** Total stroke already claimed on the busiest cell of the stretch. */
-  usedWidth(axis: "h" | "v", line: number, from: number, to: number): number {
-    const lo = Math.floor(Math.min(from, to) / BOARD_GRID);
-    const hi = Math.floor(Math.max(from, to) / BOARD_GRID);
-    let worst = 0;
-    for (let cell = lo; cell <= hi; cell += 1) {
-      const total = this.totals.get(this.key(axis, line, cell));
-      if (total !== undefined && total > worst) {
-        worst = total;
-      }
-    }
-    return worst;
-  }
-
-  claim(axis: "h" | "v", line: number, from: number, to: number, claimInterval: LaneClaim) {
-    const lo = Math.floor(Math.min(from, to) / BOARD_GRID);
-    const hi = Math.floor(Math.max(from, to) / BOARD_GRID);
+  claim(run: ClaimedRun, claimInterval: LaneClaim, edgeId: string) {
     const width = claimInterval.hi - claimInterval.lo;
-    for (let cell = lo; cell <= hi; cell += 1) {
-      const key = this.key(axis, line, cell);
+    let records = this.claimsByEdge.get(edgeId);
+    if (!records) {
+      records = [];
+      this.claimsByEdge.set(edgeId, records);
+    }
+    const dx = Math.sign(run.x1 - run.x0);
+    const dy = Math.sign(run.y1 - run.y0);
+    const steps = Math.max(Math.abs(run.x1 - run.x0), Math.abs(run.y1 - run.y0));
+    for (let i = 0; i <= steps; i += 1) {
+      const x = run.x0 + dx * i;
+      const y = run.y0 + dy * i;
+      const key = this.laneKey(run.axis, x, y);
       const claims = this.cells.get(key);
       if (claims) {
         claims.push(claimInterval);
       } else {
         this.cells.set(key, [claimInterval]);
       }
-      this.totals.set(key, (this.totals.get(key) ?? 0) + width);
+      const cell = this.cellOf(x, y);
+      if (cell >= 0) {
+        this.totals[run.axis * this.cellCount + cell] += width;
+      }
+      records.push({ key, cell, axis: run.axis, claim: claimInterval });
     }
+  }
+
+  /**
+   * What a step from (x0,y0) to (x1,y1) along `axis` would cross: passers of
+   * every OTHER axis through its far vertex, and for a diagonal step the
+   * other diagonal through the cell centre it cuts. `weighted` multiplies
+   * each by one plus the spot's negotiation history.
+   */
+  stepCrossings(axis: Axis, x0: number, y0: number, x1: number, y1: number, weighted: boolean): number {
+    const far = this.cellOf(x1, y1);
+    let count = far < 0 ? 0 : this.otherPassers(this.vertices[far], axis, weighted);
+    if (axis >= 2 && (x0 !== x1 || y0 !== y1)) {
+      const centre = this.cellOf(Math.min(x0, x1), Math.min(y0, y1));
+      if (centre >= 0) {
+        count += this.otherPassers(this.centres[centre], axis, weighted);
+      }
+    }
+    return count;
+  }
+
+  private otherPassers(word: number, axis: Axis, weighted: boolean): number {
+    if (word === 0) {
+      return 0;
+    }
+    const passers =
+      (word & PASSER_MASK) +
+      ((word >>> PASSER_BITS) & PASSER_MASK) +
+      ((word >>> (2 * PASSER_BITS)) & PASSER_MASK) +
+      ((word >>> (3 * PASSER_BITS)) & PASSER_MASK) -
+      ((word >>> (axis * PASSER_BITS)) & PASSER_MASK);
+    if (passers === 0) {
+      return 0;
+    }
+    return weighted ? passers * (1 + ((word >>> HISTORY_SHIFT) & HISTORY_MASK)) : passers;
+  }
+
+  /** The crossings a placed wire has right now, against everyone else. */
+  crossingsOf(edgeId: string): number {
+    const runs = this.runsByEdge.get(edgeId);
+    if (!runs) {
+      return 0;
+    }
+    let count = 0;
+    for (const run of runs) {
+      const dx = Math.sign(run.x1 - run.x0);
+      const dy = Math.sign(run.y1 - run.y0);
+      const steps = Math.max(Math.abs(run.x1 - run.x0), Math.abs(run.y1 - run.y0));
+      if (steps === 0) {
+        const cell = this.cellOf(run.x0, run.y0);
+        count += cell < 0 ? 0 : this.otherPassers(this.vertices[cell], run.axis, false);
+        continue;
+      }
+      for (let i = 1; i <= steps; i += 1) {
+        count += this.stepCrossings(
+          run.axis,
+          run.x0 + dx * (i - 1),
+          run.y0 + dy * (i - 1),
+          run.x0 + dx * i,
+          run.y0 + dy * i,
+          false,
+        );
+      }
+    }
+    return count;
+  }
+
+  /** Ends a negotiation round: every spot wires cross at now costs more. */
+  escalate() {
+    const bump = (words: Int32Array) => {
+      for (let i = 0; i < words.length; i += 1) {
+        const word = words[i];
+        if (word === 0) {
+          continue;
+        }
+        let axes = 0;
+        for (let axis = 0; axis < 4; axis += 1) {
+          if ((word >>> (axis * PASSER_BITS)) & PASSER_MASK) {
+            axes += 1;
+          }
+        }
+        if (axes >= 2 && ((word >>> HISTORY_SHIFT) & HISTORY_MASK) < HISTORY_MASK) {
+          words[i] = word + (1 << HISTORY_SHIFT);
+        }
+      }
+    };
+    bump(this.vertices);
+    bump(this.centres);
+  }
+
+  private addPasser(words: Int32Array, cell: number, axis: Axis, delta: number) {
+    if (cell < 0) {
+      return;
+    }
+    const shift = axis * PASSER_BITS;
+    const word = words[cell];
+    const current = (word >>> shift) & PASSER_MASK;
+    const next = Math.min(PASSER_MASK, Math.max(0, current + delta));
+    // History outlives the passers.
+    words[cell] = (word & ~(PASSER_MASK << shift)) | (next << shift);
+  }
+
+  private record(edgeId: string, centre: boolean, axis: Axis, cell: number) {
+    let records = this.passersByEdge.get(edgeId);
+    if (!records) {
+      records = [];
+      this.passersByEdge.set(edgeId, records);
+    }
+    records.push({ centre, axis, cell });
+  }
+
+  /**
+   * Records a run as passed through: its interior vertices on its axis
+   * (run ends are corners and stay unmarked), and for a diagonal every
+   * cell centre it cuts. Also remembers the run for `crossingsOf`.
+   */
+  markRun(run: ClaimedRun, edgeId: string) {
+    let runs = this.runsByEdge.get(edgeId);
+    if (!runs) {
+      runs = [];
+      this.runsByEdge.set(edgeId, runs);
+    }
+    runs.push(run);
+    const dx = Math.sign(run.x1 - run.x0);
+    const dy = Math.sign(run.y1 - run.y0);
+    const steps = Math.max(Math.abs(run.x1 - run.x0), Math.abs(run.y1 - run.y0));
+    for (let i = 1; i < steps; i += 1) {
+      const cell = this.cellOf(run.x0 + dx * i, run.y0 + dy * i);
+      this.addPasser(this.vertices, cell, run.axis, 1);
+      this.record(edgeId, false, run.axis, cell);
+    }
+    if (run.axis >= 2) {
+      for (let i = 0; i < steps; i += 1) {
+        const x = run.x0 + dx * i;
+        const y = run.y0 + dy * i;
+        const cell = this.cellOf(Math.min(x, x + dx), Math.min(y, y + dy));
+        this.addPasser(this.centres, cell, run.axis, 1);
+        this.record(edgeId, true, run.axis, cell);
+      }
+    }
+  }
+
+  /**
+   * Records a wire's apron vertex as passed through along its stub's axis:
+   * the stub runs straight on through the apron into the card, so a wire
+   * riding the card's margin line crosses it there.
+   */
+  markStub(axis: Axis, x: number, y: number, edgeId: string) {
+    const cell = this.cellOf(x, y);
+    this.addPasser(this.vertices, cell, axis, 1);
+    this.record(edgeId, false, axis, cell);
+    let runs = this.runsByEdge.get(edgeId);
+    if (!runs) {
+      runs = [];
+      this.runsByEdge.set(edgeId, runs);
+    }
+    // A zero-length run at the vertex, so crossingsOf sees the stub too.
+    runs.push({ axis, x0: x, y0: y, x1: x, y1: y });
+  }
+
+  /** Rips a wire up: its lane claims and passers are forgotten. */
+  release(edgeId: string) {
+    const claims = this.claimsByEdge.get(edgeId);
+    if (claims) {
+      for (const { key, cell, axis, claim } of claims) {
+        const list = this.cells.get(key);
+        if (list) {
+          const at = list.indexOf(claim);
+          if (at >= 0) {
+            list.splice(at, 1);
+          }
+          if (list.length === 0) {
+            this.cells.delete(key);
+          }
+        }
+        if (cell >= 0) {
+          const index = axis * this.cellCount + cell;
+          const total = this.totals[index] - (claim.hi - claim.lo);
+          this.totals[index] = total <= 1e-6 ? 0 : total;
+        }
+      }
+      this.claimsByEdge.delete(edgeId);
+    }
+    const passers = this.passersByEdge.get(edgeId);
+    if (passers) {
+      for (const { centre, axis, cell } of passers) {
+        this.addPasser(centre ? this.centres : this.vertices, cell, axis, -1);
+      }
+      this.passersByEdge.delete(edgeId);
+    }
+    this.runsByEdge.delete(edgeId);
   }
 }
 
 /**
  * Where in the lane a new wire of `width` sits, given what is already there.
- * A lone wire rides dead centre. A joiner slots beside the existing claims —
+ * A lone wire rides dead centre. A joiner slots beside the existing claims -
  * on the side of its own upcoming turn when it has one (`prefer` −1/+1), so
  * a wire about to peel off leftward sits on the left of the bundle and never
- * has to cross its lane-mates to leave. A wire that fits nowhere returns
- * centre again — that is the sanctioned port-stub overlap, and the A* cost
- * has already made sure it only happens where there was no alternative.
+ * has to cross its lane-mates to leave. A wire that fits nowhere spills past
+ * the band rather than drawing on top of what is already there.
  */
-function packIntoLane(existing: LaneClaim[], width: number, prefer: number): LaneClaim {
-  const half = LANE_CAPACITY / 2;
-  const tryAt = (center: number): LaneClaim | undefined => {
-    const lo = center - width / 2;
-    const hi = center + width / 2;
-    if (lo < -half - 1e-6 || hi > half + 1e-6) {
-      return undefined;
-    }
+function packIntoLane(
+  existing: LaneClaim[],
+  width: number,
+  prefer: number,
+  capacity: number,
+): { claim: LaneClaim; overflowed: boolean } {
+  const half = capacity / 2;
+  const clear = (lo: number, hi: number): boolean => {
     for (const claim of existing) {
       if (lo < claim.hi + LANE_GAP - 1e-6 && hi > claim.lo - LANE_GAP + 1e-6) {
-        return undefined;
+        return false;
       }
     }
-    return { lo, hi };
+    return true;
   };
-
   const candidates: number[] = [0];
   for (const claim of existing) {
     candidates.push(claim.hi + LANE_GAP + width / 2);
@@ -454,141 +790,53 @@ function packIntoLane(existing: LaneClaim[], width: number, prefer: number): Lan
   }
   candidates.sort((left, right) =>
     prefer !== 0
-      ? // Toward the exit side first; nearest the centre among equals.
-        prefer * (right - left) || Math.abs(left) - Math.abs(right)
+      ? prefer * (right - left) || Math.abs(left) - Math.abs(right)
       : Math.abs(left) - Math.abs(right) || left - right,
   );
   for (const center of candidates) {
-    const slot = tryAt(center);
-    if (slot) {
-      return slot;
-    }
-  }
-  // Nothing fits inside the band — a fat pipe beside a fat pipe, or a
-  // stroke doubling back on itself. Spill past the band edge rather than
-  // returning centre: centre meant drawing EXACTLY on top of whatever is
-  // already there, which is the one thing a wire must never do to itself.
-  // The spill leans on the lane's daylight (and a sliver of the neighbour
-  // lane at worst), which still reads as two lines.
-  const trySpill = (center: number): LaneClaim | undefined => {
     const lo = center - width / 2;
     const hi = center + width / 2;
-    for (const claim of existing) {
-      if (lo < claim.hi + LANE_GAP - 1e-6 && hi > claim.lo - LANE_GAP + 1e-6) {
-        return undefined;
-      }
+    if (lo < -half - 1e-6 || hi > half + 1e-6) {
+      continue;
     }
-    return { lo, hi };
-  };
+    if (clear(lo, hi)) {
+      return { claim: { lo, hi }, overflowed: false };
+    }
+  }
   for (const center of candidates) {
-    const slot = trySpill(center);
-    if (slot) {
-      return slot;
+    const lo = center - width / 2;
+    const hi = center + width / 2;
+    if (clear(lo, hi)) {
+      return { claim: { lo, hi }, overflowed: true };
     }
   }
-  return { lo: -width / 2, hi: width / 2 };
-}
-
-/* ------------------------------------------------------------------ */
-/* The line graph                                                      */
-/* ------------------------------------------------------------------ */
-
-function snapLine(value: number): number {
-  return Math.round(value / BOARD_GRID) * BOARD_GRID;
-}
-
-/** Sorted unique array plus index lookup. */
-function buildAxis(values: Iterable<number>): { coords: number[]; index: Map<number, number> } {
-  const coords = [...new Set(values)].sort((left, right) => left - right);
-  const index = new Map<number, number>();
-  coords.forEach((coord, i) => index.set(coord, i));
-  return { coords, index };
-}
-
-interface BlockedIntervals {
-  /** Per line index: sorted merged [lo, hi] intervals a run may not overlap. */
-  byLine: Array<Array<[number, number]>>;
-}
-
-function buildBlocked(
-  lineCoords: number[],
-  obstacles: GridObstacle[],
-  pickSpan: (obstacle: GridObstacle) => [number, number],
-  pickBlock: (obstacle: GridObstacle) => [number, number],
-): BlockedIntervals {
-  const byLine: Array<Array<[number, number]>> = lineCoords.map(() => []);
-  for (const obstacle of obstacles) {
-    const [spanLo, spanHi] = pickSpan(obstacle);
-    const [blockLo, blockHi] = pickBlock(obstacle);
-    // Lines STRICTLY inside the margin-inflated span are blocked; the
-    // boundary lines are exactly one cell out and stay legal.
-    let lo = binarySearchAbove(lineCoords, spanLo - WIRE_NODE_MARGIN);
-    for (; lo < lineCoords.length && lineCoords[lo] < spanHi + WIRE_NODE_MARGIN; lo += 1) {
-      byLine[lo].push([blockLo - WIRE_NODE_MARGIN, blockHi + WIRE_NODE_MARGIN]);
-    }
-  }
-  for (const intervals of byLine) {
-    intervals.sort((left, right) => left[0] - right[0]);
-  }
-  return { byLine };
-}
-
-/** First index whose coord is strictly greater than `value`. */
-function binarySearchAbove(coords: number[], value: number): number {
-  let lo = 0;
-  let hi = coords.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (coords[mid] <= value) {
-      lo = mid + 1;
-    } else {
-      hi = mid;
-    }
-  }
-  return lo;
-}
-
-/** May a run travel [from, to] on this line without entering a margin? */
-function runIsFree(intervals: Array<[number, number]>, from: number, to: number): boolean {
-  const lo = Math.min(from, to);
-  const hi = Math.max(from, to);
-  for (const [blockLo, blockHi] of intervals) {
-    if (blockLo >= hi) {
-      break;
-    }
-    // Open-interval overlap: touching a margin boundary is allowed,
-    // entering it is not.
-    if (hi > blockLo + 1e-6 && lo < blockHi - 1e-6) {
-      return false;
-    }
-  }
-  return true;
+  return { claim: { lo: -width / 2, hi: width / 2 }, overflowed: true };
 }
 
 /* ------------------------------------------------------------------ */
 /* Endpoint plumbing                                                   */
 /* ------------------------------------------------------------------ */
 
-/** The apron vertex: the endpoint pushed one cell out of its card, on-grid. */
-function apronPoint(endpoint: GridEndpoint): GridPoint {
-  switch (endpoint.side) {
-    case "left":
-      return { x: snapLine(endpoint.x) - WIRE_NODE_MARGIN, y: snapLine(endpoint.y) };
-    case "right":
-      return { x: snapLine(endpoint.x) + WIRE_NODE_MARGIN, y: snapLine(endpoint.y) };
-    case "top":
-      return { x: snapLine(endpoint.x), y: snapLine(endpoint.y) - WIRE_NODE_MARGIN };
-    case "bottom":
-      return { x: snapLine(endpoint.x), y: snapLine(endpoint.y) + WIRE_NODE_MARGIN };
-  }
+function snapLine(value: number): number {
+  return Math.round(value / BOARD_GRID) * BOARD_GRID;
 }
 
-const DIRECTIONS = [
-  { dx: 1, dy: 0 },
-  { dx: -1, dy: 0 },
-  { dx: 0, dy: 1 },
-  { dx: 0, dy: -1 },
-] as const;
+/** The apron vertex: the endpoint pushed one cell out of its card, on-grid. */
+function apronPoint(endpoint: GridEndpoint): GridPoint {
+  const dir = outwardDirection(endpoint.side);
+  return {
+    x: snapLine(endpoint.x) + DIR_DX[dir] * WIRE_NODE_MARGIN,
+    y: snapLine(endpoint.y) + DIR_DY[dir] * WIRE_NODE_MARGIN,
+  };
+}
+
+function isFiniteEndpoint(endpoint: GridEndpoint): boolean {
+  return Number.isFinite(endpoint.x) && Number.isFinite(endpoint.y);
+}
+
+function dockKey(endpoint: GridEndpoint): string {
+  return `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`;
+}
 
 /* ------------------------------------------------------------------ */
 /* The solve                                                           */
@@ -597,110 +845,669 @@ const DIRECTIONS = [
 interface SolveContext {
   obstacles: GridObstacle[];
   occupancy: LaneOccupancy;
+  /** The board's extent in cells; no search window reaches past it. */
+  board: CellBounds;
+  /** The wide rung is skipped once the solve's pops pass this. */
+  widePopCap: number;
   /**
-   * Dock points already taken, as "x,y". With whole-perimeter docking every
-   * wire can have its own attachment point, so no two wires should ever
-   * share one while free points remain — the claim is what spreads a fan of
-   * wires around the card instead of piling them onto one spot.
+   * Dock points already taken, as "x,y", each against the wire holding it.
+   * With whole-perimeter docking every wire can have its own attachment
+   * point, so no two wires should share one while free points remain - the
+   * claim is what spreads a fan of wires around the card instead of piling
+   * them onto one spot.
    */
-  usedDocks: Set<string>;
+  usedDocks: Map<string, string>;
 }
 
-function dockKey(endpoint: GridEndpoint): string {
-  return `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`;
+/** A request after dock planning: the pruned docks, and the whole rim to fall back on. */
+interface PlannedRequest extends GridRouteRequest {
+  allSources: GridEndpoint[];
+  allTargets: GridEndpoint[];
 }
 
+/** A found route before it is installed: its ends and its vertex chain in cells. */
+interface RouteFound {
+  source: GridEndpoint;
+  target: GridEndpoint;
+  /** Vertex chain in CELL units, apron to apron, one entry per corner. */
+  vertices: GridPoint[];
+  /** The search's cost for it: length, turns, dock penalties, crossings. */
+  cost: number;
+}
+
+/** One wire's standing in the solve: its route and how well it fared. */
+interface RouteState {
+  request: PlannedRequest;
+  found: RouteFound | undefined;
+  routed: GridRoutedEdge;
+  /** Other wires this one runs across. */
+  crossings: number;
+  /** It had to squeeze into a lane it did not fit. */
+  overflowed: boolean;
+  /** A reroute gave it back the same route: nothing else to try. */
+  stuck: boolean;
+}
+
+/**
+ * Every wire on the board, as ONE solve.
+ *
+ * The solve is three moves. DOCKS first: `planDocks` looks at each card's
+ * wires together and hands every one a preferred dock facing where it is
+ * going, siblings spread around the rim in bearing order - this is the part
+ * no per-wire search could see, because a wire on its own has no idea four
+ * more are about to leave the same card. Then the FIRST PASS routes every
+ * wire, LONGEST first: a long wire takes the open lines and the short ones
+ * fit in around it, which is what nests a fan of wires to a row of drawers
+ * instead of having the last one climb across all the others. Then
+ * NEGOTIATION: any wire that ended up crossing another, or squeezed into a
+ * full lane, is ripped up and routed again against the whole finished board -
+ * it now sees the wires that came after it - and the spots wires keep
+ * fighting over get dearer each round. Unhappy wires only, budgeted at one
+ * reroute per wire on the board, so a clean board pays nothing for it.
+ */
 export function solveGridRoutes(
   obstacles: GridObstacle[],
   requests: GridRouteRequest[],
+  stats?: GridSolveStats,
+  tuning: RouterTuning = DEFAULT_ROUTER_TUNING,
 ): Map<string, GridRoutedEdge> {
+  applyTuning(tuning);
+  workPops = 0;
+  workPriced = 0;
+  workSearches = 0;
+  const startedAt = performance.now();
+  const bounds = boardBounds(obstacles, requests);
   const context: SolveContext = {
     obstacles,
-    occupancy: new LaneOccupancy(),
-    usedDocks: new Set(),
+    occupancy: new LaneOccupancy(bounds),
+    board: bounds,
+    usedDocks: new Map(),
+    widePopCap: (NEGOTIATION_POPS_PER_WIRE * requests.length) / 2,
   };
-  const results = new Map<string, GridRoutedEdge>();
-  const sorted = [...requests].sort(
-    (left, right) => left.order - right.order || (left.edgeId < right.edgeId ? -1 : 1),
+  const planned = planDocks(requests);
+  const sorted = [...planned].sort(
+    (left, right) =>
+      (T.longestFirst ? routeSpan(right) - routeSpan(left) : routeSpan(left) - routeSpan(right)) ||
+      left.order - right.order ||
+      (left.edgeId < right.edgeId ? -1 : 1),
   );
+
+  const states: RouteState[] = [];
   for (const request of sorted) {
-    results.set(request.edgeId, routeOne(context, request));
+    states.push(routeOne(context, request));
+  }
+
+  const firstPassMs = performance.now() - startedAt;
+  let rerouted = 0;
+  // A floor on the budget: a small board's few wires may need several
+  // trades to settle, and the whole solve is still milliseconds.
+  let budget = Math.max(12, Math.round(T.negotiationBudget * states.length));
+  const popCap = NEGOTIATION_POPS_PER_WIRE * states.length;
+  context.widePopCap = popCap;
+  for (let round = 0; round < T.negotiationRounds && budget > 0 && workPops < popCap; round += 1) {
+    // Every round the contested spots get dearer (escalate), so a wire
+    // whose last reroute changed nothing is worth another try: `stuck`
+    // only spares it the rest of the round it was found stuck in.
+    const unhappy: number[] = [];
+    for (let i = 0; i < states.length; i += 1) {
+      const state = states[i];
+      state.stuck = false;
+      if (state.found && (state.crossings > 0 || state.overflowed)) {
+        unhappy.push(i);
+      }
+    }
+    if (unhappy.length === 0) {
+      break;
+    }
+    context.occupancy.escalate();
+    for (const index of unhappy) {
+      if (budget === 0 || workPops >= popCap) {
+        break;
+      }
+      const state = states[index];
+      ripUp(context, state);
+      const again = routeOne(context, state.request, state.found);
+      if (state.found && again.found && sameRoute(state.found, again.found)) {
+        again.stuck = true;
+      }
+      states[index] = again;
+      rerouted += 1;
+      budget -= 1;
+    }
+    // Others may have been crossed by the movers; re-read every wire so the
+    // next round works from the truth.
+    let remaining = readCrossings(context, states);
+    if (remaining === 0) {
+      break;
+    }
+    // SWAPS. Two wires leaving one card that still cross may simply have
+    // their docks the wrong way round: a wall beside the card can invert
+    // the bearing order, the outer wire having to take the lower dock and
+    // hug the wall while the inner one runs above it. Neither wire can fix
+    // that alone, so they trade planned docks, both route again, and the
+    // trade stands only if the board's crossings fall. Two reroutes from
+    // the budget per trial, one trial per pair per round.
+    for (let i = 0; i < states.length && budget >= 2 && workPops < popCap; i += 1) {
+      const a = states[i];
+      if (!a.found || a.crossings === 0) {
+        continue;
+      }
+      for (let k = i + 1; k < states.length && budget >= 2; k += 1) {
+        const b = states[k];
+        if (!b.found || b.crossings === 0 || !sharesCard(a.request, b.request)) {
+          continue;
+        }
+        const foundA = a.found;
+        const foundB = b.found;
+        swapPlans(a.request, b.request);
+        ripUp(context, a);
+        ripUp(context, b);
+        const nextA = routeOne(context, a.request, foundA);
+        const nextB = routeOne(context, b.request, foundB);
+        budget -= 2;
+        rerouted += 2;
+        states[i] = nextA;
+        states[k] = nextB;
+        const after = readCrossings(context, states);
+        if (after < remaining) {
+          remaining = after;
+          break;
+        }
+        // No better: put both back exactly as they were.
+        ripUp(context, nextA);
+        ripUp(context, nextB);
+        swapPlans(a.request, b.request);
+        states[i] = install(context, a.request, foundA);
+        states[k] = install(context, b.request, foundB);
+        readCrossings(context, states);
+      }
+    }
+    if (remaining === 0) {
+      break;
+    }
+  }
+
+  // Lanes are packed as wires arrive, so a wire that packed beside a
+  // neighbour keeps that offset after the neighbour has moved on. Once every
+  // route is final, pack them all again on a clean board.
+  if (rerouted > 0) {
+    context.occupancy = new LaneOccupancy(bounds);
+    for (let i = 0; i < states.length; i += 1) {
+      const state = states[i];
+      if (state.found) {
+        states[i] = install(context, state.request, state.found);
+      }
+    }
+  }
+
+  const results = new Map<string, GridRoutedEdge>();
+  let crossings = 0;
+  let fallbacks = 0;
+  for (const state of states) {
+    results.set(state.request.edgeId, state.routed);
+    crossings += state.crossings;
+    if (!state.found && state.routed.points.length > 0) {
+      fallbacks += 1;
+    }
+  }
+  if (stats) {
+    stats.crossings = crossings;
+    stats.rerouted = rerouted;
+    stats.fallbacks = fallbacks;
+    stats.pops = workPops;
+    stats.priced = workPriced;
+    stats.searches = workSearches;
+    stats.firstPassMs = Math.round(firstPassMs);
+    stats.perEdge = {};
+    for (const state of states) {
+      stats.perEdge[state.request.edgeId] = {
+        crossings: state.crossings,
+        overflowed: state.overflowed,
+        fallback: !state.found,
+      };
+    }
+    stats.negotiationMs = Math.round(performance.now() - startedAt - firstPassMs);
   }
   return results;
 }
 
-function routeOne(context: SolveContext, request: GridRouteRequest): GridRoutedEdge {
-  const allSources = request.sources.filter(isFiniteEndpoint);
-  const allTargets = request.targets.filter(isFiniteEndpoint);
-  if (allSources.length === 0 || allTargets.length === 0) {
+/**
+ * The board's extent in cells, padded past the largest search window a wire
+ * can grow to, so the dense occupancy arrays cover every vertex a route can
+ * touch. Anything outside (nothing, in practice) counts as empty.
+ */
+function boardBounds(obstacles: GridObstacle[], requests: GridRouteRequest[]): CellBounds {
+  let left = Infinity;
+  let right = -Infinity;
+  let top = Infinity;
+  let bottom = -Infinity;
+  const take = (x: number, y: number) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (x < left) left = x;
+    if (x > right) right = x;
+    if (y < top) top = y;
+    if (y > bottom) bottom = y;
+  };
+  for (const obstacle of obstacles) {
+    take(obstacle.left, obstacle.top);
+    take(obstacle.right, obstacle.bottom);
+  }
+  for (const request of requests) {
+    for (const endpoint of request.sources) take(endpoint.x, endpoint.y);
+    for (const endpoint of request.targets) take(endpoint.x, endpoint.y);
+    for (const stop of request.waypoints ?? []) take(stop.x, stop.y);
+  }
+  if (left === Infinity) {
+    return { x0: 0, y0: 0, width: 1, height: 1 };
+  }
+  const padCells = Math.ceil(T.windowPad * WINDOW_GROWTH) + 2;
+  const x0 = Math.floor(left / BOARD_GRID) - padCells;
+  const y0 = Math.floor(top / BOARD_GRID) - padCells;
+  const x1 = Math.ceil(right / BOARD_GRID) + padCells;
+  const y1 = Math.ceil(bottom / BOARD_GRID) + padCells;
+  return { x0, y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+}
+
+/** Re-reads every placed wire's crossings from the occupancy; returns the total. */
+function readCrossings(context: SolveContext, states: RouteState[]): number {
+  let total = 0;
+  for (const state of states) {
+    if (state.found) {
+      state.crossings = context.occupancy.crossingsOf(state.request.edgeId);
+      total += state.crossings;
+    }
+  }
+  return total;
+}
+
+function sharesCard(a: PlannedRequest, b: PlannedRequest): boolean {
+  return (
+    (a.sourceCardId !== undefined && a.sourceCardId === b.sourceCardId) ||
+    (a.targetCardId !== undefined && a.targetCardId === b.targetCardId)
+  );
+}
+
+/** Trades the planned docks (the priced candidate lists) on every card two wires share. */
+function swapPlans(a: PlannedRequest, b: PlannedRequest) {
+  if (a.sourceCardId !== undefined && a.sourceCardId === b.sourceCardId) {
+    const sources = a.sources;
+    a.sources = b.sources;
+    b.sources = sources;
+  }
+  if (a.targetCardId !== undefined && a.targetCardId === b.targetCardId) {
+    const targets = a.targets;
+    a.targets = b.targets;
+    b.targets = targets;
+  }
+}
+
+function sameRoute(a: RouteFound, b: RouteFound): boolean {
+  if (a.vertices.length !== b.vertices.length) {
+    return false;
+  }
+  for (let i = 0; i < a.vertices.length; i += 1) {
+    if (a.vertices[i].x !== b.vertices[i].x || a.vertices[i].y !== b.vertices[i].y) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Manhattan distance between a wire's two candidate sets, for the order. */
+function routeSpan(request: GridRouteRequest): number {
+  const source = endpointsCentre(request.sources);
+  const target = endpointsCentre(request.targets);
+  if (!source || !target) {
+    return 0;
+  }
+  return Math.abs(source.x - target.x) + Math.abs(source.y - target.y);
+}
+
+type Rect = { left: number; top: number; right: number; bottom: number };
+
+function endpointsRect(endpoints: GridEndpoint[]): Rect | undefined {
+  let left = Infinity;
+  let right = -Infinity;
+  let top = Infinity;
+  let bottom = -Infinity;
+  for (const endpoint of endpoints) {
+    if (!isFiniteEndpoint(endpoint)) {
+      continue;
+    }
+    if (endpoint.x < left) left = endpoint.x;
+    if (endpoint.x > right) right = endpoint.x;
+    if (endpoint.y < top) top = endpoint.y;
+    if (endpoint.y > bottom) bottom = endpoint.y;
+  }
+  if (left === Infinity) {
+    return undefined;
+  }
+  return { left, top, right, bottom };
+}
+
+function endpointsCentre(endpoints: GridEndpoint[]): GridPoint | undefined {
+  const rect = endpointsRect(endpoints);
+  return rect ? { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 } : undefined;
+}
+
+/** Forgets everything a wire holds: lanes, passers and both docks. */
+function ripUp(context: SolveContext, state: RouteState) {
+  const edgeId = state.request.edgeId;
+  context.occupancy.release(edgeId);
+  for (const [key, holder] of context.usedDocks) {
+    if (holder === edgeId) {
+      context.usedDocks.delete(key);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Dock planning                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A card's perimeter as one line: the distance clockwise from the top-left
+ * corner. Every candidate dock and every wire's ideal exit live on it, so
+ * "how far is this dock from where the wire wants to leave" is a subtraction.
+ */
+function perimeterParam(side: GridSide, x: number, y: number, rect: Rect): number {
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  switch (side) {
+    case "top":
+      return x - rect.left;
+    case "right":
+      return width + (y - rect.top);
+    case "bottom":
+      return width + height + (rect.right - x);
+    case "left":
+      return 2 * width + height + (rect.bottom - y);
+  }
+}
+
+interface DockEnd {
+  request: PlannedRequest;
+  end: "source" | "target";
+  cardId: string;
+  farCardId: string | undefined;
+  rect: Rect;
+  /** Where the wire would ideally leave, on the perimeter line. */
+  ideal: number;
+  /** The heading's angle round the card, for ordering ties at a corner. */
+  angle: number;
+  /** The ideal after siblings have been spread apart. */
+  planned: number;
+}
+
+/**
+ * Plans where every wire leaves and arrives, one card at a time.
+ *
+ * For each end with a card id and a choice of docks, the ideal exit is the
+ * rim point nearest the far end (the first waypoint, when there is one).
+ * Siblings on one card are sorted by that point around the rim - ties at a
+ * corner by the bearing of their destinations - and spread apart by a cell
+ * where they collide, so the order they dock in is the order their
+ * destinations lie in and no two of them need to cross each other to
+ * leave. Two wires between the SAME pair of cards want the same exit at
+ * both ends; they are ordered one way at one card and the other way at the
+ * other (which card is "first" is decided by id), so they run parallel
+ * instead of swapping over. The plan is soft: it becomes each candidate's
+ * `penalty`, and docks far from the plan are set aside (kept in
+ * `allSources` / `allTargets` for a wire that cannot route from the near
+ * ones). Returns copies; the caller's requests stand.
+ */
+function planDocks(requests: GridRouteRequest[]): PlannedRequest[] {
+  const byCard = new Map<string, DockEnd[]>();
+  const copies: PlannedRequest[] = requests.map((request) => ({
+    ...request,
+    sources: request.sources.filter(isFiniteEndpoint),
+    targets: request.targets.filter(isFiniteEndpoint),
+    allSources: request.sources.filter(isFiniteEndpoint),
+    allTargets: request.targets.filter(isFiniteEndpoint),
+  }));
+  for (const request of copies) {
+    for (const end of ["source", "target"] as const) {
+      const cardId = end === "source" ? request.sourceCardId : request.targetCardId;
+      const own = end === "source" ? request.sources : request.targets;
+      if (cardId === undefined || own.length < 2) {
+        continue;
+      }
+      const rect = endpointsRect(own);
+      const far = endpointsCentre(end === "source" ? request.targets : request.sources);
+      if (!rect || rect.right - rect.left <= 0 || rect.bottom - rect.top <= 0 || !far) {
+        continue;
+      }
+      const stops = request.waypoints ?? [];
+      const heading =
+        stops.length > 0 ? (end === "source" ? stops[0] : stops[stops.length - 1]) : far;
+      const centreX = (rect.left + rect.right) / 2;
+      const centreY = (rect.top + rect.bottom) / 2;
+      // Angle round the card, measured so it grows clockwise from the
+      // top-left corner like the perimeter line does.
+      const angle =
+        (Math.atan2(heading.y - centreY, heading.x - centreX) + Math.PI * 1.25 + Math.PI * 4) %
+        (Math.PI * 2);
+      const ideal = exitParam(rect, heading);
+      const dockEnd: DockEnd = {
+        request,
+        end,
+        cardId,
+        farCardId: end === "source" ? request.targetCardId : request.sourceCardId,
+        rect,
+        ideal,
+        angle,
+        planned: ideal,
+      };
+      const list = byCard.get(cardId);
+      if (list) {
+        list.push(dockEnd);
+      } else {
+        byCard.set(cardId, [dockEnd]);
+      }
+    }
+  }
+
+  for (const [cardId, ends] of byCard) {
+    ends.sort((left, right) => {
+      if (left.ideal !== right.ideal) {
+        return left.ideal - right.ideal;
+      }
+      if (left.angle !== right.angle) {
+        return left.angle - right.angle;
+      }
+      const byEdge =
+        left.request.edgeId < right.request.edgeId
+          ? -1
+          : left.request.edgeId > right.request.edgeId
+            ? 1
+            : 0;
+      // Same far card at both: mirror the order at the far side.
+      if (left.farCardId !== undefined && left.farCardId === right.farCardId) {
+        return cardId < left.farCardId ? byEdge : -byEdge;
+      }
+      return byEdge;
+    });
+    const rect = ends[0].rect;
+    const perimeter = 2 * (rect.right - rect.left + (rect.bottom - rect.top));
+    // The docks this card actually offers, once round the rim.
+    const dockParams = new Set<number>();
+    for (const dockEnd of ends) {
+      const own = dockEnd.end === "source" ? dockEnd.request.sources : dockEnd.request.targets;
+      for (const endpoint of own) {
+        dockParams.add(perimeterParam(endpoint.side, endpoint.x, endpoint.y, dockEnd.rect));
+      }
+    }
+    assignDocks(ends, [...dockParams].sort((a, b) => a - b));
+    for (const dockEnd of ends) {
+      const own = dockEnd.end === "source" ? dockEnd.request.sources : dockEnd.request.targets;
+      const priced: GridEndpoint[] = [];
+      for (const endpoint of own) {
+        const at = perimeterParam(endpoint.side, endpoint.x, endpoint.y, dockEnd.rect);
+        const gap = Math.abs(at - dockEnd.planned);
+        const distance = Math.min(gap, perimeter - gap);
+        if (distance <= (T.dockPlanWindow * BOARD_GRID) + 1e-6) {
+          priced.push({ ...endpoint, penalty: distance * T.dockPlanBias });
+        }
+      }
+      if (priced.length === 0) {
+        continue;
+      }
+      if (dockEnd.end === "source") {
+        dockEnd.request.sources = priced;
+      } else {
+        dockEnd.request.targets = priced;
+      }
+    }
+  }
+  return copies;
+}
+
+/**
+ * The rim point nearest `heading`: the side the destination is beyond, at
+ * the destination's own coordinate clamped to that side. Not a ray from the
+ * centre - on a tall card the centre sits far below a drawer parked over
+ * its top-right corner, and the ray leaves by the right side, sending the
+ * wire out sideways to climb across everything else leaving that side.
+ * Nearest-point sends it out the top, where it belongs. A heading inside
+ * the card (overlapping cards) falls back to the ray.
+ */
+function exitParam(rect: Rect, heading: GridPoint): number {
+  const clampX = Math.min(Math.max(heading.x, rect.left), rect.right);
+  const clampY = Math.min(Math.max(heading.y, rect.top), rect.bottom);
+  if (heading.y < rect.top) {
+    return perimeterParam("top", clampX, rect.top, rect);
+  }
+  if (heading.y > rect.bottom) {
+    return perimeterParam("bottom", clampX, rect.bottom, rect);
+  }
+  if (heading.x < rect.left) {
+    return perimeterParam("left", rect.left, clampY, rect);
+  }
+  if (heading.x > rect.right) {
+    return perimeterParam("right", rect.right, clampY, rect);
+  }
+  const halfWidth = (rect.right - rect.left) / 2;
+  const halfHeight = (rect.bottom - rect.top) / 2;
+  const centreX = rect.left + halfWidth;
+  const centreY = rect.top + halfHeight;
+  const dx = heading.x - centreX;
+  const dy = heading.y - centreY;
+  if (dx === 0 && dy === 0) {
+    return perimeterParam("right", rect.right, centreY, rect);
+  }
+  if (Math.abs(dx) * halfHeight >= Math.abs(dy) * halfWidth) {
+    const y = centreY + (dy * halfWidth) / Math.abs(dx);
+    return dx > 0
+      ? perimeterParam("right", rect.right, y, rect)
+      : perimeterParam("left", rect.left, y, rect);
+  }
+  const x = centreX + (dx * halfHeight) / Math.abs(dy);
+  return dy > 0
+    ? perimeterParam("bottom", x, rect.bottom, rect)
+    : perimeterParam("top", x, rect.top, rect);
+}
+
+/**
+ * Hands each of a card's wires (sorted round the rim) its own real dock, in
+ * that order, minimising the total distance from their ideals: a monotone
+ * matching by dynamic programming over ends x docks. Rim POSITIONS spread a
+ * cell apart were not enough - a corner keep-out leaves a stretch of rim
+ * with no docks at all, and four wires planned 20px apart round a corner
+ * all snapped to the same two docks. Matching onto the docks themselves
+ * keeps the bearing order AND gives every wire a different place to leave.
+ * More wires than docks: the overflow takes its nearest dock and shares.
+ */
+function assignDocks(ends: DockEnd[], docks: number[]) {
+  const n = ends.length;
+  const m = docks.length;
+  if (m === 0) {
+    return;
+  }
+  const matched = Math.min(n, m);
+  // dp[i][j]: least cost matching the first i ends into the first j docks.
+  const dp: Float64Array[] = [];
+  for (let i = 0; i <= matched; i += 1) {
+    dp.push(new Float64Array(m + 1).fill(Infinity));
+  }
+  dp[0].fill(0);
+  for (let i = 1; i <= matched; i += 1) {
+    for (let j = i; j <= m; j += 1) {
+      const skip = dp[i][j - 1];
+      const take = dp[i - 1][j - 1] + Math.abs(docks[j - 1] - ends[i - 1].ideal);
+      dp[i][j] = skip < take ? skip : take;
+    }
+  }
+  let j = m;
+  for (let i = matched; i >= 1; i -= 1) {
+    while (j > i && dp[i][j - 1] <= dp[i][j]) {
+      j -= 1;
+    }
+    ends[i - 1].planned = docks[j - 1];
+    j -= 1;
+  }
+  for (let i = matched; i < n; i += 1) {
+    let best = docks[0];
+    for (const dock of docks) {
+      if (Math.abs(dock - ends[i].ideal) < Math.abs(best - ends[i].ideal)) {
+        best = dock;
+      }
+    }
+    ends[i].planned = best;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* One wire                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Routes one wire against the board as it stands and installs the result.
+ * `previous` is the route it held before a rip-up: if nothing better can
+ * be found now, that route goes back rather than a fallback.
+ */
+function routeOne(
+  context: SolveContext,
+  request: PlannedRequest,
+  previous?: RouteFound,
+): RouteState {
+  const found = findRoute(context, request) ?? previous;
+  if (found) {
+    return install(context, request, found);
+  }
+  return {
+    request,
+    found: undefined,
+    routed: fallbackRoute(context, request),
+    crossings: 0,
+    overflowed: false,
+    stuck: false,
+  };
+}
+
+/** Claims the found route's lanes and docks and draws its polyline. */
+function install(context: SolveContext, request: PlannedRequest, found: RouteFound): RouteState {
+  context.usedDocks.set(dockKey(found.source), request.edgeId);
+  context.usedDocks.set(dockKey(found.target), request.edgeId);
+  const assembled = claimAndAssemble(context, request, found);
+  return {
+    request,
+    found,
+    routed: { edgeId: request.edgeId, points: assembled.points },
+    crossings: assembled.crossings,
+    overflowed: assembled.overflowed,
+    stuck: false,
+  };
+}
+
+/** The boxed-in L: the wire still exists, and may cross things. */
+function fallbackRoute(context: SolveContext, request: PlannedRequest): GridRoutedEdge {
+  const source = request.allSources[0];
+  const target = request.allTargets[0];
+  if (!source || !target) {
     return { edgeId: request.edgeId, points: [] };
   }
-  // The frames this wire lives inside are not obstacles to it. Filtered per
-  // request, not in the shared context: the same frame that lets a member
-  // wire through must still turn every foreign wire away.
-  const exempt = request.exemptObstacleIds;
-  const obstacles =
-    exempt && exempt.length > 0
-      ? context.obstacles.filter((obstacle) => !exempt.includes(obstacle.id))
-      : context.obstacles;
-  // The frames this wire is on its way OUT of, kept as rects: crossing is
-  // allowed, loitering is expensive (COST_INSIDE_EXEMPT). Frames holding
-  // BOTH ends are its home instead — there, leaving is what costs.
-  const home = request.homeObstacleIds;
-  const exemptRects =
-    exempt && exempt.length > 0
-      ? context.obstacles.filter(
-          (obstacle) =>
-            exempt.includes(obstacle.id) && !(home && home.includes(obstacle.id)),
-        )
-      : [];
-  const homeRects =
-    home && home.length > 0
-      ? context.obstacles.filter((obstacle) => home.includes(obstacle.id))
-      : [];
-  // A taken dock is off the menu — until the card is out of free ones, when
-  // sharing beats failing.
-  const freeSources = allSources.filter((e) => !context.usedDocks.has(dockKey(e)));
-  const freeTargets = allTargets.filter((e) => !context.usedDocks.has(dockKey(e)));
-  const sources = freeSources.length > 0 ? freeSources : allSources;
-  const targets = freeTargets.length > 0 ? freeTargets : allTargets;
-  const waypoints = (request.waypoints ?? []).filter(
-    (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
-  );
-
-  let pad = WINDOW_PAD;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const routed = routeWithinWindow(context, obstacles, exemptRects, homeRects, request, sources, targets, waypoints, pad);
-    if (routed === SEALED) {
-      break;
-    }
-    if (routed) {
-      return routed;
-    }
-    pad *= WINDOW_GROWTH;
-  }
-  // Waypoints that cannot be reached (parked inside a card's margin, sealed
-  // off) must not cost the wire its route: try again without them.
-  if (waypoints.length > 0) {
-    pad = WINDOW_PAD;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const routed = routeWithinWindow(context, obstacles, exemptRects, homeRects, request, sources, targets, [], pad);
-      if (routed === SEALED) {
-        break;
-      }
-      if (routed) {
-        return routed;
-      }
-      pad *= WINDOW_GROWTH;
-    }
-  }
-
-  // Boxed in (touching cards, sealed pockets): a plain L so the wire still
-  // exists. It may cross things; there was no legal grid path to take.
-  const source = sources[0];
-  const target = targets[0];
-  context.usedDocks.add(dockKey(source));
-  context.usedDocks.add(dockKey(target));
+  context.usedDocks.set(dockKey(source), request.edgeId);
+  context.usedDocks.set(dockKey(target), request.edgeId);
   const sourceApron = apronPoint(source);
   const targetApron = apronPoint(target);
   return {
@@ -715,244 +1522,326 @@ function routeOne(context: SolveContext, request: GridRouteRequest): GridRoutedE
   };
 }
 
-function isFiniteEndpoint(endpoint: GridEndpoint): boolean {
-  return Number.isFinite(endpoint.x) && Number.isFinite(endpoint.y);
+function findRoute(context: SolveContext, request: PlannedRequest): RouteFound | undefined {
+  if (request.allSources.length === 0 || request.allTargets.length === 0) {
+    return undefined;
+  }
+  // The frames this wire lives inside are not obstacles to it. Filtered per
+  // request, not in the shared context: the same frame that lets a member
+  // wire through must still turn every foreign wire away.
+  const exempt = request.exemptObstacleIds;
+  const obstacles =
+    exempt && exempt.length > 0
+      ? context.obstacles.filter((obstacle) => !exempt.includes(obstacle.id))
+      : context.obstacles;
+  const home = request.homeObstacleIds;
+  const exemptRects =
+    exempt && exempt.length > 0
+      ? context.obstacles.filter(
+          (obstacle) => exempt.includes(obstacle.id) && !(home && home.includes(obstacle.id)),
+        )
+      : [];
+  const homeRects =
+    home && home.length > 0
+      ? context.obstacles.filter((obstacle) => home.includes(obstacle.id))
+      : [];
+  const waypoints = (request.waypoints ?? []).filter(
+    (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
+  );
+
+  // The planned docks first; the whole rim if those cannot route. A dock
+  // another wire already uses costs `dockShare` more but stays on the
+  // menu: when one side of a drawer is where every wire wants to be, they
+  // stack onto it one after another rather than being sent round the back.
+  const menus: Array<[GridEndpoint[], GridEndpoint[]]> = [[request.sources, request.targets]];
+  if (
+    request.allSources.length > request.sources.length ||
+    request.allTargets.length > request.targets.length
+  ) {
+    menus.push([request.allSources, request.allTargets]);
+  }
+  const priceTaken = (endpoints: GridEndpoint[]): GridEndpoint[] =>
+    endpoints.map((endpoint) =>
+      context.usedDocks.has(dockKey(endpoint))
+        ? { ...endpoint, penalty: (endpoint.penalty ?? 0) + T.dockShare }
+        : endpoint,
+    );
+  // A route that paid for a crossing is not an answer, it is a reason to
+  // look further: first the whole rim (the way round may be a dock the
+  // plan set aside - a wire trapped under a card's bottom leaves by its
+  // side), then a bigger window (the way round may be over the top of a
+  // tall card, far outside the box the ends span). The cheapest wins; a
+  // clean route ends the search at once, so an ordinary wire pays for
+  // one search.
+  let best: RouteFound | undefined;
+  const consider = (found: RouteFound): boolean => {
+    if (!best || found.cost < best.cost) {
+      best = found;
+    }
+    return found.cost < T.crossing;
+  };
+  // Two rungs: the planned docks inside the wire's own box, then the whole
+  // rim across the whole board (windows are clamped to the board, so that
+  // is the last rung there can be). A middle rung bought little and was
+  // climbed hundreds of times on a busy board.
+  const rungs: Array<[GridEndpoint[], GridEndpoint[], number, number]> = [
+    [request.sources, request.targets, T.windowPad * BOARD_GRID, 1],
+  ];
+  const last = menus[menus.length - 1];
+  rungs.push([last[0], last[1], WIDE_RUNG_CELLS * BOARD_GRID, BOARD_RUNG_WEIGHT]);
+  // Waypoints that cannot be reached (parked inside a card's margin,
+  // sealed off) must not cost the wire its route: try again without.
+  for (const stops of waypoints.length > 0 ? [waypoints, []] : [[]]) {
+    for (const [menuSources, menuTargets, pad, weight] of rungs) {
+      if (pad > T.windowPad * BOARD_GRID && workPops >= context.widePopCap) {
+        break;
+      }
+      const routed = routeWithinWindow(
+        context,
+        obstacles,
+        exemptRects,
+        homeRects,
+        request,
+        priceTaken(menuSources),
+        priceTaken(menuTargets),
+        stops,
+        pad,
+        weight,
+      );
+      if (routed === SEALED) {
+        break;
+      }
+      if (routed && consider(routed)) {
+        return routed;
+      }
+    }
+    if (best) {
+      break;
+    }
+  }
+  return best;
 }
+
+/* ------------------------------------------------------------------ */
+/* The search                                                          */
+/* ------------------------------------------------------------------ */
 
 function routeWithinWindow(
   context: SolveContext,
   obstacles: GridObstacle[],
   exemptRects: GridObstacle[],
   homeRects: GridObstacle[],
-  request: GridRouteRequest,
+  request: PlannedRequest,
   sources: GridEndpoint[],
   targets: GridEndpoint[],
   waypoints: GridPoint[],
   pad: number,
-): GridRoutedEdge | typeof SEALED | undefined {
+  /**
+   * Heuristic weight. 1 is plain A* and finds the cheapest route; above 1
+   * (the whole-board rung) the search trusts the distance more, explores a
+   * fraction of the states, and may miss a slightly cheaper detour - a
+   * fair trade for a fallback whose job is finding a way round at all.
+   */
+  weight: number,
+): RouteFound | typeof SEALED | undefined {
+  const toCell = (value: number) => Math.round(value / BOARD_GRID);
   const sourceAprons = sources.map(apronPoint);
   const targetAprons = targets.map(apronPoint);
   const stops = waypoints.map((point) => ({ x: snapLine(point.x), y: snapLine(point.y) }));
 
-  let windowLeft = Infinity;
-  let windowRight = -Infinity;
-  let windowTop = Infinity;
-  let windowBottom = -Infinity;
+  let left = Infinity;
+  let right = -Infinity;
+  let top = Infinity;
+  let bottom = -Infinity;
   for (const point of [...sourceAprons, ...targetAprons, ...stops]) {
-    if (point.x < windowLeft) windowLeft = point.x;
-    if (point.x > windowRight) windowRight = point.x;
-    if (point.y < windowTop) windowTop = point.y;
-    if (point.y > windowBottom) windowBottom = point.y;
+    if (point.x < left) left = point.x;
+    if (point.x > right) right = point.x;
+    if (point.y < top) top = point.y;
+    if (point.y > bottom) bottom = point.y;
   }
-  const span = windowRight - windowLeft + (windowBottom - windowTop);
-  const grownPad = Math.max(pad, 0.5 * span);
-  windowLeft -= grownPad;
-  windowRight += grownPad;
-  windowTop -= grownPad;
-  windowBottom += grownPad;
-
-  // Candidate lines: every card boundary pushed one and two cells out (the
-  // travel lane and its overflow neighbour), plus each endpoint's own apron
-  // lines and each waypoint's cross so starts, goals, and stops all exist
-  // in the graph.
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (const obstacle of obstacles) {
-    if (
-      obstacle.right < windowLeft - 2 * BOARD_GRID ||
-      obstacle.left > windowRight + 2 * BOARD_GRID ||
-      obstacle.bottom < windowTop - 2 * BOARD_GRID ||
-      obstacle.top > windowBottom + 2 * BOARD_GRID
-    ) {
-      continue;
-    }
-    const left = snapLine(obstacle.left);
-    const right = snapLine(obstacle.right);
-    const top = snapLine(obstacle.top);
-    const bottom = snapLine(obstacle.bottom);
-    xs.push(left - BOARD_GRID, left - 2 * BOARD_GRID, right + BOARD_GRID, right + 2 * BOARD_GRID);
-    ys.push(top - BOARD_GRID, top - 2 * BOARD_GRID, bottom + BOARD_GRID, bottom + 2 * BOARD_GRID);
-  }
-  for (const point of [...sourceAprons, ...targetAprons, ...stops]) {
-    xs.push(point.x);
-    ys.push(point.y);
-  }
-  // The window's own edges, so two far-apart cards always have an outer
-  // corridor between them even when nothing else contributes a line.
-  xs.push(snapLine(windowLeft), snapLine(windowRight));
-  ys.push(snapLine(windowTop), snapLine(windowBottom));
-
-  const xAxis = buildAxis(xs.filter((x) => x >= windowLeft && x <= windowRight));
-  const yAxis = buildAxis(ys.filter((y) => y >= windowTop && y <= windowBottom));
-  if (xAxis.coords.length === 0 || yAxis.coords.length === 0) {
-    return undefined;
-  }
-
-  const windowObstacles = obstacles.filter(
-    (obstacle) =>
-      obstacle.right >= windowLeft &&
-      obstacle.left <= windowRight &&
-      obstacle.bottom >= windowTop &&
-      obstacle.top <= windowBottom,
-  );
-  // For a vertical line x=v: blocked while v is strictly inside the inflated
-  // horizontal span, over the inflated vertical extent (and vice versa).
-  const verticalBlocked = buildBlocked(
-    xAxis.coords,
-    windowObstacles,
-    (o) => [o.left, o.right],
-    (o) => [o.top, o.bottom],
-  );
-  const horizontalBlocked = buildBlocked(
-    yAxis.coords,
-    windowObstacles,
-    (o) => [o.top, o.bottom],
-    (o) => [o.left, o.right],
-  );
-
-  const xCount = xAxis.coords.length;
-  const yCount = yAxis.coords.length;
-  const stateCount = xCount * yCount * 4;
+  // The window is the ends' own box plus the pad: with turns and crossings
+  // priced, the search sweeps most of its window whatever the heuristic
+  // says, so the window IS the cost. A wire that cannot route inside it
+  // gets a bigger one (WINDOW_GROWTH), not every wire a big one.
+  // Clamped to the board's own extent (plus a cell): growing past the
+  // last card adds nothing a wire could use.
+  const board = context.board;
+  const cx0 = Math.max(toCell(left - pad), board.x0);
+  const cx1 = Math.min(toCell(right + pad), board.x0 + board.width - 1);
+  const cy0 = Math.max(toCell(top - pad), board.y0);
+  const cy1 = Math.min(toCell(bottom + pad), board.y0 + board.height - 1);
+  const width = cx1 - cx0 + 1;
+  const height = cy1 - cy0 + 1;
+  const vertexCount = width * height;
+  const stateCount = vertexCount * 8;
   const maxPops = Math.max(MIN_ASTAR_POPS, stateCount * ASTAR_POPS_PER_STATE);
 
-  // Where a run sits relative to the frames that matter to it. The border
-  // line itself counts as inside.
-  const touches = (
-    rect: GridObstacle,
-    horizontal: boolean,
-    laneLine: number,
-    spanLo: number,
-    spanHi: number,
-  ): boolean =>
-    horizontal
-      ? laneLine >= rect.top - 1e-6 &&
-        laneLine <= rect.bottom + 1e-6 &&
-        spanHi > rect.left - 1e-6 &&
-        spanLo < rect.right + 1e-6
-      : laneLine >= rect.left - 1e-6 &&
-        laneLine <= rect.right + 1e-6 &&
-        spanHi > rect.top - 1e-6 &&
-        spanLo < rect.bottom + 1e-6;
-  const within = (
-    rect: GridObstacle,
-    horizontal: boolean,
-    laneLine: number,
-    spanLo: number,
-    spanHi: number,
-  ): boolean =>
-    horizontal
-      ? laneLine >= rect.top - 1e-6 &&
-        laneLine <= rect.bottom + 1e-6 &&
-        spanLo >= rect.left - 1e-6 &&
-        spanHi <= rect.right + 1e-6
-      : laneLine >= rect.left - 1e-6 &&
-        laneLine <= rect.right + 1e-6 &&
-        spanLo >= rect.top - 1e-6 &&
-        spanHi <= rect.bottom + 1e-6;
-
-  // Runs are indexed by their lower vertex and axis: (vertex x 2) for the
-  // horizontal run to the next x line, (vertex x 2 + 1) for the vertical
-  // run to the next y line. Priced lazily, once per attempt (see the pool).
-  const runGeneration = acquireRunGeneration(xCount * yCount * 2);
-  const runStamp = runPoolStamp;
-  const runCosts = runPoolCost;
-  const priceRun = (runIndex: number, xi: number, yi: number, horizontal: boolean): number => {
-    if (runStamp[runIndex] === runGeneration) {
-      return runCosts[runIndex];
+  // Per-vertex flags. Blocked: strictly inside a margin-inflated card (the
+  // margin boundary itself stays legal). Exempt/home: on or inside a frame.
+  ensureCellPool(vertexCount);
+  const blocked = cellBlocked;
+  const exemptFlag = cellExempt;
+  const homeFlag = cellHome;
+  blocked.fill(0, 0, vertexCount);
+  const hasExempt = exemptRects.length > 0;
+  const hasHome = homeRects.length > 0;
+  if (hasExempt) exemptFlag.fill(0, 0, vertexCount);
+  if (hasHome) homeFlag.fill(0, 0, vertexCount);
+  const vertexAt = (xi: number, yi: number) => xi * height + yi;
+  const fillRect = (flags: Uint8Array, rect: GridObstacle, inflate: number, strict: boolean) => {
+    // Cells whose coordinate lies within (strict) or on (loose) the rect.
+    const epsilon = strict ? 1e-6 : -1e-6;
+    const xa = Math.max(Math.ceil((rect.left - inflate + epsilon) / BOARD_GRID), cx0);
+    const xb = Math.min(Math.floor((rect.right + inflate - epsilon) / BOARD_GRID), cx1);
+    const ya = Math.max(Math.ceil((rect.top - inflate + epsilon) / BOARD_GRID), cy0);
+    const yb = Math.min(Math.floor((rect.bottom + inflate - epsilon) / BOARD_GRID), cy1);
+    for (let x = xa; x <= xb; x += 1) {
+      for (let y = ya; y <= yb; y += 1) {
+        flags[vertexAt(x - cx0, y - cy0)] = 1;
+      }
     }
-    runStamp[runIndex] = runGeneration;
-    let laneLine: number;
-    let from: number;
-    let to: number;
-    let free: boolean;
-    if (horizontal) {
-      laneLine = yAxis.coords[yi];
-      from = xAxis.coords[xi];
-      to = xAxis.coords[xi + 1];
-      free = runIsFree(horizontalBlocked.byLine[yi], from, to);
-    } else {
-      laneLine = xAxis.coords[xi];
-      from = yAxis.coords[yi];
-      to = yAxis.coords[yi + 1];
-      free = runIsFree(verticalBlocked.byLine[xi], from, to);
+  };
+  for (const obstacle of obstacles) {
+    fillRect(blocked, obstacle, WIRE_NODE_MARGIN, true);
+  }
+  for (const rect of exemptRects) {
+    fillRect(exemptFlag, rect, 0, false);
+  }
+  for (const rect of homeRects) {
+    fillRect(homeFlag, rect, 0, false);
+  }
+
+  const inWindow = (xi: number, yi: number) => xi >= 0 && xi < width && yi >= 0 && yi < height;
+
+  // Steps are undirected and keyed by their lower vertex: (vertex x 4 + k)
+  // for k = 0 E, 1 SE, 2 S, 3 SW. Priced lazily, once per attempt.
+  const stepGeneration = acquireStepGeneration(vertexCount * 4);
+  const stepStamp = stepPoolStamp;
+  const stepCosts = stepPoolCost;
+  /** Cost of the step from (xi,yi) in direction dir, or STEP_BLOCKED. */
+  const priceStep = (xi: number, yi: number, dir: number): number => {
+    const nxi = xi + DIR_DX[dir];
+    const nyi = yi + DIR_DY[dir];
+    if (!inWindow(nxi, nyi)) {
+      return STEP_BLOCKED;
+    }
+    // Canonical orientation: E, SE, S, SW from the lower vertex.
+    const stepIndex = dir < 4 ? vertexAt(xi, yi) * 4 + dir : vertexAt(nxi, nyi) * 4 + (dir - 4);
+    if (stepStamp[stepIndex] === stepGeneration) {
+      return stepCosts[stepIndex];
+    }
+    stepStamp[stepIndex] = stepGeneration;
+    workPriced += 1;
+    const a = vertexAt(xi, yi);
+    const b = vertexAt(nxi, nyi);
+    let free = blocked[a] === 0 && blocked[b] === 0 && (T.diagonals || (dir & 1) === 0);
+    if (free && (dir & 1) === 1) {
+      // No corner cutting: a diagonal needs both orthogonal neighbours free.
+      free = blocked[vertexAt(nxi, yi)] === 0 && blocked[vertexAt(xi, nyi)] === 0;
     }
     if (!free) {
-      runCosts[runIndex] = RUN_BLOCKED;
-      return RUN_BLOCKED;
+      stepCosts[stepIndex] = STEP_BLOCKED;
+      return STEP_BLOCKED;
     }
-    const distance = to - from;
-    const used = context.occupancy.usedWidth(horizontal ? "h" : "v", laneLine, from, to);
-    const fits = used === 0 || used + LANE_GAP + request.strokeWidth <= LANE_CAPACITY;
-    const factor = used === 0 ? COST_EMPTY : fits ? COST_SHARED : COST_OVERFLOW;
+    const axis = DIR_AXIS[dir];
+    const capacity = axis >= 2 ? T.diagonalLaneCapacity : LANE_CAPACITY;
+    const used = context.occupancy.usedWidth(axis, xi + cx0, yi + cy0, nxi + cx0, nyi + cy0);
+    const fits = used === 0 || used + LANE_GAP + request.strokeWidth <= capacity;
+    const factor = used === 0 ? T.costEmpty : fits ? T.costShared : T.costOverflow;
     // Loitering in a frame the wire is leaving costs; so does straying out
-    // of the frame it lives in. A run only counts as home when it lies
-    // wholly inside - a run half out is already the excursion.
-    let insideExempt = false;
-    for (const rect of exemptRects) {
-      if (touches(rect, horizontal, laneLine, from, to)) {
-        insideExempt = true;
-        break;
-      }
+    // of the frame it lives in.
+    let framePenalty = 1;
+    if (hasExempt && (exemptFlag[a] === 1 || exemptFlag[b] === 1)) {
+      framePenalty = T.costInsideExempt;
+    } else if (hasHome && (homeFlag[a] === 0 || homeFlag[b] === 0)) {
+      framePenalty = T.costOutsideHome;
     }
-    let strayedFromHome = false;
-    for (const rect of homeRects) {
-      if (!within(rect, horizontal, laneLine, from, to)) {
-        strayedFromHome = true;
-        break;
-      }
-    }
-    const framePenalty = insideExempt
-      ? COST_INSIDE_EXEMPT
-      : strayedFromHome
-        ? COST_OUTSIDE_HOME
-        : 1;
-    const cost = distance * factor * framePenalty;
-    runCosts[runIndex] = cost;
+    const crossings = context.occupancy.stepCrossings(
+      axis,
+      xi + cx0,
+      yi + cy0,
+      nxi + cx0,
+      nyi + cy0,
+      true,
+    );
+    const cost = DIR_LENGTH[dir] * factor * framePenalty + crossings * T.crossing;
+    stepCosts[stepIndex] = cost;
     return cost;
   };
 
   const vertexOf = (point: GridPoint): number | undefined => {
-    const xi = xAxis.index.get(point.x);
-    const yi = yAxis.index.get(point.y);
-    return xi === undefined || yi === undefined ? undefined : xi * yCount + yi;
+    const xi = toCell(point.x) - cx0;
+    const yi = toCell(point.y) - cy0;
+    return inWindow(xi, yi) ? vertexAt(xi, yi) : undefined;
   };
 
-  const starts: Array<{ vertex: number; endpointIndex: number }> = [];
-  for (let i = 0; i < sourceAprons.length; i += 1) {
-    const vertex = vertexOf(sourceAprons[i]);
-    if (vertex !== undefined) {
-      starts.push({ vertex, endpointIndex: i });
-    }
+  // Ends: the apron (one cell out) and the clean point (T.cleanCells out
+  // along the normal), when the straight run to it is open.
+  interface EndVertex {
+    endpointIndex: number;
+    apron: number;
+    clean: number | undefined;
+    /** Outward direction of the port. */
+    outward: number;
+    /** Cost of the straight run apron -> clean point. */
+    cleanCost: number;
   }
-  const goals = new Map<number, number>();
-  for (let i = 0; i < targetAprons.length; i += 1) {
-    const vertex = vertexOf(targetAprons[i]);
-    if (vertex !== undefined && !goals.has(vertex)) {
-      goals.set(vertex, i);
+  const endVertices = (endpoints: GridEndpoint[], aprons: GridPoint[]): EndVertex[] => {
+    const list: EndVertex[] = [];
+    for (let i = 0; i < endpoints.length; i += 1) {
+      const apron = vertexOf(aprons[i]);
+      if (apron === undefined || blocked[apron] === 1) {
+        continue;
+      }
+      const outward = outwardDirection(endpoints[i].side);
+      let clean: number | undefined = apron;
+      let cleanCost = 0;
+      for (let step = 1; step < T.cleanCells && clean !== undefined; step += 1) {
+        const xi = Math.floor(clean / height);
+        const yi = clean % height;
+        const cost = priceStep(xi, yi, outward);
+        if (cost === STEP_BLOCKED) {
+          clean = undefined;
+        } else {
+          clean = vertexAt(xi + DIR_DX[outward], yi + DIR_DY[outward]);
+          cleanCost += cost;
+        }
+      }
+      list.push({
+        endpointIndex: i,
+        apron,
+        clean: clean === apron ? undefined : clean,
+        outward,
+        cleanCost,
+      });
     }
-  }
-  if (starts.length === 0 || goals.size === 0) {
+    return list;
+  };
+  const starts = endVertices(sources, sourceAprons);
+  const ends = endVertices(targets, targetAprons);
+  if (starts.length === 0 || ends.length === 0) {
     return undefined;
   }
   const stopVertices: number[] = [];
   for (const stop of stops) {
     const vertex = vertexOf(stop);
-    if (vertex === undefined) {
+    if (vertex === undefined || blocked[vertex] === 1) {
       return undefined;
     }
     stopVertices.push(vertex);
   }
 
   /**
-   * Cost-free flood over free runs from a seed set: does it reach any of
-   * `wanted`, and does it touch the window border? Prices the runs it walks,
-   * which the A* then reads back for free.
+   * Cost-free flood over free steps from a seed set: does it reach any of
+   * `wanted`, and does it touch the window border? Four-connected: a
+   * diagonal step needs both orthogonal neighbours free anyway, so it never
+   * reaches anything the orthogonal steps cannot.
    */
   const flood = (
     seedVertices: Iterable<number>,
-    wanted: Map<number, number>,
+    wanted: Set<number>,
   ): { reached: boolean; touchedBorder: boolean } => {
-    const generation = acquireFloodGeneration(xCount * yCount);
+    const generation = acquireFloodGeneration(vertexCount);
     const stamp = floodPoolStamp;
     const queue = floodPoolQueue;
     let head = 0;
@@ -971,26 +1860,16 @@ function routeWithinWindow(
       if (wanted.has(vertex)) {
         return { reached: true, touchedBorder };
       }
-      const xi = Math.floor(vertex / yCount);
-      const yi = vertex % yCount;
-      if (xi === 0 || yi === 0 || xi === xCount - 1 || yi === yCount - 1) {
+      const xi = Math.floor(vertex / height);
+      const yi = vertex % height;
+      if (xi === 0 || yi === 0 || xi === width - 1 || yi === height - 1) {
         touchedBorder = true;
       }
-      for (let dir = 0; dir < 4; dir += 1) {
-        const { dx, dy } = DIRECTIONS[dir];
-        const nxi = xi + dx;
-        const nyi = yi + dy;
-        if (nxi < 0 || nxi >= xCount || nyi < 0 || nyi >= yCount) {
+      for (let dir = 0; dir < 8; dir += 2) {
+        if (priceStep(xi, yi, dir) === STEP_BLOCKED) {
           continue;
         }
-        const runCost =
-          dy === 0
-            ? priceRun(((dx < 0 ? nxi : xi) * yCount + yi) * 2, dx < 0 ? nxi : xi, yi, true)
-            : priceRun((xi * yCount + (dy < 0 ? nyi : yi)) * 2 + 1, xi, dy < 0 ? nyi : yi, false);
-        if (runCost === RUN_BLOCKED) {
-          continue;
-        }
-        const next = nxi * yCount + nyi;
+        const next = vertexAt(xi + DIR_DX[dir], yi + DIR_DY[dir]);
         if (stamp[next] !== generation) {
           stamp[next] = generation;
           queue[tail] = next;
@@ -1005,16 +1884,14 @@ function routeWithinWindow(
   // touches the border: sealed, no window will do. Unreachable but both
   // regions reach the border: the way round lies outside, so grow.
   if (stopVertices.length === 0) {
-    const startVertices = new Map<number, number>();
-    for (const start of starts) {
-      startVertices.set(start.vertex, start.endpointIndex);
-    }
-    const fromStarts = flood(startVertices.keys(), goals);
+    const startSet = new Set(starts.map((start) => start.apron));
+    const goalSet = new Set(ends.map((end) => end.apron));
+    const fromStarts = flood(startSet, goalSet);
     if (!fromStarts.reached) {
       if (!fromStarts.touchedBorder) {
         return SEALED;
       }
-      const fromGoals = flood(goals.keys(), startVertices);
+      const fromGoals = flood(goalSet, startSet);
       return fromGoals.touchedBorder ? undefined : SEALED;
     }
   }
@@ -1024,48 +1901,96 @@ function routeWithinWindow(
     g: number;
     startIndex: number;
   }
+  interface LegGoal {
+    vertex: number;
+    /** Required arrival direction, or -1 for any. */
+    dir: number;
+    penalty: number;
+    endpointIndex: number;
+    /** Vertices to append after the goal (the clean run into the apron). */
+    tail: number[];
+  }
   interface LegResult {
     startIndex: number;
     arrivalDir: number;
-    vertices: GridPoint[];
-    goalVertex: number;
+    vertices: number[];
+    goal: LegGoal;
+    cost: number;
   }
 
   /**
-   * One A* leg over the shared graph. Seeds are (vertex, direction) states
-   * with starting costs; goals map vertex to endpoint index; goalPenalty is
-   * the dock's centre-bias cost, paid when finishing there. The best
-   * (g + penalty) goal wins, not the first popped.
+   * One A* leg over the grid. Seeds are (vertex, direction) states with
+   * starting costs; goals name a vertex, the direction it must be reached
+   * in, and a penalty paid on finishing there. The best (g + penalty) goal
+   * wins, not the first popped.
    */
-  const searchLeg = (
-    seeds: LegSeed[],
-    legGoals: Map<number, number>,
-    goalPenalty: (goalIndex: number) => number,
-    goalAprons: GridPoint[],
-  ): LegResult | undefined => {
+  const searchLeg = (seeds: LegSeed[], goals: LegGoal[]): LegResult | undefined => {
+    workSearches += 1;
+    const goalsByVertex = new Map<number, LegGoal[]>();
     let goalLeft = Infinity;
     let goalRight = -Infinity;
     let goalTop = Infinity;
     let goalBottom = -Infinity;
-    for (const apron of goalAprons) {
-      if (apron.x < goalLeft) goalLeft = apron.x;
-      if (apron.x > goalRight) goalRight = apron.x;
-      if (apron.y < goalTop) goalTop = apron.y;
-      if (apron.y > goalBottom) goalBottom = apron.y;
+    for (const goal of goals) {
+      const list = goalsByVertex.get(goal.vertex);
+      if (list) {
+        list.push(goal);
+      } else {
+        goalsByVertex.set(goal.vertex, [goal]);
+      }
+      const xi = Math.floor(goal.vertex / height);
+      const yi = goal.vertex % height;
+      if (xi < goalLeft) goalLeft = xi;
+      if (xi > goalRight) goalRight = xi;
+      if (yi < goalTop) goalTop = yi;
+      if (yi > goalBottom) goalBottom = yi;
     }
-    // Distance to the goal set's bounding box: a lower bound on the distance
-    // to any goal, so admissibility holds at COST_EMPTY per pixel.
-    const heuristic = (vertex: number): number => {
-      const x = xAxis.coords[Math.floor(vertex / yCount)];
-      const y = yAxis.coords[vertex % yCount];
-      const dx = x < goalLeft ? goalLeft - x : x > goalRight ? x - goalRight : 0;
-      const dy = y < goalTop ? goalTop - y : y > goalBottom ? y - goalBottom : 0;
-      return (dx + dy) * COST_EMPTY;
+    // Octile distance to the goal set's bounding box, plus one 45° bend
+    // when the box is not straight ahead in the state's own direction: a
+    // lower bound on any path's cost, so admissibility holds - and a much
+    // tighter one than distance alone once turns cost real money, which is
+    // what keeps the search from sweeping the whole window.
+    const minTurn = Math.min(T.turn45, T.turn90);
+    const heuristic = (state: number): number => {
+      const vertex = state >> 3;
+      const dir = state & 7;
+      const xi = Math.floor(vertex / height);
+      const yi = vertex % height;
+      const dx = xi < goalLeft ? goalLeft - xi : xi > goalRight ? xi - goalRight : 0;
+      const dy = yi < goalTop ? goalTop - yi : yi > goalBottom ? yi - goalBottom : 0;
+      const diagonal = dx < dy ? dx : dy;
+      const straight = (dx > dy ? dx : dy) - diagonal;
+      let cost = (straight * BOARD_GRID + diagonal * DIAGONAL_LENGTH) * T.costEmpty * weight;
+      if (dx !== 0 || dy !== 0) {
+        // Does a ray from here in `dir` hit the box? Intersect the ray
+        // parameter intervals per axis.
+        const ddx = DIR_DX[dir];
+        const ddy = DIR_DY[dir];
+        let lo = 0;
+        let hi = Infinity;
+        if (ddx === 0) {
+          if (xi < goalLeft || xi > goalRight) hi = -1;
+        } else {
+          const a = (goalLeft - xi) / ddx;
+          const b = (goalRight - xi) / ddx;
+          lo = Math.max(lo, Math.min(a, b));
+          hi = Math.min(hi, Math.max(a, b));
+        }
+        if (ddy === 0) {
+          if (yi < goalTop || yi > goalBottom) hi = -1;
+        } else {
+          const a = (goalTop - yi) / ddy;
+          const b = (goalBottom - yi) / ddy;
+          lo = Math.max(lo, Math.min(a, b));
+          hi = Math.min(hi, Math.max(a, b));
+        }
+        if (hi < lo) {
+          cost += minTurn;
+        }
+      }
+      return cost;
     };
 
-    // Pooled state (see acquireSearchGeneration): a state whose stamp is not
-    // this generation has never been touched this leg, and its first access
-    // initialises it to the Infinity / -1 the per-leg fill() used to write.
     const generation = acquireSearchGeneration(stateCount);
     const stamp = searchPoolStamp;
     const gScores = searchPoolG;
@@ -1082,31 +2007,30 @@ function routeWithinWindow(
 
     let heapSize = 0;
     let seq = 0;
-    const heapLess = (left: number, right: number): boolean => {
-      const df = searchHeapF[left] - searchHeapF[right];
+    const heapLess = (leftIndex: number, rightIndex: number): boolean => {
+      const df = searchHeapF[leftIndex] - searchHeapF[rightIndex];
       if (df !== 0) {
         return df < 0;
       }
-      const dg = searchHeapG[left] - searchHeapG[right];
+      const dg = searchHeapG[leftIndex] - searchHeapG[rightIndex];
       if (dg !== 0) {
         return dg < 0;
       }
-      // Monotone tiebreak keeps the pop order deterministic.
-      return searchHeapSeq[left] < searchHeapSeq[right];
+      return searchHeapSeq[leftIndex] < searchHeapSeq[rightIndex];
     };
-    const heapSwap = (left: number, right: number) => {
-      const f = searchHeapF[left];
-      searchHeapF[left] = searchHeapF[right];
-      searchHeapF[right] = f;
-      const g = searchHeapG[left];
-      searchHeapG[left] = searchHeapG[right];
-      searchHeapG[right] = g;
-      const state = searchHeapState[left];
-      searchHeapState[left] = searchHeapState[right];
-      searchHeapState[right] = state;
-      const entrySeq = searchHeapSeq[left];
-      searchHeapSeq[left] = searchHeapSeq[right];
-      searchHeapSeq[right] = entrySeq;
+    const heapSwap = (leftIndex: number, rightIndex: number) => {
+      const f = searchHeapF[leftIndex];
+      searchHeapF[leftIndex] = searchHeapF[rightIndex];
+      searchHeapF[rightIndex] = f;
+      const g = searchHeapG[leftIndex];
+      searchHeapG[leftIndex] = searchHeapG[rightIndex];
+      searchHeapG[rightIndex] = g;
+      const state = searchHeapState[leftIndex];
+      searchHeapState[leftIndex] = searchHeapState[rightIndex];
+      searchHeapState[rightIndex] = state;
+      const entrySeq = searchHeapSeq[leftIndex];
+      searchHeapSeq[leftIndex] = searchHeapSeq[rightIndex];
+      searchHeapSeq[rightIndex] = entrySeq;
     };
     const push = (f: number, g: number, state: number) => {
       ensureSearchHeapCapacity(heapSize + 1);
@@ -1125,7 +2049,6 @@ function routeWithinWindow(
         i = parent;
       }
     };
-    /** Pops the heap top into popF/popG/popState. False when empty. */
     let popF = 0;
     let popG = 0;
     let popState = 0;
@@ -1168,12 +2091,13 @@ function routeWithinWindow(
       if (seed.g < gScores[seed.state]) {
         gScores[seed.state] = seed.g;
         startOf[seed.state] = seed.startIndex;
-        push(seed.g + heuristic(Math.floor(seed.state / 4)), seed.g, seed.state);
+        push(seed.g + heuristic(seed.state), seed.g, seed.state);
       }
     }
 
     let goalState = -1;
     let goalCost = Infinity;
+    let goalHit: LegGoal | undefined;
     let pops = 0;
     while (pop()) {
       const currentF = popF;
@@ -1186,286 +2110,451 @@ function routeWithinWindow(
         continue;
       }
       pops += 1;
+      workPops += 1;
       if (pops > maxPops) {
         return undefined;
       }
-      const vertex = Math.floor(currentState / 4);
-      const currentDir = currentState % 4;
-      const goalIndex = legGoals.get(vertex);
-      if (goalIndex !== undefined) {
-        const cost = currentG + goalPenalty(goalIndex);
-        if (cost < goalCost) {
-          goalCost = cost;
-          goalState = currentState;
+      const vertex = currentState >> 3;
+      const currentDir = currentState & 7;
+      const here = goalsByVertex.get(vertex);
+      if (here) {
+        for (const goal of here) {
+          if (goal.dir !== -1 && goal.dir !== currentDir) {
+            continue;
+          }
+          const cost = currentG + goal.penalty;
+          if (cost < goalCost) {
+            goalCost = cost;
+            goalState = currentState;
+            goalHit = goal;
+          }
         }
         // No break, no skip: goal vertices are ordinary vertices that other
         // routes (and cheaper docks past this one) travel through.
       }
 
-      const xi = Math.floor(vertex / yCount);
-      const yi = vertex % yCount;
-      for (let dir = 0; dir < 4; dir += 1) {
-        const { dx, dy } = DIRECTIONS[dir];
-        const nxi = xi + dx;
-        const nyi = yi + dy;
-        if (nxi < 0 || nxi >= xCount || nyi < 0 || nyi >= yCount) {
+      const xi = Math.floor(vertex / height);
+      const yi = vertex % height;
+      // Leaving an occupied lane at this vertex is half a crossing: the
+      // wire may have to weave across its lane-mate to get off. Joining
+      // one is the other half. The search cannot see which side of the
+      // lane-mate the wire will be packed on, and charging the weave both
+      // ways keeps wires off each other's shoulders, which is the look
+      // wanted anyway - ribbons run a lane apart.
+      const leaveWeave =
+        context.occupancy.usedWidth(DIR_AXIS[currentDir], xi + cx0, yi + cy0, xi + cx0, yi + cy0) > 0
+          ? T.crossing / 2
+          : 0;
+      for (let dir = 0; dir < 8; dir += 1) {
+        const turn = TURN_COSTS[currentDir * 8 + dir];
+        if (turn !== turn) {
           continue;
         }
-        // The run between the two vertices, keyed by the lower one.
-        const runCost =
-          dy === 0
-            ? priceRun(((dx < 0 ? nxi : xi) * yCount + yi) * 2, dx < 0 ? nxi : xi, yi, true)
-            : priceRun((xi * yCount + (dy < 0 ? nyi : yi)) * 2 + 1, xi, dy < 0 ? nyi : yi, false);
-        if (runCost === RUN_BLOCKED) {
+        const stepCost = priceStep(xi, yi, dir);
+        if (stepCost === STEP_BLOCKED) {
           continue;
         }
-        const stepCost = runCost + (dir === currentDir ? 0 : TURN_COST);
-        const nextState = (nxi * yCount + nyi) * 4 + dir;
-        const nextG = currentG + stepCost;
+        let weave = 0;
+        if (dir !== currentDir) {
+          weave = leaveWeave;
+          if (context.occupancy.usedWidth(DIR_AXIS[dir], xi + cx0, yi + cy0, xi + cx0, yi + cy0) > 0) {
+            weave += T.crossing / 2;
+          }
+        }
+        const nextState = (vertexAt(xi + DIR_DX[dir], yi + DIR_DY[dir]) << 3) | dir;
+        const nextG = currentG + stepCost + turn + weave;
         touch(nextState);
         if (nextG < gScores[nextState] - 1e-9) {
           gScores[nextState] = nextG;
           cameFrom[nextState] = currentState;
           startOf[nextState] = startOf[currentState];
-          push(nextG + heuristic(nxi * yCount + nyi), nextG, nextState);
+          push(nextG + heuristic(nextState), nextG, nextState);
         }
       }
     }
 
-    if (goalState < 0) {
+    if (goalState < 0 || !goalHit) {
       return undefined;
     }
     const chain: number[] = [];
     for (let state = goalState; state >= 0; state = cameFrom[state]) {
-      chain.push(Math.floor(state / 4));
+      chain.push(state >> 3);
     }
     chain.reverse();
     return {
       startIndex: startOf[goalState],
-      arrivalDir: goalState % 4,
-      goalVertex: Math.floor(goalState / 4),
-      vertices: chain.map((vertex) => ({
-        x: xAxis.coords[Math.floor(vertex / yCount)],
-        y: yAxis.coords[vertex % yCount],
-      })),
+      arrivalDir: goalState & 7,
+      vertices: chain,
+      goal: goalHit,
+      cost: goalCost,
     };
   };
 
-  // The legs: source, then each waypoint in order, then target. Each leg
-  // restarts its costs (the dots are the user's law, not something to
-  // optimise around), but carries the arrival direction so passing straight
-  // through a dot is free and turning at it costs the normal turn.
+  // Seeds: leaving straight along the port's normal. The clean point (two
+  // cells out) is free to turn from; the apron is seeded too, dearer by the
+  // early-turn cost, for the wire that has nowhere else to go.
   let seeds: LegSeed[] = [];
+  const startHeads = new Map<number, number>();
   for (const start of starts) {
-    const startPenalty = sources[start.endpointIndex]?.penalty ?? 0;
-    for (let dir = 0; dir < 4; dir += 1) {
+    // Leaving along a lane another wire already rides is half a weave,
+    // like turning onto one: stacked docks are not free.
+    const apronX = Math.floor(start.apron / height) + cx0;
+    const apronY = (start.apron % height) + cy0;
+    const stacked =
+      context.occupancy.usedWidth(DIR_AXIS[start.outward], apronX, apronY, apronX, apronY) > 0
+        ? T.crossing / 2
+        : 0;
+    const penalty = (sources[start.endpointIndex]?.penalty ?? 0) + stacked;
+    seeds.push({
+      state: (start.apron << 3) | start.outward,
+      g: penalty + T.earlyTurn,
+      startIndex: start.endpointIndex,
+    });
+    if (start.clean !== undefined) {
       seeds.push({
-        state: start.vertex * 4 + dir,
-        g: startPenalty,
+        state: (start.clean << 3) | start.outward,
+        g: penalty + start.cleanCost,
         startIndex: start.endpointIndex,
       });
+      startHeads.set(start.endpointIndex, start.apron);
     }
   }
 
-  const mergedVertices: GridPoint[] = [];
+  const mergedVertices: number[] = [];
   let sourceIndex: number | undefined;
+  let totalCost = 0;
+  const takeLeg = (leg: LegResult) => {
+    const continuing = mergedVertices.length > 0;
+    if (sourceIndex === undefined) {
+      sourceIndex = leg.startIndex;
+      // Seeded from the clean point: the straight run from the apron is
+      // part of the route.
+      const head = startHeads.get(leg.startIndex);
+      if (head !== undefined && leg.vertices[0] !== head) {
+        mergedVertices.push(head);
+      }
+    }
+    // A leg after the first starts where the last one ended.
+    mergedVertices.push(...(continuing ? leg.vertices.slice(1) : leg.vertices));
+  };
   for (const stopVertex of stopVertices) {
-    const stopPoint = {
-      x: xAxis.coords[Math.floor(stopVertex / yCount)],
-      y: yAxis.coords[stopVertex % yCount],
-    };
-    const leg = searchLeg(seeds, new Map([[stopVertex, 0]]), () => 0, [stopPoint]);
+    const leg = searchLeg(seeds, [
+      { vertex: stopVertex, dir: -1, penalty: 0, endpointIndex: 0, tail: [] },
+    ]);
     if (!leg) {
       return undefined;
     }
-    if (sourceIndex === undefined) {
-      sourceIndex = leg.startIndex;
-    }
-    mergedVertices.push(...(mergedVertices.length > 0 ? leg.vertices.slice(1) : leg.vertices));
+    takeLeg(leg);
+    totalCost += leg.cost;
     seeds = [];
-    for (let dir = 0; dir < 4; dir += 1) {
-      seeds.push({
-        state: stopVertex * 4 + dir,
-        g: dir === leg.arrivalDir ? 0 : TURN_COST,
-        startIndex: leg.startIndex,
+    for (let dir = 0; dir < 8; dir += 1) {
+      const turn = TURN_COSTS[leg.arrivalDir * 8 + dir];
+      if (turn !== turn) {
+        continue;
+      }
+      seeds.push({ state: (stopVertex << 3) | dir, g: turn, startIndex: leg.startIndex });
+    }
+  }
+
+  // Goals: landing straight. The clean point must be reached heading in
+  // along the normal; the apron takes any arrival, dearer by the early-turn
+  // cost.
+  const goals: LegGoal[] = [];
+  for (const end of ends) {
+    const apronX = Math.floor(end.apron / height) + cx0;
+    const apronY = (end.apron % height) + cy0;
+    const stacked =
+      context.occupancy.usedWidth(DIR_AXIS[end.outward], apronX, apronY, apronX, apronY) > 0
+        ? T.crossing / 2
+        : 0;
+    const penalty = (targets[end.endpointIndex]?.penalty ?? 0) + stacked;
+    goals.push({
+      vertex: end.apron,
+      dir: -1,
+      penalty: penalty + T.earlyTurn,
+      endpointIndex: end.endpointIndex,
+      tail: [],
+    });
+    if (end.clean !== undefined) {
+      goals.push({
+        vertex: end.clean,
+        dir: (end.outward + 4) % 8,
+        penalty: penalty + end.cleanCost,
+        endpointIndex: end.endpointIndex,
+        tail: [end.apron],
       });
     }
   }
-
-  const finalLeg = searchLeg(
-    seeds,
-    goals,
-    (goalIndex) => targets[goalIndex]?.penalty ?? 0,
-    targetAprons,
-  );
+  const finalLeg = searchLeg(seeds, goals);
   if (!finalLeg) {
     return undefined;
   }
-  mergedVertices.push(
-    ...(mergedVertices.length > 0 ? finalLeg.vertices.slice(1) : finalLeg.vertices),
-  );
+  takeLeg(finalLeg);
+  totalCost += finalLeg.cost;
+  mergedVertices.push(...finalLeg.goal.tail);
 
   const source = sources[sourceIndex ?? finalLeg.startIndex] ?? sources[0];
-  const target = targets[goals.get(finalLeg.goalVertex) ?? 0] ?? targets[0];
-  context.usedDocks.add(dockKey(source));
-  context.usedDocks.add(dockKey(target));
-
-  return {
-    edgeId: request.edgeId,
-    points: claimAndAssemble(context, request, source, target, compactPoints(mergedVertices)),
-  };
+  const target = targets[finalLeg.goal.endpointIndex] ?? targets[0];
+  const points = mergedVertices.map((vertex) => ({
+    x: Math.floor(vertex / height) + cx0,
+    y: (vertex % height) + cy0,
+  }));
+  return { source, target, vertices: compactPoints(points), cost: totalCost };
 }
 
 /* ------------------------------------------------------------------ */
 /* Lane claiming and the final polyline                                */
 /* ------------------------------------------------------------------ */
 
+interface AssembledRoute {
+  points: GridPoint[];
+  crossings: number;
+  overflowed: boolean;
+}
+
+interface Run {
+  axis: Axis;
+  /** Unit direction, in cells. */
+  dx: number;
+  dy: number;
+  /** First and last vertex, in cells. */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** Sideways offset of the drawn line from the grid line, in px. */
+  offset: number;
+}
+
+/** A point on a run's drawn line, from a vertex on its grid line. */
+function drawnPoint(run: Run, x: number, y: number): GridPoint {
+  const length = Math.hypot(run.dx, run.dy);
+  const nx = -run.dy / length;
+  const ny = run.dx / length;
+  return { x: x * BOARD_GRID + nx * run.offset, y: y * BOARD_GRID + ny * run.offset };
+}
+
+/** Where two drawn lines meet; undefined when parallel. */
+function intersectLines(
+  p: GridPoint,
+  u: { x: number; y: number },
+  q: GridPoint,
+  v: { x: number; y: number },
+): GridPoint | undefined {
+  const denominator = u.x * v.y - u.y * v.x;
+  if (Math.abs(denominator) < 1e-9) {
+    return undefined;
+  }
+  const t = ((q.x - p.x) * v.y - (q.y - p.y) * v.x) / denominator;
+  return { x: p.x + u.x * t, y: p.y + u.y * t };
+}
+
 /**
- * Turns the on-line vertex chain into the drawn polyline: every straight run
- * claims its slice of its lane and shifts sideways to it, corners re-join at
- * the offset intersections, and the true anchors go on the ends. The stubs —
- * anchor to first/last corner — stay at the anchor's exact coordinate, so a
- * wire always leaves a port dead straight.
+ * Turns the vertex chain into the drawn polyline: every straight run claims
+ * its slice of its lane and shifts sideways to it, corners re-join where the
+ * neighbouring drawn lines meet, and the true anchors go on the ends. The
+ * stubs - anchor to first/last corner - stay at the anchor's exact
+ * coordinate, so a wire always leaves a port dead straight.
  */
 function claimAndAssemble(
   context: SolveContext,
-  request: GridRouteRequest,
-  source: GridEndpoint,
-  target: GridEndpoint,
-  vertices: GridPoint[],
-): GridPoint[] {
+  request: PlannedRequest,
+  found: RouteFound,
+): AssembledRoute {
+  const { source, target, vertices } = found;
   if (vertices.length === 0) {
-    return [];
+    return { points: [], crossings: 0, overflowed: false };
   }
-
-  const sourceStubAxis: "h" | "v" =
-    source.side === "left" || source.side === "right" ? "h" : "v";
-  const targetStubAxis: "h" | "v" =
-    target.side === "left" || target.side === "right" ? "h" : "v";
-  // The visible ends. Deepened anchors stay collinear with their stub: the
-  // segment adjacent to an anchor always runs along the side's normal, and
-  // the tip only moves along that same normal.
+  const sourceDir = outwardDirection(source.side);
+  const targetDir = outwardDirection(target.side);
+  const sourceAxis = DIR_AXIS[sourceDir];
+  const targetAxis = DIR_AXIS[targetDir];
   const sourceTip = stubTip(source);
   const targetTip = stubTip(target);
+  const firstVertex = vertices[0];
+  const lastVertex = vertices[vertices.length - 1];
+  const sourceApron = { x: firstVertex.x * BOARD_GRID, y: firstVertex.y * BOARD_GRID };
+  const targetApron = { x: lastVertex.x * BOARD_GRID, y: lastVertex.y * BOARD_GRID };
+
+  // The stubs pass straight through their apron vertices.
+  let crossings = 0;
+  crossings += context.occupancy.stepCrossings(
+    sourceAxis,
+    firstVertex.x,
+    firstVertex.y,
+    firstVertex.x,
+    firstVertex.y,
+    false,
+  );
+  crossings += context.occupancy.stepCrossings(
+    targetAxis,
+    lastVertex.x,
+    lastVertex.y,
+    lastVertex.x,
+    lastVertex.y,
+    false,
+  );
+  context.occupancy.markStub(sourceAxis, firstVertex.x, firstVertex.y, request.edgeId);
+  context.occupancy.markStub(targetAxis, lastVertex.x, lastVertex.y, request.edgeId);
 
   // No moves at all: the two aprons share a vertex (adjacent ports). Pure
   // stub work, nothing claims a lane.
   if (vertices.length === 1) {
-    const apron = vertices[0];
-    const stubCorner = (endpoint: GridEndpoint, stubAxis: "h" | "v"): GridPoint =>
-      stubAxis === "h" ? { x: apron.x, y: endpoint.y } : { x: endpoint.x, y: apron.y };
-    return compactPoints([
-      sourceTip,
-      stubCorner(source, sourceStubAxis),
-      apron,
-      stubCorner(target, targetStubAxis),
-      targetTip,
-    ]);
+    const apron = sourceApron;
+    const stubCorner = (endpoint: GridEndpoint, axis: Axis): GridPoint =>
+      axis === 0 ? { x: apron.x, y: endpoint.y } : { x: endpoint.x, y: apron.y };
+    return {
+      points: compactPoints([
+        sourceTip,
+        stubCorner(source, sourceAxis),
+        apron,
+        stubCorner(target, targetAxis),
+        targetTip,
+      ]),
+      crossings,
+      overflowed: false,
+    };
   }
 
-  interface Run {
-    axis: "h" | "v";
-    line: number;
-    from: number;
-    to: number;
-    /** The coordinate this run actually draws at (line + lane offset). */
-    drawn: number;
-  }
   const runs: Run[] = [];
   for (let i = 0; i + 1 < vertices.length; i += 1) {
     const a = vertices[i];
     const b = vertices[i + 1];
-    runs.push(
-      a.y === b.y
-        ? { axis: "h", line: a.y, from: a.x, to: b.x, drawn: a.y }
-        : { axis: "v", line: a.x, from: a.y, to: b.y, drawn: a.x },
-    );
+    const dx = Math.sign(b.x - a.x);
+    const dy = Math.sign(b.y - a.y);
+    const axis: Axis = dy === 0 ? 0 : dx === 0 ? 1 : dx === dy ? 2 : 3;
+    runs.push({ axis, dx, dy, x0: a.x, y0: a.y, x1: b.x, y1: b.y, offset: 0 });
   }
+
   // Which side of its lane each run should sit on: the side of the turn at
-  // the run's end (the last run turns toward its target anchor). A wire that
-  // will peel off leftward rides the left of a shared bundle, so leaving
-  // never means crossing over a lane-mate — the crossing the pack order used
-  // to manufacture at exactly the wrong moment.
+  // the run's end (the last run turns toward its target anchor). A wire
+  // that will peel off to the right rides the right of a shared bundle, so
+  // leaving never means crossing over a lane-mate.
   const departureFor = (index: number): number => {
     const run = runs[index];
-    const next =
-      index + 1 < runs.length
-        ? runs[index + 1].line
-        : run.axis === "h"
-          ? target.y
-          : target.x;
-    return Math.sign(next - run.line);
+    let nx: number;
+    let ny: number;
+    if (index + 1 < runs.length) {
+      nx = runs[index + 1].dx;
+      ny = runs[index + 1].dy;
+    } else {
+      nx = targetTip.x - targetApron.x;
+      ny = targetTip.y - targetApron.y;
+    }
+    const departure = Math.sign(run.dx * ny - run.dy * nx);
+    // The side the wire ARRIVED from, the same way: the previous run lies
+    // behind the corner. When it agrees with the departure side the wire
+    // sits there and never has to cross a lane-mate; when the two
+    // disagree a weave is unavoidable and the departure side wins.
+    let px: number;
+    let py: number;
+    if (index > 0) {
+      px = runs[index - 1].dx;
+      py = runs[index - 1].dy;
+    } else {
+      px = sourceApron.x - sourceTip.x;
+      py = sourceApron.y - sourceTip.y;
+    }
+    const arrival = -Math.sign(run.dx * py - run.dy * px);
+    if (departure === 0) {
+      return arrival;
+    }
+    return departure;
   };
+  let overflowed = false;
   runs.forEach((run, index) => {
-    const existing = context.occupancy.claimsFor(run.axis, run.line, run.from, run.to);
-    const slot = packIntoLane(existing, request.strokeWidth, departureFor(index));
-    run.drawn = run.line + (slot.lo + slot.hi) / 2;
-    context.occupancy.claim(run.axis, run.line, run.from, run.to, slot);
+    const claimed: ClaimedRun = { axis: run.axis, x0: run.x0, y0: run.y0, x1: run.x1, y1: run.y1 };
+    const steps = Math.max(Math.abs(run.x1 - run.x0), Math.abs(run.y1 - run.y0));
+    for (let i = 1; i <= steps; i += 1) {
+      crossings += context.occupancy.stepCrossings(
+        run.axis,
+        run.x0 + run.dx * (i - 1),
+        run.y0 + run.dy * (i - 1),
+        run.x0 + run.dx * i,
+        run.y0 + run.dy * i,
+        false,
+      );
+    }
+    const existing = context.occupancy.claimsAlong(claimed);
+    const packed = packIntoLane(
+      existing,
+      request.strokeWidth,
+      departureFor(index),
+      run.axis >= 2 ? T.diagonalLaneCapacity : LANE_CAPACITY,
+    );
+    if (packed.overflowed) {
+      overflowed = true;
+    }
+    run.offset = (packed.claim.lo + packed.claim.hi) / 2;
+    context.occupancy.claim(claimed, packed.claim, request.edgeId);
+    context.occupancy.markRun(claimed, request.edgeId);
   });
 
   const points: GridPoint[] = [sourceTip];
 
-  // Source stub onto the first run. When the run is PARALLEL to the stub
-  // (the wire sets off along its own port line), it goes straight only as
-  // far as the apron vertex, then jogs onto its packed lane. Pinning the
-  // whole run to the anchor — the previous behaviour — put every wire out
-  // of the same port on literally the same line for the run's full length.
+  // Source stub onto the first run. Along the normal (the usual clean
+  // exit): straight to the apron at the port's own coordinate, then a jog
+  // onto the packed lane. Any other way: straight out along the normal
+  // until it meets the run's drawn line.
   const first = runs[0];
-  const sourceApron = vertices[0];
-  if (first.axis === sourceStubAxis) {
-    if (sourceStubAxis === "h") {
-      points.push({ x: sourceApron.x, y: source.y }, { x: sourceApron.x, y: first.drawn });
-    } else {
-      points.push({ x: source.x, y: sourceApron.y }, { x: first.drawn, y: sourceApron.y });
-    }
-  } else {
-    // Perpendicular: straight out at the anchor's coordinate to the run.
+  const outX = DIR_DX[sourceDir];
+  const outY = DIR_DY[sourceDir];
+  if (first.dx === outX && first.dy === outY) {
     points.push(
-      sourceStubAxis === "h" ? { x: first.drawn, y: source.y } : { x: source.x, y: first.drawn },
+      sourceAxis === 0 ? { x: sourceApron.x, y: source.y } : { x: source.x, y: sourceApron.y },
+      drawnPoint(first, first.x0, first.y0),
     );
+  } else {
+    const met = intersectLines(
+      { x: source.x, y: source.y },
+      { x: outX, y: outY },
+      drawnPoint(first, first.x0, first.y0),
+      { x: first.dx, y: first.dy },
+    );
+    points.push(met ?? drawnPoint(first, first.x0, first.y0));
   }
 
-  // Interior corners: intersection of neighbouring drawn lines. Two
-  // consecutive runs on the SAME axis are a reversal — a waypoint excursion
-  // turning around — so the corner is the turnaround vertex, with a small
-  // jog between the two runs' lane slots (they pack side by side, which is
-  // what keeps the out-and-back legible as two parallel lines).
+  // Interior corners: where neighbouring drawn lines meet. Two consecutive
+  // runs along the SAME line in opposite directions are a reversal - a
+  // waypoint excursion turning around - so the corner is the turnaround
+  // vertex, with a small jog between the two runs' lane slots.
   for (let i = 0; i + 1 < runs.length; i += 1) {
     const runA = runs[i];
     const runB = runs[i + 1];
-    if (runA.axis === runB.axis) {
-      const turn = vertices[i + 1];
-      if (runA.axis === "h") {
-        points.push({ x: turn.x, y: runA.drawn }, { x: turn.x, y: runB.drawn });
-      } else {
-        points.push({ x: runA.drawn, y: turn.y }, { x: runB.drawn, y: turn.y });
-      }
-      continue;
+    const met = intersectLines(
+      drawnPoint(runA, runA.x0, runA.y0),
+      { x: runA.dx, y: runA.dy },
+      drawnPoint(runB, runB.x0, runB.y0),
+      { x: runB.dx, y: runB.dy },
+    );
+    if (met) {
+      points.push(met);
+    } else {
+      points.push(drawnPoint(runA, runA.x1, runA.y1), drawnPoint(runB, runB.x0, runB.y0));
     }
-    points.push({
-      x: runA.axis === "v" ? runA.drawn : runB.drawn,
-      y: runA.axis === "h" ? runA.drawn : runB.drawn,
-    });
   }
 
-  // Target stub off the last run, mirroring the source: lane until the
-  // apron, jog to the anchor, straight in.
+  // Target stub off the last run, mirroring the source.
   const last = runs[runs.length - 1];
-  const targetApron = vertices[vertices.length - 1];
-  if (last.axis === targetStubAxis) {
-    if (targetStubAxis === "h") {
-      points.push({ x: targetApron.x, y: last.drawn }, { x: targetApron.x, y: target.y });
-    } else {
-      points.push({ x: last.drawn, y: targetApron.y }, { x: target.x, y: targetApron.y });
-    }
-  } else {
+  const inX = -DIR_DX[targetDir];
+  const inY = -DIR_DY[targetDir];
+  if (last.dx === inX && last.dy === inY) {
     points.push(
-      targetStubAxis === "h" ? { x: last.drawn, y: target.y } : { x: target.x, y: last.drawn },
+      drawnPoint(last, last.x1, last.y1),
+      targetAxis === 0 ? { x: targetApron.x, y: target.y } : { x: target.x, y: targetApron.y },
     );
+  } else {
+    const met = intersectLines(
+      { x: target.x, y: target.y },
+      { x: inX, y: inY },
+      drawnPoint(last, last.x1, last.y1),
+      { x: last.dx, y: last.dy },
+    );
+    points.push(met ?? drawnPoint(last, last.x1, last.y1));
   }
   points.push(targetTip);
 
-  return compactPoints(points);
+  return { points: compactPoints(points), crossings, overflowed };
 }
 
 /**
@@ -1477,24 +2566,15 @@ function stubTip(endpoint: GridEndpoint): GridPoint {
   if (depth <= 0) {
     return { x: endpoint.x, y: endpoint.y };
   }
-  switch (endpoint.side) {
-    case "left":
-      return { x: endpoint.x + depth, y: endpoint.y };
-    case "right":
-      return { x: endpoint.x - depth, y: endpoint.y };
-    case "top":
-      return { x: endpoint.x, y: endpoint.y + depth };
-    case "bottom":
-      return { x: endpoint.x, y: endpoint.y - depth };
-  }
+  const dir = outwardDirection(endpoint.side);
+  return { x: endpoint.x - DIR_DX[dir] * depth, y: endpoint.y - DIR_DY[dir] * depth };
 }
 
 /**
- * Drops zero-length and collinear intermediate points — but ONLY when the
+ * Drops zero-length and collinear intermediate points - but ONLY when the
  * direction of travel is preserved. A point where the wire REVERSES along
  * the same line (a waypoint excursion: out to a dot and back the way it
- * came) is a real turnaround, and merging it used to swallow the entire
- * excursion, which read as the wire ignoring its dot.
+ * came) is a real turnaround, and merging it would swallow the excursion.
  */
 export function compactPoints(points: GridPoint[]): GridPoint[] {
   const kept: GridPoint[] = [];
@@ -1508,11 +2588,12 @@ export function compactPoints(points: GridPoint[]): GridPoint[] {
       const a = kept[kept.length - 3];
       const b = kept[kept.length - 2];
       const c = kept[kept.length - 1];
-      const collinear =
-        (Math.abs(a.x - b.x) < 0.01 && Math.abs(b.x - c.x) < 0.01) ||
-        (Math.abs(a.y - b.y) < 0.01 && Math.abs(b.y - c.y) < 0.01);
-      const sameDirection =
-        (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) > 0;
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const bcx = c.x - b.x;
+      const bcy = c.y - b.y;
+      const collinear = Math.abs(abx * bcy - aby * bcx) < 0.01;
+      const sameDirection = abx * bcx + aby * bcy > 0;
       if (!collinear || !sameDirection) {
         break;
       }

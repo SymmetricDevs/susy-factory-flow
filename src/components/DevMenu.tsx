@@ -42,6 +42,20 @@ import {
 } from "./flow/board-tilt";
 import { isNodeDetailGlanceForced, setNodeDetailGlanceForced } from "./flow/node-detail";
 import { isPerfHudEnabled, setPerfHudEnabled } from "./flow/PerfHud";
+import {
+  canRedoRouterTuning,
+  canUndoRouterTuning,
+  DEFAULT_ROUTER_TUNING,
+  getRouterTuning,
+  isDefaultRouterTuning,
+  redoRouterTuning,
+  requestWireReroute,
+  resetRouterTuning,
+  ROUTER_TUNING_FIELDS,
+  setRouterTuning,
+  undoRouterTuning,
+  type RouterTuning,
+} from "./flow/router-tuning";
 import { useFactoryStore } from "@/store/factory-store";
 import { getUiScale } from "@/lib/ui-scale";
 
@@ -96,15 +110,45 @@ export function DevMenu({
   };
   const [forceGlance, setForceGlance] = useState(() => isNodeDetailGlanceForced());
   const [holdEnding, setHoldEnding] = useState(() => getBoardTimelapseHoldEnding());
+  // The wire router's dials. Every change re-solves the board live.
+  const [tuning, setTuning] = useState<RouterTuning>(() => getRouterTuning());
+  const patchTuning = (patch: Partial<RouterTuning>) => {
+    setRouterTuning(patch);
+    setTuning(getRouterTuning());
+  };
 
+  // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) step the wire dials while the menu
+  // has focus - a slider keeps focus after a drag, and the palette itself
+  // takes focus on any click inside it. Elsewhere the keys stay the board's.
+  const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+        return;
+      }
+      const focusInside =
+        dialogRef.current !== null && dialogRef.current.contains(document.activeElement);
+      if (!focusInside || !(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        if (undoRouterTuning()) {
+          setTuning(getRouterTuning());
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        if (redoRouterTuning()) {
+          setTuning(getRouterTuning());
+        }
+        event.preventDefault();
+        event.stopPropagation();
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
   // Dragged by the header, plain pointer capture. Clamped so the header can
@@ -114,10 +158,18 @@ export function DevMenu({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-label="Dev menu"
-      className="fixed z-[120] flex max-h-[calc(85*var(--ui-vh))] w-96 max-w-[calc(100*var(--ui-vw)-16px)] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-2xl"
+      tabIndex={-1}
+      className="fixed z-[120] flex max-h-[calc(85*var(--ui-vh))] w-96 max-w-[calc(100*var(--ui-vw)-16px)] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-2xl outline-none"
       style={{ left: position.x, top: position.y }}
+      onPointerDownCapture={(event) => {
+        // Any click inside takes focus, so Ctrl+Z reaches the dials.
+        if (!(event.target as Element).closest("input, button, select, textarea")) {
+          event.currentTarget.focus();
+        }
+      }}
     >
       <div
         className="relative shrink-0 cursor-move touch-none select-none border-b border-line bg-gradient-to-br from-surface-raised to-surface px-5 py-4 compact:px-4"
@@ -426,6 +478,138 @@ export function DevMenu({
             >
               Play
             </button>
+          </div>
+
+          <div className="mt-2 rounded border border-line px-3 py-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <span className="min-w-0">
+                <span className="block text-base leading-tight text-fg">Wires</span>
+                <span className="mt-0.5 block text-xs text-fg-muted">
+                  Every dial the wire router has. Costs are pixels of travel: a corner at 80
+                  means a wire goes 80px out of its way to avoid one. Edits re-route the board
+                  live.
+                </span>
+              </span>
+              <span className="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  disabled={!canUndoRouterTuning()}
+                  title="Undo (Ctrl+Z)"
+                  onClick={() => {
+                    undoRouterTuning();
+                    setTuning(getRouterTuning());
+                  }}
+                  className="rounded border border-line px-2 py-1 text-xs text-fg-muted hover:border-line-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  disabled={!canRedoRouterTuning()}
+                  title="Redo (Ctrl+Shift+Z)"
+                  onClick={() => {
+                    redoRouterTuning();
+                    setTuning(getRouterTuning());
+                  }}
+                  className="rounded border border-line px-2 py-1 text-xs text-fg-muted hover:border-line-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Redo
+                </button>
+                <button
+                  type="button"
+                  disabled={isDefaultRouterTuning()}
+                  onClick={() => {
+                    resetRouterTuning();
+                    setTuning(getRouterTuning());
+                  }}
+                  className="rounded border border-line px-2 py-1 text-xs text-fg-muted hover:border-line-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Reset
+                </button>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => requestWireReroute()}
+              className="mt-2.5 w-full rounded border border-cyan-700 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-500/20"
+            >
+              Re-route all wires
+            </button>
+            {(["Turns", "Crossings", "Negotiation", "Docks", "Costs", "Search"] as const).map(
+              (group) => (
+                <div key={group} className="mt-2.5">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                    {group}
+                  </span>
+                  {ROUTER_TUNING_FIELDS.filter((field) => field.group === group).map((field) => {
+                    const value = tuning[field.key];
+                    const changed = value !== DEFAULT_ROUTER_TUNING[field.key];
+                    if (field.kind === "boolean") {
+                      return (
+                        <label
+                          key={field.key}
+                          title={field.hint}
+                          className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-fg-muted"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(value)}
+                            onChange={(event) => patchTuning({ [field.key]: event.target.checked })}
+                            className="accent-cyan-500"
+                          />
+                          <span className={changed ? "text-cyan-300" : undefined}>{field.label}</span>
+                          <span className="text-fg-subtle">{field.hint}</span>
+                        </label>
+                      );
+                    }
+                    const number = Number(value);
+                    return (
+                      <div
+                        key={field.key}
+                        title={field.hint}
+                        className="mt-1.5 flex items-center gap-1.5 text-xs"
+                      >
+                        <span
+                          className={[
+                            "w-24 shrink-0 truncate",
+                            changed ? "text-cyan-300" : "text-fg-subtle",
+                          ].join(" ")}
+                        >
+                          {field.label}
+                        </span>
+                        <input
+                          type="range"
+                          min={field.min}
+                          max={field.max}
+                          step={field.step}
+                          value={number}
+                          onChange={(event) =>
+                            patchTuning({ [field.key]: Number(event.target.value) })
+                          }
+                          aria-label={field.label}
+                          className="h-1 w-full accent-cyan-500"
+                        />
+                        <input
+                          type="number"
+                          min={field.min}
+                          max={field.max}
+                          step={field.step}
+                          value={number}
+                          onChange={(event) => {
+                            const next = Number(event.target.value);
+                            if (Number.isFinite(next)) {
+                              patchTuning({ [field.key]: next });
+                            }
+                          }}
+                          aria-label={`${field.label} value`}
+                          className="w-16 shrink-0 rounded border border-line bg-surface px-1 py-0.5 text-right tabular-nums text-fg"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ),
+            )}
           </div>
 
           <div className="mt-2 rounded border border-line px-3 py-2.5">

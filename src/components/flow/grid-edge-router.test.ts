@@ -784,7 +784,7 @@ describe("straight shots and self loops", () => {
     expect(points[0].y).toBe(points[1].y);
   });
 
-  it("a card wired to itself docks freely and lands cells away from its exit", () => {
+  it("a card wired to itself docks freely, turns only at 90 degrees, and lands a cell or more from its exit", () => {
     const machine = card("machine", 0, 0, 440, 300);
     const solved = solveGridRoutes(
       [machine],
@@ -802,6 +802,8 @@ describe("straight shots and self loops", () => {
     expect(points.length).toBeGreaterThanOrEqual(3);
     const first = points[0];
     const last = points[points.length - 1];
-    expect(Math.max(Math.abs(first.x - last.x), Math.abs(first.y - last.y))).toBeGreaterThanOrEqual(40);
+    expect(Math.max(Math.abs(first.x - last.x), Math.abs(first.y - last.y))).toBeGreaterThanOrEqual(20);
+    // Ninety-degree turns only: every run is horizontal or vertical.
+    expect(isOrthogonal(points)).toBe(true);
   });
 });

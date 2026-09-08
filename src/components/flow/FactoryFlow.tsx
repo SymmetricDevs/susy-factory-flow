@@ -283,6 +283,7 @@ import type { ArrangeInput } from "@/lib/board-arrange";
 import { makeRouteJudge } from "@/lib/route-judge";
 import { routePoints } from "@/lib/route-metrics";
 import { registerBoardGeometryReader, registerBoardScoreReader } from "./board-score";
+import { flattenBoards } from "@/lib/model/flatten-boards";
 import { arrangeInWorker, type ArrangeProgress } from "@/lib/arrange-solve";
 import type { ArrangeJudgeInput } from "@/lib/arrange-job";
 import {
@@ -5496,7 +5497,7 @@ export function FactoryFlow() {
   // The arrange in flight, for the loader; undefined when none is.
   const [arrangeProgress, setArrangeProgress] = useState<ArrangeProgress | undefined>(undefined);
   const arrangeRunningRef = useRef(false);
-  const handleAutoArrange = useCallback(async (options: { tidyBoardInteriors: boolean }) => {
+  const handleAutoArrange = useCallback(async (options: { keepBoards: boolean }) => {
     // One at a time: a second click while one runs is a second click.
     if (arrangeRunningRef.current) {
       return;
@@ -5504,17 +5505,23 @@ export function FactoryFlow() {
     arrangeRunningRef.current = true;
     setArrangeProgress({ seq: 0, stage: "Reading the board", done: 0, total: 1 });
     const state = useFactoryStore.getState();
+    // THE DUMP (Jack, 2026-09-08): unless Keep boards is on, every board is
+    // dumped first - members surface where the frame stood, the frames go -
+    // and the arrange lays out one flat set of cards. Keep boards on is the
+    // old rule: a board someone drew is sealed and only placed.
+    const dumpBoards = !options.keepBoards && (state.project.pockets?.length ?? 0) > 0;
+    const project = dumpBoards ? flattenBoards(state.project) : state.project;
     let computed: Awaited<ReturnType<typeof computeAutoArrangement>>;
     try {
       computed = await computeAutoArrangement(
-        state.project,
+        project,
         state.lastResult,
         // Tight spacing, always: the dial for it was only ever set one way.
         // Islands are emergent now (board-arrange-air.ts), no dial.
         {
           spacing: "compact",
         },
-        options,
+        { tidyBoardInteriors: false },
         (progress) => setArrangeProgress(progress),
       );
     } catch (error) {
@@ -5557,6 +5564,9 @@ export function FactoryFlow() {
       setOwners,
       setBoardThemes,
       removeAnnotationIds: staleInkIds,
+      // The dump for real: every board goes, its members ride `moves`
+      // (root positions from the flattened plan) and surface on the canvas.
+      removeBoards: dumpBoards ? (state.project.pockets ?? []).map((pocket) => pocket.id) : undefined,
     });
     useFactoryStore.getState().frameBoardNodes();
   }, []);
@@ -8781,9 +8791,9 @@ const BoardViewMenu = memo(function BoardViewMenu({
    * sheet of its own): the one setting, and the button that runs it.
    */
   arrange: {
-    tidyBoardInteriors: boolean;
-    onToggleTidyBoards: () => void;
-    onArrange: (options: { tidyBoardInteriors: boolean }) => void;
+    keepBoards: boolean;
+    onToggleKeepBoards: () => void;
+    onArrange: (options: { keepBoards: boolean }) => void;
   };
 }) {
   const {
@@ -8939,16 +8949,16 @@ const BoardViewMenu = memo(function BoardViewMenu({
           ))}
           {/* ARRANGE, at the foot of the sheet: the setting reads like the
               toggles above it, and the button that runs it sits right under.
-              The arrange respects boards you drew by default; the setting is
-              where you say otherwise. */}
+              The arrange dumps every board by default (Jack, 2026-09-08);
+              Keep boards is where you say otherwise. */}
           <div className="mt-1 border-t-2 border-[var(--mc-15)] pt-1">
             <button
               type="button"
-              onClick={arrange.onToggleTidyBoards}
-              aria-pressed={arrange.tidyBoardInteriors}
+              onClick={arrange.onToggleKeepBoards}
+              aria-pressed={arrange.keepBoards}
               className={[
                 "flex w-full items-start gap-2 border-2 p-2 text-left",
-                arrange.tidyBoardInteriors
+                arrange.keepBoards
                   ? `border-[var(--mc-good)] ${TOOL_FACE_ON}`
                   : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
               ].join(" ")}
@@ -8956,18 +8966,18 @@ const BoardViewMenu = memo(function BoardViewMenu({
               <Network className="mt-[1px] h-4 w-4 shrink-0" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[12px] font-black uppercase">Rearrange inside boards</span>
+                  <span className="font-mono text-[12px] font-black uppercase">Keep boards</span>
                   <span
                     className={[
                       "font-mono text-[10px] font-black tracking-[1px]",
-                      arrange.tidyBoardInteriors ? "text-[var(--mc-good)]" : "text-[var(--mc-ink-muted)]",
+                      arrange.keepBoards ? "text-[var(--mc-good)]" : "text-[var(--mc-ink-muted)]",
                     ].join(" ")}
                   >
-                    {arrange.tidyBoardInteriors ? "ON" : "OFF"}
+                    {arrange.keepBoards ? "ON" : "OFF"}
                   </span>
                 </span>
                 <span className="font-mono text-[11px] leading-snug opacity-80">
-                  On, every open board is laid out again too. Off, boards you drew are only placed.
+                  On, boards you drew stay as they are and are only placed. Off, every board is dumped and everything is arranged.
                 </span>
               </span>
             </button>
@@ -8975,7 +8985,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
               type="button"
               onClick={() => {
                 onOpenChange(false);
-                arrange.onArrange({ tidyBoardInteriors: arrange.tidyBoardInteriors });
+                arrange.onArrange({ keepBoards: arrange.keepBoards });
               }}
               className="mt-1 flex w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 font-mono text-[12px] font-black uppercase text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
               aria-label="Arrange the board"
@@ -8993,7 +9003,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
 // Whether auto-arrange may lay out the inside of boards the player drew.
 // A browser preference, not part of the plan: two people sharing a setup
 // each keep their own habit.
-const ARRANGE_TIDY_BOARDS_KEY = "gtnh-factory-flow.arrange-tidy-boards.v1";
+const ARRANGE_KEEP_BOARDS_KEY = "gtnh-factory-flow.arrange-keep-boards.v1";
 
 const PaintToolbar = memo(function PaintToolbar({
   paintMode,
@@ -9027,7 +9037,7 @@ const PaintToolbar = memo(function PaintToolbar({
   view: BoardView;
   onViewChange: (patch: Partial<BoardView>) => void;
   /** Runs the arrange; the fold-out's setting rides along per press. */
-  onAutoArrange: (options: { tidyBoardInteriors: boolean }) => void;
+  onAutoArrange: (options: { keepBoards: boolean }) => void;
   folded: boolean;
   /**
    * The whole row folds into the brush, the bin and whole-board keys
@@ -9057,18 +9067,18 @@ const PaintToolbar = memo(function PaintToolbar({
   // lift its z while either is out, same as it does for the palette.
   const [isViewMenuOpen, setViewMenuOpen] = useState(false);
   // The arrange sheet: one setting and the button that runs it. The setting
-  // is remembered per browser; the default respects the boards you drew.
-  const [tidyBoardInteriors, setTidyBoardInteriors] = useState(() => {
+  // is remembered per browser; the default dumps every board.
+  const [keepBoards, setKeepBoards] = useState(() => {
     try {
-      return localStorage.getItem(ARRANGE_TIDY_BOARDS_KEY) === "1";
+      return localStorage.getItem(ARRANGE_KEEP_BOARDS_KEY) === "1";
     } catch {
       return false;
     }
   });
-  const onToggleTidyBoards = useCallback(() => {
-    setTidyBoardInteriors((was) => {
+  const onToggleKeepBoards = useCallback(() => {
+    setKeepBoards((was) => {
       try {
-        localStorage.setItem(ARRANGE_TIDY_BOARDS_KEY, was ? "0" : "1");
+        localStorage.setItem(ARRANGE_KEEP_BOARDS_KEY, was ? "0" : "1");
       } catch {
         // Private windows without storage still get the toggle for the session.
       }
@@ -9255,7 +9265,7 @@ const PaintToolbar = memo(function PaintToolbar({
             onChange={onViewChange}
             open={isViewMenuOpen}
             onOpenChange={setViewMenuOpen}
-            arrange={{ tidyBoardInteriors, onToggleTidyBoards, onArrange: onAutoArrange }}
+            arrange={{ keepBoards, onToggleKeepBoards, onArrange: onAutoArrange }}
           />
         </ToolTray>
     </>
@@ -9506,11 +9516,7 @@ function ResourceEdgeComponent({
   const visualSource = visualSourceCandidates[0];
   const visualTarget = visualTargetCandidates[0];
   // Direction has one voice: the marching dashes when pulse mode is on,
-  // chevrons only when it is off — and only in free-dock mode. With wires
-  // pinned to their ports, which side a wire attaches on already says which
-  // way it flows (inputs left, outputs right), so the chevrons are noise
-  // there. Module state is safe to read here: a mode flip re-signs every
-  // route and the settle pass re-issues every edge.
+  // arrows when it is off - at every zoom, larger at a glance.
   const showArrowHead =
     flowRate?.pulse !== true &&
     (isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS));
@@ -9865,39 +9871,34 @@ function ResourceEdgeComponent({
           style={{ pointerEvents: "none" }}
         />
       ) : null}
-      {/* Direction chevrons, one near each end when the marching dashes are
-          off: the source's says "flow leaves here", the target's "flow lands
-          here". Both are pulled back off the cards — the last stretch of a
-          wire sits in the margin or under the card, where an arrow drowns.
-          The wire's own colour, lifted a step brighter over a dark halo —
-          tinted like the line it rides but never lost inside it — sized to
-          the stroke: a regular little arrow on a thin wire, sitting INSIDE
-          the stroke on a fat pipe. */}
+      {/* Direction arrows (Jack, 2026-09-08: "very visible, but still look
+          good and be the same colour as the edge"): FILLED arrowheads in the
+          wire's own colour lifted brighter, edged in a deep shade of the same
+          colour under a soft shadow so they read on the pipe and on the paper alike, sized to the stroke - a little
+          wider than a thin wire, a little wider than a fat pipe - one near
+          each end and one every few cells along a long run, never across a
+          corner. At a glance they draw double size so they survive the zoom. */}
       {showArrowHead
-        ? getRouteChevrons(liveRoute.points, coreStrokeWidth).map((chevron, index) => (
-            <g key={index} style={{ pointerEvents: "none" }}>
-              <polyline
-                points={chevron}
-                stroke="#111827"
-                strokeWidth={Math.min(2 + coreStrokeWidth * 0.12, 4) + 2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity={isEdgeStarved(data) ? 0.75 : 0.9}
-              />
-              <polyline
-                points={chevron}
-                stroke={brightenHexColor(edgeColor, 0.35)}
-                strokeWidth={Math.min(2 + coreStrokeWidth * 0.12, 4)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity={isEdgeStarved(data) ? 0.8 : 1}
-                style={{
-                  filter: isHighlighted ? "drop-shadow(0 0 4px var(--glow-halo))" : undefined,
-                }}
-              />
-            </g>
+        ? getRouteArrows(liveRoute.points, coreStrokeWidth, isGlobalView).map((arrow, index) => (
+            <polygon
+              key={index}
+              points={arrow}
+              fill={brightenHexColor(edgeColor, 0.55)}
+              stroke={darkenHexColor(edgeColor, 0.6)}
+              strokeWidth={isGlobalView ? 2.5 : 1.5}
+              strokeLinejoin="round"
+              opacity={isEdgeStarved(data) ? 0.8 : 1}
+              style={{
+                pointerEvents: "none",
+                // The outline is a DEEP shade of the wire's own colour, not
+                // black (Jack: a black edge read as spots ahead of the tip
+                // where it crossed the pipe); a soft shadow lifts the head
+                // off pipe and paper alike.
+                filter: isHighlighted
+                  ? "drop-shadow(0 0 4px var(--glow-halo))"
+                  : "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75))",
+              }}
+            />
           ))
         : null}
       {hoverPathD ? (
@@ -13304,6 +13305,20 @@ function getConnectionSnap(toX: number, toY: number) {
   return point ? { point, side: best.target.side, target: best.target } : undefined;
 }
 
+/** The colour pulled toward black by `amount` (0 leaves it, 1 is black). */
+function darkenHexColor(color: string, amount: number) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    return color;
+  }
+  const value = Number.parseInt(match[1], 16);
+  const drop = (channel: number) => Math.max(0, Math.round(channel * (1 - amount)));
+  const r = drop((value >> 16) & 0xff);
+  const g = drop((value >> 8) & 0xff);
+  const b = drop(value & 0xff);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
 function brightenHexColor(color: string, amount: number) {
   const match = /^#([0-9a-f]{6})$/i.exec(color);
   if (!match) {
@@ -13393,35 +13408,44 @@ const ARROW_SETBACK = 10;
  */
 let lastWaypointRemovalAt = 0;
 
+/** A long run wears an arrow every this many px (8 cells). */
+const ARROW_SPACING = 160;
+
 /**
- * Direction chevrons along a routed wire, as SVG polyline point strings.
- * One near each end (source and target) when the route is long enough, one
- * in the middle when it is not. Sized to the stroke: wider than a thin wire
- * (a regular little arrow), capped so it fits INSIDE a full-lane pipe.
+ * Direction arrows along a routed wire, as SVG polygon point strings
+ * (filled triangles: tip, then the two wing corners behind it). One near
+ * each end when the route is long enough, one in the middle when it is
+ * not, and one every ARROW_SPACING along a long run - each lying wholly
+ * within one straight run, never folded over a corner. Sized to the stroke,
+ * a little wider than the wire so the head reads as a head on a fat pipe
+ * too; at a glance everything doubles so the arrows survive the zoom.
  */
-function getRouteChevrons(
+function getRouteArrows(
   points: Array<{ x: number; y: number }>,
   strokeWidth: number,
+  glance: boolean,
 ): string[] {
   const segments = getPolylineSegments(points);
   const total = segments.reduce((sum, segment) => sum + segment.length, 0);
-  if (total < 24) {
+  if (total < 16) {
     return [];
   }
+  const scale = glance ? 2 : 1;
+  const length = Math.min(Math.max(11, strokeWidth * 1.5), 22) * scale;
+  const halfWidth = Math.min(Math.max(5, strokeWidth * 0.7), 11) * scale;
 
-  // Two regimes: a thin wire wears a regular little arrow wider than
-  // itself; a pipe wide enough to hold one gets a chevron sized to sit
-  // INSIDE with clear water on both sides — not rubbing the pipe walls.
-  const halfWidth =
-    strokeWidth >= 7 ? Math.max(2.8, Math.min(strokeWidth * 0.3, 5)) : 3.5;
-  const length = halfWidth * 1.6;
-
-  // The point and travel direction at `distance` along the polyline.
+  // Segment starts along the polyline, so an arrow can be kept inside one.
+  const starts: number[] = [];
+  let walked = 0;
+  for (const segment of segments) {
+    starts.push(walked);
+    walked += segment.length;
+  }
   const at = (distance: number): { x: number; y: number; dx: number; dy: number } => {
-    let walked = 0;
-    for (const segment of segments) {
-      if (walked + segment.length >= distance || segment === segments[segments.length - 1]) {
-        const t = Math.min(Math.max((distance - walked) / segment.length, 0), 1);
+    for (let i = 0; i < segments.length; i += 1) {
+      const segment = segments[i];
+      if (distance <= starts[i] + segment.length || i === segments.length - 1) {
+        const t = Math.min(Math.max((distance - starts[i]) / segment.length, 0), 1);
         return {
           x: segment.start.x + (segment.end.x - segment.start.x) * t,
           y: segment.start.y + (segment.end.y - segment.start.y) * t,
@@ -13429,27 +13453,60 @@ function getRouteChevrons(
           dy: (segment.end.y - segment.start.y) / segment.length,
         };
       }
-      walked += segment.length;
     }
     const lastPoint = points[points.length - 1];
     return { x: lastPoint.x, y: lastPoint.y, dx: 1, dy: 0 };
   };
-
-  const chevronAt = (tipDistance: number): string => {
-    const { x, y, dx, dy } = at(tipDistance);
+  // The arrow whose tip would sit at `tip` slid, if need be, so the whole
+  // head lies on one straight run; undefined when no run there is long
+  // enough to hold it.
+  const settle = (tip: number): number | undefined => {
+    for (let i = 0; i < segments.length; i += 1) {
+      const start = starts[i];
+      const end = start + segments[i].length;
+      if (tip - length >= start - 0.01 && tip <= end + 0.01) {
+        return tip;
+      }
+      if (tip > start && tip - length < start && i > 0) {
+        // Folded over the corner at `start`: back onto the run before it
+        // if that run can hold the head, else forward onto this one.
+        const before = segments[i - 1];
+        if (before.length >= length) return start;
+        if (segments[i].length >= length) return start + length;
+        return undefined;
+      }
+    }
+    return undefined;
+  };
+  const arrowAt = (tip: number): string => {
+    const { x, y, dx, dy } = at(tip);
     const backX = x - dx * length;
     const backY = y - dy * length;
-    // Perpendicular wings behind the tip.
     const wingX = -dy * halfWidth;
     const wingY = dx * halfWidth;
-    return `${backX + wingX},${backY + wingY} ${x},${y} ${backX - wingX},${backY - wingY}`;
+    return `${x},${y} ${backX + wingX},${backY + wingY} ${backX - wingX},${backY - wingY}`;
   };
 
-  // Short wire: one chevron at the middle says everything there is room for.
+  // Short wire: one arrow in the middle says everything there is room for.
   if (total < 2 * ARROW_SETBACK + 3 * length) {
-    return [chevronAt(total / 2 + length / 2)];
+    const tip = settle(total / 2 + length / 2);
+    return tip === undefined ? [] : [arrowAt(tip)];
   }
-  return [chevronAt(ARROW_SETBACK + length), chevronAt(total - ARROW_SETBACK)];
+  const wanted: number[] = [ARROW_SETBACK + length];
+  const spacing = ARROW_SPACING * scale;
+  const last = total - ARROW_SETBACK;
+  for (let tip = wanted[0] + spacing; tip < last - spacing / 2; tip += spacing) {
+    wanted.push(tip);
+  }
+  wanted.push(last);
+  const tips: number[] = [];
+  for (const tip of wanted) {
+    const settled = settle(tip);
+    if (settled === undefined) continue;
+    if (tips.some((other) => Math.abs(other - settled) < length * 1.5)) continue;
+    tips.push(settled);
+  }
+  return tips.map(arrowAt);
 }
 
 function isCompatibleResourceConnection(

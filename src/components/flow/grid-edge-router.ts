@@ -1819,6 +1819,10 @@ function routeWithinWindow(
   weight: number,
 ): RouteFound | typeof SEALED | undefined {
   const toCell = (value: number) => Math.round(value / BOARD_GRID);
+  // A card wired to itself routes with 90° turns ONLY (Jack, 2026-09-08):
+  // no diagonal exits, landings or runs. A loop that left at 45° and
+  // turned back on itself read as a scribble on the card's own edge.
+  const straightOnly = request.sourceCardId !== undefined && request.sourceCardId === request.targetCardId;
   const sourceAprons = sources.map(apronPoint);
   const targetAprons = targets.map(apronPoint);
   const stops = waypoints.map((point) => ({ x: snapLine(point.x), y: snapLine(point.y) }));
@@ -1977,7 +1981,7 @@ function routeWithinWindow(
       const normal = outwardDirection(endpoints[i].side);
       const dockX = toCell(endpoints[i].x) - cx0;
       const dockY = toCell(endpoints[i].y) - cy0;
-      for (const outward of [normal, (normal + 1) % 8, (normal + 7) % 8]) {
+      for (const outward of straightOnly ? [normal] : [normal, (normal + 1) % 8, (normal + 7) % 8]) {
         const apronX = dockX + DIR_DX[outward];
         const apronY = dockY + DIR_DY[outward];
         if (!inWindow(apronX, apronY)) {
@@ -2108,10 +2112,11 @@ function routeWithinWindow(
     landing?: boolean;
   }
   // A card wired to itself (Jack, 2026-09-08: free docks for those too)
-  // must land some cells from where it left, or the cheapest loop is a
+  // must land a cell or more from where it left (one, since 2026-09-08:
+  // "let's make it one"), or the cheapest loop is a
   // dock next to its own and the wire is a stub nobody can read.
   const selfLoop = request.sourceCardId !== undefined && request.sourceCardId === request.targetCardId;
-  const SELF_LOOP_CELLS = 3;
+  const SELF_LOOP_CELLS = 1;
   /**
    * THE CLEAN RUN, by start: the apron and the cells after it up to the
    * clean point (T.cleanCells out from the card edge). A turn made ON one
@@ -2376,6 +2381,9 @@ function routeWithinWindow(
       const earlyTurn =
         zoneStarts !== undefined && zoneStarts.includes(startOf[currentState]) ? T.earlyTurn : 0;
       for (let dir = 0; dir < 8; dir += 1) {
+        if (straightOnly && (dir & 1) === 1) {
+          continue;
+        }
         const turn = TURN_COSTS[currentDir * 8 + dir];
         if (turn !== turn) {
           continue;

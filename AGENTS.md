@@ -555,25 +555,25 @@ Working notes for future agents on GTNH Factory Flow.
 - Opening a legacy pocket (`size` absent - the "coordinates are their own
   old space" signal) rebases members to fit the frame and drops waypoints
   on wires touching them; minimize mirrors the waypoint rule.
-- Auto-arrange LOCKS EVERY EXISTING BOARD (Jack, 2026-08-29, from player
-  feedback: the dump-first arrange read as destructive). A board someone
-  drew is the player's: its contents are never rearranged, its frame keeps
-  its size, name, paper and ink, and the arrange only PLACES the board -
-  one solid meta card in the root pass, wire length between blocks doing
-  the placing. Waypoints pinned on wires wholly inside one locked board
-  ride the board's move (translated, not wiped); every other re-laid wire
-  still loses its stops and dragged label, and only ROOT-level ink is
-  cleared. Do not resurrect the dump (`removeBoards` on
-  `applyBoardArrangement` survives as API only).
-- The arrange button opens a small SHEET (the pattern the retired Setup Rules key used
-  beside it): one setting, "Rearrange inside boards", and the Arrange
-  button under it. The setting is a browser preference
-  (`gtnh-factory-flow.arrange-tidy-boards.v1`, off by default), never part
-  of the plan. ON, every OPEN board takes the full interior pass in place:
-  members re-laid, frame refit, that level's ink and pinned waypoints
-  reset - but membership, name and paper still stand, and minimized
-  boards stay sealed either way. This is what makes the button repeatable
-  once everything lives in boards.
+- AUTO-ARRANGE DUMPS EVERY BOARD FIRST (Jack, 2026-09-08: the arrange
+  "should have no respect for player-made boards"; this reverses the
+  2026-08-29 lock, which was itself a reversal of an earlier dump - the
+  history is in git, not here). `flattenBoards` (src/lib/model) surfaces
+  every member where its frame stood (fitted frames add their corner,
+  nested frames every corner up the chain, legacy pockets surface verbatim)
+  and the arrange lays out one flat set of cards; `applyBoardArrangement`
+  gets `removeBoards` = every board id, so the boards go in the arrange's
+  own undo entry and the members ride `moves`.
+- KEEP BOARDS is the switch (the arrange SHEET: one setting, "Keep
+  boards", and the Arrange button under it). A browser preference
+  (`gtnh-factory-flow.arrange-keep-boards.v1`, OFF by default), never part
+  of the plan. ON is the old lock: a board someone drew is sealed - its
+  contents are never rearranged, its frame keeps its size, name, paper and
+  ink - and the arrange only PLACES the board, one solid meta card in the
+  root pass. Waypoints pinned on wires wholly inside one kept board ride
+  the board's move. The "Rearrange inside boards" setting is gone; the
+  `tidyBoardInteriors` option on `computeAutoArrangement` is always false
+  now and only the code path remains.
 - NO ZONES (Jack, 2026-09-08: "drop island support, board wrapping and
   whatnot"). The arrange no longer wraps islands in fresh "Zone N" boards;
   `addBoards` / `setOwners` from `computeAutoArrangement` are always empty
@@ -988,9 +988,12 @@ Working notes for future agents on GTNH Factory Flow.
   dock connects there without a search - the only special case.
   Preference order Jack asked for falls out of the prices: straight shot,
   then a 45° shot, then pathing round.
-- SELF LOOPS dock freely like everything else, but must land at least
-  three cells (`SELF_LOOP_CELLS`) from where they left (`landsTooClose`
-  at goal acceptance), or the loop collapses to a stub.
+- SELF LOOPS dock freely like everything else, but route with 90° TURNS
+  ONLY (`straightOnly` in routeWithinWindow: no diagonal exits, landings or
+  runs - a loop that left at 45° and turned back on itself read as a
+  scribble on the card's own edge) and must land at least one cell
+  (`SELF_LOOP_CELLS`) from where they left (`landsTooClose` at goal
+  acceptance), or the loop collapses to a stub. Both Jack, 2026-09-08.
 - TURNS COST: a 45° bend `turn45` (35), a 90° corner `turn90` (80), a
   reversal `reverse` (waypoint excursions only), 135° forbidden. Jack's
   rules (2026-09-08): turning should cost a lot, a diagonal costs its true
@@ -1053,6 +1056,15 @@ Working notes for future agents on GTNH Factory Flow.
   z-index lift, search-emphasised drawer wires) are GONE; wires always sit
   under the cards (`factory-flow-board--edges-under`). Old plans carrying
   the key parse (unknown keys strip).
+- DIRECTION ARROWS (Jack, 2026-09-08: "very visible, but still look good
+  and be the same colour as the edge"): FILLED arrowheads (`getRouteArrows`
+  in FactoryFlow) in the wire's colour lifted brighter, outlined in a DEEP
+  shade of the same colour (never black: a black edge read as spots ahead
+  of the tip where it crossed the pipe) over a soft offset drop shadow,
+  sized to the stroke and a little wider than it, one near each end and one
+  every 8 cells along a long run, each kept wholly on one straight run.
+  They stay at a GLANCE (`EDGE_DETAIL_ARROWS` is in the glance level) and
+  draw double size there.
 - Edge rate labels are a VIEW mode, off by default: the tag button in the
   board toolbar shows lean rate pills on the lines. No dragging, no popover.
 

@@ -574,29 +574,34 @@ Working notes for future agents on GTNH Factory Flow.
   reset - but membership, name and paper still stand, and minimized
   boards stay sealed either way. This is what makes the button repeatable
   once everything lives in boards.
-- What the arrange still builds is ZONES for the strays
-  (`computeAutoArrangement`, all one undo entry): loose root cards are
-  scouted with a throwaway arrange and each natural island of two or more
-  becomes a fresh open board ("Zone N", numbered past any existing
-  "Zone N", `addBoards` / `setOwners`). Existing boards stand in the scout
-  so islands form around them but are never swallowed into a zone. Shelf
-  strays and interchange buffers (the arranger's `backdrop: false`
-  islands) stay loose between zones. Each fresh zone arranges its own
-  members in frame space (origin one cell under the title bar) and the
-  frame FITS around the result (`setBoardSizes`); zone interiors pin no
-  waypoints (stored waypoints are flow-space).
-- The zone interior passes are BOUNDARY-AWARE: every wire crossing a frame
-  gets a phantom partner card (one per outer neighbour and direction,
-  weight x3), so members that talk across the border land against the edge
-  their wires leave through; phantoms are discarded and the members
-  re-normalise to the frame corner. Each interior pass records where every
-  crossing wire's member landed (`boundaryPortY`, "edgeId:boardId" from
-  frame top) - and locked top-level boards record the same from where
-  their members already STAND - and the root pass uses those as the board
-  card's PORT heights, which is what lines frames up so wires between
-  boards run straight instead of crossing. The arrange also papers every
-  fresh zone from `ZONE_PAPERS`, skipping coats other boards already wear;
-  locked boards are never re-dressed.
+- NO ZONES (Jack, 2026-09-08: "drop island support, board wrapping and
+  whatnot"). The arrange no longer wraps islands in fresh "Zone N" boards;
+  `addBoards` / `setOwners` from `computeAutoArrangement` are always empty
+  now (the plumbing stays for the locked-board bookkeeping). Islands are
+  still a layout TECHNIQUE inside `arrangeBoard` - groups that trade
+  through a wire or two stand apart - they just get no frame.
+- THE ARRANGE IS BENCHMARKED, and the benchmark is Jack's (2026-09-08):
+  total crossings of the board's real wires first, total wire length
+  second, readability assumed to follow. `arrangeBoard` lays out twice -
+  the plain column pass, and a CHALLENGER where every island is rearranged
+  by `src/lib/board-arrange-optimize.ts` (simulated annealing over column
+  order, column offsets, row air and satellite slides, scored against a
+  router-shaped proxy: clean-exit octilinear paths, crossings x 1200,
+  wires through cards x 500, bends, length, sprawl, strangers apart) - and
+  when the host supplies a JUDGE (`ArrangeInput.judge`, built by
+  `buildArrangeJudge` in FactoryFlow on the published route inputs, real
+  docks and widths, shifted to the candidate positions and solved by the
+  real router; `measureRoutes` counts) both layouts are routed and the
+  fewer crossings wins, shorter wire breaking ties. Without a judge (boards
+  on the level, interior passes) the plain pass stands: the proxy is not to
+  be trusted unjudged. So an arrange is never worse than the plain pass on
+  the board's own wires. Corpus (arrange-router.local.test.ts, CAPTURE=...)
+  on 2026-09-08, plain -> judged: jack-board 1/29k -> 1/23k, hv-oil 1/19.6k
+  same, LUV 0/37k -> 0/35k, platline 2/32k -> 1/37k, untitled 2/68k ->
+  1/62k (crossings/length px); 3-9 s. Players' hand layouts still beat the
+  arrange on length every time and on crossings sometimes; the proxy's
+  crossing count is crude (it says 8 where the router draws 2), which is
+  the open problem.
 - The board title bar has a paint button (palette in a NodeToolbar portal,
   because the frame's own layer sits under the cards); the paint TOOL works
   on boards too. Both go through `paintPocket`.

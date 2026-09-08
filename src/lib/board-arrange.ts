@@ -30,6 +30,7 @@
  */
 
 import { BOARD_GRID, cells, snapToGrid } from "./board-grid";
+import { optimizeIslandLayout, type OptimizeCard } from "./board-arrange-optimize";
 
 /** A card to place: its id, footprint, and where it sits today. */
 export interface ArrangeCard {
@@ -143,6 +144,16 @@ export interface ArrangeInput {
    */
   origin?: { x: number; y: number };
   taste?: ArrangeTaste;
+  /**
+   * The judge of candidate layouts (board-arrange-optimize.ts): given
+   * every card's top-left, how many crossings the board's real wires would
+   * have. Built by the host on the board's own route requests, so the
+   * arranger optimises the picture the player will actually get.
+   */
+  judge?: (positions: ReadonlyMap<string, { x: number; y: number }>) => {
+    crossings: number;
+    length: number;
+  };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -288,7 +299,41 @@ interface Block {
   plain?: boolean;
 }
 
+/**
+ * The layout, then the challenger. The column pass lays the board out as
+ * it always has; the optimiser (board-arrange-optimize.ts) then rearranges
+ * each island against a router-shaped score. With a judge supplied by the
+ * host, BOTH layouts are routed with the real router and the one with
+ * fewer crossings wins, shorter wire breaking the tie - so an arrange is
+ * never worse than the plain pass on the board's own wires. Without a
+ * judge the plain pass stands: the optimiser's proxy is not to be trusted
+ * unjudged.
+ */
 export function arrangeBoard(input: ArrangeInput): ArrangeResult {
+  const plain = arrangeBoardOnce(input, false);
+  if (!input.judge || input.cards.length < 2) {
+    return plain;
+  }
+  const challenger = arrangeBoardOnce(input, true);
+  const verdict = (result: ArrangeResult) =>
+    input.judge!(new Map(result.moves.map((move) => [move.id, move.position])));
+  const plainVerdict = verdict(plain);
+  const challengerVerdict = verdict(challenger);
+  if (
+    challengerVerdict.crossings < plainVerdict.crossings ||
+    (challengerVerdict.crossings === plainVerdict.crossings &&
+      challengerVerdict.length < plainVerdict.length)
+  ) {
+    return challenger;
+  }
+  return plain;
+}
+
+/** Whether layoutIsland runs the optimiser; set per arrangeBoardOnce call. */
+let OPTIMISE = false;
+
+function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult {
+  OPTIMISE = optimise;
   const { cards, wires } = input;
   if (cards.length === 0) {
     return { moves: [], islands: [], wireRoutes: [] };
@@ -499,6 +544,8 @@ export function arrangeBoard(input: ArrangeInput): ArrangeResult {
         group.satellites,
         exitsByGroup[index],
         pulls && pulls.size > 0 ? pulls : undefined,
+        links,
+        input.judge,
       );
       if (group.interchange) {
         block.plain = true;
@@ -1063,6 +1110,13 @@ function layoutIsland(
   satellites: Map<CardSlot, SatellitePlan>,
   exits: ReadonlyMap<string, number>,
   pulls?: ReadonlyMap<string, Array<{ y: number; weight: number; anchor: number }>>,
+  /**
+   * Every wire on the board, satellite wires included: the optimiser at
+   * the end scores the island against ALL the wires inside it, not only
+   * the ones the column system saw.
+   */
+  allLinks?: WireLink[],
+  _judge?: ArrangeInput["judge"],
 ): Block {
   // The layout may run twice over the same slots (the second pass knows
   // where every island stands); everything derived is recomputed from
@@ -1277,6 +1331,14 @@ function layoutIsland(
 
   // Satellites, pinned to their machine's side at the port row they serve
   // and stacked apart when several share a side.
+  const slotIndex = new Map<string, CardSlot>();
+  for (const slot of members) {
+    slotIndex.set(slot.card.id, slot);
+  }
+  for (const sat of satellites.keys()) {
+    slotIndex.set(sat.card.id, sat);
+  }
+  const slotOfId = (id: string): CardSlot => slotIndex.get(id)!;
   const satGroups = new Map<string, Array<{ sat: CardSlot; plan: SatellitePlan }>>();
   for (const [sat, plan] of satellites) {
     push(satGroups, `${plan.anchor.index}:${plan.side}`, { sat, plan });
@@ -1299,6 +1361,60 @@ function layoutIsland(
       previousBottom = place.y + sat.card.height;
       ids.push(sat.card.id);
       places.push(place);
+    }
+  }
+
+  // THE OPTIMISER. The column system got the island's shape; now the cards
+  // move until the wires the router will draw cross as little as possible
+  // (board-arrange-optimize.ts). Every wire inside the island counts,
+  // satellite wires included, and satellites keep to the side they serve.
+  if (OPTIMISE && allLinks && ids.length >= 2) {
+    const idSet = new Set(ids);
+    const satelliteOf = new Map<string, { anchorId: string; side: "left" | "right" }>();
+    for (const [sat, plan] of satellites) {
+      satelliteOf.set(sat.card.id, { anchorId: plan.anchor.card.id, side: plan.side });
+    }
+    const optimizeCards: OptimizeCard[] = ids.map((id) => {
+      const slot = slotOfId(id);
+      const anchor = satellites.get(slot)?.anchor;
+      return {
+        id,
+        width: slot.card.width,
+        height: slot.card.height,
+        role: slot.card.role,
+        layer: anchor ? anchor.layer : slot.layer,
+        seq: anchor ? anchor.seq : slot.y,
+        section: anchor ? anchor.section : slot.section,
+        satellite: satelliteOf.get(id),
+      };
+    });
+    const optimizeWires = allLinks
+      .filter((link) => idSet.has(link.from.card.id) && idSet.has(link.to.card.id))
+      .map((link) => ({
+        source: link.from.card.id,
+        target: link.to.card.id,
+        weight: link.weight,
+        sourcePortY: link.fromAnchor,
+        targetPortY: link.toAnchor,
+      }));
+    if (optimizeWires.length > 0) {
+      const optimized = optimizeIslandLayout(optimizeCards, optimizeWires, {
+        rowGapCells: Math.round(ROW_GAP / BOARD_GRID),
+        sectionGapCells: Math.round(SECTION_GAP / BOARD_GRID),
+        columnGapCells: Math.round(COLUMN_GAP_MIN / BOARD_GRID),
+        satellitePadCells: Math.round(SATELLITE_PAD / BOARD_GRID),
+        // The island's finalists are judged by the optimiser's own stand-in
+        // (island-local, cheap); the host's judge routes the WHOLE board and
+        // is spent once, on the finished layouts (arrangeBoard).
+        judge: undefined,
+      });
+      if (process.env.ARRANGE_DEBUG) {
+        console.log("finalists", JSON.stringify(optimized.finalists), "before", Math.round(optimized.before), "after", Math.round(optimized.after));
+      }
+      optimized.positions.forEach((place, i) => {
+        places[i].x = place.x;
+        places[i].y = place.y;
+      });
     }
   }
 

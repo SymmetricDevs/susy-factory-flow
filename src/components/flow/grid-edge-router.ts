@@ -2571,6 +2571,46 @@ function stubTip(endpoint: GridEndpoint): GridPoint {
 }
 
 /**
+ * Proper crossings between the routes of different wires, and their total
+ * length in px: the two numbers a layout is judged by (crossings first).
+ * Touching ends and T-junctions do not count as crossings.
+ */
+export function measureRoutes(routes: Iterable<GridRoutedEdge>): { crossings: number; length: number } {
+  const segments: Array<{ id: string; a: GridPoint; b: GridPoint }> = [];
+  let length = 0;
+  for (const route of routes) {
+    for (let i = 1; i < route.points.length; i += 1) {
+      const a = route.points[i - 1];
+      const b = route.points[i];
+      segments.push({ id: route.edgeId, a, b });
+      length += Math.hypot(b.x - a.x, b.y - a.y);
+    }
+  }
+  const cross = (o: GridPoint, a: GridPoint, b: GridPoint) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  let crossings = 0;
+  for (let i = 0; i < segments.length; i += 1) {
+    for (let j = i + 1; j < segments.length; j += 1) {
+      const s = segments[i];
+      const t = segments[j];
+      if (s.id === t.id) continue;
+      const d1 = cross(s.a, s.b, t.a);
+      const d2 = cross(s.a, s.b, t.b);
+      const d3 = cross(t.a, t.b, s.a);
+      const d4 = cross(t.a, t.b, s.b);
+      const eps = 0.5;
+      if (
+        ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) &&
+        ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps))
+      ) {
+        crossings += 1;
+      }
+    }
+  }
+  return { crossings, length };
+}
+
+/**
  * Drops zero-length and collinear intermediate points - but ONLY when the
  * direction of travel is preserved. A point where the wire REVERSES along
  * the same line (a waypoint excursion: out to a dot and back the way it

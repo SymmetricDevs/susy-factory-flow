@@ -276,8 +276,11 @@ import {
   type GridEndpoint,
   type GridSide,
   type GridRouteRequest,
+  type GridObstacle,
+  measureRoutes,
 } from "./grid-edge-router";
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
+import type { ArrangeInput } from "@/lib/board-arrange";
 import {
   ASYNC_ROUTE_EDGE_LIMIT,
   routeWorkerAvailable,
@@ -1482,6 +1485,75 @@ function installSolvedRoutes(result: RouteSolveResult) {
   routeSolveRerender?.();
 }
 setRouteSolveSink(installSolvedRoutes);
+
+/**
+ * The arranger's judge: routes the board's OWN wires (the published route
+ * inputs - real docks, widths, ids, frames) at hypothetical card positions
+ * and reports crossings and total length. Every card is shifted by the
+ * difference between where it stands and where the layout puts it, so the
+ * measured perimeters and slot ports move with it. Undefined when any card
+ * on the level is a board (the meta cards have no measured perimeter of
+ * their own to shift) or when no wire has resolvable ends.
+ */
+function buildArrangeJudge(cardIds: readonly string[]): ArrangeInput["judge"] | undefined {
+  const ids = new Set(cardIds);
+  const inputs = publishedGridRouteEdges.filter(
+    (input) => ids.has(input.sourceNodeId) && ids.has(input.targetNodeId),
+  );
+  if (inputs.length === 0) {
+    return undefined;
+  }
+  const base: Array<{ input: GridRouteEdgeInput; sources: GridEndpoint[]; targets: GridEndpoint[] }> = [];
+  for (const input of inputs) {
+    const sources = resolveGridRouteEndpoints(input, "source");
+    const targets = resolveGridRouteEndpoints(input, "target");
+    if (sources.length === 0 || targets.length === 0) {
+      continue;
+    }
+    base.push({ input, sources, targets });
+  }
+  if (base.length === 0) {
+    return undefined;
+  }
+  const bounds = new Map<string, { left: number; top: number; right: number; bottom: number }>();
+  for (const id of ids) {
+    const rect = getMeasuredNodeBoundsById(id);
+    if (!rect) {
+      return undefined;
+    }
+    bounds.set(id, rect);
+  }
+  const tuning = getRouterTuning();
+  return (positions) => {
+    const delta = new Map<string, { dx: number; dy: number }>();
+    const obstacles: GridObstacle[] = [];
+    for (const [id, rect] of bounds) {
+      const at = positions.get(id) ?? { x: rect.left, y: rect.top };
+      delta.set(id, { dx: at.x - rect.left, dy: at.y - rect.top });
+      obstacles.push({
+        id,
+        left: at.x,
+        top: at.y,
+        right: at.x + (rect.right - rect.left),
+        bottom: at.y + (rect.bottom - rect.top),
+      });
+    }
+    const shift = (ends: GridEndpoint[], id: string): GridEndpoint[] => {
+      const d = delta.get(id) ?? { dx: 0, dy: 0 };
+      return ends.map((end) => ({ ...end, x: end.x + d.dx, y: end.y + d.dy }));
+    };
+    const requests: GridRouteRequest[] = base.map(({ input, sources, targets }) => ({
+      edgeId: input.edgeId,
+      order: input.order,
+      sources: shift(sources, input.sourceNodeId),
+      targets: shift(targets, input.targetNodeId),
+      strokeWidth: Math.min(input.routingWidth, LANE_CAPACITY),
+      sourceCardId: input.sourceNodeId,
+      targetCardId: input.targetNodeId,
+    }));
+    return measureRoutes(solveGridRoutes(obstacles, requests, undefined, tuning).values());
+  };
+}
 
 function clearDirectRoutes() {
   directRouteCache.clear();
@@ -12052,67 +12124,9 @@ function computeAutoArrangement(
     }`;
   const addBoards: FactoryPocket[] = [];
   const setOwners: Array<{ id: string; pocketId?: string }> = [];
-  const scout = makeGatherer(baseProject).gatherLevel(undefined);
-  if (scout.cards.length > 0) {
-    const scouted = arrangeBoard({ cards: scout.cards, wires: scout.wires, taste });
-    const scoutPositionById = new Map(
-      scouted.moves.map((move) => [move.id, move.position] as const),
-    );
-    // Membership falls out of the geometry: every island rect covers
-    // exactly its own cards. Locked boards helped shape the islands but
-    // are never claimed by one.
-    const islandMembers: string[][] = scouted.islands.map(() => []);
-    for (const card of scout.cards) {
-      if (lockedBoardIds.has(card.id)) {
-        continue;
-      }
-      const position = scoutPositionById.get(card.id);
-      const size = scout.sizeById.get(card.id);
-      if (!position || !size) {
-        continue;
-      }
-      const centreX = position.x + size.width / 2;
-      const centreY = position.y + size.height / 2;
-      const index = scouted.islands.findIndex(
-        (island) =>
-          // The stray shelf and interchange buffers wear no backdrop; their
-          // cards stay loose between the zones on purpose.
-          island.backdrop &&
-          centreX >= island.x &&
-          centreX <= island.x + island.width &&
-          centreY >= island.y &&
-          centreY <= island.y + island.height,
-      );
-      if (index >= 0) {
-        islandMembers[index].push(card.id);
-      }
-    }
-    // Fresh zones number past any "Zone N" already standing on the plan.
-    let zoneNumber = 1;
-    for (const pocket of basePockets) {
-      const match = /^Zone (\d+)$/.exec(pocket.name);
-      if (match) {
-        zoneNumber = Math.max(zoneNumber, Number(match[1]) + 1);
-      }
-    }
-    for (const members of islandMembers) {
-      if (members.length < 2) {
-        continue;
-      }
-      const zone: FactoryPocket = {
-        id: mintZoneId(),
-        name: `Zone ${zoneNumber}`,
-        position: { x: 0, y: 0 },
-        expanded: true,
-      };
-      zoneNumber += 1;
-      addBoards.push(zone);
-      for (const id of members) {
-        setOwners.push({ id, pocketId: zone.id });
-      }
-    }
-  }
-
+  // No zones (Jack, 2026-09-08): the arrange no longer wraps islands in
+  // fresh boards. A layout that minimises crossings and length separates
+  // its natural groups by itself, and a board is the player's to draw.
   // Everything the zoning did not claim stays loose on the canvas.
   const zoneOwner = new Map(setOwners.map((owner) => [owner.id, owner.pocketId]));
 
@@ -12288,7 +12302,11 @@ function computeAutoArrangement(
   // The root pass: boards as meta cards at their fresh sizes, wire length
   // between the blocks doing the placing.
   const root = gatherLevel(undefined);
-  const arranged = arrangeBoard({ cards: root.cards, wires: root.wires, taste });
+  // The judge routes the real wires at each candidate layout; it exists
+  // only when every card on the level is a plain card (no boards).
+  const rootIsPlain = root.cards.every((card) => !isPocketId(project, card.id));
+  const judge = rootIsPlain ? buildArrangeJudge(root.cards.map((card) => card.id)) : undefined;
+  const arranged = arrangeBoard({ cards: root.cards, wires: root.wires, taste, judge });
   moves.push(...arranged.moves);
 
   // How far each locked top-level board moved: waypoints pinned on wires

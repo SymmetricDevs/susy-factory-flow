@@ -627,10 +627,23 @@ Working notes for future agents on GTNH Factory Flow.
   writes the arranger's answer beside it; `score-layout.local.test.ts`
   scores one. Compact taste is 1/2/2/1/0 cells (row/section/column/
   satellite pad/stack), what Jack's hand draws.
-- Numbers on the oil board at the shipped dials (2026-09-08): Jack's
-  hand layout `artifacts/route-audit/oil-jack4.layout.json` 3 crossings /
-  8,388 pts / 6,863 px; the arranger's answer to it 3 / 12-14k pts /
-  10-12k px; the in-app Arrange of his plan (`oil-v8` audit) 2 crossings
+- POINTS ARE WEIGHTED BY FLOW (Jack, 2026-09-08: "edges with more items/s
+  or L/s are more expensive to traverse ... like laying the bedrock
+  first"). `wireWeight(width)` in route-metrics.ts is 0.5 + width/8: the
+  quietest wire on the board (4 px) weighs 1, the busiest (16 px) 2.5. A
+  wire's length and bends count its weight times over and a crossing
+  weighs the heavier of the two wires (`weighted*` fields on
+  `RouteMeasure`; `routePoints` reads those). Every `GridRoutedEdge`
+  carries its `width` so the judge, the router's own retainBest and the
+  dev menu's score all weigh the same way; the arranger's proxy already
+  weighted links by log10 of the flow. Effect on the numbers: a board's
+  points rose by roughly the average weight (Jack's oil-jack4 8,388 ->
+  12,401 at 3 crossings), so compare boards only at one metric version.
+- Numbers on the oil board at the shipped dials (2026-09-08, weighted):
+  Jack's hand layout `artifacts/route-audit/oil-jack4.layout.json` 3
+  crossings / 12,401 pts / 6,880 px; the arranger's answer to it 3 /
+  18,809 pts / 10,400 px; unweighted the same day 8,388 vs 12,134. The
+  in-app Arrange of his plan (`oil-v8` audit, unweighted) 2 crossings
   / 10,703 px. The arranger LOSES ON WIRE: a machine fed only by a source
   drawer is ranked into column one and stands ~50 cells from the consumer
   it shares its output drawer with (Jack puts it beside the consumer), and
@@ -658,7 +671,8 @@ Working notes for future agents on GTNH Factory Flow.
   parent, so a floor child could not go below either. The layer reads live
   positions from the node lookup, so paper tracks a dragged frame exactly.
   Open boards therefore also un-seal the edge/node layers
-  (`factory-flow-board--edges-under`, the lever thickness mode pulls).
+  (`factory-flow-board--edges-under`, always on now that line thickness
+  is always on).
 - The marching dashes are a CANVAS painted over everything, so anything the
   wires go under has to be punched back out of it. A board's bar and rim are
   in that set in EVERY mode (`boardChromeOccluders`, fed from
@@ -878,9 +892,15 @@ Working notes for future agents on GTNH Factory Flow.
     wire that cannot route from the near ones), and a dock another wire
     already uses costs `dockShare` - never a ban, so wires may stack onto
     one side of a drawer when that routes best (Jack, 2026-09-08).
-  - FIRST PASS, LONGEST WIRE FIRST: a long wire takes the open lines and
-    the short ones fit in around it, which nests a fan to a row of drawers
-    instead of having the last one climb across all the others.
+  - FIRST PASS, BEDROCK FIRST (Jack, 2026-09-08): the THICKEST wires -
+    the ones carrying the most - take the open lines first, then, at one
+    width, the longest: a long wire takes the open lines and the short
+    ones fit in around it, which nests a fan to a row of drawers instead
+    of having the last one climb across all the others. The trickles find
+    their way round the trunk lines afterwards.
+  - THE BOARD KEPT is the one with the fewest POINTS (`retainBest`,
+    `routePoints` over `measureWireRoutes`), the same number the arrange
+    and the dev menu's score read.
   - NEGOTIATION: any wire that ended up crossing another (or overflowing a
     lane) is ripped up and routed again against the whole finished board,
     and every spot wires cross at gets dearer each round (`escalate`, a
@@ -982,6 +1002,13 @@ Working notes for future agents on GTNH Factory Flow.
   2026-09-08 vs the old Hanan router: crossings 4->0, 9->0, 45->20,
   23->5, 6->1, 43->28, 634->314; time roughly 2.5x (farm-power 1.7s->4.6s,
   in the worker; hv-oil 51->133ms).
+- LINE THICKNESS IS ALWAYS ON (Jack, 2026-09-08: "line thickness will be
+  perma enabled"). Every wire is drawn and routed at `laneWidthForHeat`
+  of its flow; the switch, `lineThicknessMode` on the board view and plan
+  view, and the thin-mode styling (starved dashes, per-kind widths,
+  z-index lift, search-emphasised drawer wires) are GONE; wires always sit
+  under the cards (`factory-flow-board--edges-under`). Old plans carrying
+  the key parse (unknown keys strip).
 - Edge rate labels are a VIEW mode, off by default: the tag button in the
   board toolbar shows lean rate pills on the lines. No dragging, no popover.
 

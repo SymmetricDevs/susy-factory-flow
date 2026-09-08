@@ -13,6 +13,21 @@ export interface RoutePoint {
 export interface MeasuredRoute {
   edgeId: string;
   points: readonly RoutePoint[];
+  /** Stroke the wire routes at, in px; sets its weight (see wireWeight). */
+  width?: number;
+}
+
+/**
+ * A wire's WEIGHT from its width (Jack, 2026-09-08: "edges with more
+ * items/s or L/s are more expensive to traverse"). Widths come off the
+ * lane-fraction menu, 4 px for the quietest wire on the board to 16 px
+ * for the busiest; a quiet wire weighs 1, the busiest 2.5. Its length and
+ * bends count that many times over in the points, and a crossing weighs
+ * the heavier of the two wires - so the arrange keeps the trunk lines
+ * short and straight and lets the trickles go round.
+ */
+export function wireWeight(width: number | undefined): number {
+  return 0.5 + (width ?? 4) / 8;
 }
 export interface RouteCrossing {
   point: RoutePoint;
@@ -26,6 +41,12 @@ export interface RouteMeasure {
   bends90: number;
   bendsSharp: number;
   events: RouteCrossing[];
+  /** The same four, each wire's counted wireWeight times over. */
+  weightedCrossings: number;
+  weightedLength: number;
+  weightedBends45: number;
+  weightedBends90: number;
+  weightedBendsSharp: number;
 }
 /** What a bend and a crossing cost, in pixels of wire: the router's own dials. */
 export interface RoutePrices {
@@ -116,17 +137,32 @@ export function measureWireRoutes(input: Iterable<MeasuredRoute>): RouteMeasure 
       };
     }),
   );
+  const weights = routes.map((r) => wireWeight(r.width));
   let length = 0;
-  for (const list of segments) for (const s of list) length += Math.hypot(s.dx, s.dy);
+  let weightedLength = 0;
+  segments.forEach((list, index) => {
+    for (const s of list) {
+      const run = Math.hypot(s.dx, s.dy);
+      length += run;
+      weightedLength += run * weights[index];
+    }
+  });
   let bends45 = 0;
   let bends90 = 0;
   let bendsSharp = 0;
-  for (const route of routes) {
+  let weightedBends45 = 0;
+  let weightedBends90 = 0;
+  let weightedBendsSharp = 0;
+  routes.forEach((route, index) => {
     const bends = countBends(route.points);
     bends45 += bends.bends45;
     bends90 += bends.bends90;
     bendsSharp += bends.bendsSharp;
-  }
+    weightedBends45 += bends.bends45 * weights[index];
+    weightedBends90 += bends.bends90 * weights[index];
+    weightedBendsSharp += bends.bendsSharp * weights[index];
+  });
+  let weightedCrossings = 0;
   const events: RouteCrossing[] = [];
   for (let i = 0; i < routes.length; i++)
     for (let j = i + 1; j < routes.length; j++) {
@@ -152,22 +188,37 @@ export function measureWireRoutes(input: Iterable<MeasuredRoute>): RouteMeasure 
           if (!contacts.some((q) => Math.hypot(p.x - q.x, p.y - q.y) < EPS)) contacts.push(p);
         }
       for (const p of contacts)
-        if (pathsCrossAt(routes[i], routes[j], p))
+        if (pathsCrossAt(routes[i], routes[j], p)) {
           events.push({ point: p, edges: [routes[i].edgeId, routes[j].edgeId] });
+          weightedCrossings += Math.max(weights[i], weights[j]);
+        }
     }
-  return { crossings: events.length, length, bends45, bends90, bendsSharp, events };
+  return {
+    crossings: events.length,
+    length,
+    bends45,
+    bends90,
+    bendsSharp,
+    events,
+    weightedCrossings,
+    weightedLength,
+    weightedBends45,
+    weightedBends90,
+    weightedBendsSharp,
+  };
 }
 
 /**
  * The board's points: every wire's length plus its bends at the router's
- * prices (a sharper bend as three 90° ones), plus every crossing. One
- * number, lower is better, crossings dominating at the shipped prices.
+ * prices (a sharper bend as three 90° ones), plus every crossing - each
+ * counted the wire's weight times over, so a trunk line's detour costs
+ * more than a trickle's. One number, lower is better.
  */
 export function routePoints(measure: RouteMeasure, prices: RoutePrices): number {
   return (
-    measure.length +
-    measure.bends45 * prices.turn45 +
-    (measure.bends90 + 3 * measure.bendsSharp) * prices.turn90 +
-    measure.crossings * prices.crossing
+    measure.weightedLength +
+    measure.weightedBends45 * prices.turn45 +
+    (measure.weightedBends90 + 3 * measure.weightedBendsSharp) * prices.turn90 +
+    measure.weightedCrossings * prices.crossing
   );
 }

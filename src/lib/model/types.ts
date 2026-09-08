@@ -666,7 +666,6 @@ export interface PlanViewState {
   /** Historical: older plans carry it, nothing reads it. Line colour rides
    * the status glance mode now. */
   lineHeatMode?: boolean;
-  lineThicknessMode?: boolean;
   lineLabelsMode?: boolean;
   linePulseMode?: boolean;
   calmMode?: boolean;

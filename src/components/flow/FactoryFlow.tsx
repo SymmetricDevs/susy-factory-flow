@@ -39,7 +39,6 @@ import {
   Ban,
   Box,
   Combine,
-  Cable,
   Grid2x2,
   Eye,
   Focus,
@@ -1369,7 +1368,11 @@ function ensureGridSolve() {
           continue;
         }
         if (entry.signature !== gridSolveSignature) settled = false;
-        routes.push({ edgeId: input.edgeId, points: entry.route.points });
+        routes.push({
+          edgeId: input.edgeId,
+          points: entry.route.points,
+          width: Math.min(input.routingWidth, LANE_CAPACITY),
+        });
       }
       const measured = measureRoutes(routes);
       return {
@@ -2045,14 +2048,16 @@ export function FactoryFlow() {
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
   const boardView = useBoardView();
-  const { lineLabelsMode, lineThicknessMode, calmMode } = boardView;
+  const { lineLabelsMode, calmMode } = boardView;
   // Device taste, not plan state: never captured into plan-view snapshots.
   const boardMotion = useBoardMotion();
   const canvasTheme = getCanvasTheme(boardView.canvasTheme);
   // Line colour rides the speed smart view now — no switch of its own. The
   // edge component itself gates it to the glance step, where the view lives.
   const speedColorMode = boardView.glanceMode === "status";
-  const anyLineMode = speedColorMode || lineThicknessMode;
+  // Line thickness is always on (Jack, 2026-09-08); every wire is drawn and
+  // routed at the width its flow earns.
+  const anyLineMode = true;
   const setFlowViewportCenter = useFactoryStore((state) => state.setFlowViewportCenter);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
@@ -2749,11 +2754,11 @@ export function FactoryFlow() {
     // republishes every endpoint, but an edge only redraws when its identity
     // changes — without the epoch bump the new docking arrived one hover at
     // a time, as each edge happened to re-render.
-    const nextLaneScale = lineThicknessMode ? THICK_LINE_LANE_SCALE : 1;
+    const nextLaneScale = THICK_LINE_LANE_SCALE;
     // Clearances are a routing input for the same reason lane width is, and
     // they move together: both are functions of the widest line the current
     // mode can draw. See edgeClearancesForMode.
-    const nextClearances = edgeClearancesForMode(lineThicknessMode);
+    const nextClearances = edgeClearancesForMode(true);
     if (
       publishedEdgeLaneScale !== nextLaneScale ||
       publishedDirectEdgeNodeClearance !== nextClearances.node ||
@@ -2840,7 +2845,7 @@ export function FactoryFlow() {
     if (invalidateRoutes) {
       invalidateMeasuredLayout();
     }
-  }, [lineThicknessMode]);
+  }, []);
   // Live-drag throttle state: when the last mid-drag solve ran, and the
   // trailing timer that guarantees the LAST cell a card entered still gets
   // its solve when the pointer stops moving inside a throttle window.
@@ -3168,7 +3173,7 @@ export function FactoryFlow() {
       // together or visibly do not.
       publishedEdgeStrokeWidths.set(
         edge.id,
-        lineThicknessMode ? laneWidthForHeat(heat) : DEFAULT_EDGE_STROKE_WIDTH,
+        laneWidthForHeat(heat),
       );
     }
 
@@ -3305,13 +3310,9 @@ export function FactoryFlow() {
       // the board, 1 the busiest. A single line, or a board where every line
       // is equal, reads as the biggest there is.
       const flowHeat = flowHeatById.get(edge.id) ?? 0;
-      // isLimited almost never survives the solver's utilisation convergence,
-      // since demand gets scaled down to whatever supply exists. The nameplate
-      // comparison is what actually catches a starved machine. Storage soaks
-      // up whatever arrives, so a line into a barrel is never starved.
+      // Storage soaks up whatever arrives, so a line into a barrel is never
+      // supply-capped.
       const isSupplyCapped = edgeResult?.constraint === "supply" && !targetStorage;
-      const isStarvedEdge =
-        isSupplyCapped || (edgeResult?.isLimited === true && !targetStorage);
       const isStorageEdge = Boolean(sourceStorage || targetStorage);
       const resource = getEdgeResource(project, edge);
       const edgeColor = getInitialResourceColor(resource);
@@ -3334,12 +3335,6 @@ export function FactoryFlow() {
       const canonicalTargetHandle = targetIsPocket
         ? POCKET_CARD_TARGET_HANDLE
         : canonicalizeResourceHandleId(edge.targetHandle);
-      const isSearchEdgeActive = edgeMatchesSearch(edge, resource, recipeSearch);
-      // A drawer's own wires thicken when the search names them. Hovering the
-      // drawer no longer feeds this: that lights the wires ON the drawer
-      // through the flow scope, which is a per-edge subscription and does not
-      // rebuild this memo.
-      const isStorageEdgeEmphasized = isStorageEdge && isSearchEdgeActive;
       const isFlowHighlighted =
         activeFlowResourceKey === makeResourceKey(edge.resourceKind, edge.resourceId);
 
@@ -3406,7 +3401,7 @@ export function FactoryFlow() {
         // No drag-time bump any more: wires hold still during a drag and the
         // dragged card itself is elevated (see handleNodeDragStart), so a
         // card in hand always passes OVER the board's wiring.
-        zIndex: lineThicknessMode ? -1 : isFlowHighlighted ? 1200 : 20,
+        zIndex: -1,
         source: sourceRep,
         target: targetRep,
         sourceHandle: canonicalSourceHandle,
@@ -3459,7 +3454,7 @@ export function FactoryFlow() {
                 heat: flowHeat,
                 kind: flowBucketFor(edge.resourceKind),
                 color: speedColorMode,
-                thickness: lineThicknessMode,
+                thickness: true,
                 // The marching dashes were retired (2026-09-07): their canvas
                 // dirtied the whole board every frame and read the camera a
                 // frame late, so they cost most of the frame rate and still
@@ -3473,33 +3468,9 @@ export function FactoryFlow() {
           // Always the resource colour: the edge component derives its own
           // speed-view stroke at the point of use (it knows the LOD step).
           stroke: edgeColor,
-          // Volume is the whole message in thickness mode, so the starved
-          // dashes stand down rather than chopping up a fat pipe.
-          strokeDasharray: isStarvedEdge && !lineThicknessMode ? "4 6" : undefined,
-          strokeOpacity: lineThicknessMode
-            ? 0.95
-            : isFlowHighlighted
-              ? 1
-              : isStarvedEdge
-                ? 0.58
-                : isStorageEdge
-                  ? 0.86
-                  : 0.92,
-          // Doubled across the board: ~3px wires read as scratches next to
-          // the 4-16px dynamic pipes and on dense displays.
-          strokeWidth: lineThicknessMode
-            ? laneWidthForHeat(flowHeat)
-            : isFlowHighlighted
-              ? 9
-              : isStorageEdge
-                ? isStorageEdgeEmphasized
-                  ? 7.5
-                  : 6.2
-                : isStarvedEdge
-                  ? 5.4
-                  : edge.resourceKind === "fluid"
-                    ? 6.8
-                    : 5.8,
+          // Volume is the whole message, so no starved dashes chop up a pipe.
+          strokeOpacity: 0.95,
+          strokeWidth: laneWidthForHeat(flowHeat),
         },
       })];
     });
@@ -3538,7 +3509,6 @@ export function FactoryFlow() {
     anyLineMode,
     speedColorMode,
     lineLabelsMode,
-    lineThicknessMode,
     layoutVersion,
     pocketSummaries,
     pocketView,
@@ -4888,11 +4858,7 @@ export function FactoryFlow() {
         // dots. The GIF replays against these instead of the live
         // registries, which will have forgotten the offscreen edges by then.
         occlusionRects: [
-          ...(lineThicknessMode
-            ? (publishedBoardBounds ?? []).map(({ id, bounds }) => {
-                return bounds;
-              })
-            : []),
+          ...(publishedBoardBounds ?? []).map(({ bounds }) => bounds),
           // Board chrome hides the wires under it in every mode, so the
           // exported dashes stop at it too.
           ...publishedBoardFrameBounds.flatMap(({ bounds }) => boardChromeOccluders(bounds)),
@@ -4952,7 +4918,7 @@ export function FactoryFlow() {
         dispatchImageExportComplete(requestId, capture, failure);
       }
     },
-    [flowNodes, canvasTheme.base, lineThicknessMode],
+    [flowNodes, canvasTheme.base],
   );
 
   const exportFlowImage = useCallback(
@@ -5575,9 +5541,9 @@ export function FactoryFlow() {
     }
     // The board may have changed while the arrange ran; apply to the
     // current store, which is what applyBoardArrangement reads.
-    // An arranged board is read through two switches, so the arrange sets
-    // them: lines weighted by volume, rate pills off.
-    writeBoardView({ lineThicknessMode: true, lineLabelsMode: false });
+    // An arranged board is read without rate pills, so the arrange turns
+    // them off.
+    writeBoardView({ lineLabelsMode: false });
     // The arrange draws no ink: its islands become ZONES — real boards the
     // stray cards move into. Root notes (and old releases' island boxes)
     // go; they point at a layout that no longer exists. Boards the player
@@ -6367,7 +6333,7 @@ export function FactoryFlow() {
         paintCursor ? "factory-flow-board--painting" : "",
         annotationTool ? "factory-flow-board--annotating" : "",
         isDeleteMode ? "factory-flow-board--deleting" : "",
-        lineThicknessMode ? "factory-flow-board--edges-under" : "",
+        "factory-flow-board--edges-under",
         calmMode ? "factory-flow-board--calm" : "",
         // The two motion switches (board-motion.tsx): the grid magnet and the
         // arrival pop hang off the first, the easing gauges off the second.
@@ -8824,7 +8790,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
   const {
     canvasPattern,
     lineLabelsMode,
-    lineThicknessMode,
     calmMode,
   } = view;
   // Motion is device taste, not plan state: read and written through its own
@@ -8842,16 +8807,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
     Icon: LucideIcon;
     flip: () => void;
   }> = [
-    // The two line modes, independent and mixable. Volume is always ranked
-    // within a kind, items against items and fluids against fluids.
-    {
-      id: "thickness",
-      on: lineThicknessMode,
-      label: "Line thickness",
-      line: "Wires with more flow are drawn thicker.",
-      Icon: Cable,
-      flip: () => onChange({ lineThicknessMode: !lineThicknessMode }),
-    },
     {
       id: "labels",
       on: lineLabelsMode,
@@ -13763,21 +13718,6 @@ function getEdgeResource(
       output?.iconAtlas?.dominantColor ??
       storage?.iconAtlas?.dominantColor,
   };
-}
-
-function edgeMatchesSearch(
-  edge: FactoryEdge,
-  resource: Pick<ResourceAmount, "id" | "displayName">,
-  query: string,
-) {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (normalizedQuery.length < 2) {
-    return false;
-  }
-
-  return `${resource.displayName ?? ""} ${resource.id} ${edge.resourceId}`
-    .toLowerCase()
-    .includes(normalizedQuery);
 }
 
 function recipeContainsResourceKey(recipe: Recipe | undefined, resourceKey: string) {

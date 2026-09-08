@@ -31,7 +31,7 @@
  */
 
 import { BOARD_GRID } from "@/lib/board-grid";
-import { measureWireRoutes } from "@/lib/route-metrics";
+import { measureWireRoutes, routePoints } from "@/lib/route-metrics";
 import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "./router-tuning";
 
 /** One cell of clearance between any wire run and any card. */
@@ -160,6 +160,8 @@ export interface GridRouteRequest {
 export interface GridRoutedEdge {
   edgeId: string;
   points: GridPoint[];
+  /** The stroke the wire was routed at, in px: its weight in the points. */
+  width?: number;
   /**
    * The route's vertex chain in cells and the docks it took: enough to
    * PIN it into a later solve (`solveGridRoutes`'s `pinned`) exactly as
@@ -990,8 +992,12 @@ export function solveGridRoutes(
     widePopCap: (NEGOTIATION_POPS_PER_WIRE * requests.length) / 2,
   };
   const planned = planDocks(requests);
+  // BEDROCK FIRST (Jack, 2026-09-08): the thick wires - the ones carrying
+  // the most - take the open lines first, then the long ones, and the
+  // trickles find their way round them. Same width: longest first.
   const sorted = [...planned].sort(
     (left, right) =>
+      right.strokeWidth - left.strokeWidth ||
       (T.longestFirst ? routeSpan(right) - routeSpan(left) : routeSpan(left) - routeSpan(right)) ||
       left.order - right.order ||
       (left.edgeId < right.edgeId ? -1 : 1),
@@ -1021,13 +1027,16 @@ export function solveGridRoutes(
 
   const firstPassMs = performance.now() - startedAt;
   let bestRoutes = states.map((state) => state.routed);
-  let bestMeasure = measureWireRoutes(bestRoutes);
+  let bestPoints = routePoints(measureWireRoutes(bestRoutes), T);
+  // The board kept is the one with the fewest POINTS (length, bends and
+  // crossings at the dials, each wire weighted by its width) - the same
+  // number the arrange and the dev menu's score read.
   const retainBest = () => {
     const routes = states.map((state) => state.routed);
-    const measure = measureWireRoutes(routes);
-    if (measure.crossings < bestMeasure.crossings || (measure.crossings === bestMeasure.crossings && measure.length < bestMeasure.length)) {
+    const points = routePoints(measureWireRoutes(routes), T);
+    if (points < bestPoints) {
       bestRoutes = routes;
-      bestMeasure = measure;
+      bestPoints = points;
     }
   };
   let rerouted = 0;
@@ -1148,7 +1157,7 @@ export function solveGridRoutes(
     }
   }
   if (stats) {
-    stats.crossings = bestMeasure.crossings;
+    stats.crossings = measureWireRoutes(bestRoutes).crossings;
     stats.rerouted = rerouted;
     stats.fallbacks = fallbacks;
     stats.pops = workPops;
@@ -1587,6 +1596,7 @@ function install(context: SolveContext, request: PlannedRequest, found: RouteFou
     found,
     routed: {
       edgeId: request.edgeId,
+      width: request.strokeWidth,
       points: assembled.points,
       vertices: found.vertices,
       source: found.source,
@@ -1603,7 +1613,7 @@ function fallbackRoute(context: SolveContext, request: PlannedRequest): GridRout
   const source = request.allSources[0];
   const target = request.allTargets[0];
   if (!source || !target) {
-    return { edgeId: request.edgeId, points: [] };
+    return { edgeId: request.edgeId, points: [], width: request.strokeWidth };
   }
   context.usedDocks.set(dockKey(source), request.edgeId);
   context.usedDocks.set(dockKey(target), request.edgeId);
@@ -1611,6 +1621,7 @@ function fallbackRoute(context: SolveContext, request: PlannedRequest): GridRout
   const targetApron = apronPoint(target);
   return {
     edgeId: request.edgeId,
+    width: request.strokeWidth,
     points: compactPoints([
       { x: source.x, y: source.y },
       sourceApron,

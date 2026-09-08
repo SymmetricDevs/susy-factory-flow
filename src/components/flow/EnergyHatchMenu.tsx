@@ -406,7 +406,7 @@ export function energySupplyChipText(familyId: string | undefined, hatches: numb
  * and the number itself at the bottom.
  */
 /** The list shows this many whole hatch rows; the rest scroll. A row is h-7. */
-const HATCH_LIST_ROWS = 12;
+const HATCH_LIST_ROWS = 11;
 const HATCH_ROW_HEIGHT = 28;
 
 export function EnergyHatchCalculator({
@@ -523,7 +523,6 @@ export function EnergyHatchCalculator({
             ) : null}
           </div>
 
-          <div className="mt-auto" />
 
           {/* Where the number sits between the last win and the next. */}
           <div className={SETTING_TILE_CLASS}>

@@ -868,7 +868,7 @@ export function optimizeIslandLayout(
 /** Rim docks the way the board offers them in free-dock mode. */
 function rim(rect: Rect): GridEndpoint[] {
   const out: GridEndpoint[] = [];
-  const keepOut = (span: number) => (span < 6 * BOARD_GRID ? BOARD_GRID : 2 * BOARD_GRID);
+  const keepOut = (span: number) => (span >= 2 * BOARD_GRID ? BOARD_GRID : 0);
   const kx = keepOut(rect.right - rect.left);
   const ky = keepOut(rect.bottom - rect.top);
   for (let x = rect.left + kx; x <= rect.right - kx; x += BOARD_GRID) {

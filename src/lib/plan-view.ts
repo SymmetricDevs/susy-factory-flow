@@ -34,7 +34,6 @@ export function capturePlanView(): PlanViewState {
     // No `lineHeatMode` any more: line colour rides the status glance mode,
     // which the snapshot already carries.
     lineThicknessMode: board.lineThicknessMode,
-    freeDockMode: board.freeDockMode,
     lineLabelsMode: board.lineLabelsMode,
     linePulseMode: board.linePulseMode,
     calmMode: board.calmMode,
@@ -130,7 +129,6 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   // switch on a layer that no longer exists.
   for (const key of [
     "lineThicknessMode",
-    "freeDockMode",
     "lineLabelsMode",
     "calmMode",
   ] as const) {

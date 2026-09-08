@@ -15,7 +15,6 @@ const VIEW: PlanViewState = {
   canvasPattern: "lines",
   lineHeatMode: true,
   lineThicknessMode: false,
-  freeDockMode: false,
   lineLabelsMode: true,
   linePulseMode: false,
   calmMode: true,

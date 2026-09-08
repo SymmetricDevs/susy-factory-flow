@@ -667,7 +667,6 @@ export interface PlanViewState {
    * the status glance mode now. */
   lineHeatMode?: boolean;
   lineThicknessMode?: boolean;
-  freeDockMode?: boolean;
   lineLabelsMode?: boolean;
   linePulseMode?: boolean;
   calmMode?: boolean;

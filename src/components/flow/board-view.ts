@@ -81,8 +81,6 @@ export interface BoardView {
   // anyone who had line colour on has it off now, on purpose.
   /** Lines take their thickness from how much moves through them. */
   lineThicknessMode: boolean;
-  /** Wires attach anywhere on a card (on) or at their fixed ports (off). */
-  freeDockMode: boolean;
   /** Rate pills on the lines. Off by default; the ports carry the numbers. */
   lineLabelsMode: boolean;
   /** Dashes march along each line in the direction of flow. */
@@ -106,7 +104,6 @@ export const DEFAULT_BOARD_VIEW: BoardView = {
   // and which lines carry the load, which is most of what a first look at a
   // plan is for. Colour modes stay off — those override what the board is
   // already telling you with resource colours and paint tags.
-  freeDockMode: true,
   lineLabelsMode: false,
   lineThicknessMode: true,
   // RETIRED (2026-09-07). The marching dashes were a full-board canvas
@@ -147,7 +144,6 @@ function readBoardView(): BoardView {
       canvasTheme: isCanvasThemeId(parsed.canvasTheme)
         ? parsed.canvasTheme
         : DEFAULT_BOARD_VIEW.canvasTheme,
-      freeDockMode: flag(parsed.freeDockMode, DEFAULT_BOARD_VIEW.freeDockMode),
       lineLabelsMode: flag(parsed.lineLabelsMode, DEFAULT_BOARD_VIEW.lineLabelsMode),
       lineThicknessMode: flag(parsed.lineThicknessMode, DEFAULT_BOARD_VIEW.lineThicknessMode),
       // Retired: a stored true is not honoured (see DEFAULT_BOARD_VIEW).

@@ -30,7 +30,6 @@
  */
 
 import { BOARD_GRID, cells, snapToGrid } from "./board-grid";
-import { optimizeIslandLayout, type OptimizeCard } from "./board-arrange-optimize";
 
 /** A card to place: its id, footprint, and where it sits today. */
 export interface ArrangeCard {
@@ -144,38 +143,6 @@ export interface ArrangeInput {
    */
   origin?: { x: number; y: number };
   taste?: ArrangeTaste;
-  /**
-   * The judge of candidate layouts (board-arrange-optimize.ts): given
-   * every card's top-left, how many crossings the board's real wires would
-   * have. Built by the host on the board's own route requests, so the
-   * arranger optimises the picture the player will actually get.
-   */
-  judge?: (
-    positions: ReadonlyMap<string, { x: number; y: number }>,
-    options?: {
-      /**
-       * A quicker verdict for the polish's many trials: the wires a moved
-       * card touches are re-solved, the rest hold their routes from the
-       * `base` layout. The final word is always the full verdict.
-       */
-      quick?: boolean;
-      base?: ReadonlyMap<string, { x: number; y: number }>;
-    },
-  ) => {
-    crossings: number;
-    length: number;
-    /** Length plus bends and crossings at the router's prices: the score. */
-    points: number;
-    /** Where wires cross, with the two wire ids, when the judge knows. */
-    events?: Array<{ point: { x: number; y: number }; edges: [string, string] }>;
-  };
-  /**
-   * Judge calls the exact polish may spend after the layout is chosen
-   * (default 60). Each is a full solve of the board's wires.
-   */
-  polishBudget?: number;
-  /** Where the arrange is, as it goes: for a loader on the board. */
-  onProgress?: (progress: { stage: string; done: number; total: number }) => void;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -219,19 +186,17 @@ let PAGE_FOLD = false;
 
 function applyTaste(taste: ArrangeTaste | undefined): void {
   const spacing = taste?.spacing ?? "normal";
-  // Compact is what a hand draws (Jack's oil board, 2026-09-08): rows a
-  // cell apart, columns two, drawers touching. Wire has to be paid for.
-  ROW_GAP = cells(spacing === "compact" ? 1 : spacing === "roomy" ? 3 : 2);
-  SECTION_GAP = cells(spacing === "compact" ? 2 : spacing === "roomy" ? 6 : 4);
-  COLUMN_GAP_MIN = cells(spacing === "compact" ? 2 : spacing === "roomy" ? 5 : 3);
+  ROW_GAP = cells(spacing === "compact" ? 2 : spacing === "roomy" ? 3 : 2);
+  SECTION_GAP = cells(spacing === "compact" ? 3 : spacing === "roomy" ? 6 : 4);
+  COLUMN_GAP_MIN = cells(spacing === "compact" ? 3 : spacing === "roomy" ? 5 : 3);
   // Wide enough that two islands' grounds plus both their two-cell no-go
   // collars fit between any pair with room left over.
   ISLAND_GAP = cells(spacing === "compact" ? 10 : spacing === "roomy" ? 16 : 12);
   const islands = taste?.islands ?? "normal";
   ISLAND_CUT_MAX = islands === "off" ? -1 : islands === "eager" ? 3 : 2;
   ISLAND_MIN_CARDS = islands === "eager" ? 3 : 4;
-  SATELLITE_PAD = cells(spacing === "compact" ? 1 : 2);
-  SATELLITE_STACK_GAP = cells(spacing === "compact" ? 0 : 1);
+  SATELLITE_PAD = cells(2);
+  SATELLITE_STACK_GAP = cells(1);
 }
 
 /**
@@ -323,347 +288,7 @@ interface Block {
   plain?: boolean;
 }
 
-/**
- * The layout, then the challenger. The column pass lays the board out as
- * it always has; the optimiser (board-arrange-optimize.ts) then rearranges
- * each island against a router-shaped score. With a judge supplied by the
- * host, BOTH layouts are routed with the real router and the one with
- * fewer crossings wins, shorter wire breaking the tie - so an arrange is
- * never worse than the plain pass on the board's own wires. Without a
- * judge the plain pass stands: the optimiser's proxy is not to be trusted
- * unjudged.
- */
 export function arrangeBoard(input: ArrangeInput): ArrangeResult {
-  input.onProgress?.({ stage: "Laying the board out", done: 0, total: 1 });
-  const plain = arrangeBoardOnce(input, false);
-  if (!input.judge || input.cards.length < 2) {
-    return plain;
-  }
-  input.onProgress?.({ stage: "Trying a second layout", done: 0, total: 1 });
-  const challenger = arrangeBoardOnce(input, true);
-  input.onProgress?.({ stage: "Routing both layouts", done: 0, total: 1 });
-  const verdict = (result: ArrangeResult) =>
-    input.judge!(new Map(result.moves.map((move) => [move.id, move.position])));
-  const plainVerdict = verdict(plain);
-  const challengerVerdict = verdict(challenger);
-  // Both layouts are polished - they start from different structures and
-  // the polish is greedy, so each can reach a place the other cannot - and
-  // the better finished board wins: fewer crossings, then shorter wire.
-  const polishedPlain = polishWithJudge(input, plain, plainVerdict, "first");
-  const polishedChallenger = polishWithJudge(input, challenger, challengerVerdict, "second");
-  input.onProgress?.({ stage: "Choosing the better board", done: 1, total: 1 });
-  const finalPlain = verdict(polishedPlain);
-  const finalChallenger = verdict(polishedChallenger);
-  // POINTS decide (Jack, 2026-09-08): a crossing is already priced into
-  // them at the crossing dial, and a board that avoids one by sending a
-  // wire round the whole board has paid more than the crossing cost.
-  return finalChallenger.points < finalPlain.points ? polishedChallenger : polishedPlain;
-}
-
-/**
- * THE EXACT POLISH. The layout is done; now the real router says where the
- * wires still cross, and the cards on those wires are tried elsewhere -
- * swapped with a column neighbour, or set down beside a partner on any of
- * its four sides - each try judged by the router itself. The first try
- * that lowers the crossings (or keeps them and shortens the wire) is
- * taken, and the search goes again from there until nothing helps or the
- * budget of judge calls is spent. This is what a player does by hand: look
- * at the crossing, move the card. Every try keeps the grid and the
- * no-overlap rule; nothing else on the board moves.
- */
-function polishWithJudge(
-  input: ArrangeInput,
-  result: ArrangeResult,
-  verdict: {
-    crossings: number;
-    length: number;
-    points: number;
-    events?: Array<{ point: { x: number; y: number }; edges: [string, string] }>;
-  },
-  which: "first" | "second" = "first",
-): ArrangeResult {
-  const judge = input.judge;
-  if (!judge) {
-    return result;
-  }
-  const fullBudget = input.polishBudget ?? 100;
-  let budget = fullBudget;
-  const report = () =>
-    input.onProgress?.({
-      stage: `Moving cards off crossings (${which} layout), ${verdict.crossings} to start`,
-      done: fullBudget - budget,
-      total: fullBudget,
-    });
-  report();
-  const sizeById = new Map(input.cards.map((card) => [card.id, { width: card.width, height: card.height }]));
-  const wiresOf = new Map<string, ArrangeWire[]>();
-  for (const wire of input.wires) {
-    push(wiresOf, wire.source, wire);
-    push(wiresOf, wire.target, wire);
-  }
-  const wireById = new Map(input.wires.filter((wire) => wire.id).map((wire) => [wire.id!, wire]));
-  const positions = new Map(result.moves.map((move) => [move.id, { ...move.position }]));
-  // The search runs on quick verdicts against a fully judged BASE: a move
-  // is tried with only its own wires re-solved, and when it wins, the new
-  // layout gets the full verdict and becomes the base.
-  let base = new Map(positions);
-  let best = verdict;
-  const start = { positions: new Map(positions), verdict };
-  const gap = BOARD_GRID;
-  const overlaps = (id: string, x: number, y: number): boolean => {
-    const size = sizeById.get(id)!;
-    for (const [other, at] of positions) {
-      if (other === id) continue;
-      const otherSize = sizeById.get(other)!;
-      if (
-        x < at.x + otherSize.width + gap &&
-        x + size.width + gap > at.x &&
-        y < at.y + otherSize.height + gap &&
-        y + size.height + gap > at.y
-      ) {
-        return true;
-      }
-    }
-    return false;
-  };
-  const tried = new Set<string>();
-  // A machine moves with the drawers that serve only it, the way a hand
-  // drags a machine and its buds together.
-  const budsOf = new Map<string, string[]>();
-  for (const [id, size] of sizeById) {
-    if (size.width > cells(6)) continue;
-    const partners = new Set((wiresOf.get(id) ?? []).map((wire) => (wire.source === id ? wire.target : wire.source)));
-    if (partners.size === 1) {
-      const [anchor] = partners;
-      if (sizeById.get(anchor)!.width > cells(6)) push(budsOf, anchor, id);
-    }
-  }
-  const groupOf = (id: string): string[] => [id, ...(budsOf.get(id) ?? [])];
-  const groupOverlaps = (group: string[], dx: number, dy: number): boolean => {
-    const set = new Set(group);
-    for (const member of group) {
-      const at = positions.get(member)!;
-      const size = sizeById.get(member)!;
-      const x = at.x + dx;
-      const y = at.y + dy;
-      for (const [other, otherAt] of positions) {
-        if (set.has(other)) continue;
-        const otherSize = sizeById.get(other)!;
-        if (
-          x < otherAt.x + otherSize.width + gap &&
-          x + size.width + gap > otherAt.x &&
-          y < otherAt.y + otherSize.height + gap &&
-          y + size.height + gap > otherAt.y
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-  for (let round = 0; round < 40 && budget > 0; round += 1) {
-    // Cards on crossing wires, the most-crossed first; drawers before
-    // machines because a drawer is cheap to move.
-    const blame = new Map<string, number>();
-    // The far end of each crossing wire, per card: the partner a move
-    // should bring the card toward.
-    const crossingPartners = new Map<string, Set<string>>();
-    for (const event of best.events ?? []) {
-      for (const edgeId of event.edges) {
-        const wire = wireById.get(edgeId);
-        if (!wire) continue;
-        blame.set(wire.source, (blame.get(wire.source) ?? 0) + 1);
-        blame.set(wire.target, (blame.get(wire.target) ?? 0) + 1);
-        if (!crossingPartners.has(wire.source)) crossingPartners.set(wire.source, new Set());
-        if (!crossingPartners.has(wire.target)) crossingPartners.set(wire.target, new Set());
-        crossingPartners.get(wire.source)!.add(wire.target);
-        crossingPartners.get(wire.target)!.add(wire.source);
-      }
-    }
-    // Nothing crosses: the cards on the longest wires are the suspects,
-    // since every remaining point is wire and bends.
-    if (blame.size === 0) {
-      for (const wire of input.wires) {
-        const a = positions.get(wire.source);
-        const b = positions.get(wire.target);
-        if (!a || !b) continue;
-        const span = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-        blame.set(wire.source, Math.max(blame.get(wire.source) ?? 0, span));
-        blame.set(wire.target, Math.max(blame.get(wire.target) ?? 0, span));
-      }
-      if (blame.size === 0) break;
-    }
-    // The most-crossed card first: it is the one standing in the wrong
-    // place. Drawers break ties, being cheap to move.
-    const suspects = [...blame.keys()].sort((a, b) => {
-      const storageA = sizeById.get(a)!.width <= cells(6) ? 1 : 0;
-      const storageB = sizeById.get(b)!.width <= cells(6) ? 1 : 0;
-      return blame.get(b)! - blame.get(a)! || storageB - storageA || (a < b ? -1 : 1);
-    });
-    let improved = false;
-    for (const id of suspects) {
-      if (improved || budget <= 0) break;
-      const size = sizeById.get(id)!;
-      const partners = [...new Set((wiresOf.get(id) ?? []).map((wire) => (wire.source === id ? wire.target : wire.source)))]
-        .filter((partner) => positions.has(partner));
-      const candidates: Array<{ x: number; y: number }> = [];
-      const add = (x: number, y: number) => {
-        x = snapToGrid(x);
-        y = snapToGrid(y);
-        const key = `${id}@${x},${y}`;
-        if (tried.has(key)) return;
-        const home = positions.get(id)!;
-        if (groupOverlaps(groupOf(id), x - home.x, y - home.y)) return;
-        tried.add(key);
-        candidates.push({ x, y });
-      };
-      const own = positions.get(id)!;
-      const group = groupOf(id);
-      for (const partner of partners) {
-        const at = positions.get(partner)!;
-        const partnerSize = sizeById.get(partner)!;
-        const rows = [at.y, at.y + partnerSize.height - size.height, at.y + (partnerSize.height - size.height) / 2];
-        const columns = [at.x, at.x + partnerSize.width - size.width, at.x + (partnerSize.width - size.width) / 2];
-        for (const y of rows) {
-          add(at.x - size.width - 2 * gap, y);
-          add(at.x + partnerSize.width + 2 * gap, y);
-          // A slide in its own column, level with the partner.
-          add(own.x, y);
-        }
-        for (const x of columns) {
-          add(x, at.y - size.height - 2 * gap);
-          add(x, at.y + partnerSize.height + 2 * gap);
-        }
-      }
-      // Nearest a partner first: the smallest move that helps is the one a
-      // hand would make.
-      // The partners on the crossing wires count four times over: it is
-      // the wire that crosses that the move has to shorten.
-      const wanted = crossingPartners.get(id);
-      const distance = (p: { x: number; y: number }) =>
-        partners.reduce((sum, partner) => {
-          const at = positions.get(partner)!;
-          const partnerSize = sizeById.get(partner)!;
-          const weight = wanted?.has(partner) ? 4 : 1;
-          return (
-            sum +
-            weight *
-              (Math.max(0, at.x - p.x - size.width, p.x - at.x - partnerSize.width) +
-                Math.max(0, at.y - p.y - size.height, p.y - at.y - partnerSize.height))
-          );
-        }, 0) + Math.abs(p.x - own.x) * 0.1 + Math.abs(p.y - own.y) * 0.1;
-      candidates.sort((a, b) => distance(a) - distance(b));
-      for (const candidate of candidates.slice(0, 18)) {
-        if (budget <= 0) break;
-        const saved = new Map(group.map((member) => [member, positions.get(member)!]));
-        const dx = candidate.x - own.x;
-        const dy = candidate.y - own.y;
-        for (const member of group) {
-          const at = saved.get(member)!;
-          positions.set(member, { x: at.x + dx, y: at.y + dy });
-        }
-        const quick = judge(positions, { quick: true, base });
-        budget -= 1;
-        report();
-        if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
-          console.log("try", id.slice(0, 14), candidate.x, candidate.y, "quick", quick.crossings, Math.round(quick.points), "best", best.crossings, Math.round(best.points));
-        }
-        // A crossing fewer is always worth the full verdict; a length gain
-        // must be real (two percent) to be worth one.
-        if (quick.points < best.points * 0.98) {
-          const next = judge(positions);
-          if (next.points < best.points - 1) {
-            best = next;
-            base = new Map(positions);
-            improved = true;
-            break;
-          }
-        }
-        for (const [member, at] of saved) positions.set(member, at);
-      }
-      if (improved || budget <= 0) break;
-      // SWAPS: trade places with a card in the same column - the move
-      // that fixes a wire climbing past its neighbours' wires. Each card
-      // takes the other's top-left, buds riding along; both must fit.
-      const swapKeys = new Set<string>();
-      for (const [other, otherAt] of positions) {
-        if (budget <= 0 || improved) break;
-        if (other === id || group.includes(other) || groupOf(other).includes(id)) continue;
-        const otherSize = sizeById.get(other)!;
-        const sameColumn = own.x < otherAt.x + otherSize.width && otherAt.x < own.x + size.width;
-        if (!sameColumn) continue;
-        const key = [id, other].sort().join("<>") + `@${own.x},${own.y}|${otherAt.x},${otherAt.y}`;
-        if (tried.has(key) || swapKeys.has(key)) continue;
-        swapKeys.add(key);
-        tried.add(key);
-        const otherGroup = groupOf(other);
-        const both = [...group, ...otherGroup];
-        const saved = new Map(both.map((member) => [member, positions.get(member)!]));
-        const dxA = otherAt.x - own.x;
-        const dyA = otherAt.y - own.y;
-        for (const member of group) {
-          const at = saved.get(member)!;
-          positions.set(member, { x: at.x + dxA, y: at.y + dyA });
-        }
-        for (const member of otherGroup) {
-          const at = saved.get(member)!;
-          positions.set(member, { x: at.x - dxA, y: at.y - dyA });
-        }
-        // Neither group may land on anything (the other group included).
-        let legal = true;
-        for (const member of both) {
-          const at = positions.get(member)!;
-          const memberSize = sizeById.get(member)!;
-          for (const [third, thirdAt] of positions) {
-            if (third === member) continue;
-            const thirdSize = sizeById.get(third)!;
-            if (
-              at.x < thirdAt.x + thirdSize.width + gap &&
-              at.x + memberSize.width + gap > thirdAt.x &&
-              at.y < thirdAt.y + thirdSize.height + gap &&
-              at.y + memberSize.height + gap > thirdAt.y
-            ) {
-              legal = false;
-              break;
-            }
-          }
-          if (!legal) break;
-        }
-        if (legal) {
-          const quick = judge(positions, { quick: true, base });
-          budget -= 1;
-          report();
-          if (quick.points < best.points * 0.98) {
-            const next = judge(positions);
-            if (next.points < best.points - 1) {
-              best = next;
-              base = new Map(positions);
-              improved = true;
-              break;
-            }
-          }
-        }
-        for (const [member, at] of saved) positions.set(member, at);
-      }
-    }
-    if (!improved) break;
-  }
-  // The full verdict decides: the polished layout only replaces the
-  // starting one if it is truly better by the real router.
-  const final = judge(positions);
-  const keep = final.points < start.verdict.points;
-  const chosen = keep ? positions : start.positions;
-  return {
-    ...result,
-    moves: result.moves.map((move) => ({ ...move, position: chosen.get(move.id) ?? move.position })),
-  };
-}
-
-/** Whether layoutIsland runs the optimiser; set per arrangeBoardOnce call. */
-let OPTIMISE = false;
-
-function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult {
-  OPTIMISE = optimise;
   const { cards, wires } = input;
   if (cards.length === 0) {
     return { moves: [], islands: [], wireRoutes: [] };
@@ -874,8 +499,6 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
         group.satellites,
         exitsByGroup[index],
         pulls && pulls.size > 0 ? pulls : undefined,
-        links,
-        input.judge,
       );
       if (group.interchange) {
         block.plain = true;
@@ -1440,13 +1063,6 @@ function layoutIsland(
   satellites: Map<CardSlot, SatellitePlan>,
   exits: ReadonlyMap<string, number>,
   pulls?: ReadonlyMap<string, Array<{ y: number; weight: number; anchor: number }>>,
-  /**
-   * Every wire on the board, satellite wires included: the optimiser at
-   * the end scores the island against ALL the wires inside it, not only
-   * the ones the column system saw.
-   */
-  allLinks?: WireLink[],
-  _judge?: ArrangeInput["judge"],
 ): Block {
   // The layout may run twice over the same slots (the second pass knows
   // where every island stands); everything derived is recomputed from
@@ -1484,7 +1100,7 @@ function layoutIsland(
   // Two-card loops are lifted out before any of that: their wires never
   // touch the column system, and the pair stacks in one column.
   const pairs = twoCycleLinks(links);
-  const forward = splitCoFeeders(breakCycles(members, links, pairs), members);
+  const forward = breakCycles(members, links, pairs);
 
   assignLayers(members, forward, pairs, exits);
 
@@ -1661,14 +1277,6 @@ function layoutIsland(
 
   // Satellites, pinned to their machine's side at the port row they serve
   // and stacked apart when several share a side.
-  const slotIndex = new Map<string, CardSlot>();
-  for (const slot of members) {
-    slotIndex.set(slot.card.id, slot);
-  }
-  for (const sat of satellites.keys()) {
-    slotIndex.set(sat.card.id, sat);
-  }
-  const slotOfId = (id: string): CardSlot => slotIndex.get(id)!;
   const satGroups = new Map<string, Array<{ sat: CardSlot; plan: SatellitePlan }>>();
   for (const [sat, plan] of satellites) {
     push(satGroups, `${plan.anchor.index}:${plan.side}`, { sat, plan });
@@ -1691,60 +1299,6 @@ function layoutIsland(
       previousBottom = place.y + sat.card.height;
       ids.push(sat.card.id);
       places.push(place);
-    }
-  }
-
-  // THE OPTIMISER. The column system got the island's shape; now the cards
-  // move until the wires the router will draw cross as little as possible
-  // (board-arrange-optimize.ts). Every wire inside the island counts,
-  // satellite wires included, and satellites keep to the side they serve.
-  if (OPTIMISE && allLinks && ids.length >= 2) {
-    const idSet = new Set(ids);
-    const satelliteOf = new Map<string, { anchorId: string; side: "left" | "right" }>();
-    for (const [sat, plan] of satellites) {
-      satelliteOf.set(sat.card.id, { anchorId: plan.anchor.card.id, side: plan.side });
-    }
-    const optimizeCards: OptimizeCard[] = ids.map((id) => {
-      const slot = slotOfId(id);
-      const anchor = satellites.get(slot)?.anchor;
-      return {
-        id,
-        width: slot.card.width,
-        height: slot.card.height,
-        role: slot.card.role,
-        layer: anchor ? anchor.layer : slot.layer,
-        seq: anchor ? anchor.seq : slot.y,
-        section: anchor ? anchor.section : slot.section,
-        satellite: satelliteOf.get(id),
-      };
-    });
-    const optimizeWires = allLinks
-      .filter((link) => idSet.has(link.from.card.id) && idSet.has(link.to.card.id))
-      .map((link) => ({
-        source: link.from.card.id,
-        target: link.to.card.id,
-        weight: link.weight,
-        sourcePortY: link.fromAnchor,
-        targetPortY: link.toAnchor,
-      }));
-    if (optimizeWires.length > 0) {
-      const optimized = optimizeIslandLayout(optimizeCards, optimizeWires, {
-        rowGapCells: Math.round(ROW_GAP / BOARD_GRID),
-        sectionGapCells: Math.round(SECTION_GAP / BOARD_GRID),
-        columnGapCells: Math.round(COLUMN_GAP_MIN / BOARD_GRID),
-        satellitePadCells: Math.round(SATELLITE_PAD / BOARD_GRID),
-        // With a host judge, the finished layouts are judged for real in
-        // arrangeBoard, so the island's finalists go by proxy score alone;
-        // without one, the optimiser's own stand-in picks among them.
-        judge: _judge ? false : undefined,
-      });
-      if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
-        console.log("finalists", JSON.stringify(optimized.finalists), "before", Math.round(optimized.before), "after", Math.round(optimized.after));
-      }
-      optimized.positions.forEach((place, i) => {
-        places[i].x = place.x;
-        places[i].y = place.y;
-      });
     }
   }
 
@@ -1924,80 +1478,6 @@ function assignLayers(
   slideTowardWires(members, forward, undefined, exits);
   pullPairsTogether(pairs, forward);
   packLayers(members);
-}
-
-/**
- * Two machines that FEED THE SAME DRAWER stand on opposite sides of it, the
- * drawer between them - the way Jack drew the oil board (2026-09-08): the
- * tower's product drawers in a column to its right, the second producer to
- * the right of the drawers, feeding them leftward. Ranked left to right
- * alone, both producers land in one column, stacked, and their fans of
- * wires into the shared drawers cross each other wholesale. So for every
- * pair of machines that share a drawer as co-feeders (or co-consumers) and
- * have no forward path between them, the wires of one of them are turned
- * round for the RANKING only: that machine ranks past the drawers and
- * stands to their right. The one that keeps the left is the one with more
- * of its own other wires pointing right (its own satellites, its onward
- * chain); the other has less to lose from facing left.
- */
-function splitCoFeeders(forward: WireLink[], members: CardSlot[]): WireLink[] {
-  const byStorage = new Map<CardSlot, WireLink[]>();
-  for (const link of forward) {
-    if (link.to.card.role === "storage") push(byStorage, link.to, link);
-    if (link.from.card.role === "storage") push(byStorage, link.from, link);
-  }
-  const outgoing = new Map<CardSlot, WireLink[]>();
-  for (const link of forward) {
-    push(outgoing, link.from, link);
-  }
-  const reaches = (from: CardSlot, to: CardSlot): boolean => {
-    const seen = new Set<CardSlot>([from]);
-    const queue = [from];
-    for (let head = 0; head < queue.length; head += 1) {
-      for (const link of outgoing.get(queue[head]) ?? []) {
-        if (link.to === to) return true;
-        if (!seen.has(link.to)) {
-          seen.add(link.to);
-          queue.push(link.to);
-        }
-      }
-    }
-    return false;
-  };
-  // Decide once per pair of machines which one turns round.
-  const turned = new Set<CardSlot>();
-  const decided = new Set<string>();
-  for (const [storage, storageLinks] of byStorage) {
-    const feeders = storageLinks.filter((l) => l.to === storage).map((l) => l.from);
-    const takers = storageLinks.filter((l) => l.from === storage).map((l) => l.to);
-    for (const group of [feeders, takers]) {
-      const machines = [...new Set(group)].filter((slot) => slot.card.role !== "storage");
-      if (machines.length !== 2) continue;
-      const [p, q] = machines.sort((a, b) => a.index - b.index);
-      const key = `${p.index}:${q.index}`;
-      if (decided.has(key)) continue;
-      decided.add(key);
-      if (turned.has(p) || turned.has(q) || reaches(p, q) || reaches(q, p)) continue;
-      const shared = new Set<CardSlot>();
-      for (const [other, otherLinks] of byStorage) {
-        const ends = new Set(otherLinks.map((l) => (l.from === other ? l.to : l.from)));
-        if (ends.has(p) && ends.has(q)) shared.add(other);
-      }
-      const rightward = (slot: CardSlot) =>
-        (outgoing.get(slot) ?? []).filter((l) => !shared.has(l.to)).reduce((sum, l) => sum + l.weight, 0);
-      turned.add(rightward(p) >= rightward(q) ? q : p);
-    }
-  }
-  if (turned.size === 0) return forward;
-  // Cards wired to nothing but shared drawers are the classic case; a card
-  // with other forward wires keeps them, and only its drawer wires turn.
-  return forward.map((link) => {
-    const storageEnd = link.to.card.role === "storage" ? link.to : link.from.card.role === "storage" ? link.from : undefined;
-    if (!storageEnd) return link;
-    const machine = storageEnd === link.to ? link.from : link.to;
-    if (!turned.has(machine)) return link;
-    return { ...link, from: link.to, to: link.from, fromAnchor: link.toAnchor, toAnchor: link.fromAnchor };
-  });
 }
 
 /**

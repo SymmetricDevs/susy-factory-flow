@@ -41,7 +41,6 @@ import {
   Combine,
   Cable,
   Grid2x2,
-  Anchor,
   Eye,
   Focus,
   Tag,
@@ -1061,8 +1060,6 @@ type GridRouteEdgeInput = {
 };
 
 let publishedGridRouteEdges: GridRouteEdgeInput[] = [];
-/** Free docking (anywhere on the perimeter) vs fixed ports — see the toggle. */
-let publishedGridFreeDock = true;
 let gridSolveSignature = "";
 /**
  * Fast-path gate. Building the full signature walks every edge's endpoints,
@@ -1155,20 +1152,16 @@ function gridRouteEdgeInputsEqual(a: GridRouteEdgeInput[], b: GridRouteEdgeInput
   return true;
 }
 
-function publishGridRouteEdges(edges: GridRouteEdgeInput[], freeDock: boolean) {
+function publishGridRouteEdges(edges: GridRouteEdgeInput[]) {
   // The edges memo rebuilds on hover, search keystrokes and solver results —
   // none of which move a wire. Bumping the stamp unconditionally forced the
-  // full signature rebuild (O(edges × perimeter) endpoint resolution in free
-  // dock) just to discover nothing changed; a field-wise compare here is
-  // O(edges) and keeps the fast-path gate honest.
-  if (
-    freeDock === publishedGridFreeDock &&
-    gridRouteEdgeInputsEqual(publishedGridRouteEdges, edges)
-  ) {
+  // full signature rebuild (O(edges × perimeter) endpoint resolution) just
+  // to discover nothing changed; a field-wise compare here is O(edges) and
+  // keeps the fast-path gate honest.
+  if (gridRouteEdgeInputsEqual(publishedGridRouteEdges, edges)) {
     return;
   }
   publishedGridRouteEdges = edges;
-  publishedGridFreeDock = freeDock;
   gridSolveInputsStamp += 1;
 }
 
@@ -1185,8 +1178,6 @@ function publishGridRouteEdges(edges: GridRouteEdgeInput[], freeDock: boolean) {
 function resolveGridRouteEndpoints(
   input: GridRouteEdgeInput,
   end: "source" | "target",
-  /** Free-dock or fixed-port docks; the board's current setting by default. */
-  freeDock: boolean = publishedGridFreeDock,
 ): GridEndpoint[] {
   const nodeId = end === "source" ? input.sourceNodeId : input.targetNodeId;
   const rect = getMeasuredNodeBoundsById(nodeId);
@@ -1195,52 +1186,9 @@ function resolveGridRouteEndpoints(
   }
   const snap = (value: number) => Math.round(value / BOARD_GRID) * BOARD_GRID;
 
-  // A machine wired into itself always uses fixed ports, whatever the anchor
-  // toggle says. In free mode both ends of that wire offer the same card's
-  // whole perimeter, and the cheapest way to get from a card to itself is to
-  // not move: both ends pick one dock and the loop collapses to a stub. The
-  // real input and output rows give it two genuinely different ends, so the
-  // wire has to travel around the card and reads as the loop it is.
-  const isSelfLoop = input.sourceNodeId === input.targetNodeId;
-
-  // Fixed-port mode (the anchor toggle, off): wires attach the classic way —
-  // machine inputs on the left at their port row, outputs on the right, and
-  // storage/trash cards on whichever side centre routes best.
-  if (!freeDock || isSelfLoop) {
-    const isSlot = end === "source" ? input.sourceSlotEndpoint : input.targetSlotEndpoint;
-    if (isSlot) {
-      const handleId = end === "source" ? input.sourceHandleId : input.targetHandleId;
-      const handle = parseResourceHandleId(handleId);
-      const edgeSide = handle?.side === "input" ? Position.Left : Position.Right;
-      const side: GridSide = edgeSide === Position.Left ? "left" : "right";
-      const measured = getMeasuredSlotEndpoint({ nodeId, handleId, edgeSide });
-      if (measured) {
-        // Whole pixels: a DOM measurement under the UI zoom jitters by a
-        // fraction of a pixel between paints, and the router is a
-        // deterministic function of its inputs - a quarter pixel on one
-        // dock sent two identical arranges down different paths.
-        return [{ x: Math.round(measured.x), y: Math.round(measured.y), side }];
-      }
-      // Unmeasured (first paint of a culled node): the card edge at a
-      // plausible port height until the real measurement lands.
-      return [
-        {
-          x: side === "left" ? rect.left : rect.right,
-          y: Math.min(rect.top + 60, (rect.top + rect.bottom) / 2),
-          side,
-        },
-      ];
-    }
-    const fixedCenterX = snap((rect.left + rect.right) / 2);
-    const fixedCenterY = snap((rect.top + rect.bottom) / 2);
-    return [
-      { x: rect.left, y: fixedCenterY, side: "left" },
-      { x: rect.right, y: fixedCenterY, side: "right" },
-      { x: fixedCenterX, y: rect.top, side: "top" },
-      { x: fixedCenterX, y: rect.bottom, side: "bottom" },
-    ];
-  }
-
+  // Every wire docks freely, a machine wired into itself included (Jack,
+  // 2026-09-08; the fixed-port mode and its toggle are gone). The router
+  // keeps a self loop's two ends a few cells apart so it reads as a loop.
   const left = snap(rect.left);
   const right = snap(rect.right);
   const top = snap(rect.top);
@@ -1252,10 +1200,9 @@ function resolveGridRouteEndpoints(
   // Corners and their neighbourhoods are off limits: a wire hanging off the
   // very corner of a card reads as clipped through it. Docks start two
   // cells in from each corner — close is fine, corner is not.
-  // A small card (a drawer is 5 by 4 cells) keeps only one cell off its
-  // corners, or its short sides would offer a single dock each and every
-  // second wire would be sent round the back.
-  const keepOutFor = (span: number) => (span < 6 * BOARD_GRID ? BOARD_GRID : 2 * BOARD_GRID);
+  // One cell off the corners (Jack, 2026-09-08): a wire may leave near a
+  // corner, and at 45° if it likes; only the corner itself is not a dock.
+  const keepOutFor = (span: number) => (span >= 2 * BOARD_GRID ? BOARD_GRID : 0);
   // The window's true top: side docks exist only below it, and the corner
   // keep-out measures from IT — the window's corner, not the phantom box's.
   const dockTop = top;
@@ -1316,14 +1263,11 @@ function ensureGridSolve() {
   const requests: GridRouteRequest[] = [];
   const orderByEdge = new Map<string, number>();
   const parts: string[] = [];
-  // Free-dock endpoint resolution enumerates the whole card perimeter (~64
-  // candidates per endpoint), yet its signature never contains those coords —
+  // Endpoint resolution enumerates the whole card perimeter (~64
+  // candidates per endpoint), yet its signature never contains those coords -
   // they derive purely from the card rects the sweep hash already covers. So
-  // in free-dock mode the signature is built FIRST from the inputs alone and
-  // resolution is deferred until it actually differs; only fixed-port mode
-  // (1-4 anchors, and lazily-arriving slot measurements that must go in the
-  // signature) still resolves up front.
-  const freeDock = publishedGridFreeDock;
+  // the signature is built FIRST from the inputs alone and resolution is
+  // deferred until it actually differs.
   const deferredInputs: GridRouteEdgeInput[] = [];
   for (const input of publishedGridRouteEdges) {
     const waypointPart =
@@ -1332,43 +1276,16 @@ function ensureGridSolve() {
             .map((point) => `${Math.round(point.x)},${Math.round(point.y)}`)
             .join("+")}`
         : "";
-    let describe: string;
-    if (freeDock) {
-      // Same skip rule the resolver applies: an unmeasured node yields no
-      // candidates in free-dock mode, and nothing else can empty them.
-      if (
-        !getMeasuredNodeBoundsById(input.sourceNodeId) ||
-        !getMeasuredNodeBoundsById(input.targetNodeId)
-      ) {
-        continue;
-      }
-      deferredInputs.push(input);
-      describe = waypointPart;
-    } else {
-      const sources = resolveGridRouteEndpoints(input, "source");
-      const targets = resolveGridRouteEndpoints(input, "target");
-      if (sources.length === 0 || targets.length === 0) {
-        continue;
-      }
-      requests.push({
-        edgeId: input.edgeId,
-        order: input.order,
-        sources,
-        targets,
-        strokeWidth: Math.min(input.routingWidth, LANE_CAPACITY),
-        waypoints: input.waypoints,
-        exemptObstacleIds: input.throughBoardIds,
-        homeObstacleIds: input.homeBoardIds,
-        sourceCardId: input.sourceNodeId,
-        targetCardId: input.targetNodeId,
-      });
-      orderByEdge.set(input.edgeId, input.order);
-      describe = `${waypointPart}|${sources
-        .map((endpoint) => `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`)
-        .join("+")}|${targets
-        .map((endpoint) => `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`)
-        .join("+")}`;
+    // Same skip rule the resolver applies: an unmeasured node yields no
+    // candidates, and nothing else can empty them.
+    if (
+      !getMeasuredNodeBoundsById(input.sourceNodeId) ||
+      !getMeasuredNodeBoundsById(input.targetNodeId)
+    ) {
+      continue;
     }
+    deferredInputs.push(input);
+    const describe = waypointPart;
     // Frame exemptions are a routing input like a waypoint: adopting a card
     // changes no endpoint and moves no obstacle, yet its wires must reroute.
     const throughPart =
@@ -1397,7 +1314,7 @@ function ensureGridSolve() {
     .join(";");
 
   const tuning = getRouterTuning();
-  const signature = `${publishedGridFreeDock ? "free" : "ports"}::${routerTuningKey(tuning)}::${sweep.hash}::${framesPart}::${parts.join(";")}`;
+  const signature = `${routerTuningKey(tuning)}::${sweep.hash}::${framesPart}::${parts.join(";")}`;
   if (signature === gridSolveSignature || signature === gridSolveWantedSignature) {
     return;
   }
@@ -1405,7 +1322,7 @@ function ensureGridSolve() {
   gridSolveRequestSeq += 1;
   const seq = gridSolveRequestSeq;
 
-  // The signature actually moved: now pay for the free-dock perimeters.
+  // The signature actually moved: now pay for the perimeters.
   for (const input of deferredInputs) {
     const sources = resolveGridRouteEndpoints(input, "source");
     const targets = resolveGridRouteEndpoints(input, "target");
@@ -1590,10 +1507,8 @@ function buildArrangeJudgeInput(cardIds: readonly string[]): ArrangeJudgeInput |
   }
   const base: Array<{ input: GridRouteEdgeInput; sources: GridEndpoint[]; targets: GridEndpoint[] }> = [];
   for (const input of inputs) {
-    // Free docks, whatever the board's anchor setting: the arrange turns
-    // free docking on when it lands, so the judge must see that board.
-    const sources = resolveGridRouteEndpoints(input, "source", true);
-    const targets = resolveGridRouteEndpoints(input, "target", true);
+    const sources = resolveGridRouteEndpoints(input, "source");
+    const targets = resolveGridRouteEndpoints(input, "target");
     if (sources.length === 0 || targets.length === 0) {
       continue;
     }
@@ -2130,7 +2045,7 @@ export function FactoryFlow() {
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
   const boardView = useBoardView();
-  const { freeDockMode, lineLabelsMode, lineThicknessMode, calmMode } = boardView;
+  const { lineLabelsMode, lineThicknessMode, calmMode } = boardView;
   // Device taste, not plan state: never captured into plan-view snapshots.
   const boardMotion = useBoardMotion();
   const canvasTheme = getCanvasTheme(boardView.canvasTheme);
@@ -2925,7 +2840,7 @@ export function FactoryFlow() {
     if (invalidateRoutes) {
       invalidateMeasuredLayout();
     }
-  }, [freeDockMode, lineThicknessMode]);
+  }, [lineThicknessMode]);
   // Live-drag throttle state: when the last mid-drag solve ran, and the
   // trailing timer that guarantees the LAST cell a card entered still gets
   // its solve when the pointer stops moving inside a throttle window.
@@ -3589,7 +3504,7 @@ export function FactoryFlow() {
       })];
     });
 
-    publishGridRouteEdges(gridRouteInputs, freeDockMode);
+    publishGridRouteEdges(gridRouteInputs);
 
     // Paint order IS depth, and it has to be the SAME order hop rendering
     // uses — otherwise a line hops over something that is drawn on top of it
@@ -3621,7 +3536,6 @@ export function FactoryFlow() {
   }, [
     activeFlowResourceKey,
     anyLineMode,
-    freeDockMode,
     speedColorMode,
     lineLabelsMode,
     lineThicknessMode,
@@ -5661,9 +5575,9 @@ export function FactoryFlow() {
     }
     // The board may have changed while the arrange ran; apply to the
     // current store, which is what applyBoardArrangement reads.
-    // An arranged board is read through three switches, so the arrange sets
-    // them: lines weighted by volume, wires docking freely, rate pills off.
-    writeBoardView({ lineThicknessMode: true, freeDockMode: true, lineLabelsMode: false });
+    // An arranged board is read through two switches, so the arrange sets
+    // them: lines weighted by volume, rate pills off.
+    writeBoardView({ lineThicknessMode: true, lineLabelsMode: false });
     // The arrange draws no ink: its islands become ZONES — real boards the
     // stray cards move into. Root notes (and old releases' island boxes)
     // go; they point at a layout that no longer exists. Boards the player
@@ -6425,23 +6339,6 @@ export function FactoryFlow() {
     [setNodeColorPaintMode],
   );
 
-  // One short line of caution before the dock-mode flip rewires the board —
-  // shown when there is real work to redo (lots of lines) or user work to
-  // unsettle (pinned dots). Undefined means flip silently.
-  const dockToggleWarning = useMemo(() => {
-    const edgeCount = project.edges.length;
-    const hasDots = project.edges.some((edge) => (edge.waypoints?.length ?? 0) > 0);
-    if (edgeCount < 50 && !hasDots) {
-      return undefined;
-    }
-    if (hasDots && edgeCount >= 50) {
-      return `Rewires all ${edgeCount} lines and your pinned dots. It may take a moment and look odd at first. Flipping back restores it. Continue?`;
-    }
-    if (hasDots) {
-      return "Rewires your lines and pinned dots. It may look odd for a moment. Flipping back restores it. Continue?";
-    }
-    return `Rewires all ${edgeCount} lines. It may take a moment. Flipping back restores it. Continue?`;
-  }, [project.edges]);
 
   const paintCursor =
     nodeColorPaintMode !== undefined
@@ -6697,7 +6594,6 @@ export function FactoryFlow() {
         onDeleteModeChange={handleDeleteModeChange}
         view={boardView}
         onViewChange={writeBoardView}
-        dockToggleWarning={dockToggleWarning}
         onAutoArrange={handleAutoArrange}
         folded={toolbarFold.paint}
         foldAll={toolbarFold.paintFoldsAll}
@@ -8906,15 +8802,12 @@ function ThemeSwatch({ theme }: { theme: CanvasTheme }) {
 const BoardViewMenu = memo(function BoardViewMenu({
   view,
   onChange,
-  dockToggleWarning,
   open,
   onOpenChange,
   arrange,
 }: {
   view: BoardView;
   onChange: (patch: Partial<BoardView>) => void;
-  /** One-line caution before the dock flip rewires a big or dotted board. */
-  dockToggleWarning?: string;
   /** Held by the paint toolbar, which lifts the row's z while the sheet is out. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -8930,7 +8823,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
 }) {
   const {
     canvasPattern,
-    freeDockMode,
     lineLabelsMode,
     lineThicknessMode,
     calmMode,
@@ -8967,19 +8859,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
       line: "Each wire shows its rate.",
       Icon: Tag,
       flip: () => onChange({ lineLabelsMode: !lineLabelsMode }),
-    },
-    {
-      id: "docking",
-      on: freeDockMode,
-      label: "Free docking",
-      line: "Wires can attach anywhere on a card. Off: fixed ports only.",
-      Icon: Anchor,
-      flip: () => {
-        if (dockToggleWarning && !window.confirm(dockToggleWarning)) {
-          return;
-        }
-        onChange({ freeDockMode: !freeDockMode });
-      },
     },
     {
       id: "calm",
@@ -9174,7 +9053,6 @@ const PaintToolbar = memo(function PaintToolbar({
   onDeleteModeChange,
   view,
   onViewChange,
-  dockToggleWarning,
   onAutoArrange,
   folded,
   foldAll,
@@ -9194,7 +9072,6 @@ const PaintToolbar = memo(function PaintToolbar({
   /** The view menu rides this row's corner slot; see BoardViewMenu. */
   view: BoardView;
   onViewChange: (patch: Partial<BoardView>) => void;
-  dockToggleWarning?: string;
   /** Runs the arrange; the fold-out's setting rides along per press. */
   onAutoArrange: (options: { tidyBoardInteriors: boolean }) => void;
   folded: boolean;
@@ -9422,7 +9299,6 @@ const PaintToolbar = memo(function PaintToolbar({
               <BoardViewMenu
             view={view}
             onChange={onViewChange}
-            dockToggleWarning={dockToggleWarning}
             open={isViewMenuOpen}
             onOpenChange={setViewMenuOpen}
             arrange={{ tidyBoardInteriors, onToggleTidyBoards, onArrange: onAutoArrange }}
@@ -9683,7 +9559,6 @@ function ResourceEdgeComponent({
   // route and the settle pass re-issues every edge.
   const showArrowHead =
     flowRate?.pulse !== true &&
-    publishedGridFreeDock &&
     (isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS));
   // Every wire routes individually through the board-wide grid solve — the
   // solve's lane sharing is what makes a fan-out ride as one ribbon, which

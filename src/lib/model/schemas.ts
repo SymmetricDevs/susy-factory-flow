@@ -485,7 +485,6 @@ export const planViewStateSchema = z.object({
   canvasTheme: z.string().optional(),
   lineHeatMode: z.boolean().optional(),
   lineThicknessMode: z.boolean().optional(),
-  freeDockMode: z.boolean().optional(),
   lineLabelsMode: z.boolean().optional(),
   linePulseMode: z.boolean().optional(),
   calmMode: z.boolean().optional(),

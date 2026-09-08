@@ -68,7 +68,7 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   reverse: 240,
   earlyTurn: 100,
   cleanCells: 2,
-  crossing: 1000,
+  crossing: 400,
   diagonals: true,
   diagonalLength: Math.SQRT2,
   diagonalLaneCapacity: 10,

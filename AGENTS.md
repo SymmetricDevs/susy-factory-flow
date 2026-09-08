@@ -596,8 +596,13 @@ Working notes for future agents on GTNH Factory Flow.
   (`board-arrange-optimize.ts`: annealing over column order / offsets /
   row air / satellite slides against a router-shaped proxy score) are
   each POLISHED (`polishWithJudge`) and the better finished board wins by
-  the judge. The polish is what a hand does: the real router says where
-  wires still cross, the cards on those wires are tried elsewhere -
+  the judge, ON POINTS ALONE (Jack, 2026-09-08: a crossing is already
+  priced into the points at the crossing dial, and "if it leads to edges
+  taking the huge long way all the way around the whole board, it looks
+  stupid" - his 3-crossing board beat the arranger's 0-crossing one on
+  points). The polish runs even at zero crossings, blaming the cards on
+  the longest wires. The polish is what a hand does: the real router says
+  where wires still cross, the cards on those wires are tried elsewhere -
   beside a partner on any side (the far end of the crossing wire weighs
   four times), level with a partner in their own column, or SWAPPED with
   a card in their column - buds (drawers serving only that machine)
@@ -613,13 +618,27 @@ Working notes for future agents on GTNH Factory Flow.
   with fewer other rightward wires has its drawer wires turned round for
   the ranking, so it ranks past the drawers); shared drawers sit between
   their partners (`relaxSharedStorages`).
-- Numbers on the oil board (2026-09-08, offline harness
-  `oil-arrange.local.mjs`): hand-drawn 12 crossings / 18.5k px; plain
-  pass 5 / 20.2k; judged and polished 2 / 20.3k in ~24 s; Jack by hand 1
-  / 12.7k. The two that remain are a machine that should stand low with
-  its feeder drawer beside it, which is a two-card move the greedy polish
-  cannot make. Open: multi-card moves, a proxy that agrees with the
-  router, and the time (two polishes of ~100 partial solves).
+- VERSUS MODE: the dev menu's Score section (shift-click the version
+  chip) shows crossings / points / wires of the displayed board, "Copy
+  layout" puts a LAYOUT STRING on the clipboard (`board-layout-string.ts`
+  v2: plan id, score, every card's cell rect, every wire with port rows
+  and width), "Paste layout" applies one. `src/lib/versus.local.test.ts`
+  (LAYOUT=file OUT=file, local config) scores a layout string offline and
+  writes the arranger's answer beside it; `score-layout.local.test.ts`
+  scores one. Compact taste is 1/2/2/1/0 cells (row/section/column/
+  satellite pad/stack), what Jack's hand draws.
+- Numbers on the oil board at the shipped dials (2026-09-08): Jack's
+  hand layout `artifacts/route-audit/oil-jack4.layout.json` 3 crossings /
+  8,388 pts / 6,863 px; the arranger's answer to it 3 / 12-14k pts /
+  10-12k px; the in-app Arrange of his plan (`oil-v8` audit) 2 crossings
+  / 10,703 px. The arranger LOSES ON WIRE: a machine fed only by a source
+  drawer is ranked into column one and stands ~50 cells from the consumer
+  it shares its output drawer with (Jack puts it beside the consumer), and
+  a drawer shared by two machines stacked in one column is parked in
+  another column instead of the row gap between them. Alternating
+  `slideTowardWires` / `relaxSharedStorages` was tried and made it
+  worse. Open: a rank that pulls drawer-fed machines to their consumers,
+  in-column shared drawers, multi-card polish moves, and time (~16-25 s).
 - The board title bar has a paint button (palette in a NodeToolbar portal,
   because the frame's own layer sits under the cards); the paint TOOL works
   on boards too. Both go through `paintPocket`.
@@ -885,18 +904,34 @@ Working notes for future agents on GTNH Factory Flow.
   pooled memo; occupancy (lane widths, passers, negotiation history) is
   dense typed arrays over the board's extent, not maps - four map lookups
   per priced step was most of a big board's solve.
-- CLEAN EXITS AND LANDINGS: a wire leaves a port straight along the
-  normal and lands straight, for `cleanCells` cells (2). The search is
-  seeded at the clean point heading outward and at the apron dearer by
-  `earlyTurn`; the goal at the clean point must be reached heading in,
-  the apron takes any arrival at the same surcharge. So a bend or a
-  diagonal right off a card is possible when a wire is walled in, and
-  otherwise never.
+- EXITS AND LANDINGS (rewritten 2026-09-08 with Jack): a wire may leave
+  a dock along the port's normal OR 45° to either side of it (three
+  `EndVertex` variants per dock, each with its own apron); a diagonal
+  exit or landing costs `turn45`, the bend it is, priced at the dock. THE
+  CLEAN RUN is the apron and the cells after it up to the clean point
+  (`cleanCells` out from the card edge): a TURN made on it, by a wire
+  that left from that start (`cleanZone`, keyed by start variant through
+  `startOf`), costs `earlyTurn` on top of the turn; the landing side
+  mirrors it (the clean point must be reached heading in, the apron takes
+  any other arrival at the surcharge, and with no room for a clean run a
+  straight arrival at the apron is free). A wire that never turns there
+  pays nothing, so a straight shot to a card two cells away IS a straight
+  line. It used to charge the surcharge for STARTING at the apron, which
+  made a two-cell straight shot dearer than leaving by another side (the
+  bug Jack saw: one cell straight, two cells out-the-side-and-turn).
+  TOUCHING DOCKS (`directDock`): two cards one grid space apart have no
+  vertex between them, so a source dock whose apron IS a facing target
+  dock connects there without a search - the only special case.
+  Preference order Jack asked for falls out of the prices: straight shot,
+  then a 45° shot, then pathing round.
+- SELF LOOPS dock freely like everything else, but must land at least
+  three cells (`SELF_LOOP_CELLS`) from where they left (`landsTooClose`
+  at goal acceptance), or the loop collapses to a stub.
 - TURNS COST: a 45° bend `turn45` (35), a 90° corner `turn90` (80), a
   reversal `reverse` (waypoint excursions only), 135° forbidden. Jack's
   rules (2026-09-08): turning should cost a lot, a diagonal costs its true
   length, least turns wins, no wiggling left-right to shave a cell.
-- CROSSINGS COST `crossing` (200) each, counted at grid vertices an
+- CROSSINGS COST `crossing` (400) each, counted at grid vertices an
   earlier wire passes straight through (run ends are corners and do not
   count; a stub's apron vertex DOES, or a wire riding a card's margin line
   crossed every stub for free) and, for two diagonals, at cell centres.
@@ -920,12 +955,14 @@ Working notes for future agents on GTNH Factory Flow.
   two benzene recipes into one card, or into two benzene slots, draw as one
   wire with the summed rate; the flat edges stay distinct underneath for
   the solve, and deleting the wire deletes them all.
-- Docking is a VIEW toggle (the anchor button, on by default): free mode
-  offers the whole perimeter (corners and their neighbouring cells
-  excluded: two cells on a big card, ONE on a small one so a drawer's side
-  has three docks, not one); port mode pins wires to the classic fixed
-  ports - inputs left, outputs right, storage side centres. Ports always
-  remain where wires START (drag from a chip) and where the numbers live.
+- DOCKING IS ALWAYS FREE (Jack, 2026-09-08: "get rid of the free docking
+  setting"). Every wire, self loops included, offers its card's whole
+  perimeter, one dock per grid line, only the corner cell itself excluded
+  (`keepOutFor` in FactoryFlow: one cell on any card two cells or wider).
+  The anchor toggle, `freeDockMode` on the board view / plan view, the
+  fixed-port resolver branch and the dock-flip warning are GONE; old plans
+  carrying the key parse (unknown keys strip). Ports remain where wires
+  START (drag from a chip) and where the numbers live.
 - Crossing hops (`pointsToHoppedSvgPath`) bump over any pair of
   non-parallel segments, diagonals included: a run bumps toward the upper
   side of its own line (a vertical run toward the right).

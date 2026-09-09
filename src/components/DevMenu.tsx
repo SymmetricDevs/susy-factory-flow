@@ -52,6 +52,7 @@ import {
   requestWireReroute,
   resetRouterTuning,
   ROUTER_TUNING_FIELDS,
+  type RouterTuningField,
   setRouterTuning,
   undoRouterTuning,
   type RouterTuning,
@@ -60,6 +61,11 @@ import { useFactoryStore } from "@/store/factory-store";
 import { readBoardGeometry, readBoardScore, type BoardScore } from "./flow/board-score";
 import { decodeLayout, encodeLayout } from "@/lib/board-layout-string";
 import { getUiScale } from "@/lib/ui-scale";
+
+/** What a dial is and what its ends do, as the hover tooltip. */
+function dialTooltip(field: RouterTuningField): string {
+  return `${field.hint}\nLow: ${field.low}\nHigh: ${field.high}`;
+}
 
 /**
  * The dev menu, behind a shift-click on the version chip.
@@ -674,9 +680,9 @@ export function DevMenu({
                     const changed = value !== DEFAULT_ROUTER_TUNING[field.key];
                     if (field.kind === "boolean") {
                       return (
-                        <div key={field.key} className="mt-2">
+                        <div key={field.key} className="mt-1.5">
                         <label
-                          title={field.hint}
+                          title={dialTooltip(field)}
                           className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted"
                         >
                           <input
@@ -687,18 +693,13 @@ export function DevMenu({
                           />
                           <span className={changed ? "text-cyan-300" : undefined}>{field.label}</span>
                         </label>
-                        <div className="mb-2 ml-1 border-l-2 border-line pl-2 text-[11px] leading-snug text-fg-muted">
-                          <p>{field.hint}</p>
-                          <p className="mt-0.5">{field.low}</p>
-                          <p>{field.high}</p>
-                        </div>
                         </div>
                       );
                     }
                     const number = Number(value);
                     return (
                       <div key={field.key} className="mt-2">
-                        <div title={field.hint} className="flex items-center gap-1.5 text-xs">
+                        <div title={dialTooltip(field)} className="flex items-center gap-1.5 text-xs">
                         <span
                           className={[
                             "w-24 shrink-0 truncate",
@@ -734,17 +735,6 @@ export function DevMenu({
                           aria-label={`${field.label} value`}
                           className="w-16 shrink-0 rounded border border-line bg-surface px-1 py-0.5 text-right tabular-nums text-fg"
                         />
-                        </div>
-                        <div className="mb-2 ml-1 border-l-2 border-line pl-2 text-[11px] leading-snug text-fg-muted">
-                          <p>{field.hint}</p>
-                          <p className="mt-0.5">
-                            <span className="text-fg-subtle">Low: </span>
-                            {field.low}
-                          </p>
-                          <p>
-                            <span className="text-fg-subtle">High: </span>
-                            {field.high}
-                          </p>
                         </div>
                       </div>
                     );

@@ -9002,7 +9002,13 @@ function ArrangeLoader({
   const overall = Math.min(1, (Math.min(progress.step, steps) + within) / steps);
   // Dressed like the Settings dialog (Jack, 2026-09-08): the same bevelled
   // plate, title bar and face keys, so the loader is a window of the
-  // planner and not a web toast over it.
+  // planner and not a web toast over it. It SPINS (Jack, same day: "hard to
+  // tell it's not just hung"): the bar only moves at step boundaries and
+  // every few hundred trials, so a long routing pass held a still window
+  // for seconds. The running step's marker is a spinner that turns the
+  // whole time the worker does (one spinner, on the step, not a second in
+  // the title bar - Jack) - the arrange runs off the main thread, so a
+  // frozen spinner would mean the tab really is stuck.
   return (
     <div
       role="status"
@@ -9045,17 +9051,20 @@ function ArrangeLoader({
                         : "text-[var(--mc-ink-muted)] opacity-50",
                   ].join(" ")}
                 >
-                  <span
-                    aria-hidden
-                    className={[
-                      "inline-block h-3 w-3 shrink-0 border-2 border-[var(--mc-15)]",
-                      state === "done"
-                        ? "bg-[var(--mc-good)]"
-                        : state === "now"
-                          ? "animate-pulse bg-[var(--mc-good)]"
-                          : "bg-[var(--mc-36)]",
-                    ].join(" ")}
-                  />
+                  {state === "now" ? (
+                    <LoaderCircle
+                      aria-hidden
+                      className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--mc-good)]"
+                    />
+                  ) : (
+                    <span
+                      aria-hidden
+                      className={[
+                        "inline-block h-3 w-3 shrink-0 border-2 border-[var(--mc-15)]",
+                        state === "done" ? "bg-[var(--mc-good)]" : "bg-[var(--mc-36)]",
+                      ].join(" ")}
+                    />
+                  )}
                   <span>{step.label}</span>
                   {state === "now" && progress.stage !== step.label ? (
                     <span className="ml-auto truncate text-[11px] font-normal normal-case text-[var(--mc-ink-muted)]">

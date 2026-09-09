@@ -434,6 +434,14 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
  * at the crossing, move the card. Every try keeps the grid and the
  * no-overlap rule; nothing else on the board moves.
  */
+/**
+ * How long one polish may run, on top of its count of judge calls. Two
+ * polishes per arrange, so the pair takes at most twice this plus the
+ * verdict in flight when time runs out. The oil board's polish spends a
+ * couple of seconds; a board routing in seconds per verdict hits this.
+ */
+const POLISH_TIME_MS = 8_000;
+
 function polishWithJudge(
   input: ArrangeInput,
   result: ArrangeResult,
@@ -451,11 +459,27 @@ function polishWithJudge(
   }
   const fullBudget = input.polishBudget ?? ARRANGE_PRICES?.polishBudget ?? 100;
   let budget = fullBudget;
+  // The budget is a COUNT of judge calls, and on a big board each call is
+  // a whole-board route that can take seconds - Jack watched "Polishing
+  // the first layout, 110 crossings" for five minutes (2026-09-08). So
+  // each polish also has a wall-clock allowance: the verdict under way
+  // finishes, and the next one is not asked for. The bar reads whichever
+  // of the two is further along, so it keeps moving on a slow board.
+  const startedAt = performance.now();
+  const deadline = startedAt + POLISH_TIME_MS;
+  const spend = () => {
+    budget = performance.now() > deadline ? 0 : budget - 1;
+  };
   const report = () =>
     input.onProgress?.({
       step: which === "first" ? 3 : 4,
-      stage: `Polishing the ${which} layout, ${verdict.crossings} crossings to start`,
-      done: fullBudget - budget,
+      // The step label already says which layout; this is the detail line
+      // beside it, short enough not to be cut off.
+      stage: `${verdict.crossings} crossings to start`,
+      done: Math.min(
+        fullBudget,
+        Math.max(fullBudget - budget, (fullBudget * (performance.now() - startedAt)) / POLISH_TIME_MS),
+      ),
       total: fullBudget,
     });
   report();
@@ -627,7 +651,7 @@ function polishWithJudge(
           positions.set(member, { x: at.x + dx, y: at.y + dy });
         }
         const quick = judge(positions, { quick: true, base });
-        budget -= 1;
+        spend();
         report();
         if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
           console.log("try", id.slice(0, 14), candidate.x, candidate.y, "quick", quick.crossings, Math.round(quick.points), "best", best.crossings, Math.round(best.points));
@@ -695,7 +719,7 @@ function polishWithJudge(
         }
         if (legal) {
           const quick = judge(positions, { quick: true, base });
-          budget -= 1;
+          spend();
           report();
           if (quick.points < best.points * 0.98) {
             const next = judge(positions);

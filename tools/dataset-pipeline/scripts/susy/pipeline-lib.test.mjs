@@ -1,12 +1,15 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createInitialConfig,
   getConfigPath,
   logPath,
   parseCliArgs,
+  pipelineStepScriptName,
+  setPipelineState,
   updateConfigPaths,
 } from "./pipeline-lib.mjs";
 
@@ -71,5 +74,40 @@ describe("SUSY pipeline configuration", () => {
     expect(getConfigPath({ config: "temp/custom.json" })).toBe(
       path.resolve("temp/custom.json"),
     );
+  });
+
+  it("maps the package pipeline step to its actual script name", () => {
+    expect(pipelineStepScriptName("package")).toBe("package-dataset.mjs");
+    expect(pipelineStepScriptName("normalize")).toBe("normalize.mjs");
+  });
+
+  it("keeps the extract runner dependency imported", () => {
+    const extractSource = readFileSync(new URL("./extract.mjs", import.meta.url), "utf8");
+    expect(extractSource).toMatch(/parseCliArgs,\s*repoRoot,\s*runCommand,/s);
+    expect(extractSource).toContain("await runCommand(command, args");
+  });
+
+  it("clears stale failure metadata after a successful retry", async () => {
+    const tempDir = path.join(os.tmpdir(), `susy-pipeline-state-${Date.now()}`);
+    temporaryDirectories.push(tempDir);
+    const config = createInitialConfig({
+      tempDir,
+      datasetRoot: path.join(tempDir, "datasets"),
+      versionId: "0.1.16.14.1",
+    });
+    config.configPath = path.join(tempDir, "susy-pipeline.json");
+
+    await setPipelineState(config, "failed", "extract", {
+      error: "first attempt failed",
+      message: "retry required",
+    });
+    await setPipelineState(config, "completed", "extract", { attempt: 2 });
+
+    expect(config.state.steps.extract.status).toBe("completed");
+    expect(config.state.steps.extract.attempt).toBe(2);
+    expect(config.state.steps.extract.error).toBeUndefined();
+    expect(config.state.steps.extract.message).toBeUndefined();
+    expect(config.state.steps.extract.failedAt).toBeUndefined();
+    expect(config.state.steps.extract.completedAt).toBeDefined();
   });
 });

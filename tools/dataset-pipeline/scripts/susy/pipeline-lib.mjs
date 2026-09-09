@@ -99,6 +99,11 @@ export function createInitialConfig(options = {}) {
     settings: {
       retries: positiveInteger(options.retries, 3),
       bootstrap: options.bootstrap !== false,
+      // SUSY exports default to a self-contained downloaded client. This keeps
+      // extraction deterministic and avoids depending on a launcher GUI.
+      useDownloadedInstance: options.useDownloadedInstance !== false,
+      instanceSource: undefined,
+      downloadedInstanceStatus: undefined,
     },
     selectedVersions: Array.isArray(options.selectedVersions) ? options.selectedVersions : [],
     includeLocal: options.includeLocal === true,
@@ -127,14 +132,24 @@ export async function setPipelineState(config, status, step, details = {}) {
   config.state.currentStep = step ?? null;
   if (step) {
     config.state.steps ??= {};
-    config.state.steps[step] = {
-      ...(config.state.steps[step] ?? {}),
+    const previous = config.state.steps[step] ?? {};
+    const next = {
+      ...previous,
       status,
       ...(status === "running" ? { startedAt: new Date().toISOString() } : {}),
       ...(status === "completed" ? { completedAt: new Date().toISOString() } : {}),
       ...(status === "failed" ? { failedAt: new Date().toISOString() } : {}),
       ...details,
     };
+    // A later successful retry must not leave the old failure metadata in the
+    // config. This is particularly confusing when resuming a fresh install.
+    if (status === "running" || status === "completed") {
+      delete next.failedAt;
+      delete next.error;
+      delete next.message;
+    }
+    if (status === "running" || status === "failed") delete next.completedAt;
+    config.state.steps[step] = next;
   }
   config.updatedAt = new Date().toISOString();
   await saveConfig(config);
@@ -163,6 +178,11 @@ export async function executeStandaloneStep(step, action, options = {}) {
 
 export function logPath(config, step) {
   return path.join(path.resolve(config.paths.tempDir), "logs", `${step}.log`);
+}
+
+/** Return the standalone script filename for a pipeline step. */
+export function pipelineStepScriptName(step) {
+  return step === "package" ? "package-dataset.mjs" : `${step}.mjs`;
 }
 
 export function rawExportDir(config) {

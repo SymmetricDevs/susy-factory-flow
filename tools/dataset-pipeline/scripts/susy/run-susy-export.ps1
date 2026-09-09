@@ -27,6 +27,7 @@ $Resolver = Join-Path $PSScriptRoot "resolve-susy-instance.mjs"
 
 $RunnerRawExportDir = if ($env:SUSY_RAW_EXPORT_DIR) { [System.IO.Path]::GetFullPath($env:SUSY_RAW_EXPORT_DIR) } else { Join-Path $RepoRoot "temp\raw-export" }
 $RunnerLog = Join-Path $RunnerRawExportDir "export-runner.log"
+$PreviousClientPidFile = Join-Path $RunnerRawExportDir "previous-client.pid"
 function Write-Log {
   param([string]$Message)
   $line = $Message
@@ -97,6 +98,23 @@ $RenderedIconDir = [System.IO.Path]::GetFullPath((Join-Path $RawExportDir "rende
 $RunId = [guid]::NewGuid().ToString("N")
 $OracleGameDumpPath = Join-Path $InstanceDir "recipedump.json"
 
+# Kill any client launched by a previous attempt that may still be running.
+if (Test-Path -LiteralPath $PreviousClientPidFile) {
+  $previousPid = Get-Content -LiteralPath $PreviousClientPidFile -ErrorAction SilentlyContinue
+  if ($previousPid -and $previousPid -match '^\d+$') {
+    $existingProc = Get-Process -Id $previousPid -ErrorAction SilentlyContinue
+    if ($existingProc) {
+      Write-Log "Killing previously launched client (PID $previousPid) from a failed attempt."
+      Stop-Process -Id $previousPid -Force -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 2
+      if (Get-Process -Id $previousPid -ErrorAction SilentlyContinue) {
+        Write-Log "WARNING: Could not kill previous client PID $previousPid; the oracle jar may remain locked."
+      }
+    }
+  }
+  Remove-Item -LiteralPath $PreviousClientPidFile -Force -ErrorAction SilentlyContinue
+}
+
 # Never accept a dump or icon map from an earlier run as this run's result.
 Remove-Item -LiteralPath $RecipedumpPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $OracleGameDumpPath -Force -ErrorAction SilentlyContinue
@@ -144,6 +162,14 @@ Get-ChildItem -LiteralPath $instanceMods -Filter "susy*hei*oracle*.jar" -File -E
     }
   }
 Copy-Item -LiteralPath $OracleJar -Destination (Join-Path $instanceMods (Split-Path -Leaf $OracleJar)) -Force
+Write-Log "Copied oracle jar to: $(Join-Path $instanceMods (Split-Path -Leaf $OracleJar))"
+
+# Verify the oracle jar is in the mods folder.
+$modsAfterCopy = Get-ChildItem -LiteralPath $instanceMods -Filter "susy*hei*oracle*.jar" -File -ErrorAction SilentlyContinue
+if (-not $modsAfterCopy) {
+  Fail "Oracle jar was not found in mods folder after copy! Check: $instanceMods"
+}
+Write-Log "Verified: Oracle jar present in mods folder: $($modsAfterCopy.FullName)"
 
 $instanceOptions = Join-Path $InstanceDir "options.txt"
 if (Test-Path -LiteralPath $instanceOptions) {
@@ -204,6 +230,11 @@ function Find-LauncherExecutable {
 # this launch and restore the file in the finally block below.
 $script:PrismInstanceConfigPath = $null
 $script:PrismInstanceConfigOriginal = $null
+
+# Also set JAVA_TOOL_OPTIONS as a fallback - some Prism versions forward this.
+$env:JAVA_TOOL_OPTIONS = "-Dsusy.oracle.autorun=true -Dsusy.oracle.dumpRecipes=true -Dsusy.oracle.runId=$RunId -Dsusy.oracle.recipedumpPath=$RecipedumpPath -Dsusy.oracle.iconDir=$RenderedIconDir"
+Write-Log "Set JAVA_TOOL_OPTIONS for oracle: $env:JAVA_TOOL_OPTIONS"
+
 function Set-PrismOracleJvmArguments {
   if (-not $resolved.prismInstanceId) { return }
   $wrapperDir = Split-Path -Parent $InstanceDir
@@ -216,32 +247,20 @@ function Set-PrismOracleJvmArguments {
   $original = [System.IO.File]::ReadAllText($configPath)
   $script:PrismInstanceConfigPath = $configPath
   $script:PrismInstanceConfigOriginal = $original
-  $oracleArgs = @(
-    "-Dsusy.oracle.autorun=true",
-    "-Dsusy.oracle.dumpRecipes=true",
-    "-Dsusy.oracle.runId=$RunId",
-    "-Dsusy.oracle.recipedumpPath=`"$RecipedumpPath`"",
-    "-Dsusy.oracle.iconDir=`"$RenderedIconDir`""
-  )
-  $lines = $original -split "`r?`n", -1
-  $found = $false
-  for ($index = 0; $index -lt $lines.Count; $index++) {
-    if ($lines[$index] -notmatch "^JvmArgs=") { continue }
-    $existing = $lines[$index].Substring(8)
-    $existing = [regex]::Replace($existing, '-Dsusy\.oracle\.(?:autorun|dumpRecipes)=(?:true|false)', '')
-    $existing = [regex]::Replace($existing, '-Dsusy\.oracle\.(?:recipedumpPath|iconDir)=(?:"[^"]*"|\S+)', '')
-    $existing = $existing.Trim()
-    $arguments = $oracleArgs -join ' '
-    if ($existing) { $arguments = "$arguments $existing" }
-    $lines[$index] = "JvmArgs=$arguments"
-    $found = $true
-    break
+
+  # Delegate the INI rewrite to Node so the Windows and Unix runners use the
+  # same section-aware implementation and the same path normalization rules.
+  $patcher = Join-Path $PSScriptRoot "patch-prism-instance.mjs"
+  $patchOutput = & node $patcher `
+    --config $configPath `
+    --run-id $RunId `
+    --recipedump-path $RecipedumpPath `
+    --icon-dir $RenderedIconDir
+  if ($LASTEXITCODE -ne 0) {
+    Fail "Could not patch Prism [General] oracle JVM settings in instance.cfg."
   }
-  if (-not $found) {
-    $lines += "JvmArgs=$($oracleArgs -join ' ')"
-  }
-  [System.IO.File]::WriteAllText($configPath, ($lines -join [Environment]::NewLine))
-  Write-Log "Configured oracle JVM arguments in Prism instance.cfg for this launch."
+  Write-Log "Configured oracle JVM arguments in [General] of Prism instance.cfg (OverrideJavaArgs=true)."
+  Write-Log "Verified: Prism [General] contains slash-safe oracle JVM args."
 }
 
 function Restore-PrismJvmArguments {
@@ -250,7 +269,7 @@ function Restore-PrismJvmArguments {
       [System.IO.File]::WriteAllText($script:PrismInstanceConfigPath, $script:PrismInstanceConfigOriginal)
       Write-Log "Restored the original Prism instance.cfg JVM arguments."
     } catch {
-      Write-Log "WARNING: Could not restore $script:PrismInstanceConfigPath: $($_.Exception.Message)"
+      Write-Log "WARNING: Could not restore ${script:PrismInstanceConfigPath}: $($_.Exception.Message)"
     }
   }
 }
@@ -260,12 +279,83 @@ function Get-InstanceLogPath {
   return $null
 }
 
+function Get-SusyJavaProcesses {
+  # Cleanroom relaunches the original java.exe into a second JVM. Killing only
+  # javaw.exe leaves that child alive, locks latest.log, and makes the next
+  # retry exit before Forge can write a useful crash report. Restrict the
+  # query to this instance path so unrelated Java applications are untouched.
+  $needle = ([System.IO.Path]::GetFullPath($InstanceDir)).Replace("'", "''")
+  try {
+    return @(Get-CimInstance Win32_Process -Filter "Name = 'java.exe' OR Name = 'javaw.exe'" |
+      Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($needle, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 })
+  } catch {
+    return @()
+  }
+}
+
+function Stop-SusyJavaProcesses {
+  foreach ($javaProcess in @(Get-SusyJavaProcesses)) {
+    Write-Log "Stopping stale SUSY Java process PID $($javaProcess.ProcessId)."
+    & taskkill /PID $javaProcess.ProcessId /T /F 2>$null | Out-Null
+  }
+}
+
+function Write-LaunchDiagnostics {
+  param([string]$Reason)
+  Write-Log $Reason
+  foreach ($diagnosticFile in @($RuntimeLog, $RuntimeErrLog, (Get-InstanceLogPath))) {
+    if ($diagnosticFile -and (Test-Path -LiteralPath $diagnosticFile)) {
+      Write-Log "Last 80 lines from ${diagnosticFile}:"
+      Get-Content -LiteralPath $diagnosticFile -Tail 80 | ForEach-Object { Write-Log $_ }
+    }
+  }
+}
+
+function Find-SusyClientProcess {
+  # Cleanroom starts a second javaw.exe a few seconds after the generated
+  # launcher invokes java.exe. Poll instead of checking once: on a fast wrapper
+  # exit the old implementation reported a false launch failure and the
+  # orchestrator retried while the real client was still booting.
+  for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    foreach ($javaProcess in @(Get-SusyJavaProcesses)) {
+      $process = Get-Process -Id $javaProcess.ProcessId -ErrorAction SilentlyContinue
+      if ($process) { return $process }
+    }
+    if ($attempt -lt 19) { Start-Sleep -Seconds 1 }
+  }
+  return $null
+}
+
 $launcherManaged = [bool]$resolved.prismInstanceId -and [string]::IsNullOrWhiteSpace($env:SUSY_LAUNCH_COMMAND)
+
+# A failed Cleanroom start can leave either the original java.exe or the
+# relaunched javaw.exe alive. Clear only processes whose command line belongs
+# to this instance before replacing the oracle jar or starting another client.
+if (-not $launcherManaged) {
+  Stop-SusyJavaProcesses
+}
+
+# Kill any existing Prism process so it picks up the new JVM args.
+if ($launcherManaged) {
+  Write-Log "Checking for existing Prism processes..."
+  $existingPrism = Get-Process -Name "PrismLauncher" -ErrorAction SilentlyContinue
+  if ($existingPrism) {
+    Write-Log "Killing existing Prism process (PID $($existingPrism.Id)) to ensure clean launch with oracle JVM args."
+    Stop-Process -Name "PrismLauncher" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+    if (Get-Process -Name "PrismLauncher" -ErrorAction SilentlyContinue) {
+      Write-Log "WARNING: Could not kill existing Prism process. The oracle may not be loaded."
+    }
+  }
+}
+
 if ($launcherManaged) { Set-PrismOracleJvmArguments }
 $proc = $null
 $launchDesc = ""
+$launchStartedAt = Get-Date
 $handoffStartedAt = $null
 $oracleSeen = $false
+$clientLaunched = $false
 try {
   if ($env:SUSY_LAUNCH_COMMAND) {
     $launchDesc = $env:SUSY_LAUNCH_COMMAND
@@ -291,8 +381,13 @@ try {
       if ($startScript -and ($startScript.EndsWith(".cmd") -or $startScript.EndsWith(".bat"))) {
         $launchDesc = "cmd.exe /c `"$startScript`""
         Write-Log "Launch: $launchDesc"
+        # Use CALL with /s so cmd preserves quoted paths containing spaces and
+        # parentheses (for example a cloned repo under Downloads). Without
+        # CALL, cmd can return immediately after parsing a quoted batch path;
+        # the runner then mistakes that wrapper exit for a failed Minecraft
+        # launch and loses the useful child error output.
         $proc = Start-Process -FilePath "cmd.exe" `
-          -ArgumentList @("/d", "/c", "`"$startScript`"") `
+          -ArgumentList @("/d", "/s", "/c", "call `"$startScript`"") `
           -WorkingDirectory $InstanceDir -PassThru `
           -RedirectStandardOutput $RuntimeLog -RedirectStandardError $RuntimeErrLog -WindowStyle Hidden
       } elseif ($startScript) {
@@ -320,10 +415,30 @@ try {
   # Prism may hand the launch request to an already-running launcher process,
   # so the short-lived CLI process is not evidence that the game failed. The
   # instance log and requested dump, not this process, are the source of truth.
-  if (-not $proc -or ($proc.HasExited -and -not $launcherManaged)) {
-    Fail "The Susy client exited immediately (exit code $($proc.ExitCode)). Check $RuntimeErrLog."
+  if (-not $proc) {
+    Write-LaunchDiagnostics "The SUSY client launch did not return a process."
+    Fail "Could not start the SUSY client. Check $RuntimeErrLog."
+  }
+  if ($proc.HasExited -and -not $launcherManaged) {
+    # A batch file can be only a wrapper: cmd may finish while Cleanroom has
+    # already relaunched the actual Java process. Track that process instead of
+    # treating the wrapper's short lifetime as a failed Minecraft launch.
+    $replacement = Find-SusyClientProcess
+    if ($replacement) {
+      Write-Log "Launch wrapper PID $($proc.Id) exited; tracking SUSY Java PID $($replacement.Id)."
+      $proc = $replacement
+    } else {
+      # Do not fail here. The Java/Javaw handoff is asynchronous and can take
+      # longer than the cmd wrapper lifetime on a cold first boot. The
+      # watchdog below will keep polling for the child and will print the
+      # actual runtime/instance log if no child appears.
+      Write-Log "Launch wrapper PID $($proc.Id) exited; waiting for the Cleanroom Java child."
+    }
   }
   Write-Log "Launcher/client PID: $($proc.Id)"
+  $clientLaunched = $true
+  # Record the PID so a retry can kill this client if needed.
+  $proc.Id | Set-Content -LiteralPath $PreviousClientPidFile -Force
   if ($launcherManaged) {
     # The Prism CLI process is not the Minecraft process. It may remain alive
     # as the Prism GUI, or exit immediately after handing the request off, so
@@ -356,6 +471,12 @@ try {
       Write-Log "SUSY HEI oracle run $RunId is running inside the Prism client."
     }
 
+    # Log progress every 30 seconds to show the script is still waiting.
+    if ($handoffStartedAt -and (Get-Date).Second % 30 -eq 0) {
+      $elapsed = ((Get-Date) - $handoffStartedAt).TotalSeconds
+      Write-Log "Waiting for oracle... elapsed: $([math]::Round($elapsed, 1))s"
+    }
+
     if (Test-Path -LiteralPath $RecipedumpPath) {
       $sizeBefore = (Get-Item -LiteralPath $RecipedumpPath).Length
       Start-Sleep -Seconds 5
@@ -375,26 +496,44 @@ try {
       }
     }
 
-    if ($proc.HasExited) {
+      if ($proc.HasExited) {
       $proc.WaitForExit()
       if (Test-Path -LiteralPath $RecipedumpPath) { $dumpReady = $true; break }
       if (-not $launcherManaged) {
-        Fail "Susy client exited without producing $RecipedumpPath."
+        $replacement = Find-SusyClientProcess
+        if ($replacement) {
+          Write-Log "Tracked client PID $($proc.Id) exited; continuing with SUSY Java PID $($replacement.Id)."
+          $proc = $replacement
+        } else {
+          # Never conclude that a standalone launch failed merely because the
+          # cmd wrapper exited. Find-SusyClientProcess polls through the
+          # Cleanroom relaunch window; only after the wrapper has been gone for
+          # a full watchdog interval do we report the collected diagnostics.
+          Write-Log "No SUSY Java child is visible yet; continuing to wait for the launch handoff."
+        }
+      }
+    }
+
+    if (-not $launcherManaged -and $proc.HasExited -and -not (Find-SusyClientProcess)) {
+      $launchWaitSeconds = ((Get-Date) - $launchStartedAt).TotalSeconds
+      if ($launchWaitSeconds -gt 90) {
+        Write-LaunchDiagnostics "Standalone launch wrapper exited and no SUSY Java child appeared after $([math]::Round($launchWaitSeconds, 1)) seconds."
+        Fail "Susy client failed to start. Check $RuntimeErrLog and the instance log above."
       }
     }
 
     if ($launcherManaged -and $handoffStartedAt) {
       $handoffSeconds = ((Get-Date) - $handoffStartedAt).TotalSeconds
-      if ($handoffSeconds -gt 180 -and -not $oracleSeen) {
+      if ($handoffSeconds -gt 600 -and -not $oracleSeen) {
         $logHint = Get-InstanceLogPath
         if ($logHint -and (Test-Path -LiteralPath $logHint)) {
           Write-Log "Last 120 lines from the Prism instance log:"
           Get-Content -LiteralPath $logHint -Tail 120 | ForEach-Object { Write-Log $_ }
         }
-        Fail "Prism accepted the launch request, but the SUSY oracle was not seen in the instance log after 180 seconds. Confirm the oracle jar is enabled in Prism and inspect $logHint."
+        Fail "Prism accepted the launch request, but the SUSY oracle was not seen in the instance log after 600 seconds (10 minutes). Confirm the oracle jar is enabled in Prism and inspect $logHint."
       }
-      if ($handoffSeconds -gt 300) {
-        Fail "Prism launched the instance, but no recipedump appeared after 300 seconds. Check $RuntimeErrLog and $(Get-InstanceLogPath)."
+      if ($handoffSeconds -gt 600) {
+        Fail "Prism launched the instance, but no recipedump appeared after 600 seconds (10 minutes). Check $RuntimeErrLog and $(Get-InstanceLogPath)."
       }
     }
 
@@ -406,6 +545,10 @@ try {
   }
 } finally {
   Restore-PrismJvmArguments
+  # Clean up the PID file on success so retries know there's no leftover client.
+  if ($clientLaunched -and (Test-Path -LiteralPath $PreviousClientPidFile)) {
+    Remove-Item -LiteralPath $PreviousClientPidFile -Force -ErrorAction SilentlyContinue
+  }
   # Do not terminate Prism itself: for a launcher-managed instance `$proc` is
   # the Prism GUI/request process, not the Minecraft client.
   if ($proc -and -not $proc.HasExited -and -not $launcherManaged) {

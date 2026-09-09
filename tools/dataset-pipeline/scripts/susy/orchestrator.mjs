@@ -11,6 +11,7 @@ import {
   loadConfig,
   parseCliArgs,
   positiveInteger,
+  pipelineStepScriptName,
   repoRoot,
   runCommand,
   saveConfig,
@@ -116,6 +117,28 @@ try {
       logger.info(`Starting step ${step} (attempt ${attempt}/${retries}).`);
       renderOverallProgress(steps, step, "running");
       try {
+        // For extract steps that launch a long-running client, check whether
+        // a previous attempt left a running client behind and kill it so the
+        // retry can install the oracle jar fresh.
+        if (step === "extract") {
+          const pidFile = path.join(path.resolve(config.paths.tempDir), "raw-export", "previous-client.pid");
+          try {
+            const pidText = await fs.readFile(pidFile, "utf8").catch(() => "");
+            const pid = pidText.trim();
+            if (/^\d+$/.test(pid)) {
+              try {
+                process.kill(Number(pid));
+                logger.info(`Killed previously launched client (PID ${pid}) from a failed attempt.`);
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+              } catch {
+                // Process already exited or we don't have permission.
+              }
+            }
+          } catch {}
+          // The Windows export runner performs targeted cleanup using its own
+          // PID file. Do not kill every javaw.exe on the machine: that can
+          // terminate unrelated Minecraft or Java applications.
+        }
         await runStep(step, config.configPath ?? configPath, logger);
         config = await loadConfig({ config: configPath });
         await setPipelineState(config, "completed", step, { attempt, maxAttempts: retries });
@@ -176,6 +199,7 @@ try {
     await setPipelineState(config, "completed", null);
     logger.info("SUSY pipeline completed successfully.");
     renderOverallProgress(steps, steps.at(-1), "completed");
+    await offerDownloadedInstanceCleanup(config, logger);
   }
 } finally {
   logger.close();
@@ -258,10 +282,18 @@ async function runSelectedVersions(versionIds, parentConfig, logger) {
 }
 
 async function runStep(step, configFile, parentLogger) {
-  const script = path.join(repoRoot, "tools", "dataset-pipeline", "scripts", "susy", `${step}.mjs`);
+  const scriptName = pipelineStepScriptName(step);
+  const script = path.join(
+    repoRoot,
+    "tools",
+    "dataset-pipeline",
+    "scripts",
+    "susy",
+    scriptName,
+  );
   await runCommand(process.execPath, [script, "--config", configFile], {
     logger: parentLogger,
-    label: `Run ${step}.mjs`,
+    label: `Run ${scriptName}`,
     progress: `Pipeline step: ${step}`,
   });
 }
@@ -318,6 +350,43 @@ function renderOverallProgress(allSteps, activeStep, status) {
   const bar = `${"#".repeat(filled)}${"-".repeat(width - filled)}`;
   process.stdout.write(`\rOverall [${bar}] ${completed}/${allSteps.length} (${status}: ${activeStep})`);
   if (status === "completed" && completed === allSteps.length) process.stdout.write("\n");
+}
+
+async function offerDownloadedInstanceCleanup(currentConfig, parentLogger) {
+  const settings = currentConfig.settings ?? {};
+  const instanceDir = currentConfig.paths?.instanceDir;
+  const isDownloaded = settings.useDownloadedInstance !== false &&
+    settings.instanceSource === "bootstrap" && instanceDir;
+  if (!isDownloaded) return;
+
+  if (options.interactive === false || !process.stdin.isTTY || !process.stdout.isTTY) {
+    parentLogger.info(`Downloaded SUSY instance retained at ${instanceDir}.`);
+    return;
+  }
+
+  const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await prompt.question(
+      `The downloaded SUSY instance is at ${instanceDir}. Delete it and its runtime, or keep it? [keep/delete] `,
+    );
+    if (!/^(delete|d|yes|y)$/i.test(answer.trim())) {
+      parentLogger.info(`Downloaded SUSY instance retained at ${instanceDir}.`);
+      currentConfig.settings.downloadedInstanceStatus = "kept";
+      await saveConfig(currentConfig);
+      return;
+    }
+
+    const runtimeDir = `${instanceDir}-runtime`;
+    await fs.rm(instanceDir, { recursive: true, force: true });
+    await fs.rm(runtimeDir, { recursive: true, force: true });
+    currentConfig.settings.downloadedInstanceStatus = "deleted";
+    await saveConfig(currentConfig);
+    parentLogger.info(`Deleted downloaded SUSY instance and runtime: ${instanceDir}, ${runtimeDir}.`);
+  } catch (error) {
+    parentLogger.warn(`Could not apply downloaded-instance cleanup choice: ${error.message}`);
+  } finally {
+    prompt.close();
+  }
 }
 
 async function askForRecovery(step) {

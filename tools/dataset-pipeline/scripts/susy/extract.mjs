@@ -1,5 +1,6 @@
 import path from "node:path";
 import process from "node:process";
+import fs from "node:fs/promises";
 import {
   executeStandaloneStep,
   parseCliArgs,
@@ -10,6 +11,26 @@ import {
 const options = parseCliArgs();
 
 await executeStandaloneStep("extract", async (logger, config) => {
+  // Kill any client launched by a previous failed attempt before starting a new one.
+  const pidFile = path.join(config.paths.rawExportDir, "previous-client.pid");
+  try {
+    const pidText = await fs.readFile(pidFile, "utf8").catch(() => "");
+    const pid = pidText.trim();
+    if (/^\d+$/.test(pid)) {
+      try {
+        process.kill(Number(pid));
+        logger.info(`Killed previously launched client (PID ${pid}) from a failed attempt.`);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } catch {
+        // Process already exited or we don't have permission.
+      }
+    }
+  } catch {}
+
+  // The Windows export runner performs targeted cleanup using its own PID
+  // file. Do not terminate every javaw.exe here: a fresh install must not kill
+  // unrelated Java or Minecraft processes owned by the user.
+
   const runner = path.join(
     repoRoot,
     "tools",

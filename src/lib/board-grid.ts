@@ -55,7 +55,7 @@ export function cells(n: number): number {
  * it - each item chip gave up 8px (long names wrap to two smaller lines
  * instead of truncating) and the output coupling 4px, which is the cell.
  */
-export const RECIPE_NODE_WIDTH = cells(21); // 420
+export const RECIPE_NODE_WIDTH = cells(20); // 400
 
 /** Card padding either side of the rails (inside the 2px frame). */
 export const RECIPE_NODE_PAD_X = 8;
@@ -64,16 +64,27 @@ export const RECIPE_NODE_PAD_X = 8;
 export const RECIPE_RAIL_AREA_WIDTH = RECIPE_NODE_WIDTH - 2 * (2 + RECIPE_NODE_PAD_X); // 400
 
 /** The input chip, and the chip half of an output row. */
-export const PORT_CHIP_WIDTH = 132;
+export const PORT_CHIP_WIDTH = 122;
 
 /** The `→` divider between the two rails. */
 export const RAIL_DIVIDER_WIDTH = 16;
 
 /** Chip + 2px gap + the 30px coupling (`.flow-plug` in globals.css). */
-export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 30; // 164
+export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 30; // 154
 
 /** One port row. Two cells, so a rail of any length stays on the grid. */
 export const PORT_ROW_HEIGHT = cells(2); // 40
+
+/**
+ * The floor under the machine picture, which is the flex-1 middle between
+ * the two rails and grows with them. TWO port rows (2026-09-09): at three
+ * it stood a whole row taller than the rails on the commonest card of all,
+ * the one input and two outputs, and the picture floated in a window with
+ * nothing under it. Two rows against the picture's 96px reads square.
+ *
+ * It must stay a whole number of CELLS or a short card lands off the grid.
+ */
+export const PICTURE_MIN_HEIGHT = PORT_ROW_HEIGHT * 2; // 80
 
 /** The title row. */
 export const HEAD_ROW_HEIGHT = cells(2); // 40

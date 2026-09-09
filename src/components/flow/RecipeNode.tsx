@@ -144,7 +144,12 @@ import {
   getRecipeProgrammedCircuit,
   type RecipeProgrammedCircuit,
 } from "@/lib/model/programmed-circuit";
-import { BOARD_GRID, RECIPE_NODE_WIDTH, RECIPE_RAIL_AREA_WIDTH } from "@/lib/board-grid";
+import {
+  BOARD_GRID,
+  PICTURE_MIN_HEIGHT,
+  RECIPE_NODE_WIDTH,
+  RECIPE_RAIL_AREA_WIDTH,
+} from "@/lib/board-grid";
 import { CropPickerMenu } from "./CropPickerMenu";
 import {
   MachineMenu,
@@ -2071,7 +2076,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 machine with things going in and coming out - no arrow
                 needed. Calm mode keeps the bare arrow. */}
             {!calmMode && hasPowerPicture ? (
-              <div className="flex min-h-[120px] min-w-0 flex-1 items-stretch self-stretch">
+              <div className={PICTURE_COLUMN_CLASS} style={PICTURE_MIN_STYLE}>
+                <div className={PICTURE_FILL_CLASS}>
                 <PowerStructureWindow
                   art={powerArt}
                   icon={powerMachineIcon ?? previewMachineIcon}
@@ -2080,6 +2086,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   // Which handler and tier the art was picked for, for probes.
                   pickedFor={`${previewHandler.id}@${pictureTier}:${machineIconEntries.get(previewHandler.id)?.tiers?.length ?? 0}`}
                 />
+                </div>
               </div>
             ) : hasInputSideView && hasOutputSideView ? (
               <div className="flex min-w-0 flex-1 items-center justify-center self-stretch text-[15px] font-black text-[var(--mc-ink-muted)]">
@@ -3034,7 +3041,21 @@ export /**
  */
 const checklistLocked = () => useFactoryStore.getState().checklistMode;
 
-const PORT_CHIP_WIDTH_CLASS = "w-[132px]";
+const PORT_CHIP_WIDTH_CLASS = "w-[122px]";
+
+/** One object, not one per card per render: this sits on every recipe card. */
+const PICTURE_MIN_STYLE = { minHeight: PICTURE_MIN_HEIGHT } as const;
+
+/**
+ * The picture column between the rails. It is `relative` with NO intrinsic
+ * height and the window fills it absolutely, which is what stops the art
+ * from setting the card's height: an image is whatever aspect ratio it was
+ * drawn at, and letting it size the row put cards on fractional pixels
+ * (85.18) and off the grid. The RAILS decide the height, this column's floor
+ * catches the short cards, and the art scales to whatever it is given.
+ */
+const PICTURE_COLUMN_CLASS = "relative min-w-0 flex-1 self-stretch";
+const PICTURE_FILL_CLASS = "absolute inset-0 flex items-stretch";
 
 /**
  * One side of the port rails. Every port always renders - a hidden port is a
@@ -3069,7 +3090,7 @@ function PortRail({
         "flex shrink-0 flex-col justify-start gap-0 py-0",
         // Output rail: 132px chip + 2px gap + 30px coupling. The 20px
         // saved across both rails leaves the centre picture unchanged.
-        isInput || solveMode ? PORT_CHIP_WIDTH_CLASS : "w-[164px]",
+        isInput || solveMode ? PORT_CHIP_WIDTH_CLASS : "w-[154px]",
       ].join(" ")}
     >
       {ports.map((port) =>
@@ -3261,7 +3282,9 @@ function SharedMachineRails({
         ))}
       </div>
       {picture ? (
-        <div className="flex min-h-[120px] min-w-0 flex-1 items-stretch self-stretch">{picture}</div>
+        <div className={PICTURE_COLUMN_CLASS} style={PICTURE_MIN_STYLE}>
+          <div className={PICTURE_FILL_CLASS}>{picture}</div>
+        </div>
       ) : (
         <div className="flex min-w-0 flex-1 items-center justify-center self-stretch text-[15px] font-black text-[var(--mc-ink-muted)]">
           →
@@ -3295,7 +3318,7 @@ function NoFlowRow({ label, side }: { label: string; side: "input" | "output" })
       aria-hidden
       className={[
         "flex h-[40px] shrink-0 items-center justify-center border-2 border-dashed border-[var(--mc-47)] text-[12px] font-bold text-[var(--mc-ink-muted)]/70",
-        side === "input" ? PORT_CHIP_WIDTH_CLASS : "w-[164px]",
+        side === "input" ? PORT_CHIP_WIDTH_CLASS : "w-[154px]",
       ].join(" ")}
     >
       {label}
@@ -3365,10 +3388,13 @@ function PowerStructureWindow({
           tooltip={false}
           showAmount={false}
           showConsumedState={false}
-          // Same zoom-and-crop ratio the picker's banner uses, scaled to
-          // this window's height: the render's padding goes, its face stays.
-          iconPixelSize={inline ? 150 : 170}
-          className={`${inline ? "!h-[88px] !w-[88px]" : "!h-[100px] !w-[100px]"} ${shadow}`}
+          // Same zoom-and-crop ratio the picker's banner uses (1.7x the box),
+          // scaled to this window's height: the render's padding goes, its
+          // face stays. The inline box is sized to the window's FLOOR, not to
+          // a tall card's window — the crop is what the ratio buys, so a box
+          // bigger than the floor would simply hang out of a short card.
+          iconPixelSize={inline ? 109 : 170}
+          className={`${inline ? "!h-[64px] !w-[64px]" : "!h-[100px] !w-[100px]"} ${shadow}`}
         />
       )}
     </div>

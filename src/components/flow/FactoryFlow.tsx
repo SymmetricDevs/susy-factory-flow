@@ -197,6 +197,7 @@ import {
   BOARD_WINDOW_MIN_HEIGHT,
   BOARD_WINDOW_MIN_WIDTH,
   BOARD_WINDOW_TITLE_HEIGHT,
+  PICTURE_MIN_HEIGHT,
   RECIPE_NODE_WIDTH,
   STORAGE_NODE_HEIGHT,
   STORAGE_NODE_WIDTH,
@@ -12057,8 +12058,13 @@ function estimateNodeCardSize(
     rails += cells(2) * rows + (shared ? cells(1) : 0);
   }
   // Title row + machine strip + the port rails + footer, plus one spare row
-  // of slack for a config panel.
-  return { width: RECIPE_NODE_WIDTH, height: cells(4) + Math.max(cells(2), rails) + cells(4) };
+  // of slack for a config panel. The rails block cannot be shorter than the
+  // machine picture standing beside it, and on a one-row card the picture is
+  // what sets the height — the floor here is its floor, not one port row.
+  return {
+    width: RECIPE_NODE_WIDTH,
+    height: cells(4) + Math.max(PICTURE_MIN_HEIGHT, rails) + cells(4),
+  };
 }
 
 /**

@@ -33,7 +33,6 @@ export function capturePlanView(): PlanViewState {
     canvasTheme: board.canvasTheme,
     // No `lineHeatMode` any more: line colour rides the status glance mode,
     // which the snapshot already carries.
-    lineLabelsMode: board.lineLabelsMode,
     linePulseMode: board.linePulseMode,
     calmMode: board.calmMode,
     // The smart view (bottom-right tray) is deliberately NOT captured: it is
@@ -126,10 +125,9 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   // with no control that turns it off. `linePulseMode` is skipped since the
   // dashes were retired (board-view.ts): a plan saved with them on must not
   // switch on a layer that no longer exists.
-  for (const key of [
-    "lineLabelsMode",
-    "calmMode",
-  ] as const) {
+  // `lineLabelsMode` is not applied either: the rate pills on wires are
+  // gone (2026-09-08), so a plan saved with them on changes nothing.
+  for (const key of ["calmMode"] as const) {
     const set = flag(view[key]);
     if (set) {
       boardPatch[key] = set.value;

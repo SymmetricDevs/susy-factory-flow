@@ -6,7 +6,6 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
 import {
   BaseEdge,
-  EdgeLabelRenderer,
   ConnectionMode,
   Position,
   ReactFlow,
@@ -42,7 +41,6 @@ import {
   Grid2x2,
   Eye,
   Focus,
-  Tag,
   Gauge,
   Grid3x3,
   Grip,
@@ -109,6 +107,7 @@ import { queryRecipeDatasetResources } from "@/lib/datasets/browser-loader";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets/remote";
 import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
 import { ItemPickerPopover } from "@/components/ItemPickerPopover";
+import { BoardContextMenu, type BoardMenuTarget } from "./BoardContextMenu";
 import { listPoolCellPairs } from "@/lib/solver/pool-mode";
 import "./pool-mode.css";
 import "./scroll-camera.css";
@@ -135,7 +134,6 @@ import {
   captureBoardSelection,
   findToggleDuplicateEdge,
   useFactoryStore,
-  useRateDisplayUnits,
   wouldConnectionStorageSpawn,
   type BoardClipboardPayload,
   type BoardFraming,
@@ -239,7 +237,6 @@ import {
 import { CANVAS_THEMES, getCanvasTheme, type CanvasTheme } from "./canvas-themes";
 import { GrainBackground, RuledBackground, TiledBackground } from "./board-pattern";
 import {
-  MotionNumberText,
   readBoardMotionSnapshot,
   useBoardMotion,
   useMotionRoute,
@@ -259,13 +256,8 @@ import { getSharedMachineHandlers, listNodeSections, sectionNodeView, splitSecti
 import { isPowerRecipe } from "@/lib/power/power-recipe";
 import { isCropFarmRecipe } from "@/lib/model/passive-production";
 import {
-  edgeUnit,
-  formatEdgeRateLabelFrom,
-  getEdgeRateLabelValues,
   isEdgeStarved,
-  type EdgeLabelInput,
 } from "./edge-labels";
-import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeAddChips } from "@/components/RecipeAddChip";
 import {
   LANE_CAPACITY,
@@ -280,6 +272,7 @@ import {
 } from "./grid-edge-router";
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
 import type { ArrangeInput } from "@/lib/board-arrange";
+import { proxyPath } from "@/lib/board-arrange-optimize";
 import { makeRouteJudge } from "@/lib/route-judge";
 import { routePoints } from "@/lib/route-metrics";
 import { registerBoardGeometryReader, registerBoardScoreReader } from "./board-score";
@@ -361,10 +354,8 @@ import {
   type NodeDetailLevel,
 } from "./node-detail";
 import {
-  publishEdgeLabelBox,
   publishEdgePulse,
   publishEdgeWaypointDots,
-  retractEdgeLabelBox,
   retractEdgePulse,
   retractEdgeWaypointDots,
   snapshotEdgeLabelBoxes,
@@ -777,8 +768,6 @@ type ResourceEdgeData = {
   /** The line ends in a barrel or tank rather than a machine. */
   isStorageTarget?: boolean;
   isStorageEdge: boolean;
-  showLabel: boolean;
-  labelOffset?: { x: number; y: number };
   /** User-pinned stops the wire routes through, in order. */
   waypoints?: Array<{ x: number; y: number }>;
   sourceHandleId?: string | null;
@@ -878,6 +867,13 @@ type RoutedEdgePath = {
    */
   labelHidden?: boolean;
   points: Array<{ x: number; y: number }>;
+  /**
+   * Whether these points came from the router (fresh or last-solved) rather
+   * than the port-anchored fallback. The fallback leaves each end at its
+   * port row, which is the look free docking replaced, so a wire must never
+   * be seen ANIMATING out of one (see the morph gate in the edge).
+   */
+  solved?: boolean;
 };
 
 const directRouteCache = new Map<
@@ -2081,7 +2077,7 @@ export function FactoryFlow() {
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
   const boardView = useBoardView();
-  const { lineLabelsMode, calmMode } = boardView;
+  const { calmMode } = boardView;
   // Device taste, not plan state: never captured into plan-view snapshots.
   const boardMotion = useBoardMotion();
   const canvasTheme = getCanvasTheme(boardView.canvasTheme);
@@ -3459,8 +3455,6 @@ export function FactoryFlow() {
           isSupplyCapped,
           isStorageTarget: Boolean(targetStorage),
           isStorageEdge,
-          showLabel: lineLabelsMode,
-          labelOffset: edge.labelOffset,
           waypoints: edge.waypoints,
           sourceHandleId: canonicalSourceHandle,
           targetHandleId: canonicalTargetHandle,
@@ -3542,7 +3536,6 @@ export function FactoryFlow() {
     activeFlowResourceKey,
     anyLineMode,
     speedColorMode,
-    lineLabelsMode,
     layoutVersion,
     pocketSummaries,
     pocketView,
@@ -5456,6 +5449,69 @@ export function FactoryFlow() {
     cancelResourceConnection();
   }, [cancelResourceConnection, selectNode]);
 
+  // THE BOARD MENU (BoardContextMenu.tsx): one right click anywhere on the
+  // board. A control that already answers a right click has prevented the
+  // event's default by the time it reaches here, and is left alone.
+  const [boardMenu, setBoardMenu] = useState<BoardMenuTarget | undefined>(undefined);
+  const closeBoardMenu = useCallback(() => setBoardMenu(undefined), []);
+  const menuPoint = useCallback((event: ReactMouseEvent | MouseEvent) => {
+    const instance = flowInstanceRef.current;
+    const flow = instance
+      ? instance.screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      : { x: 0, y: 0 };
+    return { x: event.clientX, y: event.clientY, flow };
+  }, []);
+  const handlePaneContextMenu = useCallback(
+    (event: ReactMouseEvent | MouseEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      event.preventDefault();
+      setBoardMenu({ kind: "pane", ...menuPoint(event) });
+    },
+    [menuPoint],
+  );
+  const handleNodeContextMenu = useCallback(
+    (event: ReactMouseEvent, node: BoardFlowNode) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (node.type !== "recipeNode" && node.type !== "storageNode") {
+        return;
+      }
+      event.preventDefault();
+      setBoardMenu({
+        kind: node.type === "storageNode" ? "storage" : "node",
+        id: node.id,
+        ...menuPoint(event),
+      });
+    },
+    [menuPoint],
+  );
+  const handleEdgeContextMenu = useCallback(
+    (event: ReactMouseEvent, edge: Edge) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      event.preventDefault();
+      const project = useFactoryStore.getState().project;
+      const flat = project.edges.find((entry) => entry.id === edge.id);
+      // The drawer holds what the wire carries: read off the source's port,
+      // or the target's when the source is a board with no ports.
+      const resource = flat
+        ? (getResourceForHandle(project, flat.source, flat.sourceHandle ?? "") ??
+          getResourceForHandle(project, flat.target, flat.targetHandle ?? ""))
+        : undefined;
+      setBoardMenu({
+        kind: "edge",
+        ids: expandChannelEdgeIds([edge.id]),
+        resource,
+        ...menuPoint(event),
+      });
+    },
+    [expandChannelEdgeIds, menuPoint],
+  );
+
   const handleShowNodes = useCallback(
     (nodeIds: string[]) => frameBoardCards(nodeIds),
     [frameBoardCards],
@@ -5582,9 +5638,6 @@ export function FactoryFlow() {
     }
     // The board may have changed while the arrange ran; apply to the
     // current store, which is what applyBoardArrangement reads.
-    // An arranged board is read without rate pills, so the arrange turns
-    // them off.
-    writeBoardView({ lineLabelsMode: false });
     // The arrange draws no ink: its islands become ZONES — real boards the
     // stray cards move into. Root notes (and old releases' island boxes)
     // go; they point at a layout that no longer exists. Boards the player
@@ -6451,6 +6504,7 @@ export function FactoryFlow() {
         void placeImageFile(file, point);
       }}
     >
+      {boardMenu ? <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} /> : null}
       <ReactFlow
         nodes={visibleFlowNodes}
         edges={visibleFlowEdges}
@@ -6508,6 +6562,9 @@ export function FactoryFlow() {
         onSelectionStart={handleSelectionStart}
         onSelectionEnd={handleSelectionEnd}
         onPaneClick={handlePaneClick}
+        onPaneContextMenu={handlePaneContextMenu}
+        onNodeContextMenu={handleNodeContextMenu}
+        onEdgeContextMenu={handleEdgeContextMenu}
         onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onEdgesDelete={handleEdgesDelete}
@@ -8810,7 +8867,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
 }) {
   const {
     canvasPattern,
-    lineLabelsMode,
     calmMode,
   } = view;
   // Motion is device taste, not plan state: read and written through its own
@@ -8828,14 +8884,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
     Icon: LucideIcon;
     flip: () => void;
   }> = [
-    {
-      id: "labels",
-      on: lineLabelsMode,
-      label: "Line labels",
-      line: "Each wire shows its rate.",
-      Icon: Tag,
-      flip: () => onChange({ lineLabelsMode: !lineLabelsMode }),
-    },
     {
       id: "calm",
       on: calmMode,
@@ -9446,33 +9494,6 @@ const PaintToolbar = memo(function PaintToolbar({
   );
 });
 
-/**
- * The pill's numbers, eased: the flow figure and its percent glide to a new
- * solve on the value-motion clock. A leaf so the per-frame re-render is one
- * text fragment, not the edge. When the ratio appears or disappears the value
- * list changes length, which the tween treats as a snap — correct, because
- * there is no honest halfway between "has a percent" and "has none".
- */
-function EdgeRateLabelText({ data }: { data: EdgeLabelInput | undefined }) {
-  // The unit is read live: turning a rate dial re-renders this leaf and
-  // nothing upstream of it.
-  useRateDisplayUnits();
-  const { flowing, ratio } = getEdgeRateLabelValues(data);
-  const unit = data ? edgeUnit(data) : "/s";
-  // SOLVE and POOL: every line carries exactly what its taker asked, so
-  // the ratio would read 100% on every label. The rate alone.
-  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
-  const hasRatio = ratio !== undefined && !solveMode;
-  return (
-    <MotionNumberText
-      values={hasRatio ? [flowing, ratio] : [flowing]}
-      render={(shown) =>
-        formatEdgeRateLabelFrom(unit, shown[0] ?? flowing, hasRatio ? shown[1] : undefined)
-      }
-    />
-  );
-}
-
 function ResourceEdgeComponent({
   id,
   sourceX,
@@ -9671,10 +9692,18 @@ function ResourceEdgeComponent({
   // every frame for a quarter second, and past a few hundred wires that is
   // the O(edges)-per-frame bill ARCHITECTURE.md forbids — those boards snap,
   // as they always did. (Module state read here is fine; see showArrowHead.)
+  // A wire crossing BETWEEN the fallback and a real route snaps. The
+  // fallback stands at the port rows, so morphing out of one draws the wire
+  // sliding from its old fixed dock to where the router put it - the
+  // "it goes back to the old mode for a second" report. Wire-to-wire moves
+  // (a card dragged, a re-solve) still glide.
+  const wasSolvedRef = useRef(true);
+  const routeSourceChanged = wasSolvedRef.current !== Boolean(routedEdge.solved);
+  wasSolvedRef.current = Boolean(routedEdge.solved);
   const liveRoute = useMotionRoute(
     routedEdge.points,
     routedEdge.path,
-    moveMotion && publishedGridRouteEdges.length <= 300,
+    moveMotion && !routeSourceChanged && publishedGridRouteEdges.length <= 300,
   );
   // LIGHTNING. A power wire draws JAGGED: the router's route, zigzagged
   // after the fact so the router, the lanes and the hit-testing all still
@@ -9723,53 +9752,6 @@ function ResourceEdgeComponent({
       ? undefined
       : trimPolylineEnds(routedEdge.points, 26);
   const hoverPathD = hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
-
-  // The rate pill: on only in label mode, and never parked on a card — a
-  // pill with no clear stretch of wire to sit on goes away entirely.
-  const showRateLabel = Boolean(
-    data?.showLabel &&
-      data.resource &&
-      !routedEdge.labelHidden &&
-      hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS),
-  );
-  // The pulse canvas paints over the whole board and punches back out what
-  // the dashes must stay under (see edge-pulse.ts). The pill publishes its
-  // box for that punch-out: measured once per mount/text change through a
-  // ResizeObserver — never per frame — and centred on the label anchor.
-  const labelBoxRef = useRef<HTMLDivElement>(null);
-  const labelBoxX = routedEdge.labelX;
-  const labelBoxY = routedEdge.labelY;
-  useLayoutEffect(() => {
-    if (!showRateLabel) {
-      retractEdgeLabelBox(id);
-      return;
-    }
-    const element = labelBoxRef.current;
-    const publish = () => {
-      const pill = labelBoxRef.current;
-      if (!pill) {
-        return;
-      }
-      // offsetWidth/Height are pre-transform layout px, which are flow px:
-      // zoom is a transform on the viewport, not a layout input.
-      publishEdgeLabelBox(id, {
-        left: labelBoxX - pill.offsetWidth / 2,
-        top: labelBoxY - pill.offsetHeight / 2,
-        width: pill.offsetWidth,
-        height: pill.offsetHeight,
-      });
-    };
-    publish();
-    if (!element || typeof ResizeObserver === "undefined") {
-      return () => retractEdgeLabelBox(id);
-    }
-    const observer = new ResizeObserver(publish);
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-      retractEdgeLabelBox(id);
-    };
-  }, [id, labelBoxX, labelBoxY, showRateLabel]);
 
   // Hand this line's dashes to the board's pulse canvas (see edge-pulse.ts).
   // Published after commit rather than during render because it is a
@@ -10171,44 +10153,6 @@ function ResourceEdgeComponent({
             </circle>
           ))
         : null}
-      {showRateLabel && data?.resource ? (
-        // The rate pill, back by request as a VIEW mode (the tag button in
-        // the board toolbar), and deliberately lean this time: what flows
-        // and how fast, at the route's midpoint. No dragging, no popover —
-        // the port chips carry the full story.
-        <EdgeLabelRenderer>
-          <div
-            ref={labelBoxRef}
-            className="nodrag nopan absolute flex cursor-pointer items-center gap-1.5 border border-[var(--mc-15)] bg-[#2b2d32] px-1.5 py-0.5 text-[12px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)]"
-            style={{
-              transform: `translate(-50%, -50%) translate(${routedEdge.labelX}px, ${routedEdge.labelY}px)`,
-              pointerEvents: "all",
-              borderColor: isHighlighted ? "var(--glow-line)" : edgeColor,
-            }}
-            onMouseEnter={applyEdgeFlowScope}
-            onMouseLeave={() => setHoveredFlowScope(undefined)}
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              window.dispatchEvent(
-                new CustomEvent(FLOW_EDGE_LABEL_SELECT_EVENT, {
-                  detail: { edgeIds: data.bundle?.edgeIds ?? [id] },
-                }),
-              );
-            }}
-          >
-            <ResourceIcon
-              resource={data.resource}
-              size="sm"
-              showAmount={false}
-              bare
-              className="!h-[18px] !w-[18px]"
-            />
-            <span className="leading-none tracking-tight tabular-nums">
-              <EdgeRateLabelText data={data} />
-            </span>
-          </div>
-        </EdgeLabelRenderer>
-      ) : null}
     </>
   );
 }
@@ -10866,8 +10810,31 @@ function getDirectEdgePath({
   // The grid solve owns every settled route; the simple L-shape covers the
   // two transient cases — a mid-drag edge following the pointer, and an edge
   // whose endpoints have not been measured yet.
+  const fresh = useSmartRouting ? getBestDirectEdgePoints({ edgeId }) : undefined;
+  // No fresh route: the wire's LAST one stands in. A card is unmeasured for
+  // a frame after it mounts, and a wire touching it is left out of that
+  // solve - which used to drop the wire onto the port-anchored L-shape for
+  // a moment, so deleting a drawer (or anything else that mounts a card)
+  // flashed the old fixed-dock look and then slid into place (Jack,
+  // 2026-09-08). Only a wire that has never been routed falls back now.
+  const stale = fresh === undefined && useSmartRouting ? getLastDirectEdgePoints(edgeId) : undefined;
+  // A wire the router has never seen - one just made by a drawer split, a
+  // heal, a paste - has nothing to stand in. Its first frame is the
+  // ARRANGER'S PROXY PATH between the two cards (board-arrange-optimize.ts:
+  // leave at the rim point facing the far card, octilinear, one diagonal),
+  // which is the shape the router is about to draw. The port-anchored
+  // L-shape below is the last resort, for a card that is not even measured:
+  // it stands at the port rows, which is the fixed-dock look free docking
+  // replaced, and Jack sees one frame of it as the wire "going back to the
+  // old mode" (2026-09-08).
+  const guess =
+    fresh === undefined && stale === undefined && useSmartRouting
+      ? proxyBetweenNodes(sourceNodeId, targetNodeId)
+      : undefined;
   const points =
-    (useSmartRouting ? getBestDirectEdgePoints({ edgeId }) : undefined) ??
+    fresh ??
+    stale ??
+    guess ??
     getSimpleOrthogonalEdgePoints({
       sourceX,
       sourceY,
@@ -10876,6 +10843,7 @@ function getDirectEdgePath({
       targetY,
       targetPosition,
     });
+  const solved = Boolean(fresh ?? stale);
 
   // Hop bumps are sized from the width this line actually draws at, so a
   // highlighted (thickened) line still clears what it crosses.
@@ -10903,6 +10871,7 @@ function getDirectEdgePath({
   };
 
   const result: RoutedEdgePath = {
+    solved,
     path: pointsToHoppedSvgPath(
       inkPointsFor(points, sourceNodeId, targetNodeId),
       collectHoppedRouteSegments(edgeId, routeIndex, points),
@@ -11009,6 +10978,34 @@ function getBestDirectEdgePoints({
 }
 
 
+
+/**
+ * The shape the router is about to draw between two cards, for a wire that
+ * has no route yet: the arranger's own proxy path over the measured card
+ * rectangles. Undefined when either card is unmeasured.
+ */
+function proxyBetweenNodes(
+  sourceNodeId: string | undefined,
+  targetNodeId: string | undefined,
+): Array<{ x: number; y: number }> | undefined {
+  const source = getMeasuredNodeBoundsById(sourceNodeId);
+  const target = getMeasuredNodeBoundsById(targetNodeId);
+  if (!source || !target) {
+    return undefined;
+  }
+  return proxyPath(source, target).map((point) => ({
+    x: snapRouteCoord(point.x),
+    y: snapRouteCoord(point.y),
+  }));
+}
+
+/**
+ * The last route the router gave this wire, whatever solve it belongs to.
+ * Stale by definition; it stands in only while the fresh answer is missing.
+ */
+function getLastDirectEdgePoints(edgeId?: string): Array<{ x: number; y: number }> | undefined {
+  return edgeId ? directRouteCache.get(edgeId)?.route.points : undefined;
+}
 
 function snapRouteCoord(value: number) {
   return Math.round(value / EDGE_ROUTE_SNAP_GRID) * EDGE_ROUTE_SNAP_GRID;
@@ -12491,7 +12488,7 @@ async function computeAutoArrangement(
     waypoints: Array<{ x: number; y: number }>;
   }> = [];
   for (const edge of project.edges) {
-    if (!edge.waypoints?.length && !edge.labelOffset) {
+    if (!edge.waypoints?.length) {
       continue;
     }
     const sourceTop = representativeAt(undefined, edge.source);

@@ -1135,8 +1135,30 @@ Working notes for future agents on GTNH Factory Flow.
   every 8 cells along a long run, each kept wholly on one straight run.
   They stay at a GLANCE (`EDGE_DETAIL_ARROWS` is in the glance level) and
   draw double size there.
-- Edge rate labels are a VIEW mode, off by default: the tag button in the
-  board toolbar shows lean rate pills on the lines. No dragging, no popover.
+- LINE LABELS ARE GONE (Jack, 2026-09-08: "dropping support for line
+  labels ... permanently for everyone"): no rate pills on wires, no tag
+  button, no `lineLabelsMode` on the board view, no `labelOffset` on an
+  edge. Old plans and view blobs carrying the keys parse (unknown keys
+  strip); `lineLabelsMode` stays in the plan-view type as a historical
+  field nothing reads. The ports carry the numbers.
+- THE BOARD MENU (Jack, 2026-09-08): ONE right-click menu for the whole
+  board, `src/components/flow/BoardContextMenu.tsx`, on React Flow's
+  `onPaneContextMenu` / `onNodeContextMenu` / `onEdgeContextMenu`. The
+  void: "New product drawer" (the pool key's item picker at the pointer,
+  `addPoolStorage(resource, "drain", position)` - a drain drawer survives
+  the orphan sweep and is one product drawer per resource only in pool
+  mode). A machine or drawer: Clone, Delete. A wire: "Add a drawer here"
+  (`insertStorageOnEdge`: the wire goes, a drawer of its resource stands
+  where you clicked, one wire runs in and one out; a drawn channel of
+  several flat edges all run through the one drawer) and Delete wire.
+  Controls with a right click of their own (port rows, tier chips, count
+  steppers) prevent the event's default and the board handlers skip a
+  prevented event; boards, annotations and trash cans get no menu. Plain
+  words, no tooltips, no submenus. The menu chrome is the library's
+  (`LibraryMenu` / `MenuItem` in library-menu.tsx). Probe:
+  `menu-probe.local.mjs <plan.json> <prefix>` (note the pane is a
+  million px square under the scroll camera: aim by the `.react-flow`
+  wrapper's box, never the pane's).
 
 ## Import/Export Plans
 

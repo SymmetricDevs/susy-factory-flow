@@ -79,8 +79,6 @@ export interface BoardView {
   // the glance step — zoomed in, cards and lines always wear their own
   // colours. Old saved blobs still carrying the keys are simply ignored, so
   // anyone who had line colour on has it off now, on purpose.
-  /** Rate pills on the lines. Off by default; the ports carry the numbers. */
-  lineLabelsMode: boolean;
   /** Dashes march along each line in the direction of flow. */
   linePulseMode: boolean;
   /**
@@ -102,7 +100,6 @@ export const DEFAULT_BOARD_VIEW: BoardView = {
   // at the width its flow earns. Colour modes stay off - those override
   // what the board is already telling you with resource colours and paint
   // tags.
-  lineLabelsMode: false,
   // RETIRED (2026-09-07). The marching dashes were a full-board canvas
   // redrawn every frame; in Firefox a dirty canvas re-renders every board
   // tile under it, which cost most of the frame rate at 4K (33 fps sitting
@@ -141,7 +138,6 @@ function readBoardView(): BoardView {
       canvasTheme: isCanvasThemeId(parsed.canvasTheme)
         ? parsed.canvasTheme
         : DEFAULT_BOARD_VIEW.canvasTheme,
-      lineLabelsMode: flag(parsed.lineLabelsMode, DEFAULT_BOARD_VIEW.lineLabelsMode),
       // Retired: a stored true is not honoured (see DEFAULT_BOARD_VIEW).
       linePulseMode: false,
       calmMode: flag(parsed.calmMode, DEFAULT_BOARD_VIEW.calmMode),

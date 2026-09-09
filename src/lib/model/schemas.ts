@@ -449,7 +449,6 @@ export const factoryEdgeSchema = z.object({
   resourceId: z.string().min(1),
   label: z.string().optional(),
   ratePerSecond: z.number().positive().optional(),
-  labelOffset: z.object({ x: z.number(), y: z.number() }).optional(),
   waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
   // A loose cell wire's Canner ratio; see FactoryEdge.crossForm.
   crossForm: z.object({ litresPerCell: z.number().positive() }).optional(),
@@ -484,7 +483,6 @@ export const planViewStateSchema = z.object({
   canvasPattern: z.string().optional(),
   canvasTheme: z.string().optional(),
   lineHeatMode: z.boolean().optional(),
-  lineLabelsMode: z.boolean().optional(),
   linePulseMode: z.boolean().optional(),
   calmMode: z.boolean().optional(),
   glanceMode: z.string().optional(),

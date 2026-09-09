@@ -959,6 +959,15 @@ Working notes for future agents on GTNH Factory Flow.
   subscribe cards to it), a long press opens a two-item menu for a finger, and a
   drag still wires. The icon is art with `pointer-events-none`; the full-row
   React Flow handle underneath it takes the drag.
+- THE HOVER HIGHLIGHT is `src/components/flow/flow-scope.ts`, one module
+  for a port row and a drawer alike: the wires on the thing you point at,
+  each far-end port, and the cards involved. Two rules it must keep
+  (Jack, 2026-09-08): a wire belongs to the SECTION its handle names, so
+  one recipe's port on a shared card never lights another's wires; and a
+  DRAWER PASSES IT ALONG - the walk carries on through drawers in the
+  direction the hover asked about (both ways from a drawer itself) and
+  stops at the first machine, so a buffer reads as the junction it is.
+  `flow-scope.test.ts` pins both.
 - Touch gestures on the board live in `board-touch-gestures.ts`, in native
   capture-phase listeners: React Flow's pan sits on the pane below, and stopping
   the event before it gets there is the only way to take a gesture off it

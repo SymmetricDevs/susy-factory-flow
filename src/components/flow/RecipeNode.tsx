@@ -191,6 +191,7 @@ import {
   canonicalizeResourceHandleId,
   makeResourceHandleId,
 } from "./resource-handles";
+import { buildPortFlowScope } from "./flow-scope";
 import {
   buildRailPorts,
   deriveNodeVerdict,
@@ -199,7 +200,6 @@ import {
   type RailPort,
 } from "./node-verdict";
 import {
-  edgeTouchesResource,
   formatPct,
   formatPortRate,
   formatSlotRate,
@@ -3563,7 +3563,9 @@ export function OutputSocketRow({
       onPointerEnter={() =>
         isWiringConnection() || checklistLocked()
           ? undefined
-          : setHoveredFlowScope(buildPortFlowScope(nodeId, port))
+          : setHoveredFlowScope(
+              buildPortFlowScope(useFactoryStore.getState().project, nodeId, port),
+            )
       }
       onPointerLeave={() => setHoveredFlowScope(undefined)}
     >
@@ -3698,38 +3700,6 @@ function PlugBlock({ nodeId, port }: { nodeId: string; port: RailPort }) {
  * The chip doubles as the React Flow handle (drag to wire) and as the edge
  * anchor element the router measures.
  */
-/**
- * The flow neighbourhood a port hover lights up: every line on this port,
- * the far-end port of each line, and the nodes involved (so storages can
- * glow too). Built lazily on pointer-enter from live store state.
- */
-function buildPortFlowScope(nodeId: string, port: RailPort) {
-  const { project } = useFactoryStore.getState();
-  const edges: Record<string, true> = {};
-  const ports: Record<string, true> = { [`${nodeId}|${port.handleId}`]: true };
-  const nodes: Record<string, true> = { [nodeId]: true };
-  const isInput = port.side === "input";
-  for (const edge of project.edges) {
-    if ((isInput ? edge.target : edge.source) !== nodeId) {
-      continue;
-    }
-    if (!edgeTouchesResource(edge, port.side, port.kind, port.resourceId)) {
-      continue;
-    }
-    edges[edge.id] = true;
-    const otherId = isInput ? edge.source : edge.target;
-    nodes[otherId] = true;
-    const rawOtherHandle = isInput ? edge.sourceHandle : edge.targetHandle;
-    const otherHandle =
-      canonicalizeResourceHandleId(rawOtherHandle) ??
-      makeResourceHandleId(isInput ? "output" : "input", {
-        kind: edge.resourceKind,
-        id: edge.resourceId,
-      });
-    ports[`${otherId}|${otherHandle}`] = true;
-  }
-  return { edges, ports, nodes };
-}
 
 /**
  * What a port row does when you point at it.
@@ -3979,7 +3949,9 @@ export function PortChip({
       onPointerEnter={(event) => {
         rowBrowse.handlers.onPointerEnter();
         if (!plugRow && !isWiringConnection() && !checklistLocked()) {
-          setHoveredFlowScope(buildPortFlowScope(nodeId, port));
+          setHoveredFlowScope(
+            buildPortFlowScope(useFactoryStore.getState().project, nodeId, port),
+          );
         }
         void event;
       }}

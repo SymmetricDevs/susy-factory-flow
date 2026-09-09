@@ -56,6 +56,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Machine cards are *another grid space narrower*, three in all, so more of a plan fits on the screen.",
       "Item names, rates and bars are a *little smaller*, with more space around them in each row.",
       "More long item names fit on their two lines instead of running out of room.",
+      "The *Industrial Coke Oven* and *Industrial Electrolyzer* wear each other's machine picture no longer.",
     ],
   },
   {

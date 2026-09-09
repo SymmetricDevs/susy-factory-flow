@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PNG } from "pngjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const scriptPath = fileURLToPath(new URL("./normalize-oracle-export.mjs", import.meta.url));
@@ -11,7 +12,7 @@ const scriptPath = fileURLToPath(new URL("./normalize-oracle-export.mjs", import
  * The normalizer runs work at import time, so it is exercised the way the
  * pipeline runs it: as a subprocess over a fixture export.
  */
-function normalize(rawExport) {
+function normalize(rawExport, renderedIconDir) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "normalize-oracle-"));
   const input = path.join(dir, "oracle-export.json");
   const output = path.join(dir, "recipes.json");
@@ -21,6 +22,7 @@ function normalize(rawExport) {
       ...process.env,
       GTNH_DATASET_VERSION_ID: "test-fixture",
       GTNH_DATASET_VERSION_LABEL: "test",
+      ...(renderedIconDir ? { GTNH_RENDERED_ICON_DIR: renderedIconDir } : {}),
     },
     stdio: "pipe",
   });
@@ -620,5 +622,98 @@ describe("recipe ids survive a rebuild", () => {
       expect(a.id).not.toBe(b.id);
     }
     expect(a.id).toMatch(/:[0-9a-f]{16}$/);
+  });
+});
+
+describe("the two machines whose renders were filed under each other's name", () => {
+  /**
+   * The oracle's icon renders came out of a Minecraft session where the
+   * Industrial Coke Oven and the Industrial Electrolyzer were captured under
+   * each other's name. The normalizer corrects it by pointing each machine at
+   * the other's FILE - the renders are fine, only the filing was wrong, and a
+   * texture URL is served immutable so neither PNG may be rewritten in place.
+   */
+  const solidPng = (r, g, b) => {
+    const png = new PNG({ width: 2, height: 2 });
+    for (let index = 0; index < png.data.length; index += 4) {
+      png.data[index] = r;
+      png.data[index + 1] = g;
+      png.data[index + 2] = b;
+      png.data[index + 3] = 255;
+    }
+    return PNG.sync.write(png);
+  };
+
+  const COKE_FILE = "industrial_coke_oven-3d006cd8ef9f.png";
+  const ELECTROLYZER_FILE = "industrial_electrolyzer-b952ed9d9fe5.png";
+
+  let dataset;
+
+  beforeAll(() => {
+    const iconDir = fs.mkdtempSync(path.join(os.tmpdir(), "normalize-icons-"));
+    // The blue-grey block was rendered under the coke oven's name, the brown
+    // one under the electrolyzer's; they belong the other way round.
+    fs.writeFileSync(path.join(iconDir, COKE_FILE), solidPng(0x40, 0x4b, 0x59));
+    fs.writeFileSync(path.join(iconDir, ELECTROLYZER_FILE), solidPng(0x4e, 0x3d, 0x35));
+    dataset = normalize(
+      {
+        schemaVersion: 1,
+        exporter: "gtnh-oracle",
+        format: "dev.gtnhplanner.oracle.v1",
+        generatedAt: "2026-09-09T00:00:00.000Z",
+        minecraftVersion: "1.7.10",
+        loadedMods: [],
+        adapters: [],
+        recipeCount: 1,
+        domains: [
+          {
+            id: "crafting",
+            recipes: [
+              {
+                id: "swap-fixture",
+                type: "shaped",
+                inputs: [item("minecraft:brick", 1, "Brick")],
+                output: {
+                  ...item("gregtech:gt.blockmachines@15543", 1, "Industrial Coke Oven"),
+                  icon: COKE_FILE,
+                },
+              },
+              {
+                id: "swap-fixture-2",
+                type: "shaped",
+                inputs: [item("minecraft:brick", 1, "Brick")],
+                output: {
+                  ...item("gregtech:gt.blockmachines@15514", 1, "Industrial Electrolyzer"),
+                  icon: ELECTROLYZER_FILE,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      iconDir,
+    );
+    fs.rmSync(iconDir, { recursive: true, force: true });
+  });
+
+  const iconOf = (displayName) =>
+    dataset.resources.find((resource) => resource.displayName === displayName);
+
+  it("gives the coke oven the electrolyzer's render, and its colour", () => {
+    const coke = iconOf("Industrial Coke Oven");
+    expect(coke.iconPath).toContain(ELECTROLYZER_FILE);
+    expect(coke.dominantColor).toBe("#4e3d35");
+  });
+
+  it("gives the electrolyzer the coke oven's render, and its colour", () => {
+    const electrolyzer = iconOf("Industrial Electrolyzer");
+    expect(electrolyzer.iconPath).toContain(COKE_FILE);
+    expect(electrolyzer.dominantColor).toBe("#404b59");
+  });
+
+  it("leaves both PNGs where they are, so neither immutable URL changes", () => {
+    expect(iconOf("Industrial Coke Oven").iconPath).not.toBe(
+      iconOf("Industrial Electrolyzer").iconPath,
+    );
   });
 });

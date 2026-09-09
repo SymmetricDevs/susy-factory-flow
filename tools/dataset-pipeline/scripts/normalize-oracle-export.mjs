@@ -46,6 +46,16 @@ const renderedIconDir = process.env.GTNH_RENDERED_ICON_DIR;
 const oracleStrict = envFlag("GTNH_ORACLE_STRICT", false);
 
 const raw = JSON.parse(stripBom(await fs.readFile(inputPath, "utf8")));
+// The oracle's icon renders came out of a Minecraft session where two
+// machines were captured under each other's name (Jack, 2026-09-09), so the
+// Industrial Coke Oven wore the Industrial Electrolyzer's block and the other
+// way round. The renders themselves are fine; only the name they were filed
+// under is wrong, so the fix points each machine at the OTHER'S FILE rather
+// than overwriting either one - a texture URL is served immutable, and
+// rewriting one in place would leave every browser that has already fetched
+// it holding the old picture for good.
+// Delete this once the icons are re-rendered under the right names.
+const SWAPPED_RENDERED_ICON_SLUGS = [["industrial_coke_oven", "industrial_electrolyzer"]];
 const renderedIcons = await stageRenderedIcons(renderedIconDir, outDir);
 
 const resources = new Map();
@@ -2028,7 +2038,36 @@ async function stageRenderedIcons(sourceDir, datasetOutDir) {
       dominantColor: color,
     });
   }
+  swapRenderedIcons(icons);
   return icons;
+}
+
+function swapRenderedIcons(icons) {
+  // Every file a slug owns carries the same render (the pack registers the
+  // same machine at two meta ids), so a group's first file stands for all of
+  // it and the pairing never has to line the hashes up.
+  const bySlug = new Map();
+  for (const file of icons.keys()) {
+    const slug = file.replace(/-[0-9a-f]+\.png$/i, "");
+    const group = bySlug.get(slug) ?? [];
+    group.push(file);
+    bySlug.set(slug, group);
+  }
+  for (const [left, right] of SWAPPED_RENDERED_ICON_SLUGS) {
+    const leftFiles = (bySlug.get(left) ?? []).sort();
+    const rightFiles = (bySlug.get(right) ?? []).sort();
+    if (leftFiles.length === 0 || rightFiles.length === 0) {
+      continue;
+    }
+    const leftIcon = icons.get(leftFiles[0]);
+    const rightIcon = icons.get(rightFiles[0]);
+    for (const file of leftFiles) {
+      icons.set(file, rightIcon);
+    }
+    for (const file of rightFiles) {
+      icons.set(file, leftIcon);
+    }
+  }
 }
 
 async function dominantColorForPng(filePath) {

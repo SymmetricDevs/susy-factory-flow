@@ -9,6 +9,7 @@ import {
   type GridPoint,
   type GridRouteRequest,
 } from "./grid-edge-router";
+import { DEFAULT_ROUTER_TUNING } from "./router-tuning";
 
 /** A recipe-card-shaped obstacle on the grid. */
 function card(id: string, x: number, y: number, width = 360, height = 160): GridObstacle {
@@ -693,10 +694,7 @@ describe("wires plan together", () => {
 });
 
 describe("exits and landings", () => {
-  it("two cards a cell apart connect straight across, no detour", () => {
-    // Jack, 2026-09-08: a machine one grid space from its drawer had to
-    // leave by a side and come round, because the vertex between the two
-    // cards is inside both margins. Facing docks a cell apart connect.
+  it("two cards a cell apart move their docks to leave room for an arrow", () => {
     const machine = card("machine", 0, 0, 440, 300);
     const drawer = card("drawer", 460, 100, 100, 80);
     const solved = solveGridRoutes(
@@ -712,10 +710,13 @@ describe("exits and landings", () => {
       ],
     );
     const points = solved.get("e1")!.points;
-    expect(points.length).toBe(2);
-    expect(points[0].x).toBe(440);
-    expect(points[1].x).toBe(460);
-    expect(points[0].y).toBe(points[1].y);
+    expect(points.length).toBeGreaterThan(2);
+    const runs = segments(points);
+    expect(runs.every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
+    expect(runs.reduce((sum, { a, b }) => sum + Math.hypot(a.x - b.x, a.y - b.y), 0)).toBeGreaterThanOrEqual(80);
+    expect(Math.max(...runs.map(({ a, b }) => Math.hypot(a.x - b.x, a.y - b.y)))).toBeGreaterThanOrEqual(40);
+    expect(violatesMargin(points, machine)).toBe(false);
+    expect(violatesMargin(points, drawer)).toBe(false);
   });
 
   it("aligned ports go straight rather than out at 45 and back", () => {
@@ -779,11 +780,7 @@ describe("straight shots and self loops", () => {
     expect(diagonalCount).toBeGreaterThan(0);
   });
 
-  it("two cards two cells apart connect in one straight line", () => {
-    // Jack, 2026-09-08: at one cell the wire went straight, at two it came
-    // out of a side and turned in. The clean point two cells out was the
-    // far card's edge, so the search charged an early turn to a wire that
-    // never turned. Now only a turn on the exit run pays.
+  it("two cards two cells apart also get breathing room", () => {
     const machine = card("machine", 0, 0, 440, 300);
     const drawer = card("drawer", 480, 100, 100, 80);
     const solved = solveGridRoutes(
@@ -799,10 +796,56 @@ describe("straight shots and self loops", () => {
       ],
     );
     const points = solved.get("e1")!.points;
-    expect(points.length).toBe(2);
-    expect(points[0].x).toBe(440);
-    expect(points[1].x).toBe(480);
-    expect(points[0].y).toBe(points[1].y);
+    expect(points.length).toBeGreaterThan(2);
+    expect(segments(points).every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
+    const first = points[0], last = points[points.length - 1];
+    expect(Math.abs(last.x - first.x) + Math.abs(last.y - first.y)).toBeGreaterThanOrEqual(80);
+  });
+
+  it("neighbouring cards cannot earn diagonals by moving their docks farther apart", () => {
+    const a = card("a", 0, 0, 440, 300);
+    const b = card("b", 460, 20, 360, 300);
+    const points = solveGridRoutes([a, b], [request({
+      edgeId: "roof", sources: rim(a), targets: rim(b), sourceCardId: "a", targetCardId: "b",
+    })]).get("roof")!.points;
+    expect(points.length).toBeGreaterThan(2);
+    expect(segments(points).every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
+    expect(segments(points).some(({ a, b }) => Math.hypot(a.x - b.x, a.y - b.y) >= 40)).toBe(true);
+  });
+
+  it("reserves diagonals for trips of at least six grid spaces, including at the docks", () => {
+    for (const cells of [3, 4, 5, 6, 20, 100]) {
+      const points = solveGridRoutes([], [request({
+        edgeId: "trip", sources: [{ x: 0, y: 0, side: "right" }],
+        targets: [{ x: cells * 20, y: cells * 20, side: "left" }],
+      })]).get("trip")!.points;
+      expect(points.length).toBeGreaterThan(1);
+      const diagonal = segments(points).filter(({ a, b }) => a.x !== b.x && a.y !== b.y);
+      if (cells < 6) expect(diagonal).toHaveLength(0);
+      else {
+        expect(diagonal.length).toBeGreaterThan(0);
+        // Long trips may leave diagonally immediately.
+        expect(points[1].x).not.toBe(points[0].x);
+        expect(points[1].y).not.toBe(points[0].y);
+      }
+    }
+  });
+
+  it("keeps a one-cell connection when only fixed facing docks are available", () => {
+    const points = solveGridRoutes([], [request({
+      edgeId: "fixed", sources: [{ x: 0, y: 0, side: "right" }],
+      targets: [{ x: 20, y: 0, side: "left" }],
+    })]).get("fixed")!.points;
+    expect(points).toEqual([{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+  });
+
+  it("can turn off the breathing-room preference with the routing dial", () => {
+    const a = card("a", 0, 0, 440, 300), b = card("b", 460, 100, 100, 80);
+    const points = solveGridRoutes([a, b], [request({
+      edgeId: "short", sources: rim(a), targets: rim(b), sourceCardId: "a", targetCardId: "b",
+    })], undefined, { ...DEFAULT_ROUTER_TUNING, dockTravelCells: 0 }).get("short")!.points;
+    expect(points).toHaveLength(2);
+    expect(Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y)).toBe(20);
   });
 
   it("a straight shot of any length beats leaving by another side", () => {

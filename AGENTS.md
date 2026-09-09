@@ -1085,6 +1085,16 @@ Working notes for future agents on GTNH Factory Flow.
   dock connects there without a search - the only special case.
   That one-cell shortcut is straight only; longer diagonals compete with
   square routes through the ordinary search.
+  Jack's follow-up (2026-09-09): diagonals are reserved for trips whose
+  CARD RIMS are at least six grid spaces apart (`diagonalDistanceCells`),
+  measured before dock selection, never by the detour's length. Long trips
+  may still leave at 45 degrees immediately. Nearby cards route square.
+  Freely selected docks now prefer four grid spaces of total horizontal +
+  vertical separation (`dockTravelCells`, `crampedDockCost`), so the exit
+  and entrance move along the rims to leave visible wire and arrow room.
+  This supersedes the old preference for tiny one/two-cell straight shots.
+  It is a soft cost, not a forced loop or a reason to disconnect a wire;
+  fixed endpoints, pinned trips and self loops retain their own rules.
 - SELF LOOPS dock freely like everything else, but route with 90° TURNS
   ONLY (`straightOnly` in routeWithinWindow: no diagonal exits, landings or
   runs - a loop that left at 45° and turned back on itself read as a

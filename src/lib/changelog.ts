@@ -81,6 +81,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The board's ? help points at the Library, the mode switch and the machine list, and draws each drawer as its own shape.",
       "The planner reads in Inter and a third larger; Settings has the font and a size stepper.",
       "Panning is much smoother, and the moving dashes on wires are gone.",
+      "Editing a card or switching modes on a big board no longer freezes it, and the board's sounds play whole in Firefox.",
       "A multiblock running under one tick now counts whole recipes per tick, as the game does: 0.625 ticks runs two a tick, not 1.6.",
       "A multiblock's power is one EU/t number you type, wheel or add up from real hatches in a calculator that shows what it buys.",
       "The Machines list shows peak and average draw side by side with totals on top.",

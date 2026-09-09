@@ -26,6 +26,19 @@
  *   begins mid-wakeup.
  * - Fundamentals sit at 200Hz+ (laptop speakers roll off below), and the
  *   whole mix runs through one gentle lowpass so nothing spits.
+ * - FIREFOX HANDS THE GRAPH ITS ORDERS AT THE END OF THE TASK. Gecko queues
+ *   every node creation, connection and start() and flushes the queue to
+ *   the audio thread only when the current task finishes; Chrome's audio
+ *   thread picks them up at once. So a note scheduled 30ms ahead by a
+ *   click that then solves or renders for 600ms in the same task is, in
+ *   Firefox, never heard - its whole envelope is in the past by the time
+ *   the graph sees it - and a 150ms hang clips its first 120ms (measured
+ *   2026-09-08 with a MediaRecorder on the real output: Chrome played
+ *   whole through both, Firefox lost or clipped them, and yielding one
+ *   macrotask before the hang played whole). Hence `playBoardSound` on
+ *   Gecko schedules from a macrotask of its own, whatever the caller does
+ *   next; and callers that can, play first and mutate in a later task
+ *   (the mode keys), which puts the note on time as well as whole.
  */
 
 const KEY = "gtnh-factory-flow.board-sounds.v1";
@@ -209,6 +222,13 @@ const ATTACK = 0.01;
  * eats the front of the note.
  */
 const SCHEDULE_AHEAD = 0.03;
+
+/**
+ * Gecko flushes audio graph commands at the end of the task (header). Only
+ * Firefox's UA carries "Gecko/<date>"; Chrome and Safari say "like Gecko".
+ */
+const DEFERS_GRAPH_COMMANDS_TO_TASK_END =
+  typeof navigator !== "undefined" && /\bGecko\/\d/.test(navigator.userAgent);
 
 function getContext(): AudioContext | undefined {
   if (typeof window === "undefined") {
@@ -770,6 +790,12 @@ export function playBoardSound(
     // Never schedule against a suspended clock: resume first, play in the
     // callback. Sounds fire from user gestures, so the resume succeeds.
     void ctx.resume().then(play).catch(() => {});
+    return;
+  }
+  if (DEFERS_GRAPH_COMMANDS_TO_TASK_END) {
+    // A task of its own, so nothing the caller does after asking - a solve,
+    // a render - stands between the note and the audio thread (header).
+    window.setTimeout(play, 0);
     return;
   }
   play();

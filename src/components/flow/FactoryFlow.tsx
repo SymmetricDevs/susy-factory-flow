@@ -7522,7 +7522,13 @@ const ModeKeys = memo(function ModeKeys() {
       // Three separate things, three separate sounds: never a ladder that
       // rises and falls with the direction of travel.
       playBoardSound(key === "pool" ? "poolOn" : key === "solve" ? "solveOn" : "buildOn");
-      setBoardMode(key);
+      // The switch itself waits one task: the new mode re-solves and
+      // re-renders every card, a freeze of hundreds of milliseconds on a
+      // big board, and Firefox hands the audio thread its orders only when
+      // the task that gave them ends - so a sound played in the same task
+      // as that freeze arrived late and clipped, or not at all
+      // (board-sounds.ts). A task later is under a frame, invisible.
+      window.setTimeout(() => setBoardMode(key), 0);
     },
     [setBoardMode],
   );

@@ -1221,6 +1221,14 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Performance
 
+- Shared-design autosave (`post-follow.ts`) syncs the plan and metadata,
+  NEVER a live-board photograph. The old 30-second preview timer forced
+  glance/presentation mode and paused motion during capture, making the
+  board visibly shrink and stall every minute while editing a shared plan
+  (Jack, 2026-09-09). Hidden tabs could prolong it while capture waited for
+  paint. Photos are taken on explicit sharing/export only; automatic saves
+  keep the last shared photograph. Do not restore timed live-board capture.
+
 - Performance is a first-class requirement, especially on the flow board. Read
   `ARCHITECTURE.md` (root) before touching board, routing, or rendering code —
   it documents the invariants (viewport-independent routing, published

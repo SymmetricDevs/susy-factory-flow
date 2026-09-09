@@ -1207,6 +1207,17 @@ Working notes for future agents on GTNH Factory Flow.
   every 8 cells along a long run, each kept wholly on one straight run.
   They stay at a GLANCE (`EDGE_DETAIL_ARROWS` is in the glance level) and
   draw double size there.
+- CALM MODE IS SESSION ONLY, and that is a SAFETY rule, not a preference
+  (Jack, 2026-09-09: "they're stuck, they can't undo it. This is an
+  emergency"). `calmMode` on the board view is never read from storage and
+  never written to it (`board-view.ts`); only the image export turns it on,
+  for the length of a capture. The board's own switch for it went on
+  2026-09-08, so a stored `true` was a room with no door - and the export
+  persisted `true` and put it back in a `finally`, which never runs if the
+  tab closes mid-capture. Players were stranded in softened status colours
+  for good. A reload is now always the way out.
+  `board-view.test.ts` pins both halves; do not make it a stored setting
+  again unless the board carries a visible switch that turns it off.
 - LINE LABELS ARE GONE (Jack, 2026-09-08: "dropping support for line
   labels ... permanently for everyone"): no rate pills on wires, no tag
   button, no `lineLabelsMode` on the board view, no `labelOffset` on an

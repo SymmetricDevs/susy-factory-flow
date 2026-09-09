@@ -123,11 +123,11 @@ function readBoardView(): BoardView {
     }
     const parsed = JSON.parse(raw) as Partial<Record<keyof BoardView, unknown>>;
     // A key that is ABSENT falls back to the default; only an explicit `false`
-    // means off. Reading a missing key as false would mean anyone with a saved
-    // blob from before a setting existed silently opts out of its default —
-    // and every new default would ship switched off for existing users.
-    const flag = (value: unknown, fallback: boolean) =>
-      typeof value === "boolean" ? value : fallback;
+    // would mean off. Reading a missing key as false would mean anyone with a
+    // saved blob from before a setting existed silently opts out of its
+    // default — and every new default would ship switched off for existing
+    // users. Nothing needs that today: the two remaining flags are both
+    // pinned off regardless of what is stored.
     const glanceMode = isGlanceMode(parsed.glanceMode)
       ? parsed.glanceMode
       : DEFAULT_BOARD_VIEW.glanceMode;
@@ -140,9 +140,14 @@ function readBoardView(): BoardView {
         : DEFAULT_BOARD_VIEW.canvasTheme,
       // Retired: a stored true is not honoured (see DEFAULT_BOARD_VIEW).
       linePulseMode: false,
-      calmMode: flag(parsed.calmMode, DEFAULT_BOARD_VIEW.calmMode),
+      // NEVER honoured from storage, and never written to it (see
+      // writeBoardView). Calm is a render setting the image export borrows
+      // for the length of a capture, not a preference: the board's own
+      // switch for it went on 2026-09-08, so a stored `true` was a room
+      // with no door. Players reported being stuck in softened colours with
+      // no way back (2026-09-09). A reload is now always the way out.
+      calmMode: false,
       glanceMode,
-
     };
   } catch {
     // Corrupt or unreadable storage is not worth breaking the board over.
@@ -174,7 +179,16 @@ function getServerSnapshot(): BoardView {
 export function writeBoardView(patch: Partial<BoardView>) {
   boardViewState = { ...getSnapshot(), ...patch };
   try {
-    window.localStorage.setItem(BOARD_VIEW_STORAGE_KEY, JSON.stringify(boardViewState));
+    // `calmMode` is SESSION ONLY and is stripped on the way out. The image
+    // export turns it on for the length of a capture and back off in a
+    // `finally`, and that `finally` is not a promise: close the tab or lose
+    // the renderer mid-export and the last thing written was `true`. With no
+    // switch on the board to clear it, that stranded players in softened
+    // colours for good. Storage cannot hold it, so the worst an interrupted
+    // export can now cost is a reload.
+    const stored: Partial<BoardView> = { ...boardViewState };
+    delete stored.calmMode;
+    window.localStorage.setItem(BOARD_VIEW_STORAGE_KEY, JSON.stringify(stored));
   } catch {
     // A full or blocked storage quota must never break the board.
   }

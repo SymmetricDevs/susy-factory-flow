@@ -49,6 +49,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.0.2",
+    date: "2026-09-09",
+    headline: "Boards stuck in presentation colours are fixed",
+    notes: [
+      "A board left in *softened presentation colours* comes back to its normal status colours on its next load.",
+      "Exporting an image can no longer leave your board in those colours.",
+    ],
+  },
+  {
     version: "3.0.1",
     date: "2026-09-09",
     headline: "Narrower cards, and What's new is back",

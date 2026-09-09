@@ -47,27 +47,30 @@ export function cells(n: number): number {
 /* Card geometry — the sizes every node component builds itself out of.    */
 /* ---------------------------------------------------------------------- */
 
-/** Every recipe card is this wide. 18 cells. */
-// Four cells wider since 2026-09-06: the machine picture sits BETWEEN the
-// two rails now (where the arrow was) instead of in a band above them, and
-// the middle column needs 96px beside a 140px input rail and a 176px output
-// rail to show a structure render at a readable size.
-export const RECIPE_NODE_WIDTH = cells(22); // 440
+/** Every recipe card is this wide. 21 cells.
+ *
+ * The machine PICTURE sits between the two rails (2026-09-06), where the
+ * arrow was, and it is the flex-1 middle: 96px, the size a structure render
+ * reads at. One cell came back off the card on 2026-09-09 without touching
+ * it - each item chip gave up 8px (long names wrap to two smaller lines
+ * instead of truncating) and the output coupling 4px, which is the cell.
+ */
+export const RECIPE_NODE_WIDTH = cells(21); // 420
 
 /** Card padding either side of the rails (inside the 2px frame). */
 export const RECIPE_NODE_PAD_X = 8;
 
-/** Inner width available to the rails: 360 − 2×(2 frame + 8 pad). */
-export const RECIPE_RAIL_AREA_WIDTH = RECIPE_NODE_WIDTH - 2 * (2 + RECIPE_NODE_PAD_X); // 340
+/** Inner width available to the rails after frame and padding. */
+export const RECIPE_RAIL_AREA_WIDTH = RECIPE_NODE_WIDTH - 2 * (2 + RECIPE_NODE_PAD_X); // 400
 
 /** The input chip, and the chip half of an output row. */
-export const PORT_CHIP_WIDTH = 140; // 7 cells
+export const PORT_CHIP_WIDTH = 132;
 
 /** The `→` divider between the two rails. */
 export const RAIL_DIVIDER_WIDTH = 16;
 
-/** Chip + 2px gap + the 34px coupling (`.flow-plug` in globals.css). */
-export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 34; // 176
+/** Chip + 2px gap + the 30px coupling (`.flow-plug` in globals.css). */
+export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 30; // 164
 
 /** One port row. Two cells, so a rail of any length stays on the grid. */
 export const PORT_ROW_HEIGHT = cells(2); // 40

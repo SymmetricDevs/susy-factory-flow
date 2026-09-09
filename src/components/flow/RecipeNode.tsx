@@ -3034,7 +3034,7 @@ export /**
  */
 const checklistLocked = () => useFactoryStore.getState().checklistMode;
 
-const PORT_CHIP_WIDTH_CLASS = "w-[140px]";
+const PORT_CHIP_WIDTH_CLASS = "w-[132px]";
 
 /**
  * One side of the port rails. Every port always renders - a hidden port is a
@@ -3067,12 +3067,9 @@ function PortRail({
         // No gap between rows: the row IS the grid unit (40px = two cells),
         // and a gap would put every row after the first off the grid.
         "flex shrink-0 flex-col justify-start gap-0 py-0",
-        // Half the old rails. The rate text under each name was the thing that
-        // demanded 210px of chip; with it gone the name is the only wide thing
-        // left, and a truncated name plus a hover beats a board you can't fit.
-        // The output rail is chip (140) + 2px gap + the coupling (34, in
-        // globals.css) — anything wider and the couplings hang off the card.
-        isInput || solveMode ? PORT_CHIP_WIDTH_CLASS : "w-[176px]",
+        // Output rail: 132px chip + 2px gap + 30px coupling. The 20px
+        // saved across both rails leaves the centre picture unchanged.
+        isInput || solveMode ? PORT_CHIP_WIDTH_CLASS : "w-[164px]",
       ].join(" ")}
     >
       {ports.map((port) =>
@@ -3114,7 +3111,7 @@ function FreePortRow({ port }: { port: RailPort }) {
         ) : null}
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
-        <span className="block truncate text-[11px] font-bold leading-[13px] text-[var(--mc-ink-muted)]">
+        <span className="flow-port-name text-[var(--mc-ink-muted)]">
           {port.displayName}
         </span>
         {/* Same dress as a port's rate line, so the word sits where the
@@ -3291,14 +3288,14 @@ function SharedMachineRails({
 const PORT_ROW_HEIGHT_PX = BOARD_GRID * 2;
 
 function NoFlowRow({ label, side }: { label: string; side: "input" | "output" }) {
-  // Input chips are 140px and output rows 176 (chip + coupling): the stand-in
+  // Input chips are 132px and output rows 164 (chip + coupling): the stand-in
   // must match its side's width or it shoves the other rail off the card.
   return (
     <div
       aria-hidden
       className={[
         "flex h-[40px] shrink-0 items-center justify-center border-2 border-dashed border-[var(--mc-47)] text-[12px] font-bold text-[var(--mc-ink-muted)]/70",
-        side === "input" ? PORT_CHIP_WIDTH_CLASS : "w-[176px]",
+        side === "input" ? PORT_CHIP_WIDTH_CLASS : "w-[164px]",
       ].join(" ")}
     >
       {label}
@@ -4020,7 +4017,7 @@ export function PortChip({
         {/* The name is what you look for on a rail of five ports; the rate is
             what you compare once you have found it. Name in full ink, rate a
             step down and a step lighter, so the pair reads in that order. */}
-        <span className="block truncate text-[11px] font-bold leading-[13px] text-[var(--mc-ink)]">
+        <span className="flow-port-name text-[var(--mc-ink)]">
           {port.displayName}
         </span>
         {calmMode ? (
@@ -4044,12 +4041,12 @@ export function PortChip({
                 story's color. Green text over a red bar told two stories at
                 once. */}
             <span
-              className={`block truncate text-[10px] leading-[12px] tabular-nums ${rateInk} ${readsEnergy ? "font-bold" : "opacity-80"}`}
+              className={`block truncate text-[10px] leading-[10px] tabular-nums ${rateInk} ${readsEnergy ? "font-bold" : "opacity-80"}`}
             >
               {rateText}
             </span>
             {port.unsupplied ? (
-              <span className="block text-[7px] font-black leading-3 tracking-[0.5px] text-[var(--verdict-blocked-ink)]">
+              <span className="flow-port-alert block text-[7px] font-black leading-[8px] tracking-[0.5px] text-[var(--verdict-blocked-ink)]">
                 NO SUPPLY
               </span>
             ) : (

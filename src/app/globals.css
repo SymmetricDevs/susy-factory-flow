@@ -2182,6 +2182,25 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
     inset -1px -1px 0 var(--mc-47);
 }
 
+/* Two compact name lines, then the rate and bar, inside the same 40px
+   port row. Pure CSS: no text measurements or observers on a large board. */
+.flow-port-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 10px;
+}
+
+/* A missing-supply row also carries its warning below the rate. */
+.flow-port:has(.flow-port-alert) .flow-port-name {
+  font-size: 9px;
+  line-height: 9px;
+}
+
 /* A pocket card's port chip: the machine chip's raised tile, in purple. */
 /* Blueprint overwrite picker: every folded board is a target. Amber dashed
    ring on all of them, solid and brighter under the pointer — hover answers
@@ -2221,7 +2240,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 
 .flow-port-bar {
   position: relative;
-  height: 5px;
+  height: 4px;
   overflow: visible;
   background: var(--rail-bar-track);
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.35);
@@ -2332,17 +2351,17 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
    by the coupling's state. Sits INSIDE the card at the row's right edge —
    wires reach it exactly the way they reach an input chip. Everything wordy
    (who asks, gets/asks, ×N, the fix) lives in its hover. */
-/* 34px, and the output rail is exactly chip + 2px gap + this — a coupling
+/* 30px, and the output rail is exactly chip + 2px gap + this — a coupling
    wider than the rail hangs off the card's right edge. Keep the two in step:
-   PORT_CHIP_WIDTH_CLASS (140) + 2 + 34 = the rail's w-[176px], which with the
-   input rail (140), the divider (16) and two 4px gaps fills the card's 340px
+   PORT_CHIP_WIDTH_CLASS (132) + 2 + 30 = the rail's w-[164px], which with the
+   input rail (132), the picture (96) and two 4px gaps fills the card's 400px
    inner width exactly. See src/lib/board-grid.ts. */
 .flow-plug {
   position: relative;
   z-index: 5;
   display: flex;
   flex: none;
-  width: 34px;
+  width: 30px;
   align-self: stretch;
   margin-left: 2px;
   flex-direction: column;
@@ -2360,7 +2379,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 .flow-plug-top {
   display: flex;
   justify-content: center;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   line-height: 10px;
   font-variant-numeric: tabular-nums;
@@ -2420,7 +2439,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   position: relative;
   display: flex;
   flex: none;
-  width: 34px;
+  width: 30px;
   align-self: stretch;
   margin-left: 2px;
   align-items: center;

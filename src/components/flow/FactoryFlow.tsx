@@ -591,6 +591,12 @@ function withTouchDragRule(nodes: BoardFlowNode[], compact: boolean): BoardFlowN
  */
 const FLOW_MODE_MIN_WIDTH = 4;
 /**
+ * The dash pattern of a wire carrying nothing: round-capped dots one stroke
+ * wide with a gap of two and a half strokes, so the dots read as dots on a
+ * thin line and stay dots when the line is highlighted thicker.
+ */
+const idleDots = (strokeWidth: number) => `0.1 ${Math.max(8, strokeWidth * 2.5)}`;
+/**
  * The ink a routed lane width draws at. The thinnest wire (a quarter lane,
  * 4px) stays 4px; the fattest (a full 16px lane) draws at 32px (Jack,
  * 2026-09-08: "the thinnest edge is good, but the thickest edge, let's
@@ -825,6 +831,13 @@ type ResourceEdgeData = {
     color: boolean;
     thickness: boolean;
     pulse: boolean;
+    /**
+     * Nothing moves on this wire at all (Jack, 2026-09-08: "if it's zero,
+     * we don't just make it the smallest edge, we also make it a dotted
+     * line"). Drawn dotted at every zoom; starved-but-flowing wires keep
+     * their solid line, dotted only at a glance as before.
+     */
+    idle: boolean;
   };
   /**
    * Bust token for the edge-identity cache. Node size changes bump it, which
@@ -3472,6 +3485,7 @@ export function FactoryFlow() {
           flowRate: anyLineMode
             ? {
                 heat: flowHeat,
+                idle: (transferredById.get(edge.id) ?? 0) <= RATE_DISPLAY_EPSILON,
                 kind: flowBucketFor(edge.resourceKind),
                 color: speedColorMode,
                 thickness: true,
@@ -9890,9 +9904,11 @@ function ResourceEdgeComponent({
               // the starved dots spawning whole gave the wire away instantly.
               strokeDasharray: data?.timelapseDraw
                 ? undefined
-                : isGlobalView && isEdgeStarved(data)
-                  ? "2 8"
-                  : style?.strokeDasharray,
+                : flowRate?.idle
+                  ? idleDots(coreStrokeWidth)
+                  : isGlobalView && isEdgeStarved(data)
+                    ? "2 8"
+                    : style?.strokeDasharray,
               strokeLinecap: "round",
               strokeLinejoin: "round",
               strokeOpacity: isHighlighted ? 1 : 0.72,
@@ -9911,9 +9927,11 @@ function ResourceEdgeComponent({
               stroke: edgeColor,
               strokeDasharray: data?.timelapseDraw
                 ? undefined
-                : isGlobalView && isEdgeStarved(data)
-                  ? "2 8"
-                  : style?.strokeDasharray,
+                : flowRate?.idle
+                  ? idleDots(coreStrokeWidth)
+                  : isGlobalView && isEdgeStarved(data)
+                    ? "2 8"
+                    : style?.strokeDasharray,
               strokeLinecap: "round",
               strokeLinejoin: "round",
               // Zoom changes how much of the board you can see, never how the

@@ -3041,7 +3041,7 @@ export /**
  */
 const checklistLocked = () => useFactoryStore.getState().checklistMode;
 
-const PORT_CHIP_WIDTH_CLASS = "w-[122px]";
+const PORT_CHIP_WIDTH_CLASS = "w-[112px]";
 
 /** One object, not one per card per render: this sits on every recipe card. */
 const PICTURE_MIN_STYLE = { minHeight: PICTURE_MIN_HEIGHT } as const;
@@ -3090,7 +3090,7 @@ function PortRail({
         "flex shrink-0 flex-col justify-start gap-0 py-0",
         // Output rail: 132px chip + 2px gap + 30px coupling. The 20px
         // saved across both rails leaves the centre picture unchanged.
-        isInput || solveMode ? PORT_CHIP_WIDTH_CLASS : "w-[154px]",
+        isInput || solveMode ? PORT_CHIP_WIDTH_CLASS : "w-[144px]",
       ].join(" ")}
     >
       {ports.map((port) =>
@@ -3318,7 +3318,7 @@ function NoFlowRow({ label, side }: { label: string; side: "input" | "output" })
       aria-hidden
       className={[
         "flex h-[40px] shrink-0 items-center justify-center border-2 border-dashed border-[var(--mc-47)] text-[12px] font-bold text-[var(--mc-ink-muted)]/70",
-        side === "input" ? PORT_CHIP_WIDTH_CLASS : "w-[154px]",
+        side === "input" ? PORT_CHIP_WIDTH_CLASS : "w-[144px]",
       ].join(" ")}
     >
       {label}

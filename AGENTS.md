@@ -1004,21 +1004,30 @@ Working notes for future agents on GTNH Factory Flow.
 ## The Board Grid
 
 - `src/lib/board-grid.ts` owns `BOARD_GRID = 20` and every card size derived
-  from it. A recipe card is 21 cells (420px) wide: since 2026-09-06 the
+  from it. A recipe card is 19 cells (380px) wide: since 2026-09-06 the
   machine PICTURE sits between the two rails, where the arrow was (inputs
-  left, outputs right, no arrow), on a window that stretches to the rails
-  and never under 6 cells tall; calm mode keeps the bare arrow. The picture
-  is the flex-1 middle at 96px and a cell came back off the card on
-  2026-09-09 WITHOUT touching it: each item chip gave up 8px (132) and the
-  output coupling 4px (30), which is the 20px cell. A name too long for
-  132px now WRAPS to two 10px lines (`.flow-port-name`, a CSS clamp - no
-  text measurement on a board of a hundred cards) instead of ending in
-  three dots. The clamp is all that class does: the size, the weight and
-  the leading are utilities ON the element, because a name that depends on
-  a stylesheet rule for its size renders at the inherited 16px and bursts
-  out of the chip whenever that rule is late. Read the "board grid" section
-  of `ARCHITECTURE.md` before changing any size, offset, or padding on the
-  flow board.
+  left, outputs right, no arrow), on a window that is 2 port rows tall at
+  the least (`PICTURE_MIN_HEIGHT`) and never sets the card's height itself;
+  calm mode keeps the bare arrow. THREE cells came off the card on
+  2026-09-09 (22 to 21 to 20 to 19) and the picture was never touched: it
+  is the flex-1 middle at 96px throughout, and every cell came out of the
+  two item chips (140 to 112) and the output coupling (34 to 30). Re-check
+  that 96 first if the width moves again.
+  - A name too long for the chip WRAPS to two 10px lines
+    (`.flow-port-name`, a CSS clamp - no text measurement on a board of a
+    hundred cards) instead of ending in three dots. The clamp is ALL that
+    class does: the size, the weight and the leading are utilities ON the
+    element, because a name that depends on a stylesheet rule for its size
+    renders at the inherited 16px and bursts out of the chip whenever that
+    rule is late (it did, 2026-09-09).
+  - THE NAME COLUMN IS THE PRICE, and it is down to 70px. Measured over
+    three real boards (platline, farm-power, oil-community; 219 distinct
+    names): 5 clipped at 21 cells, 12 at 20, 17 at 19, and at 19 ordinary
+    names like "Sodium Hydroxide Dust" start clipping. Do not take a
+    fourth cell out of the chips - anything further has to come from the
+    28px port icon or the picture.
+  Read the "board grid" section of `ARCHITECTURE.md` before changing any
+  size, offset, or padding on the flow board.
 - The grid is always on. There is no snap toggle and no grid button; do not
   reintroduce one.
 - Node positions, node sizes, and port row centres must all be multiples of

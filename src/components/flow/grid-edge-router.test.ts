@@ -738,6 +738,47 @@ describe("exits and landings", () => {
 });
 
 describe("straight shots and self loops", () => {
+  it("a one-cell diagonal gap uses a visible square elbow", () => {
+    const route = solveGridRoutes([], [request({
+      edgeId: "short",
+      sources: [{ x: 0, y: 0, side: "right" }],
+      targets: [{ x: 20, y: 20, side: "top" }],
+    })]).get("short")!;
+    expect(route.points).toEqual([{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }]);
+  });
+
+  it("nearby staggered cards keep their connection and use square bends", () => {
+    const a = card("a", 0, 0, 440, 300);
+    const b = card("b", 460, 300, 100, 80);
+    const route = solveGridRoutes([a, b], [request({
+      edgeId: "short",
+      sources: [{ x: 440, y: 280, side: "right" }],
+      targets: [{ x: 480, y: 300, side: "top" }],
+      sourceCardId: "a", targetCardId: "b",
+    })]).get("short")!;
+    expect(route.points.length).toBeGreaterThan(2);
+    expect(segments(route.points).every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
+  });
+
+  it("diagonal runs span at least two cells, while long diagonals remain available", () => {
+    let diagonalCount = 0;
+    for (const y of [20, 40, 60, 100, 160]) {
+      const route = solveGridRoutes([], [request({
+        edgeId: "diagonal",
+        sources: [{ x: 0, y: 0, side: "right" }],
+        targets: [{ x: 200, y, side: "left" }],
+      })]).get("diagonal")!;
+      expect(route.points.length).toBeGreaterThan(1);
+      for (const { a, b } of segments(route.points)) {
+        if (a.x === b.x || a.y === b.y) continue;
+        diagonalCount += 1;
+        expect(Math.abs(a.x - b.x)).toBeGreaterThanOrEqual(40);
+        expect(Math.abs(a.y - b.y)).toBeGreaterThanOrEqual(40);
+      }
+    }
+    expect(diagonalCount).toBeGreaterThan(0);
+  });
+
   it("two cards two cells apart connect in one straight line", () => {
     // Jack, 2026-09-08: at one cell the wire went straight, at two it came
     // out of a side and turned in. The clean point two cells out was the

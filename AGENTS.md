@@ -1063,7 +1063,12 @@ Working notes for future agents on GTNH Factory Flow.
 - EXITS AND LANDINGS (rewritten 2026-09-08 with Jack): a wire may leave
   a dock along the port's normal OR 45° to either side of it (three
   `EndVertex` variants per dock, each with its own apron); a diagonal
-  exit or landing costs `turn45`, the bend it is, priced at the dock. THE
+  exit or landing costs `turn45`, the bend it is, priced at the dock.
+  Since 2026-09-09, diagonal runs need at least TWO grid cells: diagonal
+  exits/landings must reach their clean point, and the search enters an
+  interior diagonal with two checked steps before extending it one at a
+  time. Tight connections use square elbows; one-cell diagonal shots are
+  forbidden. THE
   CLEAN RUN is the apron and the cells after it up to the clean point
   (`cleanCells` out from the card edge): a TURN made on it, by a wire
   that left from that start (`cleanZone`, keyed by start variant through
@@ -1078,8 +1083,8 @@ Working notes for future agents on GTNH Factory Flow.
   TOUCHING DOCKS (`directDock`): two cards one grid space apart have no
   vertex between them, so a source dock whose apron IS a facing target
   dock connects there without a search - the only special case.
-  Preference order Jack asked for falls out of the prices: straight shot,
-  then a 45° shot, then pathing round.
+  That one-cell shortcut is straight only; longer diagonals compete with
+  square routes through the ordinary search.
 - SELF LOOPS dock freely like everything else, but route with 90° TURNS
   ONLY (`straightOnly` in routeWithinWindow: no diagonal exits, landings or
   runs - a loop that left at 45° and turned back on itself read as a

@@ -3111,7 +3111,7 @@ function FreePortRow({ port }: { port: RailPort }) {
         ) : null}
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
-        <span className="flow-port-name text-[var(--mc-ink-muted)]">
+        <span className="flow-port-name text-[10px] font-bold leading-[10px] text-[var(--mc-ink-muted)]">
           {port.displayName}
         </span>
         {/* Same dress as a port's rate line, so the word sits where the
@@ -4017,7 +4017,16 @@ export function PortChip({
         {/* The name is what you look for on a rail of five ports; the rate is
             what you compare once you have found it. Name in full ink, rate a
             step down and a step lighter, so the pair reads in that order. */}
-        <span className="flow-port-name text-[var(--mc-ink)]">
+        <span
+          className={`flow-port-name font-bold text-[var(--mc-ink)] ${
+            // A NO SUPPLY row carries a fourth reading in the same 40px, so
+            // its name gives up a point. The size lives HERE, not in the
+            // stylesheet: .flow-port-name only clamps, so a card whose CSS
+            // has not arrived yet is small and unclamped, never 16px text
+            // bursting out of the chip.
+            !calmMode && port.unsupplied ? "text-[9px] leading-[9px]" : "text-[10px] leading-[10px]"
+          }`}
+        >
           {port.displayName}
         </span>
         {calmMode ? (
@@ -4046,7 +4055,7 @@ export function PortChip({
               {rateText}
             </span>
             {port.unsupplied ? (
-              <span className="flow-port-alert block text-[7px] font-black leading-[8px] tracking-[0.5px] text-[var(--verdict-blocked-ink)]">
+              <span className="block text-[7px] font-black leading-[8px] tracking-[0.5px] text-[var(--verdict-blocked-ink)]">
                 NO SUPPLY
               </span>
             ) : (

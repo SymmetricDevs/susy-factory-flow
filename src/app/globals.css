@@ -2182,23 +2182,18 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
     inset -1px -1px 0 var(--mc-47);
 }
 
-/* Two compact name lines, then the rate and bar, inside the same 40px
-   port row. Pure CSS: no text measurements or observers on a large board. */
+/* A port name wraps to TWO compact lines instead of ending in three dots:
+   the chip gave up 8px when the card came back to 21 cells, and a second
+   line is what pays for it. CLAMP ONLY — the size and weight are utilities
+   on the element, so a name whose stylesheet has not arrived is small and
+   unclamped rather than 16px text bursting out of the chip. Pure CSS: no
+   text measurement and no observers on a board of a hundred cards. */
 .flow-port-name {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 10px;
-}
-
-/* A missing-supply row also carries its warning below the rate. */
-.flow-port:has(.flow-port-alert) .flow-port-name {
-  font-size: 9px;
-  line-height: 9px;
 }
 
 /* A pocket card's port chip: the machine chip's raised tile, in purple. */

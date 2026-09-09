@@ -32,7 +32,7 @@ export function ChecklistKeys() {
         aria-label="Checklist mode"
         aria-pressed={active}
         title="Checklist mode — click machines, drawers and wires to mark them complete. Click again to restore. Esc to leave."
-        className={`${keyClass} ${active ? "bg-emerald-200 text-emerald-950 shadow-[inset_2px_2px_0_#ecfdf5,inset_-2px_-2px_0_#047857]" : "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"}`}
+        className={`${keyClass} ${active ? "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]" : "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"}`}
         onClick={() => {
           playBoardSound(active ? "checklistOff" : "checklistOn");
           useFactoryStore.getState().setChecklistMode(!active);
@@ -41,23 +41,26 @@ export function ChecklistKeys() {
         <ClipboardCheck className="h-4 w-4" />
       </button>
       {active && (
-        <div className="pointer-events-auto absolute left-0 top-full mt-2 flex items-center gap-1 whitespace-nowrap border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-1 shadow-lg">
-          <span
+        <div className="pointer-events-auto absolute right-0 top-[calc(100%+10px)] w-48 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 text-white shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]">
+          <div className="border-b-2 border-[var(--mc-15)] px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wider">Checklist</div>
+          <div
             role="status"
-            className="flex h-8 items-center px-1.5 font-mono text-[11px] text-emerald-200"
+            className="my-1 flex items-center justify-between gap-3 bg-[var(--mc-49)] px-2 py-2 font-mono text-[11px]"
             title="Completed machines, drawers and wires"
           >
-            {done}/{total} done
-          </span>
+            <span>Completed</span>
+            <span className="font-bold tabular-nums">{done} / {total}</span>
+          </div>
           <button
             type="button"
             aria-label="Reset checklist"
             title="Reset checklist (can be undone)"
             disabled={!done}
-            className={`${keyClass} bg-[var(--mc-49)] text-white disabled:opacity-30 hover:enabled:brightness-110`}
+            className="flex h-8 w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] font-mono text-[11px] font-semibold text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] disabled:opacity-40 hover:enabled:brightness-110"
             onClick={() => useFactoryStore.getState().clearChecklist()}
           >
             <RotateCcw className="h-3.5 w-3.5" />
+            Reset checklist
           </button>
         </div>
       )}
@@ -86,7 +89,7 @@ export function useChecklistBoard(shownEdges: ShownEdge[]) {
       // Navigation belongs to the camera, even over a completed card. Its
       // native mouse listener must receive the middle-button press.
       if (event.type === "wheel" || ("button" in event && event.button === 1)) return false;
-      const element = event.target.closest(".react-flow__node, .react-flow__edge");
+      const element = event.target.closest("[data-checklist-edge], .react-flow__node, .react-flow__edge");
       if (!element) return false;
       const keyboard = event.type === "keydown" ? (event as ReactKeyboardEvent) : undefined;
       if (
@@ -103,9 +106,9 @@ export function useChecklistBoard(shownEdges: ShownEdge[]) {
         event.type === "click" ||
         (keyboard && !keyboard.repeat && (keyboard.key === "Enter" || keyboard.key === " "))
       ) {
-        const id = element.getAttribute("data-id");
+        const id = element.getAttribute("data-checklist-edge") ?? element.getAttribute("data-id");
         if (id) {
-          const edge = element.classList.contains("react-flow__edge");
+          const edge = element.hasAttribute("data-checklist-edge") || element.classList.contains("react-flow__edge");
           useFactoryStore
             .getState()
             .toggleChecklist(

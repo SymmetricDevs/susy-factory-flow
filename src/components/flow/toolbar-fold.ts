@@ -34,8 +34,9 @@ const BUILD_ROW_FOLDED_WIDTH = 132;
 // the view tray (annotations and view options) and the bin last; mute and
 // the timelapse door left for Settings. Folded, everything but the paint
 // tray stays out (the trigger stands in for it).
-const PAINT_ROW_WIDTH = 432;
-const PAINT_ROW_FOLDED_WIDTH = 360;
+// Checklist has its own 44 px tray plus the 8 px gap, also while folded.
+const PAINT_ROW_WIDTH = 484;
+const PAINT_ROW_FOLDED_WIDTH = 412;
 const SIDE_MARGINS = 24;
 const BREATH = 24;
 

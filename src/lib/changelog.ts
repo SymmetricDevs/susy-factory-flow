@@ -55,8 +55,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "Build, Solve and Pool share one switch, and several recipes can share one machine card.",
       "Checklist mode dims completed machines, drawers and wires, with saved progress and matching checks in the Machines list.",
-      "Smoother panning, cleaner arrangements and manual recalculation make large factories easier to work on.",
-      "Larger text, clearer tooltips and peak and average power readings make your plan easier to read.",
+      "Right click anywhere: add a product drawer, clone or delete a card, or cut a drawer into a wire.",
+      "Larger text, smoother panning, cleaner arrangements and manual recalculation make a large plan easier to read and work on.",
     ],
   },
   {

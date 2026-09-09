@@ -937,14 +937,21 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Board Gestures
 
-- Checklist mode (`ChecklistMode.tsx`) sits beside recalculation. Its active
+- Checklist mode (`ChecklistMode.tsx`) has its own tray on the right, beside markup/view. Its active
   tool is session state; `project.checklist` saves checked card and edge ids.
   It only changes presentation, never machine settings or production, and
   supports undo/reset. The Machines list checks the cards in each build row.
   Checks dim to 7% while the mode is on; leaving reveals the board and keeps
   progress. Capture blocks editing clicks, but middle mouse and wheel MUST
   reach the camera. Checklist wires use the FULL live route at every zoom,
-  above port hit boxes: normal 26px endpoint trimming erases short targets.
+  in an invisible hit layer above port hit boxes: normal 26px endpoint trimming
+  erases short targets; visible wires must keep their ordinary depth.
+  THE BOARD SAYS ONE THING UNDER THE POINTER while it is on (Jack,
+  2026-09-08): what a click would mark, in green - a card wears a 3px
+  outline, a wire lights its own hit target (checklist.css) - and nothing
+  else. The port rows' flow glow is off and every wheel knob on a card is
+  dead: both read `checklistLocked()` in RecipeNode at event time, so no
+  card subscribes to the mode. Any new knob on a card needs the same guard.
 
 - A port ROW answers, not its little item icon: left click opens what makes the
   resource, right click what uses it, R and U do the same for the row under the

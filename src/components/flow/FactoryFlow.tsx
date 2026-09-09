@@ -8278,7 +8278,6 @@ const SourceToolbar = memo(function SourceToolbar({
       </ToolTray>
       <ToolTray>
         <AutoSolveKeys />
-        <ChecklistKeys />
       </ToolTray>
       </ToolGroup>
     </div>
@@ -9246,6 +9245,7 @@ const PaintToolbar = memo(function PaintToolbar({
   onToggleGroup: (group: ToolGroupId | undefined) => void;
   shiftedDown: boolean;
 }) {
+  const checklistMode = useFactoryStore((state) => state.checklistMode);
   const activeColor = GT_NODE_COLORS[activeColorTag];
   // Every fold-out on this row opens on CLICK and closes on outside click or
   // Escape, like the view sheet and the Setup Rules sheet. They used to open
@@ -9505,11 +9505,14 @@ const PaintToolbar = memo(function PaintToolbar({
         // OVER it and take its clicks: the colours were once visible and
         // unpickable. The row lifts above every other toolbar for as long as
         // any of its fold-outs is out.
-        isDrawMenuOpen || isViewMenuOpen
+        isDrawMenuOpen || isViewMenuOpen || checklistMode
           ? "z-40"
           : "z-20",
       ].join(" ")}
     >
+      <ToolTray>
+        <ChecklistKeys />
+      </ToolTray>
       <ToolGroup
         id="paint"
         folded={folded}
@@ -9788,9 +9791,7 @@ function ResourceEdgeComponent({
   // 26 px at each port. That reservation erased short wires' entire target.
   // Keep the complete, currently drawn path clickable at every zoom.
   const checklistMode = useFactoryStore((state) => state.checklistMode);
-  const hoverPathD = checklistMode
-    ? liveRoute.path
-    : hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
+  const hoverPathD = !checklistMode && hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
 
   // Hand this line's dashes to the board's pulse canvas (see edge-pulse.ts).
   // Published after commit rather than during render because it is a
@@ -9897,6 +9898,16 @@ function ResourceEdgeComponent({
 
   return (
     <>
+      {checklistMode && liveRoute.path ? (
+        <ViewportPortal>
+          {/* Only the invisible hit target clears port hit boxes. The visible
+              wire keeps its usual depth behind machines and drawers. */}
+          <svg width={1} height={1} aria-hidden className="pointer-events-none absolute left-0 top-0 overflow-visible" style={{ zIndex: 30 }}>
+            <path data-checklist-edge={id} d={liveRoute.path} fill="none" stroke="transparent"
+              strokeWidth={Math.max(14, coreStrokeWidth + 6)} style={{ pointerEvents: "stroke" }} />
+          </svg>
+        </ViewportPortal>
+      ) : null}
       {(
         <>
           <path

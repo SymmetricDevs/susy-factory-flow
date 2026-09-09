@@ -937,6 +937,15 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Board Gestures
 
+- Checklist mode (`ChecklistMode.tsx`) sits beside recalculation. Its active
+  tool is session state; `project.checklist` saves checked card and edge ids.
+  It only changes presentation, never machine settings or production, and
+  supports undo/reset. The Machines list checks the cards in each build row.
+  Checks dim to 7% while the mode is on; leaving reveals the board and keeps
+  progress. Capture blocks editing clicks, but middle mouse and wheel MUST
+  reach the camera. Checklist wires use the FULL live route at every zoom,
+  above port hit boxes: normal 26px endpoint trimming erases short targets.
+
 - A port ROW answers, not its little item icon: left click opens what makes the
   resource, right click what uses it, R and U do the same for the row under the
   pointer (`port-browse.ts` holds the pointed-at row imperatively — do not

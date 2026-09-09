@@ -709,6 +709,8 @@ export interface SetupRules {
 }
 
 export interface FactoryProject {
+  /** Construction progress; never changes production. */
+  checklist?: { cards: string[]; edges: string[] };
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   id: string;
   name: string;

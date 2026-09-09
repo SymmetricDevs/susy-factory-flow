@@ -497,6 +497,7 @@ export const planViewStateSchema = z.object({
 });
 
 export const factoryProjectSchema = z.object({
+  checklist: z.object({ cards: z.array(z.string()), edges: z.array(z.string()) }).optional(),
   schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
   id: z.string().min(1),
   name: z.string().min(1),

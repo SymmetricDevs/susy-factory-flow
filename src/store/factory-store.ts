@@ -146,6 +146,10 @@ export interface BoardCameraRequest {
 }
 
 interface FactoryStore {
+  checklistMode: boolean;
+  setChecklistMode: (active: boolean) => void;
+  toggleChecklist: (kind: "cards" | "edges", ids: string[]) => void;
+  clearChecklist: () => void;
   project: FactoryProject;
   undoHistory: FactoryProject[];
   redoHistory: FactoryProject[];
@@ -934,6 +938,26 @@ export interface PendingResourceConnection {
 let lastRecipeAddId = 0;
 
 export const useFactoryStore = create<FactoryStore>((set, get) => ({
+  checklistMode: false,
+  setChecklistMode: (checklistMode) => set({ checklistMode, ...(checklistMode ? { nodeColorPaintMode: undefined, pendingResourceConnection: undefined } : {}) }),
+  toggleChecklist: (kind, ids) => set((state) => {
+    const valid = new Set(kind === "cards"
+      ? [...state.project.nodes, ...(state.project.storages ?? [])].map((entry) => entry.id)
+      : state.project.edges.map((entry) => entry.id));
+    const targets = ids.filter((id) => valid.has(id));
+    if (!targets.length) return state;
+    const checklist = state.project.checklist ?? { cards: [], edges: [] };
+    const checked = new Set(checklist[kind]);
+    const restore = targets.every((id) => checked.has(id));
+    for (const id of targets) { if (restore) checked.delete(id); else checked.add(id); }
+    playBoardSound(restore ? "checklistRestore" : "checklistCheck");
+    return withProjectHistory(state, { project: touchProject({ ...state.project, checklist: { ...checklist, [kind]: [...checked] } }) });
+  }),
+  clearChecklist: () => set((state) => {
+    if (!state.project.checklist) return state;
+    playBoardSound("checklistRestore");
+    return withProjectHistory(state, { project: touchProject({ ...state.project, checklist: undefined }) });
+  }),
   project: initialProject,
   undoHistory: [],
   redoHistory: [],

@@ -1,5 +1,7 @@
 "use client";
 
+import { ChecklistKeys, useChecklistBoard, checklistCursorStyle } from "./ChecklistMode";
+
 import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
@@ -2338,6 +2340,10 @@ export function FactoryFlow() {
   // the house colour, and legible on every paper the board ships with.
   const [activeColorTag, setActiveColorTag] = useState<FactoryNodeColorTag>("blue");
   const [isDeleteMode, setDeleteMode] = useState(false);
+  const checklistMode = useFactoryStore((state) => state.checklistMode);
+  useEffect(() => {
+    if (checklistMode) { setDeleteMode(false); setAnnotationTool(undefined); }
+  }, [checklistMode]);
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft | undefined>(undefined);
   const annotationDraftRef = useRef<AnnotationDraft | undefined>(undefined);
   const [layoutVersion, setLayoutVersion] = useState(0);
@@ -5564,7 +5570,7 @@ export function FactoryFlow() {
   useBoardTouchGestures({
     boardRef,
     instanceRef: flowInstanceRef,
-    enabled: nodeColorPaintMode === undefined && annotationTool === undefined && !isDeleteMode,
+    enabled: !checklistMode && nodeColorPaintMode === undefined && annotationTool === undefined && !isDeleteMode,
   });
 
   // The camera under the hand: the wheel eases toward its target, a released
@@ -5663,6 +5669,7 @@ export function FactoryFlow() {
   // per-frame FactoryFlow renders a node drag produces.
   const handlePaintModeChange = useCallback(
     (tag: FactoryNodeColorTag | null | undefined) => {
+      if (tag !== undefined) useFactoryStore.getState().setChecklistMode(false);
       setAnnotationTool(undefined);
       setDeleteMode(false);
       // Picking up the brush no longer touches the smart view: the coloured
@@ -5684,6 +5691,7 @@ export function FactoryFlow() {
   );
   const handleAnnotationToolChange = useCallback(
     (tool: BoardDrawTool | undefined) => {
+      if (tool) useFactoryStore.getState().setChecklistMode(false);
       setNodeColorPaintMode(undefined);
       setDeleteMode(false);
       setAnnotationTool(tool);
@@ -5696,6 +5704,7 @@ export function FactoryFlow() {
   );
   const handleDeleteModeChange = useCallback(
     (enabled: boolean) => {
+      if (enabled) useFactoryStore.getState().setChecklistMode(false);
       setNodeColorPaintMode(undefined);
       setAnnotationTool(undefined);
       setDeleteMode(enabled);
@@ -6403,6 +6412,20 @@ export function FactoryFlow() {
   );
 
 
+  const checklistCapture = useChecklistBoard(visibleFlowEdges);
+  const checklistNodes = useMemo(() => {
+    if (!checklistMode) return visibleFlowNodes;
+    const checked = new Set(project.checklist?.cards);
+    return visibleFlowNodes.map((node) => ({ ...node, draggable: false,
+      className: [node.className, checked.has(node.id) ? "checklist-done" : ""].filter(Boolean).join(" ") }));
+  }, [visibleFlowNodes, checklistMode, project.checklist]);
+  const checklistEdges = useMemo(() => {
+    if (!checklistMode) return visibleFlowEdges;
+    const checked = new Set(project.checklist?.edges);
+    return visibleFlowEdges.map((edge) => ({ ...edge,
+      className: [edge.className, (edge.data?.bundle?.edgeIds ?? [edge.id]).every((id) => checked.has(id)) ? "checklist-done" : ""].filter(Boolean).join(" ") }));
+  }, [visibleFlowEdges, checklistMode, project.checklist]);
+
   const paintCursor =
     nodeColorPaintMode !== undefined
       ? getPaintBrushCursor(
@@ -6425,6 +6448,7 @@ export function FactoryFlow() {
         // it: a floor taller than the window is a page that scrolls the board out
         // of sight.
         "factory-flow-board relative h-full min-h-[480px] compact:min-h-0 overflow-hidden border-x border-line bg-canvas",
+        checklistMode ? "checklist-active" : "",
         isNodeDragging ? "factory-flow-board--dragging" : "",
         poolMode ? "factory-flow-board--pool" : "",
         paintCursor ? "factory-flow-board--painting" : "",
@@ -6452,6 +6476,7 @@ export function FactoryFlow() {
       ].join(" ")}
       style={
         {
+          ...checklistCursorStyle,
           ...(paintCursor ? { "--paint-cursor": paintCursor } : undefined),
           ...(isDeleteMode ? { "--delete-cursor": getDeleteCursor() } : undefined),
           // The theme paints the room: base colour, the screen-space edge
@@ -6480,7 +6505,14 @@ export function FactoryFlow() {
             : undefined),
         } as CSSProperties
       }
-      onPointerDownCapture={handleAnnotationPointerDown}
+      onPointerDownCapture={(event) => { if (!checklistCapture(event)) handleAnnotationPointerDown(event); }}
+      onMouseDownCapture={checklistCapture}
+      onTouchStartCapture={checklistCapture}
+      onClickCapture={checklistCapture}
+      onDoubleClickCapture={checklistCapture}
+      onContextMenuCapture={checklistCapture}
+      onKeyDownCapture={checklistCapture}
+      onWheelCapture={checklistCapture}
       // Dragging a picture file straight onto the board drops it where it
       // lands, as an image annotation.
       onDragOver={(event) => {
@@ -6506,8 +6538,8 @@ export function FactoryFlow() {
     >
       {boardMenu ? <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} /> : null}
       <ReactFlow
-        nodes={visibleFlowNodes}
-        edges={visibleFlowEdges}
+        nodes={checklistNodes}
+        edges={checklistEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         // A press that travels under this many pixels is a CLICK, over it a
@@ -8246,6 +8278,7 @@ const SourceToolbar = memo(function SourceToolbar({
       </ToolTray>
       <ToolTray>
         <AutoSolveKeys />
+        <ChecklistKeys />
       </ToolTray>
       </ToolGroup>
     </div>
@@ -9751,7 +9784,13 @@ function ResourceEdgeComponent({
     !hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)
       ? undefined
       : trimPolylineEnds(routedEdge.points, 26);
-  const hoverPathD = hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
+  // Checklist clicks cannot start a wire, so there is no reason to reserve
+  // 26 px at each port. That reservation erased short wires' entire target.
+  // Keep the complete, currently drawn path clickable at every zoom.
+  const checklistMode = useFactoryStore((state) => state.checklistMode);
+  const hoverPathD = checklistMode
+    ? liveRoute.path
+    : hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
 
   // Hand this line's dashes to the board's pulse canvas (see edge-pulse.ts).
   // Published after commit rather than during render because it is a

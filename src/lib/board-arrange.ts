@@ -186,7 +186,7 @@ export interface ArrangeInput {
    */
   tuning?: RouterTuning;
   /** Where the arrange is, as it goes: for a loader on the board. */
-  onProgress?: (progress: { stage: string; done: number; total: number }) => void;
+  onProgress?: (progress: { step: number; stage: string; done: number; total: number }) => void;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -220,6 +220,8 @@ let ISLAND_GAP = cells(12);
 let ARRANGE_PRICES: RouterTuning | undefined;
 /** The air owed between strangers at a set of positions (set by arrangeBoard). */
 let ARRANGE_AIR: (positions: ReadonlyMap<string, { x: number; y: number }>) => number = () => 0;
+/** Where the optimiser's search is, for the loader (set by arrangeBoard). */
+let ARRANGE_SEARCH_PROGRESS: ((done: number, total: number) => void) | undefined;
 /** Air between a satellite and the card it rides (horizontal). */
 let SATELLITE_PAD = cells(2);
 /** Air between satellites stacked on one side. */
@@ -361,7 +363,7 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
         },
       }
     : rawInput;
-  input.onProgress?.({ stage: "Laying the board out", done: 0, total: 1 });
+  input.onProgress?.({ step: 0, stage: "Laying the board out", done: 0, total: 1 });
   const plain = arrangeBoardOnce(input, false);
   if (input.cards.length < 2) {
     return plain;
@@ -380,9 +382,12 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
       );
     return proxy(challenger) < proxy(plain) ? challenger : plain;
   }
-  input.onProgress?.({ stage: "Trying a second layout", done: 0, total: 1 });
+  input.onProgress?.({ step: 1, stage: "Searching for a better layout", done: 0, total: 1 });
+  ARRANGE_SEARCH_PROGRESS = (done, total) =>
+    input.onProgress?.({ step: 1, stage: "Searching for a better layout", done, total });
   const challenger = arrangeBoardOnce(input, true);
-  input.onProgress?.({ stage: "Routing both layouts", done: 0, total: 1 });
+  ARRANGE_SEARCH_PROGRESS = undefined;
+  input.onProgress?.({ step: 2, stage: "Routing the candidates", done: 0, total: 1 });
   const verdict = (result: ArrangeResult) =>
     input.judge!(new Map(result.moves.map((move) => [move.id, move.position])));
   const plainVerdict = verdict(plain);
@@ -392,7 +397,7 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
   // the better finished board wins: fewer crossings, then shorter wire.
   const polishedPlain = polishWithJudge(input, plain, plainVerdict, "first");
   const polishedChallenger = polishWithJudge(input, challenger, challengerVerdict, "second");
-  input.onProgress?.({ stage: "Choosing the better board", done: 1, total: 1 });
+  input.onProgress?.({ step: 5, stage: "Choosing the better board", done: 1, total: 1 });
   const finalPlain = verdict(polishedPlain);
   const finalChallenger = verdict(polishedChallenger);
   // POINTS decide (Jack, 2026-09-08): a crossing is already priced into
@@ -431,7 +436,8 @@ function polishWithJudge(
   let budget = fullBudget;
   const report = () =>
     input.onProgress?.({
-      stage: `Moving cards off crossings (${which} layout), ${verdict.crossings} to start`,
+      step: which === "first" ? 3 : 4,
+      stage: `Polishing the ${which} layout, ${verdict.crossings} crossings to start`,
       done: fullBudget - budget,
       total: fullBudget,
     });
@@ -1664,6 +1670,7 @@ function layoutIsland(
           : undefined,
         prices: ARRANGE_PRICES,
         air: ARRANGE_AIR,
+        onProgress: ARRANGE_SEARCH_PROGRESS,
       });
       if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
         console.log("finalists", JSON.stringify(optimized.finalists), "before", Math.round(optimized.before), "after", Math.round(optimized.after));

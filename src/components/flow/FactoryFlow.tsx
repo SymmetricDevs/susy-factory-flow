@@ -284,7 +284,13 @@ import { makeRouteJudge } from "@/lib/route-judge";
 import { routePoints } from "@/lib/route-metrics";
 import { registerBoardGeometryReader, registerBoardScoreReader } from "./board-score";
 import { flattenBoards } from "@/lib/model/flatten-boards";
-import { arrangeInWorker, type ArrangeProgress } from "@/lib/arrange-solve";
+import {
+  ARRANGE_STEPS,
+  ArrangeCancelled,
+  arrangeInWorker,
+  cancelArrange,
+  type ArrangeProgress,
+} from "@/lib/arrange-solve";
 import type { ArrangeJudgeInput } from "@/lib/arrange-job";
 import {
   ASYNC_ROUTE_EDGE_LIMIT,
@@ -5503,7 +5509,7 @@ export function FactoryFlow() {
       return;
     }
     arrangeRunningRef.current = true;
-    setArrangeProgress({ seq: 0, stage: "Reading the board", done: 0, total: 1 });
+    setArrangeProgress({ seq: 0, step: 0, stage: "Reading the board", done: 0, total: 1 });
     const state = useFactoryStore.getState();
     // THE DUMP (Jack, 2026-09-08): unless Keep boards is on, every board is
     // dumped first - members surface where the frame stood, the frames go -
@@ -5525,7 +5531,9 @@ export function FactoryFlow() {
         (progress) => setArrangeProgress(progress),
       );
     } catch (error) {
-      console.error("arrange failed", error);
+      if (!(error instanceof ArrangeCancelled)) {
+        console.error("arrange failed", error);
+      }
       arrangeRunningRef.current = false;
       setArrangeProgress(undefined);
       return;
@@ -6591,36 +6599,7 @@ export function FactoryFlow() {
           the help button; see PerfHud.tsx. */}
       <PerfHud />
       {arrangeProgress ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center"
-        >
-          <div className="pointer-events-auto w-80 max-w-[calc(100*var(--ui-vw)-32px)] rounded-lg border border-line-strong bg-surface px-5 py-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <span
-                aria-hidden
-                className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent"
-              />
-              <span className="text-base font-semibold leading-tight text-fg">Arranging the board</span>
-            </div>
-            <p className="mt-2 text-xs text-fg-muted">{arrangeProgress.stage}</p>
-            <div className="mt-2 h-1 w-full overflow-hidden rounded bg-surface-raised">
-              <div
-                className="h-full bg-cyan-500 transition-[width] duration-150"
-                style={{
-                  width: `${Math.round(
-                    (100 * Math.min(arrangeProgress.done, arrangeProgress.total)) /
-                      Math.max(arrangeProgress.total, 1),
-                  )}%`,
-                }}
-              />
-            </div>
-            <p className="mt-2 text-xs text-fg-subtle">
-              Every move is checked against the real wires, which takes a moment on a busy board.
-            </p>
-          </div>
-        </div>
+        <ArrangeLoader progress={arrangeProgress} onCancel={cancelArrange} />
       ) : null}
       {timelapseActive ? (
         // Settings live in the dev menu, set BEFORE the run; this only ends
@@ -8998,6 +8977,94 @@ const BoardViewMenu = memo(function BoardViewMenu({
 });
 
 // Whether auto-arrange may lay out the inside of boards the player drew.
+/**
+ * THE ARRANGE LOADER (Jack, 2026-09-08): one bar across every step of the
+ * arrange, each step an equal share, the steps listed under it with the
+ * current one lit, and a Cancel key. Within a step the bar moves with that
+ * step's own count (search trials, polish judge calls); a step with no
+ * count of its own fills as it ends.
+ */
+function ArrangeLoader({
+  progress,
+  onCancel,
+}: {
+  progress: ArrangeProgress;
+  onCancel: () => void;
+}) {
+  const steps = ARRANGE_STEPS.length;
+  const within = Math.min(progress.done, progress.total) / Math.max(progress.total, 1);
+  const overall = Math.min(1, (Math.min(progress.step, steps) + within) / steps);
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center"
+    >
+      <div className="pointer-events-auto w-[26rem] max-w-[calc(100*var(--ui-vw)-32px)] rounded-lg border border-line-strong bg-surface px-6 py-5 shadow-2xl">
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent"
+          />
+          <span className="text-lg font-semibold leading-tight text-fg">Arranging the board</span>
+          <span className="ml-auto font-mono text-sm tabular-nums text-fg-muted">
+            {Math.round(overall * 100)}%
+          </span>
+        </div>
+        <div className="mt-3 flex h-2.5 w-full gap-0.5">
+          {ARRANGE_STEPS.map((step, index) => {
+            const fill = index < progress.step ? 1 : index === progress.step ? within : 0;
+            return (
+              <div key={step.key} className="h-full flex-1 overflow-hidden rounded-sm bg-surface-raised">
+                <div
+                  className="h-full bg-cyan-500 transition-[width] duration-150"
+                  style={{ width: `${Math.round(fill * 100)}%` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <ol className="mt-3 flex flex-col gap-1">
+          {ARRANGE_STEPS.map((step, index) => {
+            const state = index < progress.step ? "done" : index === progress.step ? "now" : "next";
+            return (
+              <li
+                key={step.key}
+                className={[
+                  "flex items-center gap-2 text-sm",
+                  state === "now" ? "font-semibold text-fg" : state === "done" ? "text-fg-muted" : "text-fg-subtle",
+                ].join(" ")}
+              >
+                <span
+                  aria-hidden
+                  className={[
+                    "inline-block h-2 w-2 shrink-0 rounded-full",
+                    state === "done" ? "bg-cyan-500" : state === "now" ? "bg-cyan-400 ring-2 ring-cyan-400/40" : "bg-surface-raised",
+                  ].join(" ")}
+                />
+                <span>{step.label}</span>
+                {state === "now" && progress.stage !== step.label ? (
+                  <span className="ml-auto truncate text-xs font-normal text-fg-muted">{progress.stage}</span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <span className="text-xs text-fg-subtle">Every move is checked against the real wires.</span>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded border border-line-strong bg-surface-raised px-3 py-1.5 text-sm font-semibold text-fg hover:brightness-110"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // A browser preference, not part of the plan: two people sharing a setup
 // each keep their own habit.
 const ARRANGE_KEEP_BOARDS_KEY = "gtnh-factory-flow.arrange-keep-boards.v1";

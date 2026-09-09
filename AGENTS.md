@@ -564,6 +564,18 @@ Working notes for future agents on GTNH Factory Flow.
   and the arrange lays out one flat set of cards; `applyBoardArrangement`
   gets `removeBoards` = every board id, so the boards go in the arrange's
   own undo entry and the members ride `moves`.
+- THE ARRANGE LOADER (Jack, 2026-09-08: "one master progress bar with
+  steps"): `ARRANGE_STEPS` in arrange-job.ts names the six steps (lay out,
+  search, route the candidates, polish first, polish second, choose); every
+  progress message carries its `step`, the bar fills across all six with an
+  equal share each, the steps are listed under it with the current one lit,
+  and the search reports every 250 annealing trials so the bar moves
+  through it. CANCEL: `cancelArrange()` in arrange-solve.ts TERMINATES the
+  worker (it runs the job synchronously and cannot hear a message mid-job)
+  and rejects the pending promise with `ArrangeCancelled`; the next arrange
+  starts a fresh worker. The main-thread fallback cannot be stopped, so its
+  result is dropped instead. tools/audit-board.mjs waits for the loader
+  (role=status, aria-live=polite) to detach; keep those attributes.
 - KEEP BOARDS ON REARRANGE is the switch (the arrange SHEET: one setting,
   no subtext, and the Arrange button under it). A browser preference
   (`gtnh-factory-flow.arrange-keep-boards.v1`, OFF by default), never part

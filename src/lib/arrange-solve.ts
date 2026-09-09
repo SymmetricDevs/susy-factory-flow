@@ -16,10 +16,32 @@ import {
 } from "./arrange-job";
 
 export type { ArrangeJob, ArrangeJobResult, ArrangeProgress } from "./arrange-job";
+export { ARRANGE_STEPS } from "./arrange-job";
 
 let worker: Worker | undefined;
 let workerBroken = false;
 let seq = 0;
+/** The job in flight, so a cancel can end it. */
+let pending: { seq: number; cancel: () => void } | undefined;
+
+/** Thrown out of arrangeInWorker when the player cancels. */
+export class ArrangeCancelled extends Error {
+  constructor() {
+    super("Arrange cancelled");
+    this.name = "ArrangeCancelled";
+  }
+}
+
+/**
+ * Ends the arrange in flight (Jack, 2026-09-08: "I need a way to cancel it
+ * as well"). The worker runs the job synchronously and cannot hear a
+ * message mid-job, so cancelling TERMINATES it; the next arrange starts a
+ * fresh one. On the main-thread fallback the job cannot be stopped, so
+ * its result is dropped when it lands.
+ */
+export function cancelArrange(): void {
+  pending?.cancel();
+}
 
 /** Whether an arrange can leave the main thread at all. */
 export function arrangeWorkerAvailable(): boolean {
@@ -37,9 +59,13 @@ export function arrangeInWorker(
   seq += 1;
   const full: ArrangeJob = { ...job, seq };
   if (!arrangeWorkerAvailable()) {
-    return Promise.resolve(runArrangeJob(full, onProgress));
+    let cancelled = false;
+    pending = { seq: full.seq, cancel: () => { cancelled = true; } };
+    const result = runArrangeJob(full, onProgress);
+    pending = undefined;
+    return cancelled ? Promise.reject(new ArrangeCancelled()) : Promise.resolve(result);
   }
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let target: Worker;
     try {
       target = getWorker();
@@ -49,6 +75,17 @@ export function arrangeInWorker(
       resolve(runArrangeJob(full, onProgress));
       return;
     }
+    pending = {
+      seq: full.seq,
+      cancel: () => {
+        target.removeEventListener("message", onMessage);
+        target.removeEventListener("error", onError);
+        target.terminate();
+        worker = undefined;
+        pending = undefined;
+        reject(new ArrangeCancelled());
+      },
+    };
     const onMessage = (
       event: MessageEvent<{ progress?: ArrangeProgress; done?: ArrangeJobResult; error?: string }>,
     ) => {
@@ -59,6 +96,7 @@ export function arrangeInWorker(
       }
       target.removeEventListener("message", onMessage);
       target.removeEventListener("error", onError);
+      pending = undefined;
       if (data.done && data.done.seq === full.seq) {
         resolve(data.done);
       } else {
@@ -69,6 +107,7 @@ export function arrangeInWorker(
     const onError = (event: ErrorEvent) => {
       target.removeEventListener("message", onMessage);
       target.removeEventListener("error", onError);
+      pending = undefined;
       console.error("arrange worker broke; arranging on the main thread", event.message);
       workerBroken = true;
       resolve(runArrangeJob(full, onProgress));

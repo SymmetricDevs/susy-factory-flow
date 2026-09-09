@@ -104,6 +104,8 @@ export interface OptimizeOptions {
    * proxy score and to the finalists' judged points alike.
    */
   air?: (positions: ReadonlyMap<string, { x: number; y: number }>) => number;
+  /** Where the search is, every few hundred trials, for a loader. */
+  onProgress?: (done: number, total: number) => void;
 }
 
 export interface OptimizeResult {
@@ -780,6 +782,9 @@ export function optimizeIslandLayout(
   };
 
   for (let trial = 0; trial < trials; trial += 1) {
+    if (options.onProgress && trial % 250 === 0) {
+      options.onProgress(trial, trials);
+    }
     const temperature =
       startTemperature * Math.pow(endTemperature / startTemperature, trial / trials);
     const saved = snapshot();

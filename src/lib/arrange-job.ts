@@ -32,9 +32,26 @@ export interface ArrangeJob {
   judgeInput?: ArrangeJudgeInput;
 }
 
-/** Where the arrange is, for the loader: a stage, and how far along it. */
+/**
+ * THE STEPS of an arrange, in order, as the loader shows them (Jack,
+ * 2026-09-08: "one master progress bar with steps and very distinct
+ * things"). A progress message names its step; the loader fills one bar
+ * across all of them, each step taking an equal share.
+ */
+export const ARRANGE_STEPS = [
+  { key: "layout", label: "Laying the board out" },
+  { key: "search", label: "Searching for a better layout" },
+  { key: "route", label: "Routing the candidates" },
+  { key: "polishFirst", label: "Polishing the first layout" },
+  { key: "polishSecond", label: "Polishing the second layout" },
+  { key: "choose", label: "Choosing the better board" },
+] as const;
+
+/** Where the arrange is, for the loader: a step, and how far along it. */
 export interface ArrangeProgress {
   seq: number;
+  /** Index into ARRANGE_STEPS. */
+  step: number;
   stage: string;
   done: number;
   total: number;

@@ -37,7 +37,7 @@ import {
   type OptimizeCard,
 } from "./board-arrange-optimize";
 import { makeAirTerm } from "./board-arrange-air";
-import type { RouterTuning } from "@/components/flow/router-tuning";
+import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "@/components/flow/router-tuning";
 
 /** A card to place: its id, footprint, and where it sits today. */
 export interface ArrangeCard {
@@ -228,6 +228,23 @@ let SATELLITE_PAD = cells(2);
 let SATELLITE_STACK_GAP = cells(1);
 /** Island scale only: fold a too-wide run of columns back like text. */
 let PAGE_FOLD = false;
+
+/**
+ * The dev menu's Arrange dials override the taste's spacing (Jack,
+ * 2026-09-08) - but only a dial someone has MOVED; at its default the
+ * taste (compact, normal, roomy) still decides, so tests and callers that
+ * ask for a taste get it.
+ */
+function applyArrangeDials(dials: RouterTuning | undefined): void {
+  if (!dials) return;
+  if (dials.arrangeRowGap !== DEFAULT_ROUTER_TUNING.arrangeRowGap) ROW_GAP = cells(dials.arrangeRowGap);
+  if (dials.arrangeColumnGap !== DEFAULT_ROUTER_TUNING.arrangeColumnGap) {
+    COLUMN_GAP_MIN = cells(dials.arrangeColumnGap);
+  }
+  if (dials.arrangeDrawerGap !== DEFAULT_ROUTER_TUNING.arrangeDrawerGap) {
+    SATELLITE_PAD = cells(dials.arrangeDrawerGap);
+  }
+}
 
 function applyTaste(taste: ArrangeTaste | undefined): void {
   const spacing = taste?.spacing ?? "normal";
@@ -432,7 +449,7 @@ function polishWithJudge(
   if (!judge) {
     return result;
   }
-  const fullBudget = input.polishBudget ?? 100;
+  const fullBudget = input.polishBudget ?? ARRANGE_PRICES?.polishBudget ?? 100;
   let budget = fullBudget;
   const report = () =>
     input.onProgress?.({
@@ -716,6 +733,7 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
     return { moves: [], islands: [], wireRoutes: [] };
   }
   applyTaste(input.taste);
+  applyArrangeDials(ARRANGE_PRICES);
 
   const slotById = new Map<string, CardSlot>();
   cards.forEach((card, index) => {

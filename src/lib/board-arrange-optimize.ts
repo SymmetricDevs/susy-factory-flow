@@ -712,11 +712,11 @@ export function optimizeIslandLayout(
     }
     candidates.push({ score: value, state: snapshot(), key });
     candidates.sort((a, b) => a.score - b.score);
-    if (candidates.length > 6) candidates.pop();
+    if (candidates.length > Math.max(1, prices.finalists)) candidates.pop();
   };
 
   const random = rng(hashIds(cards.map((card) => card.id)));
-  const trials = options.trials ?? Math.min(20_000, 600 * n + 3000);
+  const trials = options.trials ?? Math.min(prices.searchTrials, 600 * n + 3000);
   const startTemperature = prices.crossing / 2;
   const endTemperature = 4;
   const columnCards = state.columns.flat();

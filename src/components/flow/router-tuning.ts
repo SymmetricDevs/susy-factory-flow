@@ -62,6 +62,18 @@ export interface RouterTuning {
    * board as tight as the wires allow.
    */
   islandAir: number;
+  /** ARRANGE: annealing trials the search may spend (capped by board size). */
+  searchTrials: number;
+  /** ARRANGE: distinct layouts the real router judges at the end of the search. */
+  finalists: number;
+  /** ARRANGE: router questions the polish may ask per layout. */
+  polishBudget: number;
+  /** ARRANGE: air between stacked cards, in cells. */
+  arrangeRowGap: number;
+  /** ARRANGE: least corridor between columns, in cells. */
+  arrangeColumnGap: number;
+  /** ARRANGE: air between a drawer and the machine it rides, in cells. */
+  arrangeDrawerGap: number;
 }
 
 export const DEFAULT_ROUTER_TUNING: RouterTuning = {
@@ -88,13 +100,23 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   windowPad: 4,
   wideRungCells: 30,
   islandAir: 0.5,
+  searchTrials: 20000,
+  finalists: 6,
+  polishBudget: 100,
+  arrangeRowGap: 1,
+  arrangeColumnGap: 2,
+  arrangeDrawerGap: 1,
 };
 
 export interface RouterTuningField {
   key: keyof RouterTuning;
   label: string;
-  /** One line for the player who is not the developer. */
+  /** What the dial is, in plain words. */
   hint: string;
+  /** What happens when it is turned down. */
+  low: string;
+  /** What happens when it is turned up. */
+  high: string;
   kind: "number" | "boolean";
   min?: number;
   max?: number;
@@ -102,31 +124,188 @@ export interface RouterTuningField {
   group: "Costs" | "Turns" | "Crossings" | "Docks" | "Negotiation" | "Search" | "Arrange";
 }
 
-/** The dials in the order the dev menu shows them. */
+/**
+ * The dials in the order the dev menu shows them, each explained for a
+ * player, not a developer (Jack, 2026-09-08: "explain in layman terms,
+ * what each setting does on the high end or low end"). The first six
+ * groups shape the WIRES; the Arrange group shapes AUTO ARRANGE only and
+ * never re-routes a wire by itself.
+ */
 export const ROUTER_TUNING_FIELDS: RouterTuningField[] = [
-  { key: "costEmpty", label: "Empty lane", hint: "Per pixel on a free line.", kind: "number", min: 0.1, max: 5, step: 0.1, group: "Costs" },
-  { key: "costShared", label: "Shared lane", hint: "Per pixel riding beside another wire that fits.", kind: "number", min: 0.1, max: 5, step: 0.1, group: "Costs" },
-  { key: "costOverflow", label: "Full lane", hint: "Per pixel in a lane the wire does not fit.", kind: "number", min: 1, max: 30, step: 0.5, group: "Costs" },
-  { key: "costInsideExempt", label: "Leaving a board", hint: "Multiplier while still inside a board frame the wire is leaving.", kind: "number", min: 1, max: 10, step: 0.5, group: "Costs" },
-  { key: "costOutsideHome", label: "Outside home board", hint: "Multiplier outside the board that holds both ends.", kind: "number", min: 1, max: 10, step: 0.5, group: "Costs" },
-  { key: "turn45", label: "45° bend", hint: "In pixels of travel.", kind: "number", min: 0, max: 400, step: 5, group: "Turns" },
-  { key: "turn90", label: "90° corner", hint: "In pixels of travel.", kind: "number", min: 0, max: 600, step: 5, group: "Turns" },
-  { key: "reverse", label: "Reversal", hint: "Doubling back on the same line; only waypoints need it.", kind: "number", min: 0, max: 1000, step: 10, group: "Turns" },
-  { key: "earlyTurn", label: "Early bend", hint: "Extra for bending inside the clean run at a port.", kind: "number", min: 0, max: 600, step: 10, group: "Turns" },
-  { key: "cleanCells", label: "Clean run", hint: "Cells a wire runs straight out of a port and straight into one.", kind: "number", min: 1, max: 5, step: 1, group: "Turns" },
-  { key: "diagonals", label: "Diagonals", hint: "Allow 45° runs at all.", kind: "boolean", group: "Turns" },
-  { key: "diagonalLength", label: "Diagonal length", hint: "A diagonal cell relative to a straight one. Root two is true.", kind: "number", min: 1, max: 2.5, step: 0.01, group: "Turns" },
-  { key: "crossing", label: "Crossing", hint: "Running across another wire once.", kind: "number", min: 0, max: 2000, step: 10, group: "Crossings" },
-  { key: "negotiationRounds", label: "Rounds", hint: "Passes that rip up crossing wires and route them again.", kind: "number", min: 0, max: 12, step: 1, group: "Negotiation" },
-  { key: "negotiationBudget", label: "Reroute budget", hint: "Reroutes allowed, as a multiple of the wire count.", kind: "number", min: 0, max: 5, step: 0.25, group: "Negotiation" },
-  { key: "longestFirst", label: "Longest first", hint: "Route the longest wires first; off routes the shortest first.", kind: "boolean", group: "Negotiation" },
-  { key: "dockPlanBias", label: "Plan pull", hint: "Per pixel of rim between the dock taken and the dock planned.", kind: "number", min: 0, max: 3, step: 0.05, group: "Docks" },
-  { key: "dockShare", label: "Shared dock", hint: "Extra for landing on a dock another wire already uses. Never a ban: wires may stack onto one side.", kind: "number", min: 0, max: 600, step: 10, group: "Docks" },
-  { key: "dockPlanWindow", label: "Plan window", hint: "Cells of rim either side of the plan a wire may still dock in.", kind: "number", min: 1, max: 60, step: 1, group: "Docks" },
-  { key: "diagonalLaneCapacity", label: "Diagonal lane width", hint: "Usable stroke pixels in a diagonal lane.", kind: "number", min: 4, max: 16, step: 1, group: "Search" },
-  { key: "wideRungCells", label: "Wide retry", hint: "Cells of search window a route that paid for a crossing gets on its retry.", kind: "number", min: 0, max: 80, step: 2, group: "Search" },
-  { key: "windowPad", label: "Search pad", hint: "Cells of search window round a wire's ends before it grows.", kind: "number", min: 2, max: 40, step: 1, group: "Search" },
-  { key: "islandAir", label: "Island air", hint: "Points per pixel a card pays for its nearest unrelated card standing within six cells. Zero packs tight.", kind: "number", min: 0, max: 5, step: 0.1, group: "Arrange" },
+  {
+    key: "costEmpty", label: "Empty lane", kind: "number", min: 0.1, max: 5, step: 0.1, group: "Costs",
+    hint: "What a wire pays for every pixel it travels along a free grid line. This is the unit everything else is priced in, so it mostly sets the scale.",
+    low: "Distance barely matters, so bends and crossings dominate: wires take long detours to avoid a single turn.",
+    high: "Distance is everything: wires take the shortest way even if it means more bends and crossings.",
+  },
+  {
+    key: "costShared", label: "Shared lane", kind: "number", min: 0.1, max: 5, step: 0.1, group: "Costs",
+    hint: "What a wire pays per pixel when it rides a grid line beside another wire that still fits in the lane.",
+    low: "Below the empty-lane price wires bundle together into ribbons and share lines.",
+    high: "Wires keep a line apart from each other and spread out.",
+  },
+  {
+    key: "costOverflow", label: "Full lane", kind: "number", min: 1, max: 30, step: 0.5, group: "Costs",
+    hint: "What a wire pays per pixel in a lane that is already too full for it, so it would draw on top of another wire.",
+    low: "Wires overlap freely when the way is crowded.",
+    high: "Wires go a long way round rather than ever overlap.",
+  },
+  {
+    key: "costInsideExempt", label: "Leaving a board", kind: "number", min: 1, max: 10, step: 0.5, group: "Costs",
+    hint: "How many times dearer every pixel is while a wire is still inside a board frame it is leaving.",
+    low: "A leaving wire may wander along the inside of the frame.",
+    high: "A leaving wire heads for the nearest wall at once.",
+  },
+  {
+    key: "costOutsideHome", label: "Outside home board", kind: "number", min: 1, max: 10, step: 0.5, group: "Costs",
+    hint: "How many times dearer every pixel is when a wire with both ends inside one board steps outside it.",
+    low: "A wire between two cards in a board may duck out of the board and back in.",
+    high: "A wire between two cards in a board stays inside it.",
+  },
+  {
+    key: "turn45", label: "45 degree bend", kind: "number", min: 0, max: 400, step: 5, group: "Turns",
+    hint: "What one 45 degree bend costs, counted as pixels of travel. Leaving or landing at 45 degrees costs one of these too.",
+    low: "Wires zig-zag and take diagonals freely.",
+    high: "Wires stay straight and would rather travel further than bend.",
+  },
+  {
+    key: "turn90", label: "90 degree corner", kind: "number", min: 0, max: 600, step: 5, group: "Turns",
+    hint: "What one square corner costs, counted as pixels of travel. Two 45 degree bends are the alternative to one corner.",
+    low: "Square corners are cheap, so wires draw staircases.",
+    high: "Wires avoid square corners and use diagonals or longer straight runs instead.",
+  },
+  {
+    key: "reverse", label: "Reversal", kind: "number", min: 0, max: 1000, step: 10, group: "Turns",
+    hint: "What doubling back along the same line costs. Only a wire steered through a pinned dot ever needs this.",
+    low: "A wire will loop back on itself to reach a dot.",
+    high: "A wire goes round in a wide loop rather than double back.",
+  },
+  {
+    key: "earlyTurn", label: "Early bend", kind: "number", min: 0, max: 600, step: 10, group: "Turns",
+    hint: "Extra cost for bending inside the clean run, the first cells out of a port and the last cells into one.",
+    low: "Wires may turn right off a card.",
+    high: "Wires leave and land dead straight, and only bend once they are clear of the card.",
+  },
+  {
+    key: "cleanCells", label: "Clean run", kind: "number", min: 1, max: 5, step: 1, group: "Turns",
+    hint: "How many cells out of a port count as the clean run, where bending pays the early bend on top.",
+    low: "Wires may bend one cell out of a card.",
+    high: "Wires run straight for longer before they may bend, so cards need more room around them.",
+  },
+  {
+    key: "diagonals", label: "Diagonals", kind: "boolean", group: "Turns",
+    hint: "Whether wires may run at 45 degrees at all.",
+    low: "Off: every wire is horizontal and vertical, like the old router.",
+    high: "On: wires may run diagonally.",
+  },
+  {
+    key: "diagonalLength", label: "Diagonal length", kind: "number", min: 1, max: 2.5, step: 0.01, group: "Turns",
+    hint: "How long a diagonal cell counts compared with a straight one. The true length is about 1.41.",
+    low: "Diagonals are cheaper than they really are, so wires prefer them.",
+    high: "Diagonals are dearer than they really are, so wires prefer straight runs and corners.",
+  },
+  {
+    key: "crossing", label: "Crossing", kind: "number", min: 0, max: 2000, step: 10, group: "Crossings",
+    hint: "What crossing another wire once costs, counted as pixels of travel. Crossing a thick wire weighs more in the score.",
+    low: "Wires cross each other freely and stay short.",
+    high: "Wires go a very long way round to avoid a single crossing.",
+  },
+  {
+    key: "negotiationRounds", label: "Rounds", kind: "number", min: 0, max: 12, step: 1, group: "Negotiation",
+    hint: "How many passes the router makes ripping up wires that cross and routing them again around everything else.",
+    low: "One pass: wires are routed once and left as they land. Fast, more crossings.",
+    high: "Many passes: wires keep trading places until nothing improves. Slower, fewer crossings.",
+  },
+  {
+    key: "negotiationBudget", label: "Reroute budget", kind: "number", min: 0, max: 5, step: 0.25, group: "Negotiation",
+    hint: "How many reroutes the passes may spend in total, as a multiple of the number of wires on the board.",
+    low: "Only a few wires get a second try.",
+    high: "Every crossing wire gets tried again and again.",
+  },
+  {
+    key: "longestFirst", label: "Longest first", kind: "boolean", group: "Negotiation",
+    hint: "Which wires take the open lines first once the thickest have gone: the longest, or the shortest.",
+    low: "Off: short wires go first and long ones fit round them.",
+    high: "On: long wires go first and short ones nest inside them.",
+  },
+  {
+    key: "dockPlanBias", label: "Plan pull", kind: "number", min: 0, max: 3, step: 0.05, group: "Docks",
+    hint: "How strongly a wire is pulled toward the spot on the card edge the plan chose for it, per pixel of edge away from it.",
+    low: "Wires dock wherever routes cheapest, and may cross each other leaving a card.",
+    high: "Wires dock exactly where the plan put them, in an order that never crosses.",
+  },
+  {
+    key: "dockShare", label: "Shared dock", kind: "number", min: 0, max: 600, step: 10, group: "Docks",
+    hint: "Extra cost for landing on a spot another wire already uses. Never a ban: wires may stack onto one side.",
+    low: "Several wires happily share one spot on a card edge.",
+    high: "Every wire wants its own spot, and will go round the card to find one.",
+  },
+  {
+    key: "dockPlanWindow", label: "Plan window", kind: "number", min: 1, max: 60, step: 1, group: "Docks",
+    hint: "How many cells of card edge either side of the planned spot a wire may still dock in before the whole edge is opened up.",
+    low: "Wires stick close to their planned spot.",
+    high: "Wires may dock anywhere near their planned spot.",
+  },
+  {
+    key: "diagonalLaneCapacity", label: "Diagonal lane width", kind: "number", min: 4, max: 16, step: 1, group: "Search",
+    hint: "How many pixels of wire fit side by side in a diagonal lane. Straight lanes hold 16.",
+    low: "Fewer wires share a diagonal, so thick wires avoid diagonals.",
+    high: "Diagonals hold as many wires as straight lines.",
+  },
+  {
+    key: "wideRungCells", label: "Wide retry", kind: "number", min: 0, max: 80, step: 2, group: "Search",
+    hint: "How far, in cells, a wire that paid for a crossing may look on its retry to find a way round.",
+    low: "Retries look nearby only. Fast, more crossings stay.",
+    high: "Retries look across the whole board. Slow, but finds the way over the top of a tall card.",
+  },
+  {
+    key: "windowPad", label: "Search pad", kind: "number", min: 2, max: 40, step: 1, group: "Search",
+    hint: "How many cells beyond the box between a wire's two ends the first search may look.",
+    low: "Wires only look inside their own box. Fast.",
+    high: "Wires look further afield from the start. Slower.",
+  },
+  {
+    key: "islandAir", label: "Island air", kind: "number", min: 0, max: 5, step: 0.1, group: "Arrange",
+    hint: "How much a card pays for standing within six cells of an unrelated card, one that is three or more wires away from it. This is what parts a cluster from the main body.",
+    low: "Zero packs the board as tight as the wires allow, with no islands.",
+    high: "Unrelated groups stand far apart and read as islands, at the cost of longer bridge wires.",
+  },
+  {
+    key: "searchTrials", label: "Search trials", kind: "number", min: 1000, max: 100000, step: 1000, group: "Arrange",
+    hint: "How many small trial moves the layout search may make. Small boards use fewer than this; it is a ceiling.",
+    low: "A quick rough layout.",
+    high: "A slower, more thorough search that finds tighter layouts.",
+  },
+  {
+    key: "finalists", label: "Finalists", kind: "number", min: 1, max: 12, step: 1, group: "Arrange",
+    hint: "How many distinct layouts from the search the real router judges before one is chosen.",
+    low: "The search's own favourite is taken on trust. Fast.",
+    high: "More layouts are routed for real before choosing. Slower, better chosen.",
+  },
+  {
+    key: "polishBudget", label: "Polish budget", kind: "number", min: 0, max: 400, step: 10, group: "Arrange",
+    hint: "How many times the polish may ask the router whether moving one card helps. This is most of an arrange's time.",
+    low: "Zero skips the polish: the search's layout stands as it is. Fast.",
+    high: "The polish keeps moving cards until the budget runs out. Slow, a little better.",
+  },
+  {
+    key: "arrangeRowGap", label: "Row gap", kind: "number", min: 0, max: 6, step: 1, group: "Arrange",
+    hint: "Cells of air between two cards stacked in one column.",
+    low: "Cards stack touching.",
+    high: "Cards stack with room between them for wires to pass.",
+  },
+  {
+    key: "arrangeColumnGap", label: "Column gap", kind: "number", min: 1, max: 10, step: 1, group: "Arrange",
+    hint: "The least corridor, in cells, between two columns of cards. Busy corridors grow wider by themselves.",
+    low: "Columns stand close; wires between them are short but crowded.",
+    high: "Columns stand apart; wires are longer with room to run.",
+  },
+  {
+    key: "arrangeDrawerGap", label: "Drawer gap", kind: "number", min: 0, max: 6, step: 1, group: "Arrange",
+    hint: "Cells of air between a drawer and the machine it rides beside.",
+    low: "Drawers touch their machine.",
+    high: "Drawers stand off their machine.",
+  },
 ];
 
 const STORAGE_KEY = "gtnh-factory-flow.router-tuning.v1";
@@ -275,5 +454,9 @@ export function subscribeRouterTuning(listener: () => void): () => void {
 
 /** A string that changes whenever any dial does, for solve signatures. */
 export function routerTuningKey(tuning: RouterTuning): string {
-  return ROUTER_TUNING_FIELDS.map((field) => String(tuning[field.key])).join(",");
+  // The Arrange dials shape the arranger only; turning one must not
+  // re-route every wire on the board.
+  return ROUTER_TUNING_FIELDS.filter((field) => field.group !== "Arrange")
+    .map((field) => String(tuning[field.key]))
+    .join(",");
 }

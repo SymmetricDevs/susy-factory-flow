@@ -1014,6 +1014,18 @@ Working notes for future agents on GTNH Factory Flow.
   earlier wire passes straight through (run ends are corners and do not
   count; a stub's apron vertex DOES, or a wire riding a card's margin line
   crossed every stub for free) and, for two diagonals, at cell centres.
+- THE DIALS ARE EXPLAINED FOR A PLAYER (Jack, 2026-09-08): every
+  `RouterTuningField` carries `hint` (what it is), `low` and `high` (what
+  turning it down or up does), and the dev menu prints all three under
+  each slider. The menu has two headings: WIRE ROUTING (Turns, Crossings,
+  Negotiation, Docks, Costs, Search - every dial re-routes the board) and
+  AUTO ARRANGE (the Arrange group: islandAir, searchTrials, finalists,
+  polishBudget, arrangeRowGap, arrangeColumnGap, arrangeDrawerGap - shape
+  the Arrange button only). `routerTuningKey` leaves the Arrange group out,
+  so an arrange dial never re-solves a wire. The three spacing dials
+  override the taste only when moved off their defaults
+  (`applyArrangeDials`); the arranger reads the rest through
+  `ARRANGE_PRICES` (polish budget, search trials, finalists).
 - EVERY DIAL IS LIVE: `src/components/flow/router-tuning.ts` is the one
   `RouterTuning` object the router, the worker job and the dev menu
   share; `DEFAULT_ROUTER_TUNING` is the shipped behaviour. The dev menu

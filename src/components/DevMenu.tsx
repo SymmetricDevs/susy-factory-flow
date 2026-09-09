@@ -655,7 +655,17 @@ export function DevMenu({
             </button>
             {(["Turns", "Crossings", "Negotiation", "Docks", "Costs", "Search", "Arrange"] as const).map(
               (group) => (
-                <div key={group} className="mt-2.5">
+                <div key={group} className="mt-3">
+                  {group === "Turns" ? (
+                    <span className="mb-1 block border-b border-line pb-1 text-xs font-semibold text-fg">
+                      Wire routing. Every dial below changes how wires are drawn, and re-routes the board when moved.
+                    </span>
+                  ) : null}
+                  {group === "Arrange" ? (
+                    <span className="mb-1 mt-3 block border-b border-line pb-1 text-xs font-semibold text-fg">
+                      Auto arrange. These shape the Arrange button only; they never move a wire by themselves.
+                    </span>
+                  ) : null}
                   <span className="block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
                     {group}
                   </span>
@@ -664,10 +674,10 @@ export function DevMenu({
                     const changed = value !== DEFAULT_ROUTER_TUNING[field.key];
                     if (field.kind === "boolean") {
                       return (
+                        <div key={field.key} className="mt-2">
                         <label
-                          key={field.key}
                           title={field.hint}
-                          className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-fg-muted"
+                          className="flex cursor-pointer items-center gap-2 text-xs text-fg-muted"
                         >
                           <input
                             type="checkbox"
@@ -676,17 +686,19 @@ export function DevMenu({
                             className="accent-cyan-500"
                           />
                           <span className={changed ? "text-cyan-300" : undefined}>{field.label}</span>
-                          <span className="text-fg-subtle">{field.hint}</span>
                         </label>
+                        <div className="mb-2 ml-1 border-l-2 border-line pl-2 text-[11px] leading-snug text-fg-muted">
+                          <p>{field.hint}</p>
+                          <p className="mt-0.5">{field.low}</p>
+                          <p>{field.high}</p>
+                        </div>
+                        </div>
                       );
                     }
                     const number = Number(value);
                     return (
-                      <div
-                        key={field.key}
-                        title={field.hint}
-                        className="mt-1.5 flex items-center gap-1.5 text-xs"
-                      >
+                      <div key={field.key} className="mt-2">
+                        <div title={field.hint} className="flex items-center gap-1.5 text-xs">
                         <span
                           className={[
                             "w-24 shrink-0 truncate",
@@ -722,6 +734,18 @@ export function DevMenu({
                           aria-label={`${field.label} value`}
                           className="w-16 shrink-0 rounded border border-line bg-surface px-1 py-0.5 text-right tabular-nums text-fg"
                         />
+                        </div>
+                        <div className="mb-2 ml-1 border-l-2 border-line pl-2 text-[11px] leading-snug text-fg-muted">
+                          <p>{field.hint}</p>
+                          <p className="mt-0.5">
+                            <span className="text-fg-subtle">Low: </span>
+                            {field.low}
+                          </p>
+                          <p>
+                            <span className="text-fg-subtle">High: </span>
+                            {field.high}
+                          </p>
+                        </div>
                       </div>
                     );
                   })}

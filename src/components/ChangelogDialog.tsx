@@ -19,26 +19,23 @@ import { APP_VERSION } from "@/lib/version";
  * The VERSION leads each entry. It is the thing a reader arrives holding - the
  * chip in the header told them theirs, a bug report asks for it - so entries
  * are anchored on the number and date in a rail down the left.
+ *
+ * Opened ON REQUEST only, from the version chip or the Welcome tab. It used
+ * to arrive by itself after a release carrying a warning, dressed as an
+ * interruption, with a second box guarding its close until the warning was
+ * read; both were removed (Jack, 2026-09-08). A warning still renders as an
+ * amber block inside its entry.
  */
 export function ChangelogDialog({
   onClose,
   entries = CHANGELOG,
   unseenVersions,
-  tone = "normal",
 }: {
   onClose: () => void;
   entries?: ChangelogEntry[];
   /** Which versions this reader has not seen; these are what opens on top. */
   unseenVersions?: ReadonlySet<string>;
-  /**
-   * `interrupt` is for the copy that ARRIVED rather than the one that was
-   * asked for. A dialog you opened can sit over a board you can still read -
-   * you know why it is there. One that appears by itself is competing with
-   * whatever you came to do, so it takes the board away properly.
-   */
-  tone?: "normal" | "interrupt";
 }) {
-  const isInterrupt = tone === "interrupt";
   const unseen = unseenVersions ?? new Set<string>();
 
   /**
@@ -56,34 +53,11 @@ export function ChangelogDialog({
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * The unread entries that ASKED to be acknowledged: ones carrying a warning,
-   * which is the flag for "a plan you already saved now behaves differently".
-   *
-   * Only when the notes ARRIVED. Somebody who pressed What's new is having a
-   * look, and stopping them on the way out is nagging a reader who was already
-   * curious - the interruption is spent on the one who did not ask for this
-   * and is about to go back to a board that no longer works how they remember.
-   */
-  const unreadWarnings = useMemo(
-    () =>
-      isInterrupt ? entries.filter((entry) => entry.warning && unseen.has(entry.version)) : [],
-    [entries, unseen, isInterrupt],
-  );
-  const [confirmingClose, setConfirmingClose] = useState(false);
-
-  const requestClose = () => {
-    if (unreadWarnings.length > 0 && !confirmingClose) {
-      setConfirmingClose(true);
-      return;
-    }
-    onClose();
-  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        requestClose();
+        onClose();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -92,20 +66,6 @@ export function ChangelogDialog({
 
   const missedCount = headline.filter((entry) => unseen.has(entry.version)).length;
   const oldestMissed = missedCount > 0 ? headline[missedCount - 1]!.version : undefined;
-
-  // The notes GO, and one small window asks the question. Keeping the sheet up
-  // behind a bar meant the reader answered while looking at the wall of text
-  // they had already decided not to read; with everything else gone there is
-  // one sentence and two buttons, which is the whole point of asking.
-  if (confirmingClose) {
-    return (
-      <CloseGuard
-        entry={unreadWarnings[0]!}
-        onBack={() => setConfirmingClose(false)}
-        onClose={onClose}
-      />
-    );
-  }
 
   return (
     <div
@@ -121,30 +81,18 @@ export function ChangelogDialog({
         //
         // Compact gets opacity instead, turned up to compensate. The job here
         // is taking the board away, and a darker sheet does that for free.
-        isInterrupt
-          ? "bg-neutral-950/88 backdrop-blur-lg compact:bg-neutral-950/96 compact:[backdrop-filter:none]"
-          : "bg-neutral-950/75 backdrop-blur-sm compact:bg-neutral-950/92 compact:[backdrop-filter:none]",
+        "bg-neutral-950/75 backdrop-blur-sm compact:bg-neutral-950/92 compact:[backdrop-filter:none]",
       ].join(" ")}
-      onClick={requestClose}
+      onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="What's new in GTNH Planner"
-        className={[
-          "flex max-h-[calc(88*var(--ui-vh))] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-surface compact:max-h-[calc(92*var(--ui-vh))]",
-          isInterrupt
-            ? "border-2 border-cyan-600/70 shadow-[0_0_0_1px_rgba(0,0,0,0.6),0_24px_70px_rgba(0,0,0,0.75)]"
-            : "border border-line-strong shadow-2xl",
-        ].join(" ")}
+        className="flex max-h-[calc(88*var(--ui-vh))] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-2xl compact:max-h-[calc(92*var(--ui-vh))]"
         onClick={(event) => event.stopPropagation()}
       >
-        <Masthead
-          isInterrupt={isInterrupt}
-          missedCount={missedCount}
-          oldestMissed={oldestMissed}
-          onClose={requestClose}
-        />
+        <Masthead missedCount={missedCount} oldestMissed={oldestMissed} onClose={onClose} />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 compact:px-4">
           <ul>
@@ -197,127 +145,24 @@ export function ChangelogDialog({
 }
 
 /**
- * One question, on its own, after the notes have gone.
- *
- * A release carrying a warning is one where a plan somebody saved months ago
- * now behaves differently, and they have no reason to suspect it. So the first
- * attempt to leave the notes unread lands here instead, with the warning's own
- * sentence on it - a reader who scrolled past that once is not going to be
- * persuaded by a reference to it.
- *
- * Exactly ONE speed bump, then out. Every exit gesture on this card - the
- * button, Escape, a click in the void - closes for real. Making any of them
- * loop back would turn a warning worth reading into a modal that will not shut,
- * and the second feeling is the one people remember.
- *
- * Not `window.confirm`: a native box over a blurred modal reads as the page
- * breaking, and it cannot show the sentence that matters.
- */
-function CloseGuard({
-  entry,
-  onBack,
-  onClose,
-}: {
-  entry: ChangelogEntry;
-  onBack: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      // Same rule as the sheet it replaces: no backdrop filter on a phone.
-      className="fixed inset-0 z-[122] grid place-items-center bg-neutral-950/88 p-4 backdrop-blur-lg compact:bg-neutral-950/96 compact:[backdrop-filter:none]"
-      // Clicking beside a modal means CLOSE. It briefly meant "back to the
-      // notes" on the theory that a stray click should not answer a warning,
-      // which got the gesture backwards: someone clicking the void is reaching
-      // for the exit, and landing them back in the wall of text they were
-      // leaving reads as the app refusing to shut.
-      onClick={onClose}
-    >
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-label="You have not read the heads up"
-        className="w-full max-w-md rounded-lg border-2 border-amber-600 bg-surface p-5 shadow-[0_24px_70px_rgba(0,0,0,0.75)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden />
-          <div className="min-w-0">
-            <h2 className="text-base font-bold text-amber-200">
-              {`You have not read the heads up on v${entry.version}`}
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-              {renderEmphasis(entry.warning ?? "", "text-amber-200")}
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded border border-line-strong px-3 py-1.5 text-xs font-bold text-fg-muted hover:bg-surface-raised"
-          >
-            Close anyway
-          </button>
-          <button
-            type="button"
-            autoFocus
-            onClick={onBack}
-            className="rounded border border-amber-400 bg-amber-500/25 px-3 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-500/40"
-          >
-            Let me read it
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
  * The top of the sheet, branded.
  *
- * A modal that appears by itself has one second to say what it is before it
- * gets closed on reflex, and a small grey "What's new" was not doing it. The
- * app's own name and colour up front is the difference between "the planner is
- * telling me something" and "a box appeared".
+ * The app's own name and colour up front is the difference between "the
+ * planner is telling me something" and "a box appeared".
  */
 function Masthead({
-  isInterrupt,
   missedCount,
   oldestMissed,
   onClose,
 }: {
-  isInterrupt: boolean;
   missedCount: number;
   oldestMissed?: string;
   onClose: () => void;
 }) {
   return (
     <div
-      className={[
-        "relative shrink-0 overflow-hidden border-b px-6 py-5 compact:px-4 compact:py-4",
-        isInterrupt
-          ? "border-cyan-800/60 bg-gradient-to-br from-cyan-900/60 via-cyan-950/30 to-surface"
-          : "border-line bg-gradient-to-br from-surface-raised to-surface",
-      ].join(" ")}
+      className="relative shrink-0 overflow-hidden border-b border-line bg-gradient-to-br from-surface-raised to-surface px-6 py-5 compact:px-4 compact:py-4"
     >
-      {/* A cyan wash behind the title rather than a flat panel. This banner is
-          the second and a half a reader gives the box before deciding whether
-          it is worth anything, and the app's own colour arriving with its own
-          name is most of what buys the rest of the sheet a look. */}
-      {isInterrupt ? (
-        <>
-          <span
-            aria-hidden
-            className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent"
-          />
-          <span
-            aria-hidden
-            className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-cyan-500/15 blur-3xl"
-          />
-        </>
-      ) : null}
-
       <button
         type="button"
         onClick={onClose}
@@ -337,7 +182,7 @@ function Masthead({
           header chip carries the one you are running, and a third copy in the
           title just made the reader check whether the three agreed. */}
       <h2 className="relative mt-1.5 text-2xl font-black leading-none tracking-tight compact:text-xl">
-        {isInterrupt ? "The planner has been updated" : "What's new"}
+        What&apos;s new
       </h2>
 
       <p className="relative mt-2 text-sm text-fg-muted">

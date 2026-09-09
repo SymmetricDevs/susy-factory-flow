@@ -70,24 +70,16 @@ function dialTooltip(field: RouterTuningField): string {
 /**
  * The dev menu, behind a shift-click on the version chip.
  *
- * The chip's shift-click used to jump straight to the update-popup preview;
- * that preview now lives in here as one row among the dev tools, so new ones
- * get a home instead of each claiming its own secret click. Deliberately
- * undocumented in the UI - it is a workbench, not a feature.
+ * One home for the dev tools, so new ones do not each claim a secret click
+ * of their own. Deliberately undocumented in the UI - it is a workbench, not
+ * a feature.
  *
  * A floating PALETTE, not a modal: no backdrop, no dim, no blur, dragged
  * around by its header. The tools in here act on the board live - the tilt
  * sliders especially - so the board has to stay visible and the panel has
  * to get out of the way of whatever it is adjusting.
  */
-export function DevMenu({
-  onClose,
-  onPreviewUpdatePopup,
-}: {
-  onClose: () => void;
-  /** Opens the update-popup preview (WhatsNewPreview), replacing this menu. */
-  onPreviewUpdatePopup: () => void;
-}) {
+export function DevMenu({ onClose }: { onClose: () => void }) {
   const [perfHud, setPerfHud] = useState<boolean>(() => isPerfHudEnabled());
   // Two cards is the least board that reads as a sequence at all.
   const canPlayTimelapse = useFactoryStore(
@@ -323,24 +315,6 @@ export function DevMenu({
               aria-hidden
               className={["h-4 w-4 shrink-0", perfHud ? "text-cyan-400" : "invisible"].join(" ")}
             />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onPreviewUpdatePopup();
-            }}
-            className="mt-2 flex w-full items-center gap-3 rounded border border-line px-3 py-2.5 text-left hover:border-line-strong hover:bg-surface-raised"
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block text-base leading-tight text-fg">
-                Preview the update popup
-              </span>
-              <span className="mt-0.5 block text-xs text-fg-muted">
-                Shows the what&apos;s-new popup exactly as a returning player sees it.
-              </span>
-            </span>
           </button>
 
           <div className="mt-2 rounded border border-line px-3 py-2.5">

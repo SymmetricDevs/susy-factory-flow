@@ -43,25 +43,6 @@ export interface ChangelogEntry {
    * are one block instead of a sentence and a button that got separated.
    */
   warning?: string;
-  /**
-   * Show this release to EVERY browser once, whatever it has seen before.
-   *
-   * The ordinary rule needs a version stamp to compare against, and a browser
-   * with no stamp is treated as a first visit and told nothing. That is right
-   * for somebody genuinely new, and it was wrong for the release that
-   * introduced the stamp: nobody had one yet, so a player who had used the
-   * planner for months looked exactly like a stranger and the one release the
-   * whole feature exists for was the one release nobody was shown.
-   *
-   * So this flag is not "important" - `warning` already says that. It is
-   * specifically "do not trust the stamp for this one". Spend it on a release
-   * that changes what the board MEANS, and expect to spend it roughly never;
-   * once a browser holds a stamp the ordinary path is enough.
-   *
-   * Tracked separately from the stamp, so it fires exactly once per browser
-   * and cannot repeat.
-   */
-  showToEveryone?: boolean;
   /** Offered as buttons under the notes. */
   actions?: ChangelogAction[];
 }
@@ -81,6 +62,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The board's ? help points at the Library, the mode switch and the machine list, and draws each drawer as its own shape.",
       "The planner reads in Inter and a third larger; Settings has the font and a size stepper.",
       "Panning is much smoother, and the moving dashes on wires are gone.",
+      "Release notes never pop up on their own any more: the version chip opens them and wears a dot while some are unread.",
       "Editing a card or switching modes on a big board no longer freezes it, and the board's sounds play whole in Firefox.",
       "A multiblock running under one tick now counts whole recipes per tick, as the game does: 0.625 ticks runs two a tick, not 1.6.",
       "A multiblock's power is one EU/t number you type, wheel or add up from real hatches in a calculator that shows what it buys.",
@@ -1115,7 +1097,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "*Your saved setups will act different.* Some machines will have stopped until you say where things go.",
     // The release that introduced the version stamp, so no browser alive has
     // one to compare against. Without this, nobody sees these notes at all.
-    showToEveryone: true,
   },
   {
     version: "1.42.1",

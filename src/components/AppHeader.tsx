@@ -16,7 +16,6 @@ import { ChangelogDialog } from "./ChangelogDialog";
 import { DevMenu } from "./DevMenu";
 import { SettingsDialog } from "./SettingsDialog";
 import { HeaderLinks, ReportBugButton, SupportButton } from "./HeaderLinks";
-import { WhatsNewPreview } from "./WhatsNewPreview";
 
 /**
  * The pack picker's switch. See the note where it renders; flip this back to
@@ -46,8 +45,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   // Captured at the moment of the click, because opening the notes marks them
   // read: without this the divider would have nothing above it.
   const [unseenVersions, setUnseenVersions] = useState<Set<string>>();
-  // The update-popup preview, reached from the dev menu. See WhatsNewPreview.
-  const [isPreviewOpen, setPreviewOpen] = useState(false);
   // Shift-click the version chip. See DevMenu.
   const [isDevMenuOpen, setDevMenuOpen] = useState(false);
   // The share dialog lives up here rather than in BoardActions so the compact
@@ -80,8 +77,8 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
           type="button"
           onClick={(event) => {
             // Shift-click is the way in to the dev menu (the perf readout,
-            // the update-popup preview). Undiscovered by accident, and the
-            // ordinary click is unchanged.
+            // the router dials). Undiscovered by accident, and the ordinary
+            // click is unchanged.
             if (event.shiftKey) {
               setDevMenuOpen(true);
               return;
@@ -130,13 +127,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
           onClose={() => setChangelogOpen(false)}
         />
       ) : null}
-      {isPreviewOpen ? <WhatsNewPreview onClose={() => setPreviewOpen(false)} /> : null}
-      {isDevMenuOpen ? (
-        <DevMenu
-          onClose={() => setDevMenuOpen(false)}
-          onPreviewUpdatePopup={() => setPreviewOpen(true)}
-        />
-      ) : null}
+      {isDevMenuOpen ? <DevMenu onClose={() => setDevMenuOpen(false)} /> : null}
       {isShareOpen ? <SharePlanDialog onClose={() => setShareOpen(false)} /> : null}
       {isExportOpen ? <ExportImageDialog onClose={() => setExportOpen(false)} /> : null}
       {isSettingsOpen ? <SettingsDialog onClose={() => setSettingsOpen(false)} /> : null}

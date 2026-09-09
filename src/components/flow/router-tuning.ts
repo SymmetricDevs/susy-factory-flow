@@ -401,6 +401,17 @@ export function resetRouterTuning() {
   setRouterTuning({ ...DEFAULT_ROUTER_TUNING });
 }
 
+/** The Arrange group's dials, and only those, back to default (Jack, 2026-09-08). */
+export function resetArrangeTuning() {
+  const patch: Partial<RouterTuning> = {};
+  for (const field of ROUTER_TUNING_FIELDS) {
+    if (field.group === "Arrange") {
+      (patch as Record<string, unknown>)[field.key] = DEFAULT_ROUTER_TUNING[field.key];
+    }
+  }
+  setRouterTuning(patch);
+}
+
 export function canUndoRouterTuning(): boolean {
   return undoStack.length > 0;
 }
@@ -432,8 +443,17 @@ export function redoRouterTuning(): boolean {
   return true;
 }
 
+/** Every dial at its default, the Arrange group included: what the top Reset asks. */
 export function isDefaultRouterTuning(): boolean {
-  return routerTuningKey(getRouterTuning()) === routerTuningKey(DEFAULT_ROUTER_TUNING);
+  const tuning = getRouterTuning();
+  return ROUTER_TUNING_FIELDS.every((field) => tuning[field.key] === DEFAULT_ROUTER_TUNING[field.key]);
+}
+
+export function isDefaultArrangeTuning(): boolean {
+  const tuning = getRouterTuning();
+  return ROUTER_TUNING_FIELDS.filter((field) => field.group === "Arrange").every(
+    (field) => tuning[field.key] === DEFAULT_ROUTER_TUNING[field.key],
+  );
 }
 
 /**

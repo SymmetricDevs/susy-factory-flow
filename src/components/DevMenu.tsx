@@ -50,6 +50,8 @@ import {
   isDefaultRouterTuning,
   redoRouterTuning,
   requestWireReroute,
+  resetArrangeTuning,
+  isDefaultArrangeTuning,
   resetRouterTuning,
   ROUTER_TUNING_FIELDS,
   type RouterTuningField,
@@ -642,8 +644,23 @@ export function DevMenu({ onClose }: { onClose: () => void }) {
                     </span>
                   ) : null}
                   {group === "Arrange" ? (
-                    <span className="mb-1 mt-3 block border-b border-line pb-1 text-xs font-semibold text-fg">
-                      Auto arrange. These shape the Arrange button only; they never move a wire by themselves.
+                    <span className="mb-1 mt-3 flex items-start justify-between gap-3 border-b border-line pb-1 text-xs font-semibold text-fg">
+                      <span>
+                        Auto arrange. These shape the Arrange button only; they never move a wire by themselves.
+                      </span>
+                      {/* Its own reset: the one at the top puts EVERY dial back,
+                          and tuning the arranger should not cost the routing. */}
+                      <button
+                        type="button"
+                        disabled={isDefaultArrangeTuning()}
+                        onClick={() => {
+                          resetArrangeTuning();
+                          setTuning(getRouterTuning());
+                        }}
+                        className="shrink-0 rounded border border-line px-2 py-1 text-xs font-normal text-fg-muted hover:border-line-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Reset
+                      </button>
                     </span>
                   ) : null}
                   <span className="block text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">

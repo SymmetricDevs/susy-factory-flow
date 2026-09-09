@@ -995,11 +995,21 @@ Working notes for future agents on GTNH Factory Flow.
 ## The Board Grid
 
 - `src/lib/board-grid.ts` owns `BOARD_GRID = 20` and every card size derived
-  from it. A recipe card is 22 cells (440px) wide since 2026-09-06: the
+  from it. A recipe card is 21 cells (420px) wide: since 2026-09-06 the
   machine PICTURE sits between the two rails, where the arrow was (inputs
   left, outputs right, no arrow), on a window that stretches to the rails
-  and never under 6 cells tall; calm mode keeps the bare arrow. Read the "board grid" section of `ARCHITECTURE.md` before changing
-  any size, offset, or padding on the flow board.
+  and never under 6 cells tall; calm mode keeps the bare arrow. The picture
+  is the flex-1 middle at 96px and a cell came back off the card on
+  2026-09-09 WITHOUT touching it: each item chip gave up 8px (132) and the
+  output coupling 4px (30), which is the 20px cell. A name too long for
+  132px now WRAPS to two 10px lines (`.flow-port-name`, a CSS clamp - no
+  text measurement on a board of a hundred cards) instead of ending in
+  three dots. The clamp is all that class does: the size, the weight and
+  the leading are utilities ON the element, because a name that depends on
+  a stylesheet rule for its size renders at the inherited 16px and bursts
+  out of the chip whenever that rule is late. Read the "board grid" section
+  of `ARCHITECTURE.md` before changing any size, offset, or padding on the
+  flow board.
 - The grid is always on. There is no snap toggle and no grid button; do not
   reintroduce one.
 - Node positions, node sizes, and port row centres must all be multiples of

@@ -21,11 +21,22 @@ Working notes for future agents on GTNH Factory Flow.
     work into the top changelog entry and leave the number alone. Equal to
     `version.ts` means everything is live, so this is a new release: bump, and
     open one new entry.
-- The chip opens the changelog, so every release needs ONE entry in
-  `src/lib/changelog.ts`. Write it for players, not developers: what changed on
-  THEIR board, a headline plus at most four notes. Every note is one short
-  sentence. No second sentence saying what it used to do, no reasoning, no
-  jargon ("solver", "refactor", "edge role"). Newest first.
+- THE PLAYER-FACING CHANGELOG IS GONE (Jack, 2026-09-08). No dialog, no
+  unread dot, no "new in vX" on the Welcome tab; the header chip is just the
+  number, and a plain click on it does nothing (shift-click still opens the
+  dev menu). `ChangelogDialog.tsx` was deleted. `src/lib/changelog.ts` stays
+  as a record IN THE CODE - keep adding an entry per release, same rules as
+  before - but nothing a player can reach reads it.
+- What announces a release now is the NOTICE, `src/lib/release-spotlight.ts`
+  plus `ReleaseSpotlight.tsx`: a window that arrives ONCE, on the first visit
+  after a release, carrying a line per change (icon plus a spec-sheet TITLE,
+  no sentences) and a close key. A release with no entry in
+  `RELEASE_SPOTLIGHTS` shows nothing at all, which is the per-release opt-in.
+  A brand new browser never sees one; a returning one does; closing it files
+  it in `seen-spotlights.v1` and it never returns. The number it prints
+  (`release: "3.0"`) is hard coded per notice. Preview it from the dev menu's
+  "Release popup". Its own file carries the writing rules; read them before
+  touching the copy.
 - `main` is the ONLY branch, by explicit decision (2026-08-19): all work lands
   on it, and stale feature branches were deleted after verifying main carried
   every patch. Do not accumulate long-lived branches; the unmerged

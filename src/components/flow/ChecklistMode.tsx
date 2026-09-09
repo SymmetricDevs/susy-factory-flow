@@ -31,7 +31,7 @@ export function ChecklistKeys() {
         type="button"
         aria-label="Checklist mode"
         aria-pressed={active}
-        title="Checklist mode — click machines, drawers and wires to mark them complete. Click again to restore. Esc to leave."
+        title="Checklist mode"
         className={`${keyClass} ${active ? "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]" : "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"}`}
         onClick={() => {
           playBoardSound(active ? "checklistOff" : "checklistOn");

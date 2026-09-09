@@ -416,9 +416,20 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
   // The two best by the router's verdict are polished - they start from
   // different structures and the polish is greedy, so each can reach a
   // place the other cannot - and the better finished board wins.
-  const ranked = [plain, challenger, free]
-    .map((result) => ({ result, verdict: verdict(result) }))
+  const named = [
+    { name: "plain", result: plain },
+    { name: "challenger", result: challenger },
+    { name: "free", result: free },
+  ];
+  const ranked = named
+    .map(({ name, result }) => ({ name, result, verdict: verdict(result) }))
     .sort((a, b) => a.verdict.points - b.verdict.points);
+  // For the offline harnesses: which candidate the router preferred, and by how much.
+  (globalThis as { __arrangeCandidates?: unknown }).__arrangeCandidates = ranked.map((entry) => ({
+    name: entry.name,
+    crossings: entry.verdict.crossings,
+    points: Math.round(entry.verdict.points),
+  }));
   const polishedFirst = polishWithJudge(input, ranked[0].result, ranked[0].verdict, "first");
   const polishedSecond = polishWithJudge(input, ranked[1].result, ranked[1].verdict, "second");
   input.onProgress?.({ step: 5, stage: "Choosing the better board", done: 1, total: 1 });

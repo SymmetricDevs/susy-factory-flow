@@ -46,6 +46,20 @@
  * from the start found layouts a fifth worse under the same score - a
  * column hop is too big a step for the annealing to feel its way with.
  *
+ * DRAWERS ARE PLACED BY PATTERN, NOT SEARCHED (Jack, 2026-09-08, holding
+ * his own oil board against the arranger's: "shouldn't all the products
+ * just be in a row next to each other ... one grid away from the machine
+ * ... optimise patterns"): a drawer wired to ONE machine is that
+ * machine's bud and stands in a touching LINE on its side - supplies on
+ * the left, products on the right, in port order, the line centred on
+ * the ports it serves; a drawer wired to exactly TWO machines is a shared
+ * drawer and stands in a line BETWEEN them - in the corridor when they
+ * are side by side, in a row in the gap when one is above the other. The
+ * search moves machines (and the few drawers wired to three or more)
+ * and every drawer line follows, so a machine feeding fifty products
+ * gets fifty drawers in a column, not fifty spots each at its own port
+ * row. The wires are a cell or two longer for it and the board reads.
+ *
  * Wired components are laid out one at a time and packed side by side;
  * cards with no wires go on a shelf underneath. The real router judges
  * the result against the column candidates in board-arrange.ts and the
@@ -300,14 +314,20 @@ function layoutComponent(
   const lattice = columnLattice(cards);
   const anyCell: Lattice = { pitch: BOARD_GRID, isColumnCard: () => false };
   const continuous = orientForFlow(cards, wires, stressLayout(cards, wires, random));
-  const grid = settleOnGrid(cards, continuous, anyCell);
   if (n < 2) {
     return settleOnGrid(cards, continuous, lattice);
   }
-  const globalTrials = Math.round(trials * 0.7);
-  const placed = anneal(cards, wires, grid, prices, globalTrials, random, (done) => onProgress(done), anyCell, 1);
-  const legal = legalise(cards, placed, lattice);
-  return anneal(
+  // The global search runs with every drawer FREE: the patterns need the
+  // column corridors to exist, and off the lattice a drawer line collides
+  // with whatever stands beside its machine, so most trials were refused
+  // and the search went nowhere. The patterns come in with the columns.
+  const patterns = planPatterns(cards, wires, lattice);
+  const loose: Patterns = { placement: cards.map(() => undefined), attached: cards.map(() => []), pairPartners: cards.map(() => []) };
+  const grid = settleOnGrid(cards, continuous, anyCell);
+  const globalTrials = Math.round(trials * 0.6);
+  const placed = anneal(cards, wires, grid, prices, globalTrials, random, (done) => onProgress(done), anyCell, 1, loose);
+  const legal = settleWithPatterns(cards, legalise(cards, placed, lattice), patterns);
+  const done = anneal(
     cards,
     wires,
     legal,
@@ -317,7 +337,9 @@ function layoutComponent(
     (done) => onProgress(globalTrials + done),
     lattice,
     0.15,
+    patterns,
   );
+  return settleWithPatterns(cards, done, patterns);
 }
 
 /**
@@ -338,9 +360,11 @@ function columnLattice(cards: readonly FreeCard[]): Lattice {
   const machineWidth =
     [...widths.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? cells(22);
   const drawers = cards.filter((card) => card.width < 0.6 * machineWidth);
+  // The corridor: a drawer, standing BESIDE_CELLS from the machine it is
+  // wired to and GAP_CELLS from the next column.
   const corridor =
     drawers.length > 0
-      ? Math.max(...drawers.map((card) => card.width)) + 2 * cells(GAP_CELLS)
+      ? Math.max(...drawers.map((card) => card.width)) + cells(BESIDE_CELLS) + cells(GAP_CELLS)
       : cells(BESIDE_CELLS);
   const pitch = snap(machineWidth + corridor);
   // Column cards are the wide ones, by size rather than by role: a small
@@ -384,6 +408,242 @@ function legalise(cards: readonly FreeCard[], positions: Point[], lattice: Latti
     placed.push({ left: spot.x, top: spot.y, right: spot.x + cards[i].width, bottom: spot.y + cards[i].height });
   }
   return out;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Drawer patterns (header): buds and shared drawers, placed by rule.     */
+/* ---------------------------------------------------------------------- */
+
+type Placement =
+  | { kind: "bud"; machine: number; side: "left" | "right"; port: number }
+  | { kind: "pair"; a: number; b: number; portA: number; portB: number };
+
+interface Patterns {
+  /** How each card is placed; undefined for a card the search moves. */
+  placement: Array<Placement | undefined>;
+  /** The derived drawers attached to each machine (its buds, its shared drawers). */
+  attached: number[][];
+  /** The machines each machine shares a drawer with. */
+  pairPartners: number[][];
+}
+
+function planPatterns(
+  cards: readonly FreeCard[],
+  wires: ReadonlyArray<{ a: number; b: number; wire: FreeWire }>,
+  lattice: Lattice,
+): Patterns {
+  const n = cards.length;
+  const placement: Array<Placement | undefined> = new Array(n).fill(undefined);
+  const attached: number[][] = cards.map(() => []);
+  const pairPartners: number[][] = cards.map(() => []);
+  const wiresOf: number[][] = cards.map(() => []);
+  wires.forEach(({ a, b }, w) => {
+    wiresOf[a].push(w);
+    wiresOf[b].push(w);
+  });
+  for (let d = 0; d < n; d += 1) {
+    if (lattice.isColumnCard(d) || wiresOf[d].length === 0) continue;
+    const partners = new Map<number, number[]>();
+    let foreign = false;
+    for (const w of wiresOf[d]) {
+      const other = wires[w].a === d ? wires[w].b : wires[w].a;
+      if (!lattice.isColumnCard(other)) {
+        foreign = true;
+        break;
+      }
+      const list = partners.get(other) ?? [];
+      // The port row on the machine's side, the machine's mid-height when unmeasured.
+      const port =
+        (wires[w].a === other ? wires[w].wire.sourcePortY : wires[w].wire.targetPortY) ??
+        cards[other].height / 2;
+      list.push(port);
+      partners.set(other, list);
+    }
+    if (foreign) continue;
+    const mean = (list: number[]) => list.reduce((s, v) => s + v, 0) / list.length;
+    if (partners.size === 1) {
+      const [machine, ports] = [...partners.entries()][0];
+      // A supply (every wire runs drawer -> machine) stands on the left.
+      const supply = wiresOf[d].every((w) => wires[w].a === d);
+      placement[d] = { kind: "bud", machine, side: supply ? "left" : "right", port: mean(ports) };
+      attached[machine].push(d);
+    } else if (partners.size === 2) {
+      const [[a, portsA], [b, portsB]] = [...partners.entries()];
+      placement[d] = { kind: "pair", a, b, portA: mean(portsA), portB: mean(portsB) };
+      attached[a].push(d);
+      attached[b].push(d);
+      if (!pairPartners[a].includes(b)) pairPartners[a].push(b);
+      if (!pairPartners[b].includes(a)) pairPartners[b].push(a);
+    }
+  }
+  return { placement, attached, pairPartners };
+}
+
+/**
+ * Where the drawers attached to `machines` (and to the machines they share
+ * drawers with) stand, given every card's position through `at`. Lines
+ * are built whole: a machine's right line holds its product buds and the
+ * shared drawers of every partner standing to its right, in port order,
+ * touching, centred on the ports they serve and kept within the machine's
+ * height; a row between a machine and the one below it likewise.
+ */
+function derivePatterns(
+  cards: readonly FreeCard[],
+  patterns: Patterns,
+  machines: readonly number[],
+  at: (i: number) => Point,
+): Map<number, Point> {
+  const out = new Map<number, Point>();
+  const scope = new Set<number>();
+  for (const m of machines) {
+    scope.add(m);
+    for (const p of patterns.pairPartners[m]) scope.add(p);
+  }
+  const rectOf = (i: number): Rect => {
+    const p = at(i);
+    return { left: p.x, top: p.y, right: p.x + cards[i].width, bottom: p.y + cards[i].height };
+  };
+  const lines = new Map<string, Array<{ d: number; key: number }>>();
+  const rows = new Map<string, Array<{ d: number; key: number }>>();
+  const add = (map: Map<string, Array<{ d: number; key: number }>>, key: string, d: number, order: number) => {
+    const list = map.get(key) ?? [];
+    list.push({ d, key: order });
+    map.set(key, list);
+  };
+  const seen = new Set<number>();
+  for (const m of scope) {
+    for (const d of patterns.attached[m]) {
+      if (seen.has(d)) continue;
+      seen.add(d);
+      const place = patterns.placement[d]!;
+      if (place.kind === "bud") {
+        add(lines, `${place.machine}:${place.side}`, d, place.port);
+        continue;
+      }
+      const ra = rectOf(place.a);
+      const rb = rectOf(place.b);
+      if (rb.left >= ra.right) add(lines, `${place.a}:right`, d, place.portA);
+      else if (ra.left >= rb.right) add(lines, `${place.b}:right`, d, place.portB);
+      else if (rb.top >= ra.bottom) add(rows, `${place.a}:${place.b}`, d, place.portA);
+      else if (ra.top >= rb.bottom) add(rows, `${place.b}:${place.a}`, d, place.portB);
+      else if ((ra.left + ra.right) / 2 <= (rb.left + rb.right) / 2) add(lines, `${place.a}:right`, d, place.portA);
+      else add(lines, `${place.b}:right`, d, place.portB);
+    }
+  }
+  const byKey = (p: { d: number; key: number }, q: { d: number; key: number }) => p.key - q.key || p.d - q.d;
+  for (const [key, members] of lines) {
+    const [machineText, side] = key.split(":");
+    const m = Number(machineText);
+    const r = rectOf(m);
+    members.sort(byKey);
+    const height = members.reduce((s, { d }) => s + cards[d].height, 0);
+    const width = Math.max(...members.map(({ d }) => cards[d].width));
+    const meanPort = members.reduce((s, { key }) => s + key, 0) / members.length;
+    const y0 = snap(Math.min(Math.max(r.top + meanPort - height / 2, r.top), Math.max(r.top, r.bottom - height)));
+    // Right: beside the machine. Left: at the far side of the corridor, the
+    // same x the previous column's right line uses, so two lines in one
+    // corridor can only clash in y.
+    const x = side === "right" ? r.right + cells(BESIDE_CELLS) : r.left - width - cells(GAP_CELLS);
+    let y = y0;
+    for (const { d } of members) {
+      out.set(d, { x: snap(x), y });
+      y += cards[d].height;
+    }
+  }
+  for (const [key, members] of rows) {
+    const [upperText, lowerText] = key.split(":");
+    const upper = rectOf(Number(upperText));
+    const lower = rectOf(Number(lowerText));
+    members.sort(byKey);
+    const width = members.reduce((s, { d }) => s + cards[d].width, 0);
+    const left = Math.max(upper.left, lower.left);
+    const right = Math.min(upper.right, lower.right);
+    const x0 = snap(right > left ? Math.min(Math.max((left + right) / 2 - width / 2, left), Math.max(left, right - width)) : left);
+    const y = snap(upper.bottom + cells(GAP_CELLS));
+    let x = x0;
+    for (const { d } of members) {
+      out.set(d, { x, y });
+      x += cards[d].width;
+    }
+  }
+  return out;
+}
+
+/**
+ * Every derived drawer put where its pattern says, from the machines as
+ * they stand; a drawer whose place is taken (two lines meeting in one
+ * corridor, a row with no room) is freed - handed the nearest empty spot
+ * and moved by the search like any other card from then on.
+ */
+function settleWithPatterns(cards: readonly FreeCard[], positions: Point[], patterns: Patterns): Point[] {
+  const out = positions.map((p) => ({ ...p }));
+  const machines = cards.map((_, i) => i).filter((i) => patterns.attached[i].length > 0);
+  const derived = derivePatterns(cards, patterns, machines, (i) => out[i]);
+  for (const [d, p] of derived) out[d] = p;
+  const gap = cells(GAP_CELLS);
+  // Lines that meet in one corridor STACK: two machines side by side put
+  // their products and supplies in the same corridor, and the later line
+  // slides down until it clears the one above rather than being broken up.
+  {
+    const byCorridor = new Map<number, number[]>();
+    for (const d of derived.keys()) {
+      const list = byCorridor.get(out[d].x) ?? [];
+      list.push(d);
+      byCorridor.set(out[d].x, list);
+    }
+    for (const list of byCorridor.values()) {
+      list.sort((a, b) => out[a].y - out[b].y || a - b);
+      let floor = -Infinity;
+      for (const d of list) {
+        if (out[d].y < floor) out[d] = { x: out[d].x, y: floor };
+        floor = out[d].y + cards[d].height;
+      }
+    }
+  }
+  const rect = (i: number): Rect => ({ left: out[i].x, top: out[i].y, right: out[i].x + cards[i].width, bottom: out[i].y + cards[i].height });
+  // Conflicts, in a fixed order: the later drawer of a clashing pair is freed.
+  const ids = [...derived.keys()].sort((a, b) => a - b);
+  for (const d of ids) {
+    if (!patterns.placement[d]) continue;
+    const mine = rect(d);
+    let clash = false;
+    for (let o = 0; o < cards.length; o += 1) {
+      if (o === d) continue;
+      if (overlaps(mine, rect(o), patterns.placement[o] && derived.has(o) ? 0 : gap)) {
+        clash = true;
+        break;
+      }
+    }
+    if (!clash) continue;
+    freePlacement(patterns, d);
+    const others = cards.map((_, o) => o).filter((o) => o !== d).map(rect);
+    out[d] = nearestFree(out[d], cards[d], others, gap, 80) ?? out[d];
+  }
+  return out;
+}
+
+/** A drawer leaves its pattern and becomes a card the search moves. */
+function freePlacement(patterns: Patterns, d: number): void {
+  const place = patterns.placement[d];
+  if (!place) return;
+  patterns.placement[d] = undefined;
+  const detach = (m: number) => {
+    patterns.attached[m] = patterns.attached[m].filter((x) => x !== d);
+  };
+  if (place.kind === "bud") {
+    detach(place.machine);
+    return;
+  }
+  detach(place.a);
+  detach(place.b);
+  const stillShared = patterns.attached[place.a].some((x) => {
+    const p = patterns.placement[x];
+    return p?.kind === "pair" && (p.a === place.b || p.b === place.b);
+  });
+  if (!stillShared) {
+    patterns.pairPartners[place.a] = patterns.pairPartners[place.a].filter((x) => x !== place.b);
+    patterns.pairPartners[place.b] = patterns.pairPartners[place.b].filter((x) => x !== place.a);
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -822,9 +1082,15 @@ function anneal(
   lattice: Lattice,
   /** Scales the starting temperature: 1 for a search, less for a repair. */
   heat: number,
+  patterns: Patterns,
 ): Point[] {
   const n = cards.length;
   const m = wires.length;
+  // The cards the search moves; derived drawers follow their machines.
+  const freeCards = cards.map((_, i) => i).filter((i) => !patterns.placement[i]);
+  if (freeCards.length === 0) {
+    return start.map((p) => ({ ...p }));
+  }
   const stepXOf = (i: number) => (lattice.isColumnCard(i) ? lattice.pitch : BOARD_GRID);
   const gap = cells(GAP_CELLS);
   const pos: Point[] = start.map((p) => ({ ...p }));
@@ -854,16 +1120,6 @@ function anneal(
   );
   const positionsMap = () => new Map(cards.map((card, i) => [card.id, pos[i]]));
 
-  // Buds: a drawer whose every wire meets one machine rides with it.
-  const buds: number[][] = cards.map(() => []);
-  cards.forEach((card, i) => {
-    if (card.role !== "storage") return;
-    const partners = new Set(wiresOf[i].map((w) => (wires[w].a === i ? wires[w].b : wires[w].a)));
-    if (partners.size === 1) {
-      const [anchor] = partners;
-      if (cards[anchor].role !== "storage") buds[anchor].push(i);
-    }
-  });
   const neighbours: number[][] = cards.map((_, i) => [
     ...new Set(wiresOf[i].map((w) => (wires[w].a === i ? wires[w].b : wires[w].a))),
   ]);
@@ -973,6 +1229,8 @@ function anneal(
   const savedPos: Point[] = [];
   const savedPaths = new Map<number, Path>();
   const savedOwn = new Map<number, number>();
+  // Drawers in a pattern line touch; everything else keeps the gap.
+  const gapBetween = (i: number, o: number) => (patterns.placement[i] && patterns.placement[o] ? 0 : gap);
   const attempt = (moved: number[], to: Point[]): number | undefined => {
     const movedSet = new Set(moved);
     for (let k = 0; k < moved.length; k += 1) {
@@ -980,12 +1238,12 @@ function anneal(
       const rect = { left: to[k].x, top: to[k].y, right: to[k].x + cards[i].width, bottom: to[k].y + cards[i].height };
       for (let o = 0; o < n; o += 1) {
         if (movedSet.has(o)) continue;
-        if (overlaps(rect, rects[o], gap)) return undefined;
+        if (overlaps(rect, rects[o], gapBetween(i, o))) return undefined;
       }
       for (let j = 0; j < k; j += 1) {
         const other = moved[j];
         const otherRect = { left: to[j].x, top: to[j].y, right: to[j].x + cards[other].width, bottom: to[j].y + cards[other].height };
-        if (overlaps(rect, otherRect, gap)) return undefined;
+        if (overlaps(rect, otherRect, gapBetween(i, other))) return undefined;
       }
     }
     // The wires re-priced: those on the moved cards, and those whose path
@@ -1165,13 +1423,35 @@ function anneal(
     return spots.map((s) => quantise(lattice, i, s));
   };
 
+  /**
+   * A move of free cards, completed: every derived drawer attached to a
+   * moved machine (or to a machine sharing a drawer with one) is re-placed
+   * from the machines' new positions and rides along in the same trial.
+   */
+  const expand = (moved: number[], to: Point[]): { moved: number[]; to: Point[] } => {
+    const override = new Map<number, Point>();
+    moved.forEach((i, k) => override.set(i, to[k]));
+    const machines = moved.filter((i) => patterns.attached[i].length > 0 || patterns.pairPartners[i].length > 0);
+    if (machines.length === 0) return { moved, to };
+    const derived = derivePatterns(cards, patterns, machines, (i) => override.get(i) ?? pos[i]);
+    const allMoved = [...moved];
+    const allTo = [...to];
+    for (const [d, p] of derived) {
+      if (override.has(d)) continue;
+      allMoved.push(d);
+      allTo.push(p);
+    }
+    return { moved: allMoved, to: allTo };
+  };
+  const isOwnDrawer = (i: number, p: number) => patterns.attached[i].includes(p);
   const propose = (): { moved: number[]; to: Point[] } | undefined => {
     const roll = random();
-    const i = pick(n);
+    const i = freeCards[pick(freeCards.length)];
     if (roll < 0.45) {
-      // Beside a partner.
-      if (wiresOf[i].length === 0) return undefined;
-      const w = wiresOf[i][pick(wiresOf[i].length)];
+      // Beside a partner (never beside a drawer of its own: that follows it).
+      const partnerWires = wiresOf[i].filter((w) => !isOwnDrawer(i, wires[w].a === i ? wires[w].b : wires[w].a));
+      if (partnerWires.length === 0) return undefined;
+      const w = partnerWires[pick(partnerWires.length)];
       const p = wires[w].a === i ? wires[w].b : wires[w].a;
       const spots = besideSpots(i, p, w);
       const want = spots[pick(spots.length)];
@@ -1187,41 +1467,16 @@ function anneal(
           : { x: pos[i].x, y: pos[i].y + sign * (1 + pick(6)) * BOARD_GRID };
       return { moved: [i], to: [to] };
     }
-    if (roll < 0.85) {
+    if (roll < 0.9) {
       // A swap.
-      const k = pick(n);
+      const k = freeCards[pick(freeCards.length)];
       if (k === i) return undefined;
       return { moved: [i, k], to: [quantise(lattice, i, pos[k]), quantise(lattice, k, pos[i])] };
     }
-    if (roll < 0.95) {
-      // A machine with its drawers, set beside a partner or nudged.
-      const group = [i, ...buds[i]];
-      const set = new Set(group);
-      const outside = wiresOf[i].filter((w) => !set.has(wires[w].a) || !set.has(wires[w].b));
-      let dx: number;
-      let dy: number;
-      if (outside.length > 0 && random() < 0.7) {
-        const w = outside[pick(outside.length)];
-        const p = wires[w].a === i ? wires[w].b : wires[w].a;
-        const spots = besideSpots(i, p, w);
-        const want = spots[pick(spots.length)];
-        dx = want.x - pos[i].x;
-        dy = want.y - pos[i].y;
-      } else {
-        const sign = random() < 0.5 ? -1 : 1;
-        if (random() < 0.5) {
-          dx = sign * stepXOf(i) * (lattice.isColumnCard(i) ? 1 : 1 + pick(6));
-          dy = 0;
-        } else {
-          dx = 0;
-          dy = sign * (1 + pick(6)) * BOARD_GRID;
-        }
-      }
-      return { moved: group, to: group.map((g) => ({ x: pos[g].x + dx, y: pos[g].y + dy })) };
-    }
     if (bridgeSides.length > 0 && random() < 0.5) {
       // A whole side of a bridge wire, shifted together.
-      const group = bridgeSides[pick(bridgeSides.length)];
+      const group = bridgeSides[pick(bridgeSides.length)].filter((g) => !patterns.placement[g]);
+      if (group.length === 0) return undefined;
       const sign = random() < 0.5 ? -1 : 1;
       const columnMove = group.some((g) => lattice.isColumnCard(g));
       const dx = random() < 0.5 ? sign * (columnMove ? lattice.pitch : (1 + pick(6)) * BOARD_GRID) : 0;
@@ -1229,7 +1484,7 @@ function anneal(
       return { moved: group, to: group.map((g) => ({ x: pos[g].x + dx, y: pos[g].y + dy })) };
     }
     // A neighbourhood shifted together, by a column or by cells.
-    const group = [i, ...neighbours[i]];
+    const group = [i, ...neighbours[i]].filter((g) => !patterns.placement[g]);
     const sign = random() < 0.5 ? -1 : 1;
     const columnMove = group.some((g) => lattice.isColumnCard(g));
     const dx = random() < 0.5 ? sign * (columnMove ? lattice.pitch : (1 + pick(4)) * BOARD_GRID) : 0;
@@ -1241,8 +1496,9 @@ function anneal(
   // schedule means the same on a tiny board as on a huge one.
   const samples: number[] = [];
   for (let s = 0; s < 200 && samples.length < 60; s += 1) {
-    const move = propose();
-    if (!move) continue;
+    const proposed = propose();
+    if (!proposed) continue;
+    const move = expand(proposed.moved, proposed.to);
     const delta = attempt(move.moved, move.to);
     if (delta === undefined) continue;
     undo();
@@ -1254,8 +1510,9 @@ function anneal(
   const cool = Math.log(tEnd / t0) / Math.max(1, trials);
   for (let trial = 0; trial < trials; trial += 1) {
     const temperature = t0 * Math.exp(cool * trial);
-    const move = propose();
-    if (!move) continue;
+    const proposed = propose();
+    if (!proposed) continue;
+    const move = expand(proposed.moved, proposed.to);
     const delta = attempt(move.moved, move.to);
     if (delta === undefined) continue;
     if (delta <= 0 || random() < Math.exp(-delta / temperature)) {

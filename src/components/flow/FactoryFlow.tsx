@@ -590,6 +590,19 @@ function withTouchDragRule(nodes: BoardFlowNode[], compact: boolean): BoardFlowN
  * the narrowest a sliver. `laneWidthForHeat` does the mapping.
  */
 const FLOW_MODE_MIN_WIDTH = 4;
+/**
+ * The ink a routed lane width draws at. The thinnest wire (a quarter lane,
+ * 4px) stays 4px; the fattest (a full 16px lane) draws at 32px (Jack,
+ * 2026-09-08: "the thinnest edge is good, but the thickest edge, let's
+ * make it twice as thick"), the steps between stretched to match. The
+ * ROUTER still packs and prices by lane width - only the ink doubles - so
+ * two fat pipes on neighbouring grid lines touch rather than leave
+ * daylight, which is the look asked for.
+ */
+const drawnStrokeWidth = (laneWidth: number) =>
+  FLOW_MODE_MIN_WIDTH +
+  (laneWidth - FLOW_MODE_MIN_WIDTH) *
+    ((2 * LANE_CAPACITY - FLOW_MODE_MIN_WIDTH) / (LANE_CAPACITY - FLOW_MODE_MIN_WIDTH));
 const FLOW_MODE_MAX_WIDTH = LANE_CAPACITY;
 /**
  * Dash travel in flow pixels per second: the quietest line on the board, and
@@ -9520,7 +9533,9 @@ function ResourceEdgeComponent({
   // highlighted and bundle-primary lines, which is exactly why only some lines
   // were thickening. In thickness mode the published width wins for every line.
   const flowWidthTarget =
-    flowRate?.thickness === true ? Number(style?.strokeWidth ?? FLOW_MODE_MIN_WIDTH) : undefined;
+    flowRate?.thickness === true
+      ? drawnStrokeWidth(Number(style?.strokeWidth ?? FLOW_MODE_MIN_WIDTH))
+      : undefined;
   // Eased, so a solver change reads as the pipe swelling rather than as a
   // different pipe being swapped in. Only the volume width tweens: the
   // highlight thickening below stays instant, because hover feedback that
@@ -13508,7 +13523,7 @@ const ARROW_SPACING = 160;
  * not, and one every ARROW_SPACING along a long run - each lying wholly
  * within one straight run, never folded over a corner. Sized to the stroke,
  * a little wider than the wire so the head reads as a head on a fat pipe
- * too; at a glance everything doubles so the arrows survive the zoom.
+ * too; at a glance everything grows again so the arrows survive the zoom.
  */
 function getRouteArrows(
   points: Array<{ x: number; y: number }>,
@@ -13520,9 +13535,12 @@ function getRouteArrows(
   if (total < 16) {
     return [];
   }
-  const scale = glance ? 2 : 1;
-  const length = Math.min(Math.max(11, strokeWidth * 1.5), 22) * scale;
-  const halfWidth = Math.min(Math.max(5, strokeWidth * 0.7), 11) * scale;
+  // Bigger at every zoom (Jack, 2026-09-08: "the arrows need to be
+  // larger" zoomed in, "a little bit larger" zoomed out): half again
+  // the old head up close, and the glance head grown by a fifth.
+  const scale = glance ? 1.6 : 1;
+  const length = Math.min(Math.max(16, strokeWidth * 2.2), 32) * scale;
+  const halfWidth = Math.min(Math.max(8, strokeWidth * 1.0), 16) * scale;
 
   // Segment starts along the polyline, so an arrow can be kept inside one.
   const starts: number[] = [];

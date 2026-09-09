@@ -41,6 +41,7 @@ it("arranges a captured board and judges the answer", { timeout: 900000 }, () =>
   const started = performance.now();
   const result = arrangeBoard({ cards, wires, taste, judge, tuning: judgeInput.tuning });
   const ms = Math.round(performance.now() - started);
+  say(`candidates ${JSON.stringify((globalThis as { __arrangeCandidates?: unknown }).__arrangeCandidates)}`);
   const positions = new Map(result.moves.map((move) => [move.id, move.position]));
   const after = judge(positions);
   say(

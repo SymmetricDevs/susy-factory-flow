@@ -651,6 +651,18 @@ Working notes for future agents on GTNH Factory Flow.
   the lattice from the start found layouts a fifth worse. The three
   candidates are judged by the real router, the best two polished, the
   better polished board wins on points; every dial is in `FREE_DIALS`.
+  DRAWERS ARE PLACED BY PATTERN, not searched (Jack, same day, holding
+  his hand layout against the arranger's: "shouldn't all the products
+  just be in a row next to each other"): a drawer wired to ONE machine
+  is its bud and stands in a touching LINE on its side (supplies left,
+  products right, port order, centred on the ports); a drawer wired to
+  exactly TWO machines stands in a line BETWEEN them (the corridor when
+  side by side, a row in the gap when stacked); lines meeting in one
+  corridor stack; a drawer whose place is taken is freed to the search.
+  `planPatterns` / `derivePatterns` / `settleWithPatterns` in
+  board-arrange-free.ts; the search moves machines and the drawers
+  follow. Costs points (the oil berry board 9 -> 17 crossings) and Jack
+  called the result good.
   Harnesses (local, off the suite): `arrange-capture.local.test.ts`
   (CAPTURE=an audit.json: arranges offline, REPORT=, OUT=layout) and
   `free-explain.local.test.ts` (LAYOUTS=: every objective term and the

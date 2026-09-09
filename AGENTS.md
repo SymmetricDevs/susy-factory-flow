@@ -1022,10 +1022,17 @@ Working notes for future agents on GTNH Factory Flow.
     rule is late (it did, 2026-09-09).
   - THE NAME COLUMN IS THE PRICE, and it is down to 70px. Measured over
     three real boards (platline, farm-power, oil-community; 219 distinct
-    names): 5 clipped at 21 cells, 12 at 20, 17 at 19, and at 19 ordinary
-    names like "Sodium Hydroxide Dust" start clipping. Do not take a
-    fourth cell out of the chips - anything further has to come from the
-    28px port icon or the picture.
+    names) at the 10px type: 5 clipped at 21 cells, 12 at 20, 17 at 19.
+    The chip's whole stack then went down a point - name and rate 10px to
+    9px, the bar 4px to 3px - which put 19 cells back to 12 clipped, the
+    same as 20 cells was, and gave the row 8px of air instead of 4 (the
+    text was crowding the top and the bar the bottom). SMALLER TYPE BUYS
+    WIDTH: it is worth a whole cell, so reach for it before the picture.
+    Re-measure with `name-clip-probe.local.mjs` if any of these move.
+  - The stack is name (2 lines x 9) + rate (9) + 2 + bar (3) = 32 in the
+    40px row. `chip-fit-probe.local.mjs` reports the tightest row's air
+    and the SERVED bar height, so a stale stylesheet cannot be mistaken
+    for a layout result.
   Read the "board grid" section of `ARCHITECTURE.md` before changing any
   size, offset, or padding on the flow board.
 - The grid is always on. There is no snap toggle and no grid button; do not

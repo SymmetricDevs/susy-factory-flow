@@ -3132,12 +3132,12 @@ function FreePortRow({ port }: { port: RailPort }) {
         ) : null}
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
-        <span className="flow-port-name text-[10px] font-bold leading-[10px] text-[var(--mc-ink-muted)]">
+        <span className="flow-port-name text-[9px] font-bold leading-[9px] text-[var(--mc-ink-muted)]">
           {port.displayName}
         </span>
         {/* Same dress as a port's rate line, so the word sits where the
             number would and reads as its stand-in. */}
-        <span className="block truncate text-[10px] leading-[12px] tabular-nums text-[var(--mc-ink-muted)] opacity-80">
+        <span className="block truncate text-[9px] leading-[9px] tabular-nums text-[var(--mc-ink-muted)] opacity-80">
           free
         </span>
       </span>
@@ -3529,13 +3529,13 @@ function PowerEuSocketRow({
             </span>
           </span>
           <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
-            <span className="block truncate text-[11px] font-bold leading-[13px] text-[var(--mc-ink)]">
+            <span className="block truncate text-[9px] font-bold leading-[9px] text-[var(--mc-ink)]">
               EU{" "}
-              <span className="text-[9px] font-normal text-[var(--mc-ink-muted)] opacity-75">
+              <span className="text-[8px] font-normal text-[var(--mc-ink-muted)] opacity-75">
                 ({average ? "avg" : "peak"})
               </span>
             </span>
-            <span className="block truncate text-[10px] leading-[12px] tabular-nums text-amber-200/90">
+            <span className="block truncate text-[9px] leading-[9px] tabular-nums text-amber-200/90">
               <MotionNumberText
                 values={[totalEuT]}
                 render={(shown) =>
@@ -4050,7 +4050,7 @@ export function PortChip({
             // stylesheet: .flow-port-name only clamps, so a card whose CSS
             // has not arrived yet is small and unclamped, never 16px text
             // bursting out of the chip.
-            !calmMode && port.unsupplied ? "text-[9px] leading-[9px]" : "text-[10px] leading-[10px]"
+            !calmMode && port.unsupplied ? "text-[8px] leading-[8px]" : "text-[9px] leading-[9px]"
           }`}
         >
           {port.displayName}
@@ -4076,7 +4076,7 @@ export function PortChip({
                 story's color. Green text over a red bar told two stories at
                 once. */}
             <span
-              className={`block truncate text-[10px] leading-[10px] tabular-nums ${rateInk} ${readsEnergy ? "font-bold" : "opacity-80"}`}
+              className={`block truncate text-[9px] leading-[9px] tabular-nums ${rateInk} ${readsEnergy ? "font-bold" : "opacity-80"}`}
             >
               {rateText}
             </span>

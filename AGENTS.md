@@ -1089,10 +1089,12 @@ Working notes for future agents on GTNH Factory Flow.
   CARD RIMS are at least six grid spaces apart (`diagonalDistanceCells`),
   measured before dock selection, never by the detour's length. Long trips
   may still leave at 45 degrees immediately. Nearby cards route square.
-  Freely selected docks now prefer four grid spaces of total horizontal +
-  vertical separation (`dockTravelCells`, `crampedDockCost`), so the exit
+  Freely selected docks on BENT routes now prefer six grid spaces of total
+  horizontal + vertical separation (`dockTravelCells`, `crampedDockCost`), so the exit
   and entrance move along the rims to leave visible wire and arrow room.
-  This supersedes the old preference for tiny one/two-cell straight shots.
+  Straight shots are EXEMPT (Jack's next correction, 2026-09-09): aligned
+  facing docks one or two cells apart connect directly. Exempt the actual
+  straight path, not merely aligned docks when an obstacle forces a detour.
   It is a soft cost, not a forced loop or a reason to disconnect a wire;
   fixed endpoints, pinned trips and self loops retain their own rules.
 - SELF LOOPS dock freely like everything else, but route with 90° TURNS

@@ -37,7 +37,7 @@ export interface RouterTuning {
   diagonals: boolean;
   /** Minimum gap between the endpoint rims before diagonals are allowed. */
   diagonalDistanceCells: number;
-  /** Preferred Manhattan separation of freely chosen docks, in cells. */
+  /** Preferred Manhattan dock separation for bent routes, in cells. */
   dockTravelCells: number;
   /** Length of a diagonal cell relative to a straight one (root two is true). */
   diagonalLength: number;
@@ -97,7 +97,7 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   crossing: 400,
   diagonals: true,
   diagonalDistanceCells: 6,
-  dockTravelCells: 4,
+  dockTravelCells: 6,
   diagonalLength: Math.SQRT2,
   diagonalLaneCapacity: 10,
   dockPlanBias: 0.35,
@@ -221,7 +221,7 @@ export const ROUTER_TUNING_FIELDS: RouterTuningField[] = [
   },
   {
     key: "dockTravelCells", label: "Wire breathing room", kind: "number", min: 0, max: 10, step: 1, group: "Docks",
-    hint: "Preferred distance between a wire's docks, counting horizontal and vertical grid spaces.",
+    hint: "Preferred dock separation for a wire that bends, in horizontal plus vertical grid spaces. Straight shots are exempt.",
     low: "Wires can shrink to tiny stubs between neighbouring cards.",
     high: "Docks move apart to leave more visible wire and room for an arrow.",
   },

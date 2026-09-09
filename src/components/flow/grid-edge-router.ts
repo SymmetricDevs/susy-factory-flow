@@ -1495,6 +1495,7 @@ function endpointGapCells(sources: GridEndpoint[], targets: GridEndpoint[]): num
  * Move docks apart instead of rewarding loops that merely add wire length.
  * A soft preference keeps connections possible when other cards block the
  * roomier docks. Fixed endpoints and explicitly pinned trips stay put.
+ * Actual straight shots are exempted by the caller, even at one cell.
  */
 function crampedDockCost(request: PlannedRequest, source: GridEndpoint, target: GridEndpoint): number {
   if (
@@ -1741,7 +1742,7 @@ function findRoute(context: SolveContext, request: PlannedRequest): RouteFound |
   };
   const selfLoop = request.sourceCardId !== undefined && request.sourceCardId === request.targetCardId;
   if (waypoints.length === 0 && !selfLoop) {
-    const direct = directDock(context, request, priceTaken(request.allSources), priceTaken(request.allTargets));
+    const direct = directDock(context, priceTaken(request.allSources), priceTaken(request.allTargets));
     if (direct && consider(direct)) {
       return direct;
     }
@@ -1799,7 +1800,6 @@ function findRoute(context: SolveContext, request: PlannedRequest): RouteFound |
  */
 function directDock(
   context: SolveContext,
-  request: PlannedRequest,
   sources: GridEndpoint[],
   targets: GridEndpoint[],
 ): RouteFound | undefined {
@@ -1822,7 +1822,6 @@ function directDock(
       const vertex = { x: Math.round(x / BOARD_GRID), y: Math.round(y / BOARD_GRID) };
       const cost =
         BOARD_GRID +
-        crampedDockCost(request, source, target) +
         (source.penalty ?? 0) +
         (target.penalty ?? 0) +
         context.occupancy.stepCrossings(DIR_AXIS[dir], vertex.x, vertex.y, vertex.x, vertex.y, false) *
@@ -2389,7 +2388,19 @@ function routeWithinWindow(
             continue;
           }
           const source = sources[starts[startOf[currentState]].endpointIndex];
-          const dockCost = goal.landing ? crampedDockCost(request, source, targets[goal.endpointIndex]) : 0;
+          const target = targets[goal.endpointIndex];
+          let dockCost = goal.landing ? crampedDockCost(request, source, target) : 0;
+          if (dockCost > 0) {
+            const normal = outwardDirection(source.side);
+            const aligned = DIR_DX[normal] === 0 ? source.x === target.x : source.y === target.y;
+            if (aligned && outwardDirection(target.side) === (normal + 4) % 8) {
+              // Exempt the actual straight path, not just aligned docks:
+              // an obstacle between them can still force a bent route.
+              let state = currentState;
+              while (state >= 0 && (state & 7) === normal) state = cameFrom[state];
+              if (state < 0) dockCost = 0;
+            }
+          }
           const cost = currentG + goal.penalty + dockCost;
           if (cost < goalCost) {
             goalCost = cost;

@@ -694,7 +694,7 @@ describe("wires plan together", () => {
 });
 
 describe("exits and landings", () => {
-  it("two cards a cell apart move their docks to leave room for an arrow", () => {
+  it("two cards a cell apart take the straight shot", () => {
     const machine = card("machine", 0, 0, 440, 300);
     const drawer = card("drawer", 460, 100, 100, 80);
     const solved = solveGridRoutes(
@@ -710,13 +710,10 @@ describe("exits and landings", () => {
       ],
     );
     const points = solved.get("e1")!.points;
-    expect(points.length).toBeGreaterThan(2);
-    const runs = segments(points);
-    expect(runs.every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
-    expect(runs.reduce((sum, { a, b }) => sum + Math.hypot(a.x - b.x, a.y - b.y), 0)).toBeGreaterThanOrEqual(80);
-    expect(Math.max(...runs.map(({ a, b }) => Math.hypot(a.x - b.x, a.y - b.y)))).toBeGreaterThanOrEqual(40);
-    expect(violatesMargin(points, machine)).toBe(false);
-    expect(violatesMargin(points, drawer)).toBe(false);
+    expect(points).toHaveLength(2);
+    expect(points[0].x).toBe(440);
+    expect(points[1].x).toBe(460);
+    expect(points[0].y).toBe(points[1].y);
   });
 
   it("aligned ports go straight rather than out at 45 and back", () => {
@@ -780,7 +777,7 @@ describe("straight shots and self loops", () => {
     expect(diagonalCount).toBeGreaterThan(0);
   });
 
-  it("two cards two cells apart also get breathing room", () => {
+  it("two cards two cells apart take the straight shot", () => {
     const machine = card("machine", 0, 0, 440, 300);
     const drawer = card("drawer", 480, 100, 100, 80);
     const solved = solveGridRoutes(
@@ -796,21 +793,23 @@ describe("straight shots and self loops", () => {
       ],
     );
     const points = solved.get("e1")!.points;
-    expect(points.length).toBeGreaterThan(2);
-    expect(segments(points).every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
-    const first = points[0], last = points[points.length - 1];
-    expect(Math.abs(last.x - first.x) + Math.abs(last.y - first.y)).toBeGreaterThanOrEqual(80);
+    expect(points).toHaveLength(2);
+    expect(points[0].x).toBe(440);
+    expect(points[1].x).toBe(480);
+    expect(points[0].y).toBe(points[1].y);
   });
 
   it("neighbouring cards cannot earn diagonals by moving their docks farther apart", () => {
     const a = card("a", 0, 0, 440, 300);
-    const b = card("b", 460, 20, 360, 300);
+    const b = card("b", 460, 320, 360, 300);
     const points = solveGridRoutes([a, b], [request({
       edgeId: "roof", sources: rim(a), targets: rim(b), sourceCardId: "a", targetCardId: "b",
     })]).get("roof")!.points;
     expect(points.length).toBeGreaterThan(2);
     expect(segments(points).every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
     expect(segments(points).some(({ a, b }) => Math.hypot(a.x - b.x, a.y - b.y) >= 40)).toBe(true);
+    const first = points[0], last = points[points.length - 1];
+    expect(Math.abs(last.x - first.x) + Math.abs(last.y - first.y)).toBeGreaterThanOrEqual(120);
   });
 
   it("reserves diagonals for trips of at least six grid spaces, including at the docks", () => {
@@ -840,12 +839,12 @@ describe("straight shots and self loops", () => {
   });
 
   it("can turn off the breathing-room preference with the routing dial", () => {
-    const a = card("a", 0, 0, 440, 300), b = card("b", 460, 100, 100, 80);
+    const a = card("a", 0, 0, 440, 300), b = card("b", 460, 300, 100, 80);
     const points = solveGridRoutes([a, b], [request({
       edgeId: "short", sources: rim(a), targets: rim(b), sourceCardId: "a", targetCardId: "b",
-    })], undefined, { ...DEFAULT_ROUTER_TUNING, dockTravelCells: 0 }).get("short")!.points;
-    expect(points).toHaveLength(2);
-    expect(Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y)).toBe(20);
+    })], undefined, { ...DEFAULT_ROUTER_TUNING, dockTravelCells: 0, earlyTurn: 0 }).get("short")!.points;
+    const first = points[0], last = points[points.length - 1];
+    expect(Math.abs(last.x - first.x) + Math.abs(last.y - first.y)).toBeLessThan(120);
   });
 
   it("a straight shot of any length beats leaving by another side", () => {

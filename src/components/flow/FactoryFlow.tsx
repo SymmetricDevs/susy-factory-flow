@@ -56,7 +56,6 @@ import {
   Paintbrush,
   Pencil,
   Plus,
-  Presentation,
   Redo2,
   Square,
   Trash2,
@@ -8897,10 +8896,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
     onArrange: (options: { keepBoards: boolean }) => void;
   };
 }) {
-  const {
-    canvasPattern,
-    calmMode,
-  } = view;
+  const { canvasPattern } = view;
   // Motion is device taste, not plan state: read and written through its own
   // store (board-motion.tsx), never through the plan-view snapshot.
   const boardMotion = useBoardMotion();
@@ -8916,14 +8912,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
     Icon: LucideIcon;
     flip: () => void;
   }> = [
-    {
-      id: "calm",
-      on: calmMode,
-      label: "Calm colours",
-      line: "Softer status colours.",
-      Icon: Presentation,
-      flip: () => onChange({ calmMode: !calmMode }),
-    },
     // The two motion switches. Device taste rather than plan dressing, so
     // they write to their own store and never travel with a shared plan.
     {

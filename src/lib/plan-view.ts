@@ -34,7 +34,6 @@ export function capturePlanView(): PlanViewState {
     // No `lineHeatMode` any more: line colour rides the status glance mode,
     // which the snapshot already carries.
     linePulseMode: board.linePulseMode,
-    calmMode: board.calmMode,
     // The smart view (bottom-right tray) is deliberately NOT captured: it is
     // a personal reading of the board, not part of its dress, and a saved
     // setup always opens on the default identity view.
@@ -126,13 +125,10 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   // dashes were retired (board-view.ts): a plan saved with them on must not
   // switch on a layer that no longer exists.
   // `lineLabelsMode` is not applied either: the rate pills on wires are
-  // gone (2026-09-08), so a plan saved with them on changes nothing.
-  for (const key of ["calmMode"] as const) {
-    const set = flag(view[key]);
-    if (set) {
-      boardPatch[key] = set.value;
-    }
-  }
+  // gone (2026-09-08), so a plan saved with them on changes nothing. Nor is
+  // `calmMode`: the board's switch for it went the same day (it is the
+  // export dialog's "presentation" tick now), so a plan saved with it on
+  // would leave a viewer in softened colours with nothing to turn them off.
   if (Object.keys(boardPatch).length > 0) {
     writeBoardView(boardPatch);
   }

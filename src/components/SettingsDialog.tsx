@@ -8,7 +8,6 @@ import {
   setAppFont,
   type AppFontId,
 } from "@/lib/app-font";
-import { isUpdatePopupEnabled, setUpdatePopupEnabled } from "@/lib/whats-new";
 import {
   DEFAULT_UI_SCALE_PERCENT,
   UI_SCALE_MAX_PERCENT,
@@ -42,7 +41,6 @@ import {
  */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [font, setFont] = useState<AppFontId>(() => getStoredAppFont());
-  const [updatePopup, setUpdatePopup] = useState<boolean>(() => isUpdatePopupEnabled());
   const [sounds, setSounds] = useState<boolean>(() => areBoardSoundsEnabled());
   const [volume, setVolume] = useState<number>(() => getBoardSoundVolume());
   const canPlayTimelapse = useFactoryStore(
@@ -143,15 +141,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <Plus className="h-3.5 w-3.5" />
             </Key>
           </Row>
-
-          <ToggleRow
-            label="Update notes popup"
-            on={updatePopup}
-            onChange={(next) => {
-              setUpdatePopupEnabled(next);
-              setUpdatePopup(next);
-            }}
-          />
 
           <ToggleRow
             label="Sounds"

@@ -57,6 +57,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Item names, rates and bars are a *little smaller*, with more space around them in each row.",
       "More long item names fit on their two lines instead of running out of room.",
       "The *Industrial Coke Oven* and *Industrial Electrolyzer* cards show the right machine again.",
+      "The *Liquid Fluoride Thorium Reactor* has its own picture, and the *Reactor Fuel Processing Plant* has the one it was using.",
     ],
   },
   {

@@ -94,6 +94,10 @@ const MACHINE_STRUCTURE_ART_IDS = new Set([
   "multiblock-electrolyzer",
   "pyrolyse-oven",
   "vacuum-furnace",
+  // The grey tower that stood as the LFTR's render all along (Jack,
+  // 2026-09-09): it is this plant, and the reactor is the purple slab that
+  // took its place in lftr.png.
+  "reactor-fuel-processing-plant",
 ]);
 
 /**

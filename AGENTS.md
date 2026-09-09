@@ -1007,7 +1007,9 @@ Working notes for future agents on GTNH Factory Flow.
   (`SELF_LOOP_CELLS`) from where they left (`landsTooClose` at goal
   acceptance), or the loop collapses to a stub. Both Jack, 2026-09-08.
 - TURNS COST: a 45° bend `turn45` (35), a 90° corner `turn90` (80), a
-  reversal `reverse` (waypoint excursions only), 135° forbidden. Jack's
+  reversal `reverse` (100,000 since 2026-09-08 - all but forbidden, Jack:
+  "only if they literally have to"; only a pinned dot can force one), 135°
+  forbidden. Jack's
   rules (2026-09-08): turning should cost a lot, a diagonal costs its true
   length, least turns wins, no wiggling left-right to shave a cell.
 - CROSSINGS COST `crossing` (400) each, counted at grid vertices an

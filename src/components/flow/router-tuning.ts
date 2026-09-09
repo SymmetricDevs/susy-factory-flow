@@ -84,7 +84,10 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   costOutsideHome: 3,
   turn45: 35,
   turn90: 80,
-  reverse: 240,
+  // All but forbidden (Jack, 2026-09-08: "they can only do it if they
+  // literally have to"): a wire doubles back only when no other route
+  // exists, which only a pinned dot can force.
+  reverse: 100000,
   earlyTurn: 100,
   cleanCells: 2,
   crossing: 400,
@@ -175,10 +178,10 @@ export const ROUTER_TUNING_FIELDS: RouterTuningField[] = [
     high: "Wires avoid square corners and use diagonals or longer straight runs instead.",
   },
   {
-    key: "reverse", label: "Reversal", kind: "number", min: 0, max: 1000, step: 10, group: "Turns",
-    hint: "What doubling back along the same line costs. Only a wire steered through a pinned dot ever needs this.",
+    key: "reverse", label: "Reversal", kind: "number", min: 0, max: 100000, step: 1000, group: "Turns",
+    hint: "What doubling back along the same line costs. At the default a wire only ever doubles back when no other route exists, which only a pinned dot can force.",
     low: "A wire will loop back on itself to reach a dot.",
-    high: "A wire goes round in a wide loop rather than double back.",
+    high: "A wire goes round any way it can rather than double back.",
   },
   {
     key: "earlyTurn", label: "Early bend", kind: "number", min: 0, max: 600, step: 10, group: "Turns",

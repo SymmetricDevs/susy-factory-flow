@@ -54,10 +54,9 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Narrower machine cards",
     notes: [
       "Machine cards are *another grid space narrower*, three in all, so more of a plan fits on the screen.",
-      "Item names, rates and bars are a *little smaller*, with more space around them in each row.",
-      "More long item names fit on their two lines instead of running out of room.",
-      "The *Industrial Coke Oven* and *Industrial Electrolyzer* cards show the right machine again.",
-      "The *Liquid Fluoride Thorium Reactor* has its own picture, and the *Reactor Fuel Processing Plant* has the one it was using.",
+      "Item names, rates and bars are a *little smaller*, and more long names fit on their two lines.",
+      "Four machines were wearing *the wrong picture*: both coke ovens, the electrolyzers and the thorium reactor.",
+      "The board's *help sheet* spreads across the screen again instead of reading as one long list.",
     ],
   },
   {

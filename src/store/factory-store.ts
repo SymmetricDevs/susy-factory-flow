@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
+
 import { create } from "zustand";
 import { createEmptyProject } from "@/examples";
 import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
@@ -25,9 +27,7 @@ import { normalizeLoadedProject } from "@/lib/model/project-normalize";
 import { playBoardSound, quietBoardSoundsFor, suppressBoardSound } from "@/lib/board-sounds";
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import {
-  setActivePowerDisplayUnit,
   setActiveRateUnit,
-  type PowerDisplayUnit,
   type RateUnit,
 } from "@/lib/model/rate-unit";
 import { registerBooksSink, solveBooks, solveBooksNow } from "./solve-books";
@@ -239,9 +239,6 @@ interface FactoryStore {
   /** Board-wide display unit for rates: per tick / second / minute / hour. */
   rateUnit: RateUnit;
   setRateUnit: (unit: RateUnit) => void;
-  /** EU/t, or amps of a chosen tier - the board-wide power display dial. */
-  powerDisplayUnit: PowerDisplayUnit;
-  setPowerDisplayUnit: (unit: PowerDisplayUnit) => void;
   /** Recalculate the books by hand: what the solve key does while automatic recalculation is off. */
   solveNow: () => void;
   setProject: (project: FactoryProject) => void;
@@ -1009,12 +1006,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     setActiveRateUnit(unit);
     set({ rateUnit: unit });
   },
-  powerDisplayUnit: "eu",
-  setPowerDisplayUnit: (unit) => {
-    // Same view-only rule as the rate unit above.
-    setActivePowerDisplayUnit(unit);
-    set({ powerDisplayUnit: unit });
-  },
+
   solveNow: () => {
     set({ lastResult: solveBooksNow(get().project) });
   },
@@ -5908,7 +5900,7 @@ function touchProject(project: FactoryProject): FactoryProject {
     // a custom rate card never keeps a resource after its last wire goes —
     // whether the wire, the machine at the far end or a whole selection was
     // what got deleted.
-    ...releaseCustomRates(project),
+    ...normalizeProjectHatchInputs(releaseCustomRates(project)),
     metadata: {
       ...project.metadata,
       updatedAt: new Date().toISOString(),
@@ -6203,5 +6195,4 @@ registerBooksSink((result) => {
  */
 export function useRateDisplayUnits(): void {
   useFactoryStore((state) => state.rateUnit);
-  useFactoryStore((state) => state.powerDisplayUnit);
 }

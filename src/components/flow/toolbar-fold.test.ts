@@ -3,24 +3,39 @@ import { FOLD_BUILD_BELOW, FOLD_PAINT_BELOW, toolbarFoldFor } from "./toolbar-fo
 
 describe("toolbarFoldFor", () => {
   it("keeps both rows open on a board wide enough for both", () => {
-    expect(toolbarFoldFor(1228, false)).toEqual({ build: false, paint: false, paintFoldsAll: false });
+    expect(toolbarFoldFor(1228, false)).toEqual({
+      build: false,
+      paint: false,
+      paintFoldsAll: false,
+    });
   });
 
   it("folds the paint row first: a 1400px window with both columns open", () => {
     // 1400 - 344 - 332: the width that buried the paint tray under POWER.
-    // Since the checklist tray (2026-09-08: build row 322, paint row 484)
-    // this board folds the paint row and keeps the build row; both rows fit
-    // unfolded from 854 up.
-    expect(toolbarFoldFor(854, false)).toEqual({ build: false, paint: false, paintFoldsAll: false });
-    expect(toolbarFoldFor(810, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
+    // With per-card hatch power, the build row is 218 px and the paint row 484.
+    // Both rows fit unfolded from 750 px.
+    expect(toolbarFoldFor(854, false)).toEqual({
+      build: false,
+      paint: false,
+      paintFoldsAll: false,
+    });
+    expect(toolbarFoldFor(740, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
     expect(toolbarFoldFor(600, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
-    // 1366 - 676: the common laptop now folds both rows (the build row needs 782).
-    expect(toolbarFoldFor(690, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
+    // A common laptop has enough room to leave the narrower build row open.
+    expect(toolbarFoldFor(690, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
   });
 
   it("folds the build row too when even the folded paint trigger crowds it", () => {
-    expect(toolbarFoldFor(FOLD_BUILD_BELOW - 1, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
-    expect(toolbarFoldFor(FOLD_BUILD_BELOW, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
+    expect(toolbarFoldFor(FOLD_BUILD_BELOW - 1, false)).toEqual({
+      build: true,
+      paint: true,
+      paintFoldsAll: false,
+    });
+    expect(toolbarFoldFor(FOLD_BUILD_BELOW, false)).toEqual({
+      build: false,
+      paint: true,
+      paintFoldsAll: false,
+    });
   });
 
   it("orders the thresholds so the paint row always folds before the build row", () => {

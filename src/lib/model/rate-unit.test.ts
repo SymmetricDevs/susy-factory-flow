@@ -13,7 +13,6 @@ import {
   isEnergyRateUnit,
   rateUnitMultiplier,
   rateUnitSuffix,
-  setActivePowerDisplayUnit,
   setActiveRateUnit,
 } from "./rate-unit";
 
@@ -76,20 +75,11 @@ describe("EU per unit made", () => {
   });
 });
 
-describe("EU per unit under the amps dial", () => {
-  afterEach(() => {
-    setActivePowerDisplayUnit("eu");
-  });
-
-  it("reads the canvas figure in the chosen tier's amps, the browser's stays EU", () => {
+describe("energy units stay independent of hatch voltage", () => {
+  it("always reads energy in EU", () => {
     setActiveRateUnit("eu");
-    setActivePowerDisplayUnit("LV");
-    // 200 EU an item over LV's 32 EU/t is 6.25 LV amps an item.
-    expect(formatPortRate({ kind: "item", energyPerUnit: 200 }, 10)).toBe("6.25 A LV/Item");
-    expect(energyPerUnitDisplayValue(200)).toBeCloseTo(6.25);
-    // The plain pair the recipe browser reads never follows the dial.
-    expect(energyPerUnitSuffix("item")).toBe(" EU/Item");
-    setActivePowerDisplayUnit("eu");
     expect(formatPortRate({ kind: "item", energyPerUnit: 200 }, 10)).toBe("200 EU/Item");
+    expect(energyPerUnitDisplayValue(200)).toBe(200);
+    expect(energyPerUnitSuffix("item")).toBe(" EU/Item");
   });
 });

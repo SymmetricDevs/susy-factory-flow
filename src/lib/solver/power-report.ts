@@ -1,3 +1,4 @@
+import { maxInputTierSkips } from "./power-input-rules";
 import {
   applyMachineHandlerToRecipe,
   getSelectedMachineHandler,
@@ -39,7 +40,12 @@ type PowerReportNode = Pick<
   FactoryNode,
   "overclockTier" | "coilTier" | "machineHandlerId" | "machineConfigTiers"
 > &
-  Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType" | "powerEuT">>;
+  Partial<
+    Pick<
+      FactoryNode,
+      "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps"
+    >
+  >;
 
 /**
  * Whether the build can start at all, straight from the game's checks. There
@@ -60,9 +66,8 @@ export interface NodePowerReport {
   /** Its short amp badge ("256A"), worn where the hatch count would sit. */
   hatchChip?: string;
   /**
-   * The supply was TYPED as an EU/t budget rather than built from hatches:
-   * `tier` and `amps` are read out of the number, and the hatch fields
-   * above describe no real build.
+   * A supply expressed as working amps (or a legacy EU/t budget). The
+   * legacy hatch-count fields do not describe this build.
    */
   typedBudget: boolean;
   isMultiblock: boolean;
@@ -175,15 +180,12 @@ function getPowerState(
   if (isMultiblock) {
     // No supply at all (a typed zero) is underpowered before it is anything
     // else: the tier-skip rule below would read 0 as ULV hatches.
-    if (poolEuT <= 0) {
+    if (poolEuT <= 0 && singleDrawEuT > 0) {
       return "under-powered";
     }
     // `OverclockCalculator.getAllowedTierSkip`: a recipe more than one tier
     // above the hatch voltage never runs, however many amps are stacked.
-    if (
-      rawEuT > getVoltageTierMaxEuT(tier) * 4 &&
-      !getMachineBehaviour(effectiveRecipe.machineType)?.unlimitedTierSkip
-    ) {
+    if (rawEuT > getVoltageTierMaxEuT(tier) * 4 ** maxInputTierSkips(effectiveRecipe.machineType)) {
       return "over-tier";
     }
     // `ParallelHelper.determineParallel`: the pool must carry one whole

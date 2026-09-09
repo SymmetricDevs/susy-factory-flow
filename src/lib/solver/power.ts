@@ -12,24 +12,32 @@ import {
 import type { FactoryNode, MachineTier, Recipe } from "@/lib/model/types";
 
 type VoltageTier = Exclude<MachineTier, "DEMO">;
-type PowerRecipeInput = Partial<
-  Pick<Recipe, "machineType" | "machineHandlers" | "machineProfile">
+type PowerRecipeInput = Partial<Pick<Recipe, "machineType" | "machineHandlers" | "machineProfile">>;
+type PowerNodeInput = Partial<
+  Pick<
+    FactoryNode,
+    "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps"
+  >
 >;
-type PowerNodeInput = Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType" | "powerEuT">>;
 
-/**
- * The typed EU/t budget, when the node carries a usable one. A multiblock's
- * supply is voltage times amps and nothing else (`setProcessingLogicPower`
- * hands `OverclockCalculator` exactly that product), so a player may name
- * the product directly instead of building it from hatches. Singleblocks
- * never have one: their tier is the block.
- */
-export function getNodePowerBudget(recipe: PowerRecipeInput, node: PowerNodeInput): number | undefined {
+/** The pair's derived supply, with a legacy EU/t fallback for unmigrated nodes. */
+export function getNodePowerBudget(
+  recipe: PowerRecipeInput,
+  node: PowerNodeInput,
+): number | undefined {
   if (!isMultiblockRecipe(recipe)) {
     return undefined;
   }
   // Zero is a real answer - no supply at all, which the report calls
   // underpowered - so only an absent or broken value falls back to the pair.
+  if (
+    node.hatchVoltageTier !== undefined &&
+    node.hatchAmps !== undefined &&
+    Number.isFinite(node.hatchAmps) &&
+    node.hatchAmps >= 0
+  ) {
+    return getVoltageTierMaxEuT(node.hatchVoltageTier) * node.hatchAmps;
+  }
   const budget = node.powerEuT;
   return budget !== undefined && Number.isFinite(budget) && budget >= 0 ? budget : undefined;
 }
@@ -44,9 +52,8 @@ export function getNodePowerBudget(recipe: PowerRecipeInput, node: PowerNodeInpu
  * instead, whose entries are multiblocks unless marked `kind: "single"`.
  */
 export function isMultiblockRecipe(recipe: PowerRecipeInput): boolean {
-  if ((recipe.machineHandlers?.length ?? 0) > 0) {
-    return recipe.machineProfile?.kind === "multiblock";
-  }
+  if (recipe.machineProfile?.kind === "multiblock") return true;
+  if ((recipe.machineHandlers?.length ?? 0) > 0) return false;
   const behaviour = getMachineBehaviour(recipe.machineType);
   return behaviour !== undefined && behaviour.kind !== "single";
 }
@@ -65,6 +72,8 @@ export function getNodeRunTier(
   if (!isMultiblockRecipe(recipe)) {
     return getRunVoltageTier(recipe, node.overclockTier);
   }
+  if (node.hatchVoltageTier !== undefined) return node.hatchVoltageTier;
+  // Legacy nodes outside the load funnel retain their historical interpretation.
   // A typed budget names its own hatch tier: the highest voltage that fits
   // inside it. The tier-skip rule and the parallel ordinal read that tier.
   const budget = getNodePowerBudget(recipe, node);
@@ -107,6 +116,7 @@ export function getHatchAmps(hatches: number): number {
  */
 export function getNodePowerAmps(recipe: PowerRecipeInput, node: PowerNodeInput): number {
   if (isMultiblockRecipe(recipe)) {
+    if (node.hatchVoltageTier !== undefined && node.hatchAmps !== undefined) return node.hatchAmps;
     // A typed budget is the whole supply: whatever is left over the tier's
     // voltage is amps, fractional or not - the game multiplies the two back
     // together before it counts a single overclock.
@@ -157,9 +167,7 @@ export function getEffectiveVoltageOrdinal(
     // once there is more than one, so the summed voltage is half the
     // budget, and never under the tier's own voltage (one hatch, one amp).
     // Mega-style machines count the amps themselves, so the budget stands.
-    const summedVoltage = fullPowerPool
-      ? budget
-      : Math.max(getVoltageTierMaxEuT(tier), budget / 2);
+    const summedVoltage = fullPowerPool ? budget : Math.max(getVoltageTierMaxEuT(tier), budget / 2);
     return getVoltageTierIndex(getVoltageTierForEuT(summedVoltage));
   }
   const hatches = getNodeEnergyHatches(recipe, node);

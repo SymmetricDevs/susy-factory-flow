@@ -16,7 +16,6 @@ import {
 import {
   ChevronDown,
   ChevronUp,
-  Calculator,
   Copy,
   Cpu,
   Minus,
@@ -50,9 +49,9 @@ import {
   getEnergyHatchType,
 
 } from "@/lib/machines/energy-hatches";
-import { energyHatchCatalogKey, useEnergyHatchCatalog } from "./use-energy-hatch-catalog";
-import { EnergyHatchArt, EnergyHatchCalculator } from "./EnergyHatchMenu";
-import { getVoltageTierMaxEuT, getVoltageTierWithinEuT } from "@/lib/model/tiers";
+import { useEnergyHatchCatalog } from "./use-energy-hatch-catalog";
+import { HatchPowerMenu } from "./HatchPowerMenu";
+import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { listPowerWinsCached, nextPowerWin, previousPowerWin } from "@/lib/solver/power-wins";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { prefersCuratedMachineMath } from "@/lib/solver/runtime-calculation";
@@ -75,6 +74,7 @@ import {
   getCropsNhStats,
   getVoltageTierIndex,
   getRecipeMaximumVoltageTier,
+  getRecipeMinimumVoltageTier,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
   CROP_GAIN_STAT_CONTROL_ID,
@@ -131,7 +131,6 @@ import {
   type CustomRateMode,
 } from "@/lib/model/custom-rate";
 import {
-  getActivePowerDisplayUnit,
   powerDisplayFromEuT,
   powerDisplaySuffix,
   rateMultiplierForKind,
@@ -307,13 +306,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // typed EU/t budget - voltage times amps, the only number the game
   // overclocks on. The chip types and wheels the budget; the calculator
   // beside it is where hatches are still picked by name.
-  const [powerDraft, setPowerDraft] = useState<string>();
   const [calculatorAnchor, setCalculatorAnchor] = useState<{
     x: number;
     top: number;
     bottom: number;
   }>();
-  const isHatchMenuOpen = powerDraft !== undefined || calculatorAnchor !== undefined;
+  const isHatchMenuOpen = calculatorAnchor !== undefined;
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   // The right panel's PEAK/AVG switch drives the card's power figures too,
   // so the board and the power list always tell one story.
@@ -643,9 +641,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   );
   // The chip's own art: the concrete hatch item this tier-and-family pair
   // names, from the once-per-dataset catalog.
-  const hatchChipEntry = tierControl
-    ? energyHatchCatalog.get(energyHatchCatalogKey(tierControl.current, energyHatchType.id))
-    : undefined;
+
   // The full footer — usage, power, parallel, machines, circuit — does not
   // fit the fixed card width on one line. When power and the parallel chip
   // would share the row, the parallel chip steps UP: into the config panel's
@@ -908,21 +904,20 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       });
     }
   };
-  // Write a typed budget: the pair the calculator last picked stays on the
-  // node (a switch back is one pick away) but the budget speaks over it, and
-  // the stored tier follows so every reader of the tier alone stays right.
+  // Walking the power ladder changes amps at the card's own hatch voltage.
   const commitPowerBudget = (euT: number) => {
     if (!Number.isFinite(euT) || euT < 0) {
       return;
     }
-    const tier = getVoltageTierWithinEuT(euT);
+    const tier = powerReport?.tier ?? getRecipeMinimumVoltageTier(nodeRecipe);
     // The supply speaks the power dial's electric ladder, quieter: the rung
     // is the budget's hatch tier, so a bigger number audibly climbs.
     playBoardSound("dialPower", { step: getVoltageTierIndex(tier) + 1, gain: 0.6 });
     suppressBoardSound("adjust", 150);
     updateNode(projectNode.id, {
       powerEuT: euT,
-      overclockTier: tier,
+      hatchVoltageTier: tier,
+      hatchAmps: euT / getVoltageTierMaxEuT(tier),
       energyHatchType: undefined,
     });
   };
@@ -941,16 +936,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     if (win) {
       commitPowerBudget(win.euT);
     }
-  };
-  // The typed figure in the board's power unit, back to EU/t: amps of a
-  // tier are that tier's voltage each.
-  const parsePowerDraft = (draft: string): number | undefined => {
-    const value = Number.parseFloat(draft.trim().replace(/,/g, ""));
-    if (!Number.isFinite(value) || value <= 0) {
-      return undefined;
-    }
-    const unit = getActivePowerDisplayUnit();
-    return unit === "eu" ? value : value * getVoltageTierMaxEuT(unit);
   };
   const updateCoilTier = (nextTier: string) => {
     updateNode(projectNode.id, { coilTier: nextTier });
@@ -1479,7 +1464,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             powerReport
               ? powerReport.isMultiblock
                 ? powerReport.typedBudget
-                  ? `${formatCompact(powerDisplayFromEuT(powerReport.poolEuT))} ${powerDisplaySuffix()}`
+                  ? `${formatCompact(powerReport.amps)}A ${powerReport.tier}`
                   : energyHatchType.exotic
                     ? `${energyHatchType.chip} ${powerReport.tier}`
                     : `${powerReport.hatches}× ${powerReport.tier}`
@@ -1846,106 +1831,24 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }
             >
             <div className="flex">
-              {showHatchControl && powerDraft !== undefined ? (
-                // The SUPPLY chip MID-EDIT: type any EU/t (or amps of the
-                // board's power unit). Any number is allowed, buildable from
-                // hatches or not.
-                <input
-                  autoFocus
-                  value={powerDraft}
-                  onChange={(event) => setPowerDraft(event.target.value)}
-                  onFocus={(event) => event.currentTarget.select()}
-                  onBlur={() => {
-                    const euT = parsePowerDraft(powerDraft);
-                    setPowerDraft(undefined);
-                    if (euT !== undefined) {
-                      commitPowerBudget(euT);
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.currentTarget.blur();
-                    }
-                    if (event.key === "Escape") {
-                      setPowerDraft(undefined);
-                    }
+              {showHatchControl ? <>
+                <button type="button" data-hatch-menu-anchor aria-label="Power supply"
+                  onClick={event => {
                     event.stopPropagation();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setCalculatorAnchor(calculatorAnchor ? undefined : { x: rect.right, top: rect.top, bottom: rect.bottom });
                   }}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => event.stopPropagation()}
-                  inputMode="decimal"
-                  aria-label="Power supply"
-                  className="nodrag h-6 w-[88px] border-2 bg-[var(--mc-93)] px-1 text-center text-[11px] font-bold leading-none text-[var(--mc-ink)] outline-none focus:border-cyan-700"
-                  style={{ borderColor: "var(--mc-33)" }}
-                />
-              ) : showHatchControl ? (
-                // A multiblock's power is ONE NUMBER: the EU/t budget, worn
-                // in the board's power unit and painted in the hatch tier it
-                // reads as. CLICK to type, wheel or right-click walks the
-                // wins. The calculator on its left picks real hatches.
-                <>
-                  <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Hatch calculator", rows: powerReport ? [{ label: "Supply per machine", value: formatCompact(powerReport.poolEuT) + " EU/t" }, ...(powerReport.typedBudget ? [] : [{ label: "Build", value: powerReport.hatchTypeLabel ? `${powerReport.tier} ${powerReport.hatchTypeLabel}` : `${powerReport.hatches}× ${powerReport.tier} hatch` }])] : [], actions: [{ gesture: "left", label: "Add up hatches" }] }} />}>
-                    <button
-                      type="button"
-                      data-hatch-menu-anchor
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (calculatorAnchor) {
-                          setCalculatorAnchor(undefined);
-                          return;
-                        }
-                        const rect = event.currentTarget.getBoundingClientRect();
-                        setCalculatorAnchor({ x: rect.right, top: rect.top, bottom: rect.bottom });
-                      }}
-                      className="flex h-6 w-6 items-center justify-center border-2 border-r-0 shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
-                      style={SUPPLY_CHIP_STYLE}
-                      aria-label="Hatch calculator"
-                    >
-                      {hatchChipEntry && !powerReport?.typedBudget ? (
-                        <EnergyHatchArt entry={hatchChipEntry} boxClass="h-6 w-6" />
-                      ) : (
-                        <Calculator className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </MinecraftTooltip>
-                  <MinecraftTooltip content={() => powerReport ? <PowerStoryContent report={powerReport} utilization={result?.utilization} machines={projectNode.machineCount * projectNode.parallel} recipe={nodeRecipe} node={projectNode} actions={[{ gesture: "left", label: "Type a supply" }, { gesture: "right", label: "Previous stop" }, { gesture: "wheel", label: "Walk the stops" }]} /> : null}>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setPowerDraft(String(formatCompact(powerDisplayFromEuT(powerReport?.poolEuT ?? 0))).replace(/[^0-9.]/g, "") || "0");
-                      }}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        stepPowerBudget(-1);
-                      }}
-                      onWheel={(event) => {
-                        if (checklistLocked()) return;
-                        event.stopPropagation();
-                        stepPowerBudget(event.deltaY < 0 ? 1 : -1);
-                      }}
-                      className="nowheel flex h-6 items-center justify-center gap-1 whitespace-nowrap border-2 px-1.5 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
-                      style={SUPPLY_CHIP_STYLE}
-                      aria-label="Power supply"
-                    >
-                      <span>{formatCompact(powerDisplayFromEuT(powerReport?.poolEuT ?? 0))}</span>
-                      <span className="text-[9px] opacity-90">{powerDisplaySuffix()}</span>
-                    </button>
-                  </MinecraftTooltip>
-                  {calculatorAnchor ? (
-                    <EnergyHatchCalculator
-                      anchor={calculatorAnchor}
-                      recipe={nodeRecipe}
-                      node={projectNode}
-                      budgetEuT={powerReport?.poolEuT ?? 0}
-                      catalog={energyHatchCatalog}
-                      onChange={commitPowerBudget}
-                      onClose={() => setCalculatorAnchor(undefined)}
-                    />
-                  ) : null}
-                </>
-              ) : null}
+                  onWheel={event => { if (checklistLocked()) return; event.stopPropagation(); stepPowerBudget(event.deltaY < 0 ? 1 : -1); }}
+                  onContextMenu={event => { event.preventDefault(); event.stopPropagation(); stepPowerBudget(-1); }}
+                  className="nowheel flex h-6 items-center justify-center gap-1 whitespace-nowrap border-2 px-1.5 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+                  style={SUPPLY_CHIP_STYLE}>{formatCompact(powerReport?.amps ?? 0)}A {powerReport?.tier}</button>
+                {calculatorAnchor ? <HatchPowerMenu anchor={calculatorAnchor} recipe={nodeRecipe} node={projectNode} catalog={energyHatchCatalog}
+                  onChange={(hatchVoltageTier, hatchAmps) => {
+                    playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
+                    suppressBoardSound("adjust", 150);
+                    updateNode(projectNode.id, { hatchVoltageTier, hatchAmps, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier) });
+                  }} onClose={() => setCalculatorAnchor(undefined)} /> : null}
+              </> : null}
               {showHatchControl ? null : (
               <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Voltage tier", rows: [{ label: "Configured tier", value: tierControl.current }], actions: [{ gesture: "left", label: "Increase" }, { gesture: "right", label: "Decrease" }, { gesture: "wheel", label: "Adjust tier" }] }} />}>
               <button

@@ -49,6 +49,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.1.0",
+    date: "2026-09-09",
+    headline: "Power by amps and hatch voltage",
+    notes: [
+      "Each multiblock has its own *amps and hatch tier*, with editable EU/t and hatch options.",
+      "Power steps show *the output gain* and when spare amps can be removed for free.",
+      "New multiblocks start with *full parallels and no overclock*.",
+      "Hatch voltage now enforces the game's *recipe limits*; plan totals read in EU/t.",
+    ],
+  },
+  {
     version: "3.0.3",
     date: "2026-09-09",
     headline: "Narrower machine cards",

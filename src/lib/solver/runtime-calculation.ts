@@ -31,9 +31,24 @@ export function prefersCuratedMachineMath(recipe: { machineType?: string }): boo
 }
 
 export function selectRuntimeCalculationVariant(
-  recipe: Pick<Recipe, "runtimeCalculation"> & { machineType?: string },
-  node: Pick<FactoryNode, "machineHandlerId" | "overclockTier" | "coilTier" | "machineConfigTiers">,
+  recipe: Pick<Recipe, "runtimeCalculation"> &
+    Partial<Pick<Recipe, "machineType" | "machineProfile">>,
+  node: Pick<
+    FactoryNode,
+    "machineHandlerId" | "overclockTier" | "coilTier" | "machineConfigTiers"
+  > &
+    Partial<Pick<FactoryNode, "hatchVoltageTier" | "hatchAmps">>,
 ): RuntimeCalculationVariant | undefined {
+  // Exported variants never saw the user's power pool or parallel helper.
+  // Fusion keeps its dedicated exported OC ladder; other explicitly supplied
+  // multiblocks must use the live power calculation.
+  if (
+    node.hatchVoltageTier &&
+    recipe.machineProfile?.kind === "multiblock" &&
+    !/fusion/i.test(recipe.machineType ?? "")
+  )
+    return undefined;
+  if (node.hatchVoltageTier) node = { ...node, overclockTier: node.hatchVoltageTier };
   const variants = recipe.runtimeCalculation?.variants ?? [];
   if (recipe.runtimeCalculation?.status !== "computed" || variants.length === 0) {
     return undefined;

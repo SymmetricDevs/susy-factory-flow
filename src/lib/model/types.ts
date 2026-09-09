@@ -351,16 +351,12 @@ export interface FactoryNode {
    * `energyHatches` is clamped to 1 while one of them is selected.
    */
   energyHatchType?: string;
-  /**
-   * A multiblock's power supply typed as a plain EU/t BUDGET, the way the
-   * game reads it: every multiblock overclocks on voltage times amps and
-   * nothing else. When set it overrides the hatch pair above - the run tier
-   * is the highest voltage at or under the budget, the amps are the rest -
-   * and the pair stays as the hatch calculator's last pick. Any number is
-   * allowed, buildable from real hatches or not. Ignored on singleblocks,
-   * whose tier is the block itself.
-   */
+  /** Derived hatchVoltageTier voltage × hatchAmps, persisted for old readers. */
   powerEuT?: number;
+  /** Average input voltage, independent of the total power pool. */
+  hatchVoltageTier?: Exclude<MachineTier, "DEMO">;
+  /** Working input amps. One regular hatch supplies one amp. */
+  hatchAmps?: number;
   machineHandlerId?: string;
   coilTier?: string;
   machineConfigTiers?: Record<string, string>;

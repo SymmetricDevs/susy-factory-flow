@@ -8994,68 +8994,79 @@ function ArrangeLoader({
   const steps = ARRANGE_STEPS.length;
   const within = Math.min(progress.done, progress.total) / Math.max(progress.total, 1);
   const overall = Math.min(1, (Math.min(progress.step, steps) + within) / steps);
+  // Dressed like the Settings dialog (Jack, 2026-09-08): the same bevelled
+  // plate, title bar and face keys, so the loader is a window of the
+  // planner and not a web toast over it.
   return (
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center"
+      className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center bg-neutral-950/40"
     >
-      <div className="pointer-events-auto w-[26rem] max-w-[calc(100*var(--ui-vw)-32px)] rounded-lg border border-line-strong bg-surface px-6 py-5 shadow-2xl">
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden
-            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent"
-          />
-          <span className="text-lg font-semibold leading-tight text-fg">Arranging the board</span>
-          <span className="ml-auto font-mono text-sm tabular-nums text-fg-muted">
+      <div className="pointer-events-auto w-[26rem] max-w-[calc(100*var(--ui-vw)-32px)] border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),4px_4px_0_rgba(0,0,0,0.45)]">
+        <div className="flex items-center justify-between border-b-2 border-[var(--mc-15)] px-4 py-2.5">
+          <h2 className="text-sm font-bold">Arranging the board</h2>
+          <span className="font-mono text-sm tabular-nums text-[var(--mc-ink-muted)]">
             {Math.round(overall * 100)}%
           </span>
         </div>
-        <div className="mt-3 flex h-2.5 w-full gap-0.5">
-          {ARRANGE_STEPS.map((step, index) => {
-            const fill = index < progress.step ? 1 : index === progress.step ? within : 0;
-            return (
-              <div key={step.key} className="h-full flex-1 overflow-hidden rounded-sm bg-surface-raised">
-                <div
-                  className="h-full bg-cyan-500 transition-[width] duration-150"
-                  style={{ width: `${Math.round(fill * 100)}%` }}
-                />
-              </div>
-            );
-          })}
-        </div>
-        <ol className="mt-3 flex flex-col gap-1">
-          {ARRANGE_STEPS.map((step, index) => {
-            const state = index < progress.step ? "done" : index === progress.step ? "now" : "next";
-            return (
-              <li
-                key={step.key}
-                className={[
-                  "flex items-center gap-2 text-sm",
-                  state === "now" ? "font-semibold text-fg" : state === "done" ? "text-fg-muted" : "text-fg-subtle",
-                ].join(" ")}
-              >
-                <span
-                  aria-hidden
+        <div className="px-4 py-3">
+          <div className="flex h-3 w-full gap-[3px] border-2 border-[var(--mc-15)] bg-[var(--mc-25)] p-[2px]">
+            {ARRANGE_STEPS.map((step, index) => {
+              const fill = index < progress.step ? 1 : index === progress.step ? within : 0;
+              return (
+                <div key={step.key} className="h-full flex-1 overflow-hidden bg-[var(--mc-36)]">
+                  <div
+                    className="h-full bg-[var(--mc-good)] transition-[width] duration-150"
+                    style={{ width: `${Math.round(fill * 100)}%` }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <ol className="mt-3 flex flex-col divide-y divide-[var(--mc-36)]">
+            {ARRANGE_STEPS.map((step, index) => {
+              const state = index < progress.step ? "done" : index === progress.step ? "now" : "next";
+              return (
+                <li
+                  key={step.key}
                   className={[
-                    "inline-block h-2 w-2 shrink-0 rounded-full",
-                    state === "done" ? "bg-cyan-500" : state === "now" ? "bg-cyan-400 ring-2 ring-cyan-400/40" : "bg-surface-raised",
+                    "flex min-h-8 items-center gap-2 py-1 font-mono text-[12px] uppercase",
+                    state === "now"
+                      ? "font-black text-[var(--mc-ink)]"
+                      : state === "done"
+                        ? "text-[var(--mc-ink-muted)]"
+                        : "text-[var(--mc-ink-muted)] opacity-50",
                   ].join(" ")}
-                />
-                <span>{step.label}</span>
-                {state === "now" && progress.stage !== step.label ? (
-                  <span className="ml-auto truncate text-xs font-normal text-fg-muted">{progress.stage}</span>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <span className="text-xs text-fg-subtle">Every move is checked against the real wires.</span>
+                >
+                  <span
+                    aria-hidden
+                    className={[
+                      "inline-block h-3 w-3 shrink-0 border-2 border-[var(--mc-15)]",
+                      state === "done"
+                        ? "bg-[var(--mc-good)]"
+                        : state === "now"
+                          ? "animate-pulse bg-[var(--mc-good)]"
+                          : "bg-[var(--mc-36)]",
+                    ].join(" ")}
+                  />
+                  <span>{step.label}</span>
+                  {state === "now" && progress.stage !== step.label ? (
+                    <span className="ml-auto truncate text-[11px] font-normal normal-case text-[var(--mc-ink-muted)]">
+                      {progress.stage}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t-2 border-[var(--mc-15)] px-4 py-2.5">
+          <span className="text-xs text-[var(--mc-ink-muted)]">Every move is checked against the real wires.</span>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-line-strong bg-surface-raised px-3 py-1.5 text-sm font-semibold text-fg hover:brightness-110"
+            className={`h-7 border-2 border-[var(--mc-15)] px-3 font-mono text-[12px] font-black uppercase ${TOOL_FACE_OFF}`}
           >
             Cancel
           </button>

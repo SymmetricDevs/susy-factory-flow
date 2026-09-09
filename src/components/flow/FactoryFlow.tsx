@@ -10777,12 +10777,54 @@ const directEdgePathMemo = new Map<
   }
 >();
 
+/**
+ * How far a wire's INK runs on past its dock into a drawer. A drawer is a
+ * hexagon drawn inside its rectangle, so a wire that stopped at the
+ * rectangle's edge ended in mid-air short of the slanted corners (Jack,
+ * 2026-09-08: "they need to end actually inside"). Only the drawn path
+ * carries on; the route, the arrows (which keep their setback from the
+ * dock) and the hop maths all keep the real endpoint. Wires draw under the
+ * cards, so the extra ink is hidden by the hexagon itself.
+ */
+const STORAGE_INK_OVERSHOOT = 30;
+
+function isStorageNodeId(id: string | undefined): boolean {
+  if (!id) return false;
+  return useFactoryStore.getState().project.storages?.some((storage) => storage.id === id) ?? false;
+}
+
+/** The route's points with each drawer end carried on into the drawer. */
+function inkPointsFor(
+  points: Array<{ x: number; y: number }>,
+  sourceNodeId: string | undefined,
+  targetNodeId: string | undefined,
+): Array<{ x: number; y: number }> {
+  if (points.length < 2) return points;
+  const intoSource = isStorageNodeId(sourceNodeId);
+  const intoTarget = isStorageNodeId(targetNodeId);
+  if (!intoSource && !intoTarget) return points;
+  const out = points.slice();
+  const extend = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length < 1) return to;
+    return {
+      x: to.x + ((to.x - from.x) / length) * STORAGE_INK_OVERSHOOT,
+      y: to.y + ((to.y - from.y) / length) * STORAGE_INK_OVERSHOOT,
+    };
+  };
+  if (intoSource) out[0] = extend(points[1]!, points[0]!);
+  if (intoTarget) out[out.length - 1] = extend(points[points.length - 2]!, points[points.length - 1]!);
+  return out;
+}
+
 function getDirectEdgePath({
   edgeId,
   routeIndex,
+  sourceNodeId,
   sourceX,
   sourceY,
   sourcePosition,
+  targetNodeId,
   targetX,
   targetY,
   targetPosition,
@@ -10844,7 +10886,7 @@ function getDirectEdgePath({
 
   const result: RoutedEdgePath = {
     path: pointsToHoppedSvgPath(
-      points,
+      inkPointsFor(points, sourceNodeId, targetNodeId),
       collectHoppedRouteSegments(edgeId, routeIndex, points),
       width,
     ),

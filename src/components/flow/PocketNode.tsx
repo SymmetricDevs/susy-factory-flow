@@ -5,6 +5,7 @@ import { memo, useState, type CSSProperties } from "react";
 import { Copy, Maximize2, PackageOpen, Save } from "lucide-react";
 import type { FactoryPocket } from "@/lib/model/types";
 import { RECIPE_NODE_WIDTH } from "@/lib/board-grid";
+import { LOGIN_ENABLED } from "@/lib/feature-toggles";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
 import {
   captureBoardSelection,
@@ -323,6 +324,7 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
             )}
             {!calmMode ? (
               <>
+                {!LOGIN_ENABLED ? null : (
                 <button
                   type="button"
                   onClick={(event) => {
@@ -336,6 +338,7 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
                 >
                   <Save aria-hidden className="h-3.5 w-3.5" />
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={(event) => {

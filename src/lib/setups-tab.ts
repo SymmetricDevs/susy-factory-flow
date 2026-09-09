@@ -3,13 +3,14 @@
  * (the square at the head of the tab strip), so the old "open the sidebar on
  * Setups" bridge is gone; opening the list is `openLibrary({ kind: "public" })`.
  */
+export const OPEN_SETUPS_EVENT = "susy:open-setups";
 
 /**
  * Fired when a share lands on the network, wherever it was posted from (the
  * shelf's own button or the top bar). A mounted Setups panel refetches so the
  * new post is already on the shelf when the dialog closes.
  */
-export const SETUPS_CHANGED_EVENT = "gtnh:setups-changed";
+export const SETUPS_CHANGED_EVENT = "susy:setups-changed";
 
 export function notifySetupsChanged(): void {
   window.dispatchEvent(new Event(SETUPS_CHANGED_EVENT));

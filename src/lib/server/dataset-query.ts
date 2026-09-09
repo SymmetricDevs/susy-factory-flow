@@ -101,6 +101,8 @@ interface LoadedRecipeIndex {
   hydratedRecipeSummaries?: Map<number, RecipeSummary>;
   /** Resources a crop or a bee can produce; see getPassiveSourceResourceKeys. */
   passiveSourceKeys?: Partial<Record<ResourceSourceFilter, Set<string>>>;
+  /** Dataset-declared growable resources ("kind:id"), merged into the Plants filter. */
+  plantSourceKeys?: string[];
 }
 
 export type DatasetRecipeRef = RecipeContentRef;
@@ -196,7 +198,7 @@ const BEE_RECIPE_MAPS = new Set(["Bee Produce"]);
 
 export type ResourceSourceFilter = "plants" | "bees";
 
-const datasetRoot = path.join(process.cwd(), "public", "datasets", "gtnh");
+const datasetRoot = path.join(process.cwd(), "public", "datasets", "susy");
 const loadedCatalogs = new Map<string, LoadedRecipeIndex>();
 const pendingCatalogLoads = new Map<string, Promise<LoadedRecipeIndex>>();
 const pendingRecipeIndexLoads = new Map<string, Promise<LoadedRecipeIndex>>();
@@ -819,6 +821,8 @@ export interface DatasetRecipeQueryRequest {
   maxTier: TierFilter;
   offset: number;
   limit: number;
+  /** Allow an explicitly requested paginated browse with no search clauses. */
+  browseAll?: boolean;
 }
 
 export interface RecipeMapSelection {
@@ -1148,7 +1152,7 @@ async function queryDatasetRecipesFromLookup(
   const parsedQuery = parseSearchQuery(request.query);
   const clauses = normalizedRecipeQueryClauses(request);
 
-  if (clauses.length === 0 && parsedQuery.terms.length === 0) {
+  if (clauses.length === 0 && parsedQuery.terms.length === 0 && !request.browseAll) {
     return emptyRecipeQueryResult(request);
   }
 
@@ -1182,9 +1186,16 @@ async function queryDatasetRecipesFromLookup(
   const searchScores = resolved.searchScores;
   // A pure text search has no resource to group by, so the maps come out of what
   // the words matched.
+  const browseIndexes = request.browseAll
+    ? Array.from({ length: lookup.recipeCount }, (_, index) => index)
+    : [];
   const tierCandidatesByMap =
     scopedByMap ??
-    tierFilteredByMap(lookup, groupRecipesByMap(lookup, searchScores?.keys() ?? []), request.maxTier);
+    tierFilteredByMap(
+      lookup,
+      groupRecipesByMap(lookup, searchScores?.keys() ?? browseIndexes),
+      request.maxTier,
+    );
   const countedRecipeMaps = [...tierCandidatesByMap.entries()]
     .map(([recipeMapId, recipeIndexes]) => {
       const recipeMap = lookup.recipeMaps[recipeMapId];
@@ -2048,6 +2059,14 @@ async function getPassiveSourceResourceKeys(
 
   const recipeMaps = source === "plants" ? PLANT_RECIPE_MAPS : BEE_RECIPE_MAPS;
   const keys = new Set<string>();
+
+  // Packs without dedicated crop maps (Supersymmetry's greenhouses) declare
+  // their growable resources directly on the dataset.
+  if (source === "plants") {
+    for (const key of catalog.plantSourceKeys ?? []) {
+      keys.add(key);
+    }
+  }
 
   if (catalog.version.recipeLookupIndexPath) {
     const lookup = await loadRecipeLookupIndex(catalog.version);

@@ -23,11 +23,24 @@ import { APP_VERSION } from "@/lib/version";
  * only writer is the header, which stamps on every load after asking whether
  * a notice is due.
  */
-const LAST_SEEN_KEY = "gtnh-factory-flow.last-seen-version.v1";
+const LAST_SEEN_KEY = "susy-factory-flow.last-seen-version.v1";
 
 /**
- * The version this browser last ran, or nothing if it has never been here.
- * A first visit gets no release notice, which is what the absence means.
+ * Which `showToEveryone` releases this browser has already been shown.
+ *
+ * A SECOND record, deliberately, rather than a special case on the stamp. The
+ * stamp answers "what have you seen"; this answers "have you been handed this
+ * particular release once". Folding them together would mean the forced
+ * showing had to lie about the stamp to work, and then a browser that had
+ * genuinely read the notes would be told about them again.
+ */
+const FORCED_SHOWN_KEY = "susy-factory-flow.forced-notes.v1";
+
+/**
+ * The settings dialog's mute for the update popup. "off" means the notes
+ * never arrive by themselves; the dot on the What's new button still marks
+ * unread releases, so nothing goes unannounced, just uninterrupted. Absent
+ * means on, so a fresh profile and a never-touched setting are the same.
  */
 export function readLastSeenVersion(): string | undefined {
   try {

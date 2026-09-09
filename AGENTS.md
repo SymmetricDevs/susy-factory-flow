@@ -21,13 +21,22 @@ Working notes for future agents on GTNH Factory Flow.
     work into the top changelog entry and leave the number alone. Equal to
     `version.ts` means everything is live, so this is a new release: bump, and
     open one new entry.
-- THE PLAYER-FACING CHANGELOG IS GONE (Jack, 2026-09-08). No dialog, no
-  unread dot, no "new in vX" on the Welcome tab; the header chip is just the
-  number, and a plain click on it does nothing (shift-click still opens the
-  dev menu). `ChangelogDialog.tsx` was deleted. `src/lib/changelog.ts` stays
-  as a record IN THE CODE - keep adding an entry per release, same rules as
-  before - but nothing a player can reach reads it.
-- What announces a release now is the NOTICE, `src/lib/release-spotlight.ts`
+- THE CHANGELOG IS BACK ON THE CHIP (Jack, 2026-09-09: players went looking
+  for what's new and found nothing to press). It was deleted on 2026-09-08
+  and `ChangelogDialog.tsx` is restored from that commit. A plain click on
+  the header's version chip opens it, shift-click still opens the dev menu,
+  and the chip wears a DOT for a shipped release whose notes this browser
+  has not opened. The sheet opens on the releases this reader missed and
+  keeps the rest behind "Full history"; `src/lib/changelog.ts` is what it
+  reads, so every release still needs its entry, same rules as before.
+  There is no What's new button on the right of the bar - the chip is the
+  one door, and two labelled buttons made the bar too wide.
+  - THE DOT HAS ITS OWN STAMP, `changelog-read.v1`, written ONLY by opening
+    the notes. It cannot read `last-seen-version.v1`: the release notice
+    writes that on every load, so the very load that should have raised the
+    dot would have put it out first. A first visit stamps silently and shows
+    no dot - somebody who has never seen the app does not want a history.
+- What ANNOUNCES a release is the NOTICE, `src/lib/release-spotlight.ts`
   plus `ReleaseSpotlight.tsx`: a window that arrives ONCE, on the first visit
   after a release, carrying a line per change (icon plus a spec-sheet TITLE,
   no sentences) and a close key. A release with no entry in

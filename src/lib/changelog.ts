@@ -49,6 +49,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.0.1",
+    date: "2026-09-09",
+    headline: "Narrower cards, and What's new is back",
+    notes: [
+      "Machine cards are *two grid spaces narrower*, so more of a plan fits on the screen.",
+      "A long item name now *wraps onto two lines* instead of ending in three dots.",
+      "The machine picture sits on a *square window* between the two rails.",
+      "The *version chip* opens these notes again, with the full history behind it.",
+    ],
+  },
+  {
     version: "3.0.0",
     date: "2026-09-05",
     headline: "Three modes: Build, Solve, Pool",

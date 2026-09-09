@@ -63,6 +63,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The planner reads in Inter and a third larger; Settings has the font and a size stepper.",
       "Panning is much smoother, and the moving dashes on wires are gone.",
       "Release notes never pop up on their own any more: the version chip opens them and wears a dot while some are unread.",
+      "Arrange lays a big board out the way a hand does: machines in columns, drawers between them, flow left to right, and far fewer crossings.",
       "Editing a card or switching modes on a big board no longer freezes it, and the board's sounds play whole in Firefox.",
       "A multiblock running under one tick now counts whole recipes per tick, as the game does: 0.625 ticks runs two a tick, not 1.6.",
       "A multiblock's power is one EU/t number you type, wheel or add up from real hatches in a calculator that shows what it buys.",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ROUTER_TUNING } from "@/components/flow/router-tuning";
 import {
   arrangeBoard,
+  arrangeBoardColumns,
   type ArrangeCard,
   type ArrangeMove,
   type ArrangeWire,
@@ -141,8 +142,11 @@ describe("arrangeBoard", () => {
   });
 
   it("survives a recycle loop and keeps the majority direction", () => {
+    // The column pass's rule (a cycle broken at its least wire, the rest
+    // reading left to right); the free placement may fold a loop into a
+    // triangle, which the router prices lower.
     const cards = [card("a"), card("b"), card("c")];
-    const { moves } = arrangeBoard({
+    const { moves } = arrangeBoardColumns({
       cards,
       wires: [wire("a", "b"), wire("b", "c"), wire("c", "a")],
     });

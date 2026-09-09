@@ -38,6 +38,7 @@ import {
 } from "./board-arrange-optimize";
 import { makeAirTerm } from "./board-arrange-air";
 import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "@/components/flow/router-tuning";
+import { arrangeFree } from "./board-arrange-free";
 
 /** A card to place: its id, footprint, and where it sits today. */
 export interface ArrangeCard {
@@ -385,42 +386,104 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
   if (input.cards.length < 2) {
     return plain;
   }
+  const proxy = (result: ArrangeResult) =>
+    scoreLayoutProxy(
+      input.cards,
+      input.wires.map((wire) => ({ ...wire })),
+      new Map(result.moves.map((move) => [move.id, move.position])),
+      ARRANGE_PRICES!,
+      airOf,
+    );
   if (!input.judge) {
-    // No router at hand: the proxy chooses between the plain pass and the
-    // challenger, the way it chose among the challenger's own trials.
+    // No router at hand: the proxy chooses among the plain pass, the
+    // challenger and the free placement, the way it chose among the
+    // challenger's own trials.
     const challenger = arrangeBoardOnce(input, true);
-    const proxy = (result: ArrangeResult) =>
-      scoreLayoutProxy(
-        input.cards,
-        input.wires.map((wire) => ({ ...wire })),
-        new Map(result.moves.map((move) => [move.id, move.position])),
-        ARRANGE_PRICES!,
-        airOf,
-      );
-    return proxy(challenger) < proxy(plain) ? challenger : plain;
+    const free = arrangeFreeCandidate(input);
+    return [plain, challenger, free].sort((a, b) => proxy(a) - proxy(b))[0];
   }
   input.onProgress?.({ step: 1, stage: "Searching for a better layout", done: 0, total: 1 });
   ARRANGE_SEARCH_PROGRESS = (done, total) =>
     input.onProgress?.({ step: 1, stage: "Searching for a better layout", done, total });
   const challenger = arrangeBoardOnce(input, true);
   ARRANGE_SEARCH_PROGRESS = undefined;
+  // THE THIRD CANDIDATE (Jack, 2026-09-08): a placement with no columns at
+  // all, from graph distance and a free search (board-arrange-free.ts).
+  const free = arrangeFreeCandidate(input);
   input.onProgress?.({ step: 2, stage: "Routing the candidates", done: 0, total: 1 });
   const verdict = (result: ArrangeResult) =>
     input.judge!(new Map(result.moves.map((move) => [move.id, move.position])));
-  const plainVerdict = verdict(plain);
-  const challengerVerdict = verdict(challenger);
-  // Both layouts are polished - they start from different structures and
-  // the polish is greedy, so each can reach a place the other cannot - and
-  // the better finished board wins: fewer crossings, then shorter wire.
-  const polishedPlain = polishWithJudge(input, plain, plainVerdict, "first");
-  const polishedChallenger = polishWithJudge(input, challenger, challengerVerdict, "second");
+  // The two best by the router's verdict are polished - they start from
+  // different structures and the polish is greedy, so each can reach a
+  // place the other cannot - and the better finished board wins.
+  const ranked = [plain, challenger, free]
+    .map((result) => ({ result, verdict: verdict(result) }))
+    .sort((a, b) => a.verdict.points - b.verdict.points);
+  const polishedFirst = polishWithJudge(input, ranked[0].result, ranked[0].verdict, "first");
+  const polishedSecond = polishWithJudge(input, ranked[1].result, ranked[1].verdict, "second");
   input.onProgress?.({ step: 5, stage: "Choosing the better board", done: 1, total: 1 });
-  const finalPlain = verdict(polishedPlain);
-  const finalChallenger = verdict(polishedChallenger);
+  const finalFirst = verdict(polishedFirst);
+  const finalSecond = verdict(polishedSecond);
   // POINTS decide (Jack, 2026-09-08): a crossing is already priced into
   // them at the crossing dial, and a board that avoids one by sending a
   // wire round the whole board has paid more than the crossing cost.
-  return finalChallenger.points < finalPlain.points ? polishedChallenger : polishedPlain;
+  return finalSecond.points < finalFirst.points ? polishedSecond : polishedFirst;
+}
+
+/** The free placement as an ArrangeResult: component boxes, no steering. */
+function arrangeFreeCandidate(input: ArrangeInput): ArrangeResult {
+  const prices = ARRANGE_PRICES ?? routerPrices();
+  const spacing = input.taste?.spacing ?? "normal";
+  const placed = arrangeFree(input.cards, input.wires, {
+    prices,
+    // Per card, not per board: a trial is one card's move re-priced
+    // incrementally, so a bigger board needs proportionally more of them.
+    trials: Math.max(prices.searchTrials, 1500 * input.cards.length),
+    gapCells: ROW_GAP / BOARD_GRID,
+    besideCells: spacing === "compact" ? 2 : spacing === "roomy" ? 5 : 3,
+    onProgress: (done, total) =>
+      input.onProgress?.({ step: 1, stage: "Placing freely", done, total }),
+  });
+  const origin = input.origin ?? boundingTopLeft(input.cards);
+  const newById = new Map<string, { x: number; y: number }>();
+  const moves: ArrangeMove[] = input.cards.map((card) => {
+    const p = placed.positions.get(card.id) ?? { x: 0, y: 0 };
+    const position = { x: origin.x + p.x, y: origin.y + p.y };
+    newById.set(card.id, position);
+    return { id: card.id, position };
+  });
+  followInk(input, newById, moves);
+  const islands = placed.islands.map((island) => ({
+    ...island,
+    x: origin.x + island.x,
+    y: origin.y + island.y,
+  }));
+  return { moves, islands, wireRoutes: [] };
+}
+
+/**
+ * The column candidates alone, plain versus challenger, chosen the way the
+ * whole arrange chooses. For tests of the column pass's own mechanisms
+ * (sections, satellites, the fold); the arrange itself is `arrangeBoard`.
+ */
+export function arrangeBoardColumns(rawInput: ArrangeInput): ArrangeResult {
+  ARRANGE_PRICES = rawInput.tuning ?? routerPrices();
+  ARRANGE_AIR = makeAirTerm(rawInput.cards, rawInput.wires, ARRANGE_PRICES.islandAir);
+  const airOf = (positions: ReadonlyMap<string, { x: number; y: number }>) => ARRANGE_AIR(positions);
+  const plain = arrangeBoardOnce(rawInput, false);
+  if (rawInput.cards.length < 2) {
+    return plain;
+  }
+  const challenger = arrangeBoardOnce(rawInput, true);
+  const proxy = (result: ArrangeResult) =>
+    scoreLayoutProxy(
+      rawInput.cards,
+      rawInput.wires.map((wire) => ({ ...wire })),
+      new Map(result.moves.map((move) => [move.id, move.position])),
+      ARRANGE_PRICES!,
+      airOf,
+    );
+  return proxy(challenger) < proxy(plain) ? challenger : plain;
 }
 
 /**
@@ -1061,39 +1124,7 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
     });
   });
 
-  // Ink follows the cards it overlapped: a note pinned on a machine, a box
-  // framing a cluster, each rides the average displacement of the cards it
-  // reached. Ink over empty canvas has nothing to follow and stays put.
-  for (const ink of input.ink ?? []) {
-    let deltaX = 0;
-    let deltaY = 0;
-    let touched = 0;
-    for (const card of cards) {
-      const moved = newById.get(card.id);
-      if (!moved) {
-        continue;
-      }
-      if (
-        ink.x - INK_REACH < card.x + card.width &&
-        ink.x + ink.width + INK_REACH > card.x &&
-        ink.y - INK_REACH < card.y + card.height &&
-        ink.y + ink.height + INK_REACH > card.y
-      ) {
-        deltaX += moved.x - card.x;
-        deltaY += moved.y - card.y;
-        touched += 1;
-      }
-    }
-    if (touched > 0) {
-      moves.push({
-        id: ink.id,
-        position: {
-          x: snapToGrid(ink.x + deltaX / touched),
-          y: snapToGrid(ink.y + deltaY / touched),
-        },
-      });
-    }
-  }
+  followInk(input, newById, moves);
 
   // Bridges never cut through a foreign island. A wire between two islands
   // that would pass OVER a third gets steering stops walking it around that
@@ -1142,6 +1173,48 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
   }
 
   return { moves, islands, wireRoutes };
+}
+
+/**
+ * Ink follows the cards it overlapped: a note pinned on a machine, a box
+ * framing a cluster, each rides the average displacement of the cards it
+ * reached. Ink over empty canvas has nothing to follow and stays put.
+ */
+function followInk(
+  input: ArrangeInput,
+  newById: ReadonlyMap<string, { x: number; y: number }>,
+  moves: ArrangeMove[],
+): void {
+  for (const ink of input.ink ?? []) {
+    let deltaX = 0;
+    let deltaY = 0;
+    let touched = 0;
+    for (const card of input.cards) {
+      const moved = newById.get(card.id);
+      if (!moved) {
+        continue;
+      }
+      if (
+        ink.x - INK_REACH < card.x + card.width &&
+        ink.x + ink.width + INK_REACH > card.x &&
+        ink.y - INK_REACH < card.y + card.height &&
+        ink.y + ink.height + INK_REACH > card.y
+      ) {
+        deltaX += moved.x - card.x;
+        deltaY += moved.y - card.y;
+        touched += 1;
+      }
+    }
+    if (touched > 0) {
+      moves.push({
+        id: ink.id,
+        position: {
+          x: snapToGrid(ink.x + deltaX / touched),
+          y: snapToGrid(ink.y + deltaY / touched),
+        },
+      });
+    }
+  }
 }
 
 interface Ground {

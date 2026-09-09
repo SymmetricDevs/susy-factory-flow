@@ -628,6 +628,38 @@ Working notes for future agents on GTNH Factory Flow.
   prints the two integers from the DISPLAYED routes (docs/route-audit.md);
   Jack's counts agree with it. Jack's hand-arranged oil board is the
   reference: 1 crossing, 12,745 px (`artifacts/route-audit/oil-manual`).
+- THE FREE PLACEMENT (Jack, 2026-09-08: "get rid of the grid thinking ...
+  a lot of considerations when we place a thing ... future thinking"):
+  `src/lib/board-arrange-free.ts` is a THIRD candidate beside the column
+  passes, and on big boards it is the one that wins. Stress SGD over
+  graph distance (a card ten hops away stands ten cards away, partners
+  touch) gives the structure; the cards are settled on the cell grid;
+  then simulated annealing over FREE moves (beside a partner with port
+  rows aligned, nudge, swap, a machine with its own drawers as one, a
+  whole side of a bridge wire as one) scored INCREMENTALLY in the
+  router's points plus the stranger air, plus three readability terms
+  the router does not price: TIDY (a card's edge lining up with a
+  neighbour's, or a shared port row), FLOW (a wire's target less than a
+  card's width right of its source pays per pixel, and a backward wire a
+  flat price: a crossing's worth, nearly four between two machines, a
+  token one inside a cycle - an oil board is mostly recycle loops), and
+  a little sprawl. The one lattice kept: MACHINES STAND IN COLUMNS at a
+  pitch of one machine width plus a drawer corridor, drawers in the
+  corridors; rows are any cell. The search runs twice like a chip
+  placer - free to any cell first (the structure), then legalised onto
+  the columns and repaired with a cooler search - because searching on
+  the lattice from the start found layouts a fifth worse. The three
+  candidates are judged by the real router, the best two polished, the
+  better polished board wins on points; every dial is in `FREE_DIALS`.
+  Harnesses (local, off the suite): `arrange-capture.local.test.ts`
+  (CAPTURE=an audit.json: arranges offline, REPORT=, OUT=layout) and
+  `free-explain.local.test.ts` (LAYOUTS=: every objective term and the
+  router's verdict per layout). Numbers, oil berry board (44 machines,
+  36 drawers, 104 wires, `artifacts/route-audit/oilberry-*`): the app's
+  Arrange gave 38 crossings / 41,965 px / 93,549 pts; the free placement
+  9 / 23,223 / 42,099. Jack's small oil board: 1 crossing / 5,564 px
+  (his hand layout 3 / 6,880). Cost: the arrange takes ~80 s on the big
+  board, ~20 s of it the free search.
 - HOW `arrangeBoard` WORKS NOW: the plain column pass AND a challenger
   (`board-arrange-optimize.ts`: annealing over column order / offsets /
   row air / satellite slides / column hops / moves to a partner's side,

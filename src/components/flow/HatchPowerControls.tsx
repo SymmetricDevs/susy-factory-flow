@@ -80,7 +80,7 @@ function PowerScaleMarker({ position, label, caption, lane, kind, transition, ti
       data-power-scale-label={kind}
       title={title}
       style={{ left: percent + "%", top, transform: "translateX(-" + percent + "%)", transition }}>
-      {caption ? <span className="mr-1 text-[11px] opacity-70">{caption}</span> : null}{label}
+      {caption ? <span className="mr-1 font-medium text-fg-subtle">{caption}</span> : null}{label}
     </span>
   </>;
 }

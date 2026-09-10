@@ -271,8 +271,8 @@ function PowerReadout({
         <p className="text-fg-muted">
           {mode === "build"
             ? shared
-              ? "Supply sets capacity. Recipe mix × usage = average draw."
-              : "Supply sets capacity. Max running × usage = average draw."
+              ? "Supply is capacity. Draw follows the recipes running."
+              : "Supply is capacity. The recipe only draws what it needs."
             : "Supply sets capacity. Demand follows the calculated production rate."}
         </p>
         {mode !== "build" ? (
@@ -298,7 +298,7 @@ function PowerReadout({
         ) : (
           <>
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-fg-muted">{shared ? "Recipe mix" : "Max running"} × usage</span>
+              <span className="shrink-0 text-fg-muted">{shared ? "Recipe mix" : "Max running"} × usage = average</span>
               <span className="tabular-nums text-fg">
                 {formatCompact(runningDraw)} EU/t × {number(usage * 100)}% ={" "}
                 <strong>{formatCompact(average)} EU/t</strong>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ArrowRight } from "lucide-react";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { GT_VOLTAGE_TIERS, getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { formatCompact } from "@/lib/model";
@@ -44,13 +45,11 @@ const track =
   "relative mt-1 h-3 border border-[var(--mc-15)] bg-[var(--mc-33)] p-px shadow-[inset_1px_1px_0_var(--mc-15),inset_-1px_-1px_0_var(--mc-85)]";
 function Comparison({ label, current, next }: { label: string; current: number; next: number }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border border-line bg-[var(--mc-33)] px-2 py-1.5">
+    <div className="flex h-8 items-center justify-between gap-x-2 border border-line bg-[var(--mc-33)] px-2 py-1.5">
       <span className="text-fg-muted">{label}</span>
       <span className="flex items-center gap-2 font-semibold tabular-nums text-fg">
         <span>{number(current)}</span>
-        <span aria-hidden className="font-normal text-fg-muted">
-          →
-        </span>
+        <ArrowRight aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" strokeWidth={3} />
         <span>{number(next)}</span>
       </span>
     </div>
@@ -66,17 +65,6 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
   const stats = getOverclockedRecipeStats(recipe, node);
   const voltage = getVoltageTierMaxEuT(report.tier);
   const previous = working.previousWin;
-  const before = previous
-    ? getNodePowerReport(recipe, powerNodeAtBudget(node, previous.euT))
-    : undefined;
-  const spare =
-    previous &&
-    before?.state === "ok" &&
-    report.state === "ok" &&
-    before.parallels === report.parallels &&
-    before.overclockSteps === report.overclockSteps
-      ? report.poolEuT - previous.euT
-      : 0;
   const next = working.nextWin;
   const nextNode = next ? powerNodeAtBudget(node, next.euT) : undefined;
   const nextReport = nextNode ? getNodePowerReport(recipe, nextNode) : undefined;
@@ -100,32 +88,35 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
   const raw = node.powerInputMode === "eut";
   const capacity = getMachineStructuralParallels(applyMachineHandlerToRecipe(recipe, node), node);
   const running = report.state === "ok" ? report.parallels : 0;
-  const nextRunning = nextReport?.state === "ok" ? nextReport.parallels : 0;
+  const nextRunning = nextReport?.state === "ok" ? nextReport.parallels : running;
   const suppliedText = raw ? `${formatCompact(report.poolEuT)} EU/t` : `${number(report.amps)}A`;
   const floorText = raw ? `${formatCompact(floorEuT)} EU/t` : `${number(keepAmps)}A`;
   const nextText = raw ? `${formatCompact(next?.euT ?? 0)} EU/t` : `${number(nextAmps)}A`;
+  const extraEuT = report.state === "ok" ? Math.max(0, report.poolEuT - floorEuT) : 0;
   return (
     <div
-      className="w-[400px] max-w-full text-[13px] leading-[18px] text-fg-subtle"
+      className="flex h-[350px] w-[440px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
       data-power-readout
     >
-      <div className="text-[15px] font-semibold leading-5 text-fg">Power input</div>
-      <div className="mt-1 flex flex-wrap items-center gap-1 text-[15px] font-medium leading-5 tabular-nums text-fg">
-        <span>{number(report.amps)}A ×</span>
-        <TierBadge tier={report.tier} />
-        <span>= {number(report.poolEuT)} EU/t</span>
+      <div className="h-5 shrink-0 text-[15px] font-semibold leading-5 text-fg">Power input</div>
+      <div className="mt-1 flex h-6 shrink-0 items-center justify-between gap-3 whitespace-nowrap">
+        <div className="flex min-w-0 items-center gap-1 font-medium tabular-nums text-fg">
+          <span>{number(report.amps)}A ×</span>
+          <TierBadge tier={report.tier} />
+          <span className="truncate">= {number(report.poolEuT)} EU/t</span>
+        </div>
+        <span className="flex shrink-0 items-center justify-end gap-1 text-fg-muted">
+          {raw ? (
+            "Suitable voltage assumed"
+          ) : equivalent ? (
+            <>
+              {number(equivalent)} <TierBadge tier={report.tier} />{" "}
+              {equivalent === 1 ? "hatch" : "hatches"}
+            </>
+          ) : null}
+        </span>
       </div>
-      {raw ? (
-        <p className="mt-1 flex flex-wrap items-center gap-1 text-fg-muted">
-          Assumed suitable voltage: <TierBadge tier={report.tier} />
-        </p>
-      ) : equivalent ? (
-        <p className="mt-1 flex items-center gap-1 text-fg-muted">
-          {equivalent} <TierBadge tier={report.tier} />{" "}
-          {equivalent === 1 ? "hatch (1A when alone)" : "hatches"}
-        </p>
-      ) : null}
-      <div className="my-3 grid grid-cols-2 gap-x-6 gap-y-2 border-y border-line py-3">
+      <div className="my-2 grid h-[84px] shrink-0 grid-cols-2 gap-x-6 gap-y-1 border-y border-line py-2">
         {[
           ["Parallels", `${running} / ${capacity}`],
           [
@@ -143,94 +134,94 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
         ].map(([label, value]) => (
           <div
             key={label}
-            className="min-w-0 flex flex-wrap items-baseline justify-between gap-x-2"
+            className="flex min-w-0 items-baseline justify-between gap-x-2 whitespace-nowrap"
           >
             <span className="text-fg-muted">{label}</span>
-            <span className="font-medium tabular-nums text-fg">{value}</span>
+            <span className="truncate font-medium tabular-nums text-fg">{value}</span>
           </div>
         ))}
       </div>
-      {next && nextReport ? (
-        <section>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-[15px] font-semibold text-fg">Next improvement</h3>
-            <span className="flex items-center gap-1 font-medium text-fg">
-              +{raw ? `${formatCompact(next.euT - report.poolEuT)} EU/t` : `${number(extraAmps)}A`}
-              {!raw ? <TierBadge tier={report.tier} /> : null}
-            </span>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Comparison
-              label="Overclocks"
-              current={report.state === "ok" ? report.overclockSteps : 0}
-              next={nextReport.overclockSteps}
-            />
-            <Comparison label="Parallels" current={running} next={nextRunning} />
-          </div>
-          {nextStats ? (
-            <p className="mt-2">
+      <section className="min-h-0 flex-1">
+        <div className="flex h-5 items-center justify-between gap-2">
+          <h3 className="text-[15px] font-semibold text-fg">
+            {next ? "Next improvement" : "No further improvement"}
+          </h3>
+          <span className="flex items-center gap-1 font-medium text-fg">
+            {next ? (
+              <>
+                {raw
+                  ? `+${formatCompact(next.euT - report.poolEuT)} EU/t`
+                  : `+${number(extraAmps)}A`}
+                {!raw ? <TierBadge tier={report.tier} /> : null}
+              </>
+            ) : null}
+          </span>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Comparison
+            label="Overclocks"
+            current={report.state === "ok" ? report.overclockSteps : 0}
+            next={nextReport?.overclockSteps ?? report.overclockSteps}
+          />
+          <Comparison label="Parallels" current={running} next={nextRunning} />
+        </div>
+        <p className="mt-2 h-[18px]">
+          {nextReport && nextStats ? (
+            <>
               {report.state !== "ok" ? "Machine starts at" : "Output rises to"}{" "}
               <strong className="font-medium text-fg">
                 {number((nextReport.parallels * 20) / nextStats.durationTicks)} runs/s
               </strong>
               .
-            </p>
-          ) : null}
-          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-2 tabular-nums">
-            <span className="text-fg-muted">{floorText}</span>
-            <span className="text-center font-medium text-fg">{suppliedText} supplied</span>
-            <span className="text-right text-fg-muted">{nextText}</span>
-          </div>
+            </>
+          ) : (
+            "More supply cannot increase this setup’s output."
+          )}
+        </p>
+        <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2 tabular-nums">
+          <span className="text-fg-muted">{floorText}</span>
+          <span className="text-center font-medium text-fg">{suppliedText} supplied</span>
+          <span className="text-right text-fg-muted">{next ? nextText : "Maximum"}</span>
+        </div>
+        <div
+          role="progressbar"
+          aria-label="Supply between output thresholds"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          aria-valuetext={`${suppliedText} supplied; ${next ? `next improvement at ${nextText}` : "no further improvement"}`}
+          className={track}
+        >
           <div
-            role="progressbar"
-            aria-label="Supply between output thresholds"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progress * 100)}
-            aria-valuetext={`${suppliedText} supplied; next improvement at ${nextText}`}
-            className={track}
-          >
-            <div
-              className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)]"
-              style={{ width: `${progress * 100}%` }}
-            />
-            <span
-              className="absolute inset-y-0 w-0.5 bg-[var(--mc-ink)]"
-              style={{ left: `clamp(1px, ${progress * 100}%, calc(100% - 3px))` }}
-            />
-          </div>
-          <div className="mt-1 flex justify-between gap-2 text-fg-muted">
-            <span>Current speed starts here</span>
-            <span>Next improvement</span>
-          </div>
-        </section>
-      ) : (
-        <p className="text-fg">No further output gain at this voltage.</p>
-      )}
-      {spare > 1e-9 ? (
-        <section className="mt-3 border-t border-line pt-3">
-          <h3 className="font-semibold text-fg">Power needed for this speed</h3>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <div>
-              <div className="text-fg-muted">Needed for this speed</div>
-              <strong className="text-fg">{floorText}</strong>
-            </div>
-            <div>
-              <div className="text-fg-muted">Extra supply available</div>
-              <strong className="text-fg">
-                {raw ? `${formatCompact(spare)} EU/t` : `${number(spare / voltage)}A`}
-              </strong>
-            </div>
-          </div>
-          <p className="mt-2 text-fg-muted">
-            {next
-              ? "The extra supply has not reached the next upgrade yet."
-              : "This setup is already at its maximum speed."}{" "}
-            Unused supply is not consumed.
-          </p>
-        </section>
-      ) : null}
-      {working.stall ? <p className="mt-3 text-amber-300">{working.stall}</p> : null}
+            className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)]"
+            style={{ width: `${progress * 100}%` }}
+          />
+          <span
+            className="absolute inset-y-0 w-0.5 bg-[var(--mc-ink)]"
+            style={{ left: `clamp(1px, ${progress * 100}%, calc(100% - 3px))` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between gap-2 text-fg-muted">
+          <span>
+            {report.state === "ok"
+              ? `${formatCompact(floorEuT)} EU/t for this speed`
+              : "Not running yet"}
+          </span>
+          <span>{next ? `${formatCompact(next.euT)} EU/t for next step` : "Maximum output"}</span>
+        </div>
+      </section>
+      <p
+        className={`mt-2 h-9 shrink-0 border-t border-line pt-1 ${working.stall ? "text-amber-300" : "text-fg-muted"}`}
+      >
+        {(working.stall
+          ? report.state === "over-tier"
+            ? "Hatch voltage is too low for this recipe."
+            : "Supply is too low to start this recipe."
+          : undefined) ??
+          (extraEuT > 0
+            ? `${formatCompact(extraEuT)} EU/t extra supply — ${next ? "not enough for the next step yet." : "no further output gain."}`
+            : "")}
+      </p>
     </div>
   );
 }

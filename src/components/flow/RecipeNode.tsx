@@ -1,7 +1,5 @@
 "use client";
 
-import { CropPowerReadout } from "./CropPowerReadout";
-
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
   Fragment,
@@ -1506,7 +1504,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               // A crop card's harvester tier (manager or seed bed) wears the
               // same top-right slot as every other card's voltage chip.
               ...(cropTierControl && !tierControl && !powerInfo && !calmMode ? ["50px"] : []),
-              ...(isCropProductionNode && !calmMode ? ["max-content"] : []),
             ].join(" "),
           }}
         >
@@ -1755,8 +1752,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }}
             />
           ) : null}
-          {isCropProductionNode && !calmMode ? <CropPowerReadout recipe={effectiveRecipe} node={projectNode}
-            seeds={cropSeedCount} cardEuT={cropDrawEuT} utilization={result?.utilization} mode={tooltipMode(liveProject)} /> : null}
           {showHatchControl ? <HatchPowerControls recipe={nodeRecipe} node={projectNode}
             mode={tooltipMode(liveProject)}
             plannedEuT={result ? [result, ...sectionRails.map((entry) => entry.result)].reduce(

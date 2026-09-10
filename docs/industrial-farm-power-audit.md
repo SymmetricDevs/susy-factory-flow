@@ -1,12 +1,12 @@
 # Industrial Farm power and upgrade audit
 
-## Decision
+## Decision: retain requirement-driven planning
 
-Industrial Farm needs editable supply. Reuse the multiblock card’s **amps + voltage / raw EU/t controls**, but resolve their effects through a dedicated Industrial Farm calculation. Keep the seed-bed tier separate from the energy-hatch tier. Replace the manual “Overclocks 0–6” control with an **Overclocked Growth Acceleration Unit installed / absent** control; performed overclocks are a calculated result.
+The user chose to restore the original Industrial Farm model: **seed-bed tier in the top-right, upgrades and target overclocks in the configuration, calculated consumption in the existing Power section**. No separate amp/hatch selector or duplicate power badge is needed.
 
-The farm is not an ordinary recipe-processing multiblock. It has no supply-funded recipe parallel ladder, and overclocking does not shorten its processing cycle. It should share the controls, colors, positioning, and visual hierarchy of the other power tooltips while reporting its own meaningful quantities: seed capacity, upgrade slots, production multiplier, power draw, and the next attainable production step.
+Selected overclocks express the desired operating point, not a count of installed upgrade blocks. The planner calculates the power required to achieve it; the player supplies sufficient power in game. This is a valid inverse of the game's supply-derived calculation. Seed-bed tier alone does not determine consumption: upgrades and target overclocks matter too.
 
-The previous dedicated requirement badge was an incomplete workaround. Its unconditional claim that extra supply does not increase growth is false when the overclocked unit is installed. The new top-right EU/t badge should be replaced by the shared supply controls; consumption remains in the Power cell and in the hover’s operating summary.
+The source findings below remain useful. The supply-driven redesign in sections 5–8 is an **archived, rejected proposal**, not an implementation requirement. Existing accounting limitations are recorded for future work; this rollback does not claim to fix them. Do not reintroduce supply controls or migrate existing target-overclock settings on the basis of that proposal.
 
 ## Source baseline and confidence
 
@@ -150,7 +150,7 @@ Lack of required water prevents farming. Ordinary fertilizer is optional; absenc
 
 The current crop recipe has no such dynamic input ports. A full implementation must either introduce these inputs with correct per-farm scaling and matching, or explicitly identify them as assumed external supplies. It must not claim complete resource accounting while silently omitting them. For the intended full audit/rebuild, modeling the inputs is the stronger design.
 
-## 5. Existing planner gaps
+## 5. Archived comparison for the rejected supply-driven proposal
 
 | Area | Current implementation | Required correction |
 | --- | --- | --- |
@@ -164,11 +164,11 @@ The current crop recipe has no such dynamic input ports. A full implementation m
 | Fluids | No dynamic water/fertilizer requirements | Model per-cycle, per-farm consumption and upgrade-dependent fertilizer rules |
 | Slot changes | Normalizer silently degrades units by priority | Preserve predictable edits and disclose any removal when tier/upgrade changes invalidate hardware |
 | Tooltip | Standalone required-EU/t badge and unconditional “extra supply does not increase growth” | Replace with supply controls and conditional, calculated performance story |
-| Compatibility | Old saves encode fictional selected OCs | Migrate to installed unit plus a capacity preserving the old intended rate where possible |
+| Compatibility | Old saves encode target OCs | Migrate to installed unit plus a capacity preserving the old intended rate where possible |
 
 Relevant implementation sites are `passive-production.ts`, `machine-effects.ts`, `overclock.ts`, `power-report.ts`, `throughput.ts`, `RecipeNode.tsx`, `CropPowerReadout.tsx`, and `MachineShoppingList.tsx`. Merely wiring the new controls to stored hatch fields does not fix these disconnected calculations.
 
-## 6. Proposed model and solver contract
+## 6. Rejected proposal: model and solver contract
 
 Create one farm performance calculation with explicit hardware, supply, and crop inputs. It should return normalized hardware, seed capacity, slot usage, base draw, available supply, computed overclocks, growth/output multipliers, fixed cycle duration, per-farm fluid requirements, sustained-operation state, and next power threshold. These are derived facts, not separately editable state.
 
@@ -184,7 +184,7 @@ For an old farm with manual OC count `n > 0`, install the OC unit, calculate bas
 
 Old `n = 0` means absent unit unless a future installation field says otherwise. Default supply for a newly placed farm should be a sufficient, clearly shown starting capacity; turning upgrades on afterward may legitimately make it insufficient. Switching to Crop Manager must stop applying the farm’s supply math while retaining any remembered settings according to the existing handler-switch policy.
 
-## 7. Controls and tooltip design
+## 7. Rejected proposal: controls and tooltip design
 
 The main card should have the same two supply controls as other electric multiblocks. Seed-bed tier belongs with farm hardware. The existing top-right seed-bed chip should not masquerade as hatch voltage once both values exist. Move that selector into the farm’s configuration area, or label it clearly if retaining it near the header. Replace the manual OC stepper with an installed/absent upgrade tile.
 
@@ -214,7 +214,7 @@ Build footer: **“Supply sets capacity. Average draw follows operating time.”
 
 Hatch-equivalent text must be informational and accurate for the farm’s 2 A regular hatches. Raw mode omits hatch/tier interpretation and preserves exact EU/t. Glass/hatch-layout assumptions belong in a concise contextual note, not in a new required picker.
 
-## 8. Implementation acceptance criteria
+## 8. Rejected proposal: acceptance criteria
 
 1. A base MV farm at 119 EU/t is unsustainable, at 120 EU/t sustainable, and at larger supply remains un-overclocked without the unit.
 2. An MV growth unit changes base draw to 270 EU/t; 256 EU/t is insufficient.

@@ -2620,3 +2620,11 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
     filter: drop-shadow(0 0 5px #ef4444);
   }
 }
+
+/* Public viewing keeps configuration readable, but the controls are inert. */
+[data-view-only] [data-viewer-disabled] {
+  cursor: default;
+}
+[data-view-only] button[data-viewer-disabled] {
+  opacity: 0.5;
+}

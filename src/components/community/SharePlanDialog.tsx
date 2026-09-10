@@ -243,7 +243,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
             </p>
             <p className="text-xs text-fg-subtle">
               {isPublic
-                ? "Public: it shows in Public setups and anyone with the link can open a copy."
+                ? "Public: it shows in Public setups. Anyone with the link can view it and open their own copy."
                 : "Private: only you can see it. The link opens nothing for anyone else."}
             </p>
             {error ? <p className="text-sm text-red-500">{error}</p> : null}

@@ -63,6 +63,9 @@ import { LOCAL_STORAGE_KEY, useFactoryStore } from "./factory-store";
 export type DesignSaveState = "idle" | "saving" | "saved" | "error";
 
 interface DesignStore {
+  publicView?: { id: string; name: string; authorName?: string; project: FactoryProject };
+  viewPublicProject: (post: { id: string; name: string; authorName?: string }, project: FactoryProject) => Promise<void>;
+  closePublicView: () => Promise<void>;
   /** Every design on this device, open or closed, in strip order. */
   designs: DesignSummary[];
   /** The shelf's folders, by name. */
@@ -172,7 +175,7 @@ function landOnDesign(
 ) {
   beginDesignCameraHandover();
   writeActiveDesignId(designId);
-  set({ ...rest, activeDesignId: designId });
+  set({ ...rest, activeDesignId: designId, publicView: undefined });
   showProject(project, designId);
 }
 
@@ -211,7 +214,7 @@ function withCurrentView(project: FactoryProject): FactoryProject {
  * drop the last few edits of the design being left behind.
  */
 async function flushCanvasInto(summary: DesignSummary | undefined): Promise<void> {
-  if (!summary) {
+  if (!summary || useFactoryStore.getState().isReadOnly) {
     return;
   }
 
@@ -250,6 +253,27 @@ async function listLibrary(): Promise<Pick<DesignStore, "designs" | "folders">> 
 }
 
 export const useDesignStore = create<DesignStore>((set, get) => ({
+  closePublicView: async () => {
+    if (!get().publicView) return;
+    const remembered = readActiveDesignId();
+    const target = get().designs.find((design) => design.id === remembered && !design.closed)
+      ?? openDesigns(get().designs)[0];
+    if (target) { await get().switchToDesign(target.id); return; }
+    set({ publicView: undefined });
+    showProject(createEmptyProject());
+    landOnNothing(set);
+  },
+  viewPublicProject: async (post, project) => {
+    const { activeDesignId, designs } = get();
+    await flushCanvasInto(designs.find((design) => design.id === activeDesignId));
+    beginDesignCameraHandover();
+    // No design record is created, and autosave has no design to write into.
+    set({ activeDesignId: undefined, publicView: { ...post, project } });
+    useFactoryStore.getState().loadViewedProject(project);
+    applyPlanView(project.view, "board");
+    leaveWelcomeTab();
+    leaveLibrary();
+  },
   designs: [],
   folders: [],
   activeDesignId: undefined,
@@ -698,7 +722,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
   saveActiveProject: async (designId, project) => {
     const { activeDesignId, designs } = get();
-    if (!designId || designId !== activeDesignId) {
+    if (!designId || designId !== activeDesignId || useFactoryStore.getState().isReadOnly) {
       return;
     }
 

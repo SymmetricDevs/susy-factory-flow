@@ -4,7 +4,7 @@ import { normalizeFullFarms } from "@/lib/model/full-farms";
 
 import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 
-import { create } from "zustand";
+import { create, type StateCreator, type StoreApi } from "zustand";
 import { createEmptyProject } from "@/examples";
 import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
 import {
@@ -148,6 +148,9 @@ export interface BoardCameraRequest {
 }
 
 interface FactoryStore {
+  /** Public viewing sessions never accept edits to their project. */
+  isReadOnly: boolean;
+  loadViewedProject: (project: FactoryProject) => void;
   checklistMode: boolean;
   setChecklistMode: (active: boolean) => void;
   toggleChecklist: (kind: "cards" | "edges", ids: string[]) => void;
@@ -936,7 +939,60 @@ export interface PendingResourceConnection {
 /** Never reused within a session, so a chip's dismiss can name its entry. */
 let lastRecipeAddId = 0;
 
-export const useFactoryStore = create<FactoryStore>((set, get) => ({
+function withViewerGuard(
+  initialize: (
+    set: StoreApi<FactoryStore>["setState"],
+    get: StoreApi<FactoryStore>["getState"],
+    write: StoreApi<FactoryStore>["setState"],
+    setPresentation: StoreApi<FactoryStore>["setState"],
+  ) => FactoryStore,
+): StateCreator<FactoryStore> {
+  return (write, get) => {
+    // One backstop for every edit path, including async completions and keyboard
+    // actions. A rejected edit must not change the solve or undo history either.
+    const set: typeof write = (update) =>
+      write((state) => {
+        const next = typeof update === "function" ? update(state) : update;
+        if (state.isReadOnly && next.project && next.project !== state.project)
+          return state;
+        return next;
+      });
+    // System hydration and board-window navigation are permitted in a viewer.
+    // Neither creates edit history or a saved personal design.
+    const setPresentation: typeof write = (update) => {
+      if (!get().isReadOnly) {
+        set(update);
+        return;
+      }
+      write((state) => {
+        const next = typeof update === "function" ? update(state) : update;
+        return {
+          ...next,
+          undoHistory: state.undoHistory,
+          redoHistory: state.redoHistory,
+        };
+      });
+    };
+    return initialize(set, get, write, setPresentation);
+  };
+}
+
+export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, write, setPresentation) => ({
+  isReadOnly: false,
+  loadViewedProject: (project) => {
+    quietBoardSoundsFor(1500);
+    const nextProject = normalizeLoadedProject(project);
+    write({
+      isReadOnly: true,
+      project: nextProject,
+      lastResult: solveBooks(nextProject),
+      undoHistory: [], redoHistory: [],
+      selectedNodeId: undefined, selectedBoardIds: [],
+      pendingBoardSelectionIds: undefined, pendingResourceConnection: undefined,
+      nodeColorPaintMode: undefined, checklistMode: false,
+      recipeBrowserResource: undefined, powerMenuOpen: false,
+    });
+  },
   checklistMode: false,
   setChecklistMode: (checklistMode) => set({ checklistMode, ...(checklistMode ? { nodeColorPaintMode: undefined, pendingResourceConnection: undefined } : {}) }),
   toggleChecklist: (kind, ids) => set((state) => {
@@ -1031,7 +1087,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   markHydratedProject: (project) => {
     quietBoardSoundsFor(1500);
     const nextProject = normalizeLoadedProject(project);
-    set({
+    write({
+      isReadOnly: false,
       project: nextProject,
       selectedNodeId: nextProject.nodes[0]?.id,
       selectedRecipeId: nextProject.nodes[0]?.recipeId ?? nextProject.recipes[0]?.id,
@@ -1083,7 +1140,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     }));
   },
   setDataset: (dataset) => {
-    set((state) => ({
+    setPresentation((state) => ({
       dataset,
       project: refreshProjectResourceIcons(state.project, dataset),
       recipeResourceHistory: refreshResourceHistoryIcons(state.recipeResourceHistory, dataset),
@@ -1100,7 +1157,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     }));
   },
   refreshProjectRecipes: (recipes, migration = {}) => {
-    set((state) => {
+    setPresentation((state) => {
       if (recipes.length === 0) {
         return state;
       }
@@ -2449,7 +2506,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     });
   },
   setPoolCellRatios: (ratios) => {
-    set((state) => {
+    setPresentation((state) => {
       const current = state.project.poolCellRatios ?? {};
       let changed = false;
       const merged = { ...current };
@@ -3754,7 +3811,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     return createdBoardId;
   },
   expandPocket: (pocketId) => {
-    set((state) => {
+    setPresentation((state) => {
       const pocket = (state.project.pockets ?? []).find((entry) => entry.id === pocketId);
       if (!pocket || pocket.expanded) {
         return state;
@@ -3887,7 +3944,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     });
   },
   minimizePocket: (pocketId) => {
-    set((state) => {
+    setPresentation((state) => {
       const pocket = (state.project.pockets ?? []).find((entry) => entry.id === pocketId);
       if (!pocket?.expanded) {
         return state;
@@ -4390,7 +4447,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       });
     });
   },
-}));
+})));
 
 function withProjectHistory(
   state: FactoryStore,

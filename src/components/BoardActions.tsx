@@ -87,6 +87,7 @@ export function BoardActions({
   onShare,
   onExportImage,
 }: BoardActionsProps = {}) {
+  const isReadOnly = useFactoryStore((state) => state.isReadOnly);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [isExportMenuOpen, setExportMenuOpen] = useState(false);
@@ -279,6 +280,8 @@ export function BoardActions({
       }}
     />
   );
+
+  if (isReadOnly) return null;
 
   if (variant === "list") {
     return (

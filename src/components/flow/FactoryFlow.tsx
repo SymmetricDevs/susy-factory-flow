@@ -5,6 +5,7 @@ import { ChecklistKeys, useChecklistBoard, checklistCursorStyle } from "./Checkl
 import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { useViewerLock } from "./use-viewer-lock";
 
 import {
   BaseEdge,
@@ -1979,6 +1980,7 @@ interface ResolvedResourceHandle {
 }
 
 export function FactoryFlow() {
+  const isReadOnly = useFactoryStore((state) => state.isReadOnly);
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
   const selectNode = useFactoryStore((state) => state.selectNode);
@@ -6413,12 +6415,14 @@ export function FactoryFlow() {
 
 
   const checklistCapture = useChecklistBoard(visibleFlowEdges);
+  const viewerCapture = useViewerLock(boardRef, isReadOnly);
   const checklistNodes = useMemo(() => {
+    if (isReadOnly) return visibleFlowNodes.map((node) => ({ ...node, draggable: false, connectable: false }));
     if (!checklistMode) return visibleFlowNodes;
     const checked = new Set(project.checklist?.cards);
     return visibleFlowNodes.map((node) => ({ ...node, draggable: false,
       className: [node.className, checked.has(node.id) ? "checklist-done" : ""].filter(Boolean).join(" ") }));
-  }, [visibleFlowNodes, checklistMode, project.checklist]);
+  }, [visibleFlowNodes, checklistMode, project.checklist, isReadOnly]);
   const checklistEdges = useMemo(() => {
     if (!checklistMode) return visibleFlowEdges;
     const checked = new Set(project.checklist?.edges);
@@ -6441,6 +6445,7 @@ export function FactoryFlow() {
       // React subscription.
       data-glance-mode={boardView.glanceMode}
       data-help-anchor="board"
+      data-view-only={isReadOnly || undefined}
       className={[
         // The 480px floor keeps a desktop board usable, and clears the shortest
         // window that is not compact (560px) with the two bars above it. A phone
@@ -6505,13 +6510,13 @@ export function FactoryFlow() {
             : undefined),
         } as CSSProperties
       }
-      onPointerDownCapture={(event) => { if (!checklistCapture(event)) handleAnnotationPointerDown(event); }}
-      onMouseDownCapture={checklistCapture}
-      onTouchStartCapture={checklistCapture}
-      onClickCapture={checklistCapture}
-      onDoubleClickCapture={checklistCapture}
-      onContextMenuCapture={checklistCapture}
-      onKeyDownCapture={checklistCapture}
+      onPointerDownCapture={(event) => { if (!viewerCapture(event) && !checklistCapture(event) && !isReadOnly) handleAnnotationPointerDown(event); }}
+      onMouseDownCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
+      onTouchStartCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
+      onClickCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
+      onDoubleClickCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
+      onContextMenuCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
+      onKeyDownCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
       onWheelCapture={checklistCapture}
       // Dragging a picture file straight onto the board drops it where it
       // lands, as an image annotation.
@@ -6522,6 +6527,7 @@ export function FactoryFlow() {
         }
       }}
       onDrop={(event) => {
+        if (isReadOnly) { event.preventDefault(); return; }
         const file = Array.from(event.dataTransfer.files).find((candidate) =>
           candidate.type.startsWith("image/"),
         );
@@ -6536,7 +6542,7 @@ export function FactoryFlow() {
         void placeImageFile(file, point);
       }}
     >
-      {boardMenu ? <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} /> : null}
+      {boardMenu && !isReadOnly ? <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} /> : null}
       <ReactFlow
         nodes={checklistNodes}
         edges={checklistEdges}
@@ -6547,9 +6553,10 @@ export function FactoryFlow() {
         // background does (Jack, 2026-09-07); only text inputs and the wire
         // handles keep nodrag, so a jittery click must still count as one.
         nodeClickDistance={4}
-        onConnect={handleConnect}
-        onConnectStart={handleConnectStart}
-        onConnectEnd={handleConnectEndWithSound}
+        onConnect={isReadOnly ? undefined : handleConnect}
+        nodesConnectable={!isReadOnly}
+        onConnectStart={isReadOnly ? undefined : handleConnectStart}
+        onConnectEnd={isReadOnly ? undefined : handleConnectEndWithSound}
         onInit={handleInit}
         onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}
@@ -6632,7 +6639,7 @@ export function FactoryFlow() {
         snapToGrid
         snapGrid={BOARD_GRID_SNAP}
         // A finger drags a card only after selecting it; see withTouchDragRule.
-        nodesDraggable={!isCompact}
+        nodesDraggable={!isCompact && !isReadOnly}
       >
         <NodeDetailController boardRef={boardRef} />
         <HopMapController boardRef={boardRef} />
@@ -6681,7 +6688,7 @@ export function FactoryFlow() {
         className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_60px_10px_rgba(0,0,0,0.35)]"
       />
       <SolvingBooksOverlay />
-      <PaintToolbar
+      {!isReadOnly ? <PaintToolbar
         paintMode={nodeColorPaintMode}
         onPaintModeChange={handlePaintModeChange}
         activeColorTag={activeColorTag}
@@ -6699,13 +6706,13 @@ export function FactoryFlow() {
         openGroup={openToolGroup}
         onToggleGroup={handleToolGroupToggle}
         shiftedDown={false}
-      />
-      <SourceToolbar
+      /> : null}
+      {!isReadOnly ? <SourceToolbar
         folded={toolbarFold.build}
         openGroup={openToolGroup}
         onToggleGroup={handleToolGroupToggle}
         shiftedDown={false}
-      />
+      /> : null}
       {/* The help layer rings the toolbars; with the paint row folded away
           there is nothing to ring, so it becomes the sheet, as on a phone. */}
       {/* Compact only: a desktop window narrow enough to fold the paint row

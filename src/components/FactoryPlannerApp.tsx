@@ -17,7 +17,7 @@ import { recordResourceTrend, resetResourceTrends } from "@/lib/resource-trends"
 import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
 import { openCommunityPost } from "@/lib/community/open-post";
 import { retryPendingPostFollows } from "@/lib/community/post-follow";
-import { forgetSharedPlanId, readSharedPlanId } from "@/lib/community/shared-link";
+import { forgetSharedPlanId, readSharedPlanId, syncSharedPlanAddress } from "@/lib/community/shared-link";
 import { useIsCompactViewport } from "@/lib/compact-view";
 import { startLibrarySync } from "@/lib/library/library-sync";
 import { useLibraryTab } from "@/lib/library/library-tab";
@@ -27,6 +27,7 @@ import { LibraryPage } from "./library/LibraryPage";
 import { WelcomePage } from "./welcome/WelcomePage";
 import { PlanIdentityDrawer } from "./PlanIdentityDrawer";
 import { SharedAddressSync } from "./SharedAddressSync";
+import { PublicViewBar } from "./community/PublicViewBar";
 import { BlueprintSaveDialog } from "./BlueprintSaveDialog";
 import { PowerSourceOverlay } from "./PowerSourceOverlay";
 import { DesignTabs } from "./DesignTabs";
@@ -132,19 +133,17 @@ export function FactoryPlannerApp() {
       void hydrateDesigns()
         .then(async () => {
           try {
-            // Shared "open to edit" links: /?plan=<community id>. Your own
-            // post opens your design (the address carries the id while that
-            // design is on the board, so a reload lands back on it rather
-            // than opening a duplicate); anyone else's opens as a copy.
+            // Own posts open for editing; everyone else's opens for viewing.
             const sharedPlanId = readSharedPlanId();
             if (sharedPlanId) {
               try {
                 await openCommunityPost({ id: sharedPlanId });
               } finally {
-                // The sync re-advertises the imported copy on its own; this
-                // is for the failure path, so a dead link is not retried on
-                // every reload.
+                // Release the arrival guard, then set the address explicitly:
+                // React may already have run the viewer's address effect.
                 forgetSharedPlanId();
+                syncSharedPlanAddress(useDesignStore.getState().publicView?.id
+                  ?? useFactoryStore.getState().project.metadata?.communityPlanId);
               }
             }
           } catch (error) {
@@ -351,6 +350,7 @@ function PlacementRevealer() {
 /** The board with the tab strip over it: the same on any window. */
 function BoardColumn() {
   const covering = useCoveringPage();
+  const publicView = useDesignStore((state) => state.publicView);
 
   return (
     /*
@@ -380,7 +380,7 @@ function BoardColumn() {
       </div>
       {/* The plan card describes the board it sits under; while a page
           covers that board, the card goes with it. */}
-      {covering ? null : <PlanIdentityDrawer />}
+      {covering ? null : publicView ? <PublicViewBar key={publicView.id} /> : <PlanIdentityDrawer />}
     </div>
   );
 }
@@ -396,7 +396,7 @@ function useCoveringPage(): "welcome" | "shelf" | undefined {
   const welcome = useWelcomeTab();
   const shelf = useLibraryTab();
   const isHydrated = useDesignStore((state) => state.isHydrated);
-  const hasActiveDesign = useDesignStore((state) => state.activeDesignId !== undefined);
+  const hasActiveDesign = useDesignStore((state) => state.activeDesignId !== undefined || state.publicView !== undefined);
   if (welcome.active) {
     return "welcome";
   }

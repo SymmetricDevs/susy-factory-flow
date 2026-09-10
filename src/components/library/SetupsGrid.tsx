@@ -130,6 +130,7 @@ export function SetupsGrid({
     (state) =>
       state.designs.find((design) => design.id === state.activeDesignId)?.name ?? "this board",
   );
+  const hasEditableDesign = useDesignStore((state) => state.activeDesignId !== undefined);
 
   useEffect(() => {
     const refresh = () => setRefreshTick((tick) => tick + 1);
@@ -315,8 +316,9 @@ export function SetupsGrid({
         id: plan.id,
         name: plan.name,
         isMine: plan.isMine === true,
+        authorName: plan.authorName,
       });
-      if (outcome === "copied") {
+      if (outcome === "viewed") {
         patchPlan(plan.id, (entry) => ({ ...entry, downloads: entry.downloads + 1 }));
       }
       setError(undefined);
@@ -361,6 +363,7 @@ export function SetupsGrid({
 
   // The OPEN TAB becomes this post's new content.
   const overwriteWithBoard = async (plan: CommunityPlanSummary) => {
+    if (useFactoryStore.getState().isReadOnly) return;
     try {
       const state = useFactoryStore.getState();
       await patchCommunityPlan(plan.id, {
@@ -453,7 +456,7 @@ export function SetupsGrid({
             editTags: true,
             onPickIcon: detailPlan.isMine ? () => setIconEditId(detailPlan.id) : undefined,
             primary: {
-              label: detailPlan.isMine ? "Open" : "Open a copy",
+              label: detailPlan.isMine ? "Open" : "View",
               onClick: () => {
                 setDetailId(undefined);
                 void open(detailPlan);
@@ -614,7 +617,7 @@ export function SetupsGrid({
           onClose={closeMenu}
         >
           <MenuItem
-            label={menuPlan.isMine ? "Open" : "Open a copy as a tab"}
+            label={menuPlan.isMine ? "Open" : "View setup"}
             onClick={() => {
               closeMenu();
               void open(menuPlan);
@@ -651,7 +654,7 @@ export function SetupsGrid({
                   setIconEditId(menuPlan.id);
                 }}
               />
-              <ArmedMenuItem
+              {hasEditableDesign ? <ArmedMenuItem
                 label={`Replace with "${activeTabName}"`}
                 armedLabel="Confirm: replace the post"
                 armed={armed?.id === menuPlan.id && armed.what === "overwrite"}
@@ -660,7 +663,7 @@ export function SetupsGrid({
                   closeMenu();
                   void overwriteWithBoard(menuPlan);
                 }}
-              />
+              /> : null}
               <ArmedMenuItem
                 label="Take down"
                 armedLabel="Confirm: take it down for everyone"

@@ -1261,6 +1261,21 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Import/Export Plans
 
+- Public setups open through `openCommunityPost`: owned posts resume their
+  linked personal design; other authors' posts open a VIEW-ONLY session.
+  `design-store.publicView` is transient, with no active design id or library
+  record. Never autosave or flush its canvas into a personal design.
+- `PublicViewBar` offers "Open a copy", which creates an unlinked, private
+  personal design. Only that explicit action adds the viewed setup to the
+  library. Closing the viewer returns to the previous personal design.
+- `factory-store` guards project edits while `isReadOnly`; loading a personal
+  design releases it. System dataset hydration and opening/folding board
+  windows may update the transient view, without edit history. The UI lock
+  (`use-viewer-lock.ts`) leaves resource inspection and marked board navigation
+  available; `data-viewer-inspect` must never wrap editing controls.
+- A viewer keeps its public URL across reloads; making a copy removes it.
+  An owner's posted design still follows autosaves through `post-follow.ts`.
+
 - Plan import/export must preserve item/fluid identity. `fluid.*` showing in UI usually means fluid IDs were imported without resolving display resource metadata.
 - When importing image-embedded or JSON plans, preserve node recipe overrides, selected machine handler, tier/config selections, and concrete oredict alternatives.
 - Creating a storage/drawer by dragging from a recipe slot must create both the storage node and the edge.

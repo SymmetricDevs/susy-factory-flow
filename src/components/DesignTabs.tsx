@@ -40,6 +40,7 @@ interface OpenMenu {
 }
 
 export function DesignTabs() {
+  const publicView = useDesignStore((state) => state.publicView);
   const allDesigns = useDesignStore((state) => state.designs);
   const folders = useDesignStore((state) => state.folders);
   const activeDesignId = useDesignStore((state) => state.activeDesignId);
@@ -493,6 +494,18 @@ export function DesignTabs() {
           Library
         </button>
         <span aria-hidden className="h-3.5 w-px shrink-0 bg-line" />
+        {publicView ? (
+          <div className="flex min-w-0 shrink-0 items-center border-b-2 border-amber-500 text-amber-300">
+          <button type="button" onClick={() => { leaveLibrary(); leaveWelcomeTab(); }}
+            aria-pressed={!coveringPage}
+            className="h-6 max-w-48 truncate px-2 text-xs"
+            title={`View only: ${publicView.name}`}>
+            View only: {publicView.name}
+          </button>
+          <button type="button" aria-label="Close public setup view" className="px-1 text-xs hover:text-fg"
+            onClick={() => void useDesignStore.getState().closePublicView()}>✕</button>
+          </div>
+        ) : null}
 
         {welcome.open ? (
           <div
@@ -691,7 +704,7 @@ export function DesignTabs() {
             libraryError || sync.state === "error" ? "text-red-400" : "text-fg-muted",
           ].join(" ")}
         >
-          {libraryError
+          {publicView && !coveringPage ? "View only" : libraryError
             ? libraryError
             : saveState === "saving"
               ? "Saving…"

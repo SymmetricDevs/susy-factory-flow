@@ -1,6 +1,8 @@
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { getNodePowerReport, type NodePowerReport } from "./power-report";
+import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
+import { getMachineStructuralParallels } from "./machine-effects";
 
 /**
  * One budget worth stepping to: the smallest EU/t at which the build gains
@@ -165,6 +167,33 @@ export function listPowerWinsCached(recipe: Recipe, node: PowerWinNode): PowerWi
 /** The first win strictly above this budget, if any. */
 export function nextPowerWin(wins: PowerWin[], euT: number): PowerWin | undefined {
   return wins.find((win) => win.euT > euT * (1 + 1e-9));
+}
+
+/** Target full parallel capacity before advancing to individual overclock gains. */
+export function fullParallelPowerWin(recipe: Recipe, node: FactoryNode, wins: PowerWin[]): PowerWin | undefined {
+  const effective = applyMachineHandlerToRecipe(recipe, node);
+  const current = getNodePowerReport(recipe, node);
+  const capacity = getMachineStructuralParallels(effective, node);
+  if (capacity <= 1 || !Number.isFinite(capacity) || (current.state === "ok" && current.parallels >= capacity)) return undefined;
+  const isFull = (euT: number) => {
+    const candidate = powerNodeAtBudget(node, euT);
+    const report = getNodePowerReport(recipe, candidate);
+    return report.state === "ok" && report.parallels >= getMachineStructuralParallels(effective, candidate);
+  };
+  const upper = wins.find(win => win.euT > current.poolEuT && isFull(win.euT));
+  if (!upper) return undefined;
+  // The geometric win scan may skip individual parallel steps. Refine the
+  // saturation point itself rather than using a later sampled overclock.
+  let low = current.poolEuT;
+  let high = upper.euT;
+  for (let i = 0; i < 60 && high - low > Math.max(1e-6, Number.EPSILON * high * 2); i++) {
+    const mid = (low + high) / 2;
+    if (isFull(mid)) high = mid;
+    else low = mid;
+  }
+  const whole = Math.floor(high);
+  const euT = isFull(whole) ? whole : whole + 1;
+  return toWin(euT, outcome(recipe, node, euT));
 }
 
 /** The last win strictly below this budget, if any. */

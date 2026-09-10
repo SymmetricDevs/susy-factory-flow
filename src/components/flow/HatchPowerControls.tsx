@@ -9,7 +9,7 @@ import { getNodePowerReport } from "@/lib/solver/power-report";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import { MAX_HATCH_AMPS, stepWholeAmp, stepPowerOfFourAmps } from "@/lib/solver/hatch-input";
-import { listPowerWinsCached, powerNodeAtBudget } from "@/lib/solver/power-wins";
+import { fullParallelPowerWin, listPowerWinsCached, powerNodeAtBudget } from "@/lib/solver/power-wins";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { getMachineStructuralParallels } from "@/lib/solver/machine-effects";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
@@ -111,7 +111,9 @@ export function PowerReadout({
   const hasParallels = wins.some((win) => win.parallels > 1);
   const stats = getOverclockedRecipeStats(recipe, node);
   const voltage = getVoltageTierMaxEuT(report.tier);
-  const next = working.nextWin;
+  const parallelTarget = useMemo(() => fullParallelPowerWin(recipe, node, wins), [recipe, node, wins]);
+  const next = parallelTarget ?? working.nextWin;
+  const targetLabel = parallelTarget ? "Max parallels" : "Next improvement";
   const { valueMotion } = useBoardMotion();
   const barTransition = valueMotion ? "width 240ms ease-out, left 240ms ease-out, transform 240ms ease-out" : undefined;
   const nextNode = next ? powerNodeAtBudget(node, next.euT) : undefined;
@@ -223,7 +225,7 @@ export function PowerReadout({
         <section className="min-h-0 flex-1">
           <div className="flex h-5 items-center justify-between gap-2">
             <h3 className="text-[15px] font-semibold text-fg">
-              {next ? "Next improvement" : "No further improvement"}
+              {next ? targetLabel : "No further improvement"}
             </h3>
             <span className="flex items-center gap-1 font-medium text-fg">
               {next ? (
@@ -261,7 +263,7 @@ export function PowerReadout({
               aria-valuemin={0}
               aria-valuemax={scaleEuT}
               aria-valuenow={Math.min(report.poolEuT, scaleEuT)}
-              aria-valuetext={suppliedText + " supplied; next at " + nextText}
+              aria-valuetext={suppliedText + " supplied; " + targetLabel.toLowerCase() + " at " + nextText}
               className="absolute inset-x-0 top-8 h-2.5 border border-[var(--mc-15)] bg-[var(--mc-33)] p-px shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-15)]"
             >
               <div className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)] motion-reduce:!transition-none"
@@ -279,8 +281,8 @@ export function PowerReadout({
             <PowerScaleMarker position={runningDraw / scaleEuT}
               label={raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A"} caption="draw"
               lane="lower" kind="draw" transition={barTransition} />
-            <PowerScaleMarker position={1} label={nextText} caption="next" lane="top" kind="threshold"
-              transition={barTransition} title={"Next improvement: " + next.euT + " EU/t"} />
+            <PowerScaleMarker position={1} label={nextText} caption={parallelTarget ? "max parallels" : "next"} lane="top" kind="threshold"
+              transition={barTransition} title={targetLabel + ": " + next.euT + " EU/t"} />
           </div>
         </section>
       ) : null}

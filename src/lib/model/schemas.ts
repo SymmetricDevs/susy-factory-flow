@@ -308,6 +308,7 @@ export const factoryNodeSchema = z.object({
       mode: z.enum(["supply", "request"]),
     })
     .optional(),
+  cropFullFarmCount: z.number().int().min(1).optional(),
   machineCount: z.number().min(0),
   parallel: z
     .number()

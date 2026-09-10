@@ -55,7 +55,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "Multiblock cards let you set *amps and voltage*, or switch the input to raw EU/t.",
       "Hover power controls to see *the next output gain* and how much supply can be saved.",
-      "New multiblocks start with *full parallels and no overclock*.",
+      "New multiblocks start with *full parallels and no overclock*, and Industrial Farms offer *full-farm planting*.",
       "Hatch voltage now enforces the game's *recipe limits*; plan totals read in EU/t.",
     ],
   },

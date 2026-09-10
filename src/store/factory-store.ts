@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizeFullFarms } from "@/lib/model/full-farms";
+
 import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 
 import { create } from "zustand";
@@ -4503,6 +4505,7 @@ function addRecipeNodeToState(
   const node: FactoryNode = {
     id: createId("node"),
     recipeId: recipe.id,
+    cropFullFarmCount: isCropFarmRecipe(recipe) ? 1 : undefined,
     machineCount: 1,
     parallel: 1,
     machineHandlerId: spawnHandler?.id,
@@ -4599,6 +4602,7 @@ function addConnectedRecipeNodeToState(
   const nextNode: FactoryNode = {
     id: createId("node"),
     recipeId: recipe.id,
+    cropFullFarmCount: isCropFarmRecipe(recipe) ? 1 : undefined,
     machineCount: 1,
     parallel: 1,
     machineHandlerId: spawnHandler?.id,
@@ -5900,7 +5904,7 @@ function touchProject(project: FactoryProject): FactoryProject {
     // a custom rate card never keeps a resource after its last wire goes —
     // whether the wire, the machine at the far end or a whole selection was
     // what got deleted.
-    ...normalizeProjectHatchInputs(releaseCustomRates(project)),
+    ...normalizeProjectHatchInputs(normalizeFullFarms(releaseCustomRates(project))),
     metadata: {
       ...project.metadata,
       updatedAt: new Date().toISOString(),

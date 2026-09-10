@@ -1,3 +1,4 @@
+import { normalizeFullFarms } from "./full-farms";
 import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 import type { FactoryProject } from "./types";
 import { energyHatchTypeExistsAtTier } from "@/lib/machines/energy-hatches";
@@ -34,7 +35,7 @@ export function normalizeLoadedProject(project: FactoryProject): FactoryProject 
                     // fluid slot and lose its fuel wire to the cross-form drop.
                     resynthesizePowerRecipes(
                       normalizeProjectFuelProfiles(
-                        renameOpvTier(adoptSetupRules(requireSolveForPool(project))),
+                        normalizeFullFarms(renameOpvTier(adoptSetupRules(requireSolveForPool(project)))),
                       ),
                     ),
                   ),

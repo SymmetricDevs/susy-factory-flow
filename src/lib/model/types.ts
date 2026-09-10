@@ -334,6 +334,8 @@ export interface FactoryNode {
    * survives that, so a card you unwire and rewire comes back on your number.
    */
   customRate?: { perSecond: number; mode: CustomRateMode };
+  /** When set, Industrial Farm planting follows this many full seed beds. */
+  cropFullFarmCount?: number;
   machineCount: number;
   parallel: number;
   overclockTier: MachineTier | string;

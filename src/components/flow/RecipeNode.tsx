@@ -1,5 +1,7 @@
 "use client";
 
+import { industrialFarmCapacity } from "@/lib/model/full-farms";
+
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
   Fragment,
@@ -774,6 +776,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       ? Math.ceil((result?.theoreticalMachinesRequired ?? 0) - 0.000001)
       : undefined;
   const cropSeedCount = cropSolvedSeeds ?? projectNode.machineCount;
+  const fullFarmCapacity = industrialFarmCapacity(effectiveRecipe, projectNode);
+  const fullFarms = fullFarmCapacity !== undefined && projectNode.cropFullFarmCount !== undefined;
   const cropDrawEuT = (() => {
     if (!isCropProductionNode) {
       return 0;
@@ -2165,9 +2169,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                             />
                           ) : (
                             <MachineCountStat
-                              label={isCropProductionNode ? "Seeds" : "Machines"}
-                              machineCount={projectNode.machineCount}
-                              onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
+                              key={fullFarms ? "full-farms" : "seeds"}
+                              label={fullFarms ? "Farms" : isCropProductionNode ? "Seeds" : "Machines"}
+                              machineCount={fullFarms ? projectNode.cropFullFarmCount! : projectNode.machineCount}
+                              fullFarms={fullFarmCapacity !== undefined ? fullFarms : undefined}
+                              onFullFarmsChange={(checked) => updateNode(projectNode.id, {
+                                cropFullFarmCount: checked ? Math.max(1, Math.ceil(projectNode.machineCount / fullFarmCapacity!)) : undefined,
+                              })}
+                              onChange={(count) => updateNode(projectNode.id, fullFarms
+                                ? { cropFullFarmCount: count }
+                                : { machineCount: count })}
                             />
                           )}
                           {programmedCircuit && !isSharedMachine ? (
@@ -5983,10 +5994,14 @@ function PowerStoryContent({ report, utilization, machines = 1, recipe, node, ac
 function MachineCountStat({
   label,
   machineCount,
+  fullFarms,
+  onFullFarmsChange,
   onChange,
 }: {
   label: string;
   machineCount: number;
+  fullFarms?: boolean;
+  onFullFarmsChange?: (checked: boolean) => void;
   onChange: (machineCount: number) => void;
 }) {
   const machineCountText = String(machineCount);
@@ -6041,7 +6056,15 @@ function MachineCountStat({
         stepBy(event.deltaY < 0 ? 1 : -1, event);
       }}
     >
-      <div className="truncate text-[11px] uppercase leading-[13px] text-[var(--mc-ink-muted)]">{label}</div>
+      {fullFarms !== undefined ? (
+        <label className="nodrag flex items-center gap-1 whitespace-nowrap text-[11px] leading-[13px] text-[var(--mc-ink-muted)]"
+          onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+          <input type="checkbox" checked={fullFarms} aria-label="Full farms"
+            className="h-3 w-3 accent-cyan-700"
+            onChange={(event) => { if (!checklistLocked()) onFullFarmsChange?.(event.target.checked); }} />
+          Full farms{!fullFarms ? " · Seeds" : ""}
+        </label>
+      ) : <div className="truncate text-[11px] uppercase leading-[13px] text-[var(--mc-ink-muted)]">{label}</div>}
       <div className="flex min-w-0 items-center gap-0.5">
         <button
           type="button"

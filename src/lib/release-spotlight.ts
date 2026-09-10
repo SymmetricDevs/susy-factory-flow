@@ -80,6 +80,17 @@ export interface ReleaseSpotlight {
 
 export const RELEASE_SPOTLIGHTS: ReleaseSpotlight[] = [
   {
+    version: "3.1.0",
+    release: "3.1.0",
+    title: "Multiblock power controls",
+    items: [
+      { icon: "power", title: "Amps and voltage", tint: "amber" },
+      { icon: "speed", title: "Power and output thresholds", tint: "cyan" },
+      { icon: "board", title: "Full farm planting", tint: "green" },
+      { icon: "wires", title: "Fixed wire width", tint: "blue" },
+    ],
+  },
+  {
     version: "3.0.0",
     release: "3.0",
     title: "The biggest update yet",

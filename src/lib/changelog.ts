@@ -53,10 +53,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-09",
     headline: "Power by amps and hatch voltage",
     notes: [
-      "Multiblock cards let you set *amps and voltage*, or switch the input to raw EU/t.",
-      "Hover power controls to see *the next output gain* and how much supply can be saved.",
-      "New multiblocks start with *full parallels and no overclock*, and Industrial Farms offer *full-farm planting*.",
-      "Hatch voltage now enforces the game's *recipe limits*; plan totals read in EU/t.",
+      "Set multiblock *amps and voltage* or raw EU/t, with Shift-scroll snapping amps through 1, 4, 16, 64…",
+      "Power tooltips show *output improvements, actual draw and average consumption*, with controls alongside.",
+      "Industrial Farms offer *Full farms* planting, with manual seed counts still available.",
+      "View options include *Fixed edge width* to keep wires the same thickness at every rate.",
     ],
   },
   {

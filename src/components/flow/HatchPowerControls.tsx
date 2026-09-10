@@ -9,7 +9,7 @@ import { getNodePowerReport } from "@/lib/solver/power-report";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import { stepWholeAmp } from "@/lib/solver/hatch-input";
-import { powerNodeAtBudget } from "@/lib/solver/power-wins";
+import { listPowerWinsCached, powerNodeAtBudget } from "@/lib/solver/power-wins";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { getMachineStructuralParallels } from "@/lib/solver/machine-effects";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
@@ -24,7 +24,7 @@ const number = (n: number) =>
     n > 0 && n < 0.01 ? { maximumSignificantDigits: 2 } : { maximumFractionDigits: 2 },
   );
 
-function TierBadge({ tier }: { tier: Tier }) {
+export function TierBadge({ tier }: { tier: Tier }) {
   const color = GT_TIER_COLORS[tier];
   return (
     <span
@@ -56,10 +56,18 @@ function Comparison({ label, current, next }: { label: string; current: number; 
   );
 }
 
-type Consumption = { utilization?: number; sharedAverageEuT?: number; shared?: boolean };
+type Consumption = {
+  mode: "build" | "solve" | "pool";
+  plannedEuT?: number;
+  utilization?: number;
+  sharedAverageEuT?: number;
+  shared?: boolean;
+};
 function PowerReadout({
   recipe,
   node,
+  mode,
+  plannedEuT,
   utilization,
   sharedAverageEuT,
   shared,
@@ -69,6 +77,9 @@ function PowerReadout({
     () => describePowerWorking(recipe, node, report.poolEuT),
     [recipe, node, report.poolEuT],
   );
+  const wins = useMemo(() => listPowerWinsCached(recipe, node), [recipe, node]);
+  const hasOverclocks = wins.some((win) => win.overclockSteps > 0);
+  const hasParallels = wins.some((win) => win.parallels > 1);
   const stats = getOverclockedRecipeStats(recipe, node);
   const voltage = getVoltageTierMaxEuT(report.tier);
   const previous = working.previousWin;
@@ -118,11 +129,13 @@ function PowerReadout({
       : 0;
   return (
     <div
-      className="flex h-[354px] w-[480px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
+      style={{ height: 372 - (next ? 0 : 158) - (!hasOverclocks && !hasParallels ? 18 : 0) }}
+      className="flex w-[480px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
       data-power-readout
     >
       <div className="flex h-5 shrink-0 items-center justify-between text-[15px] font-semibold leading-5 text-fg">
         <span>Power input</span>
+        {raw ? <span className="tabular-nums">{formatCompact(report.poolEuT)} EU/t</span> : null}
       </div>
       {!raw ? (
         <div className="mt-1 flex h-6 shrink-0 items-center justify-between gap-3 whitespace-nowrap">
@@ -144,7 +157,10 @@ function PowerReadout({
           </span>
         </div>
       ) : null}
-      <div className="my-2 grid h-[84px] shrink-0 grid-cols-2 gap-x-6 gap-y-1 border-y border-line py-2">
+      <div
+        style={{ height: !hasOverclocks && !hasParallels ? 66 : 84 }}
+        className="my-2 grid shrink-0 grid-cols-2 gap-x-6 gap-y-1 border-y border-line py-2"
+      >
         {[
           ["Parallels", `${running} / ${capacity}`],
           [
@@ -159,87 +175,123 @@ function PowerReadout({
           ["Runs / second", report.state === "ok" ? number(report.parallels / duration) : "0"],
           ["EU / run", formatCompact(Math.abs(stats.eut) * stats.durationTicks)],
           ["Draw · EU/t", formatCompact(report.drawEuT)],
-        ].map(([label, value]) => (
-          <div
-            key={label}
-            className="flex min-w-0 items-baseline justify-between gap-x-2 whitespace-nowrap"
-          >
-            <span className="text-fg-muted">{label}</span>
-            <span className="truncate font-medium tabular-nums text-fg">{value}</span>
-          </div>
-        ))}
+        ]
+          .filter(
+            ([label]) =>
+              (label !== "Parallels" || hasParallels) && (label !== "Overclocks" || hasOverclocks),
+          )
+          .map(([label, value]) => (
+            <div
+              key={label}
+              className="flex min-w-0 items-baseline justify-between gap-x-2 whitespace-nowrap"
+            >
+              <span className="text-fg-muted">{label}</span>
+              <span className="truncate font-medium tabular-nums text-fg">{value}</span>
+            </div>
+          ))}
       </div>
-      <section className="min-h-0 flex-1">
-        <div className="flex h-5 items-center justify-between gap-2">
-          <h3 className="text-[15px] font-semibold text-fg">
-            {next ? "Next improvement" : "No further improvement"}
-          </h3>
-          <span className="flex items-center gap-1 font-medium text-fg">
-            {next ? (
-              <>
-                {raw
-                  ? `+${formatCompact(next.euT - report.poolEuT)} EU/t`
-                  : `+${number(extraAmps)}A`}
-                {!raw ? <TierBadge tier={report.tier} /> : null}
-              </>
-            ) : null}
-          </span>
-        </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <Comparison
-            label="Overclocks"
-            current={report.state === "ok" ? report.overclockSteps : 0}
-            next={nextReport?.overclockSteps ?? report.overclockSteps}
-          />
-          <Comparison label="Parallels" current={running} next={nextRunning} />
-        </div>
-        <p className="mt-2 h-[18px]">
-          {nextReport && nextStats ? (
-            <>
-              {report.state !== "ok" ? "Machine starts at" : "Output rises to"}{" "}
-              <strong className="font-medium text-fg">
-                {number((nextReport.parallels * 20) / nextStats.durationTicks)} runs/s
-              </strong>
-              .
-            </>
-          ) : (
-            "More supply cannot increase this setup’s output."
-          )}
-        </p>
-        <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2 tabular-nums">
-          <span className="text-fg-muted">{floorText}</span>
-          <span className="text-center font-medium text-fg">{suppliedText} supplied</span>
-          <span className="text-right text-fg-muted">{next ? nextText : "Maximum"}</span>
-        </div>
-        <div
-          role="progressbar"
-          aria-label="Supply between output thresholds"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress * 100)}
-          aria-valuetext={`${suppliedText} supplied; ${next ? `next improvement at ${nextText}` : "no further improvement"}`}
-          className={track}
-        >
+      {next ? (
+        <section className="min-h-0 flex-1">
+          <div className="flex h-5 items-center justify-between gap-2">
+            <h3 className="text-[15px] font-semibold text-fg">
+              {next ? "Next improvement" : "No further improvement"}
+            </h3>
+            <span className="flex items-center gap-1 font-medium text-fg">
+              {next ? (
+                <>
+                  {raw
+                    ? `+${formatCompact(next.euT - report.poolEuT)} EU/t`
+                    : `+${number(extraAmps)}A`}
+                  {!raw ? <TierBadge tier={report.tier} /> : null}
+                </>
+              ) : null}
+            </span>
+          </div>
           <div
-            className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)]"
-            style={{ width: `${progress * 100}%` }}
-          />
-          <span
-            className="absolute inset-y-0 w-0.5 bg-[var(--mc-ink)]"
-            style={{ left: `clamp(1px, ${progress * 100}%, calc(100% - 3px))` }}
-          />
-        </div>
-        <div className="mt-1 flex justify-between gap-2 text-fg-muted">
-          <span>
-            {report.state === "ok"
-              ? `${formatCompact(floorEuT)} EU/t for this speed`
-              : "Not running yet"}
-          </span>
-          <span>{next ? `${formatCompact(next.euT)} EU/t for next step` : "Maximum output"}</span>
-        </div>
-      </section>
-      <div className="mt-2 h-10 shrink-0 border-t border-line pt-1" data-power-consumption>
-        {usage === undefined || average === undefined ? (
+            className={`mt-2 grid gap-2 ${hasParallels && hasOverclocks ? "grid-cols-2" : "grid-cols-1"}`}
+          >
+            {hasOverclocks ? (
+              <Comparison
+                label="Overclocks"
+                current={report.state === "ok" ? report.overclockSteps : 0}
+                next={nextReport?.overclockSteps ?? report.overclockSteps}
+              />
+            ) : null}
+            {hasParallels ? (
+              <Comparison label="Parallels" current={running} next={nextRunning} />
+            ) : null}
+          </div>
+          <p className="mt-2 h-[18px]">
+            {nextReport && nextStats ? (
+              <>
+                {report.state !== "ok" ? "Machine starts at" : "Output rises to"}{" "}
+                <strong className="font-medium text-fg">
+                  {number((nextReport.parallels * 20) / nextStats.durationTicks)} runs/s
+                </strong>
+                .
+              </>
+            ) : (
+              "More supply cannot increase this setup’s output."
+            )}
+          </p>
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2 tabular-nums">
+            <span className="text-fg-muted">{floorText}</span>
+            <span className="text-center font-medium text-fg">{suppliedText} supplied</span>
+            <span className="text-right text-fg-muted">{next ? nextText : "Maximum"}</span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Supply between output thresholds"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            aria-valuetext={`${suppliedText} supplied; ${next ? `next improvement at ${nextText}` : "no further improvement"}`}
+            className={track}
+          >
+            <div
+              className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)]"
+              style={{ width: `${progress * 100}%` }}
+            />
+            <span
+              className="absolute inset-y-0 w-0.5 bg-[var(--mc-ink)]"
+              style={{ left: `clamp(1px, ${progress * 100}%, calc(100% - 3px))` }}
+            />
+          </div>
+          <div className="mt-1 flex justify-between gap-2 text-fg-muted">
+            <span>
+              {report.state === "ok"
+                ? `${formatCompact(floorEuT)} EU/t for this speed`
+                : "Not running yet"}
+            </span>
+            <span>{next ? `${formatCompact(next.euT)} EU/t for next step` : "Maximum output"}</span>
+          </div>
+        </section>
+      ) : null}
+      <div className="mt-2 h-[58px] shrink-0 border-t border-line pt-1" data-power-consumption>
+        <p className="text-fg-muted">
+          {mode === "build"
+            ? "Supply sets capacity. Actual consumption follows usage."
+            : "Supply sets capacity. Demand follows the calculated production rate."}
+        </p>
+        {mode !== "build" ? (
+          plannedEuT === undefined ? (
+            <p className="text-fg-muted">Power demand appears after calculation.</p>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-fg-muted">Demand for this card</span>
+                <strong className="tabular-nums text-fg">
+                  {formatCompact(node.enabled ? plannedEuT : 0)} EU/t
+                </strong>
+              </div>
+              <p className="text-fg-muted">
+                {shared
+                  ? "All recipes, across the required machines."
+                  : "Across the required machines."}
+              </p>
+            </>
+          )
+        ) : usage === undefined || average === undefined ? (
           <p className="text-fg-muted">Average consumption appears after calculation.</p>
         ) : (
           <>
@@ -277,6 +329,8 @@ export function HatchPowerControls({
   node,
   onChange,
   locked,
+  mode,
+  plannedEuT,
   utilization,
   sharedAverageEuT,
   shared,
@@ -349,6 +403,8 @@ export function HatchPowerControls({
         <PowerReadout
           recipe={recipe}
           node={node}
+          mode={mode}
+          plannedEuT={plannedEuT}
           utilization={utilization}
           sharedAverageEuT={sharedAverageEuT}
           shared={shared}

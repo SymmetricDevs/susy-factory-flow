@@ -1,5 +1,7 @@
 "use client";
 
+import { CropPowerReadout } from "./CropPowerReadout";
+
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
   Fragment,
@@ -1504,6 +1506,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               // A crop card's harvester tier (manager or seed bed) wears the
               // same top-right slot as every other card's voltage chip.
               ...(cropTierControl && !tierControl && !powerInfo && !calmMode ? ["50px"] : []),
+              ...(isCropProductionNode && !calmMode ? ["max-content"] : []),
             ].join(" "),
           }}
         >
@@ -1752,7 +1755,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }}
             />
           ) : null}
-          {showHatchControl ? <HatchPowerControls recipe={nodeRecipe} node={projectNode} utilization={sharedUsage ?? result?.utilization} sharedAverageEuT={sharedDraw?.avgEuT} shared={isSharedMachine} locked={checklistLocked} onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => {
+          {isCropProductionNode && !calmMode ? <CropPowerReadout recipe={effectiveRecipe} node={projectNode}
+            seeds={cropSeedCount} cardEuT={cropDrawEuT} utilization={result?.utilization} mode={tooltipMode(liveProject)} /> : null}
+          {showHatchControl ? <HatchPowerControls recipe={nodeRecipe} node={projectNode}
+            mode={tooltipMode(liveProject)}
+            plannedEuT={result ? [result, ...sectionRails.map((entry) => entry.result)].reduce(
+              // In Solve/Pool, inactive results retain nameplate EU/t for their ports.
+              (sum, part) => sum + (part?.enabled && part.theoreticalMachinesRequired > 0 ? part.euT : 0), 0,
+            ) : undefined}
+            utilization={sharedUsage ?? result?.utilization} sharedAverageEuT={sharedDraw?.avgEuT} shared={isSharedMachine} locked={checklistLocked} onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => {
             playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
             suppressBoardSound("adjust", 150);
             updateNode(projectNode.id, { hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier) });

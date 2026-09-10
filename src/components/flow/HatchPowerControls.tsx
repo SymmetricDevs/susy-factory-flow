@@ -8,7 +8,7 @@ import { formatCompact } from "@/lib/model";
 import { getNodePowerReport } from "@/lib/solver/power-report";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
-import { stepWholeAmp } from "@/lib/solver/hatch-input";
+import { stepWholeAmp, stepPowerOfFourAmps } from "@/lib/solver/hatch-input";
 import { listPowerWinsCached, powerNodeAtBudget } from "@/lib/solver/power-wins";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { getMachineStructuralParallels } from "@/lib/solver/machine-effects";
@@ -357,15 +357,14 @@ export function PowerReadout({
 export function PowerControlsGuide({ raw = false, active }: { raw?: boolean; active?: "amount" | "tier" }) {
   const sections = [
     { id: "amount", title: raw ? "EU/t" : "Amps", rows: [
-      ["Click", "Enter value"], ["Scroll", "±1"], ["Ctrl + scroll", "±10"],
-      ["Shift + scroll", "±100"], ["Ctrl + Shift + scroll", "±1,000"], ["Right-click", "−1"],
+      ["Click", "Type value"], ["Scroll", "±1"], ["Ctrl + scroll", "±10"],
+      ["Shift + scroll", raw ? "±100" : "1 · 4 · 16…"], ["Ctrl + Shift + scroll", "±1,000"],
     ] },
     { id: "tier", title: "Tier", rows: [
-      ["Scroll", "Previous / next"], ["Click", "Next tier"], ["Right-click", "Previous tier"],
+      ["Click / scroll", "Change tier"],
     ] },
   ];
-  return <div className="w-[224px] max-w-full text-[13px] leading-[18px] text-fg-subtle">
-    <div className="mb-2 text-fg">Controls</div>
+  return <div className="w-[190px] max-w-full text-[12px] leading-[16px] text-fg-subtle">
     {sections.map(section => <section key={section.id} data-power-guide-section={section.id} data-active={active === section.id}
       className="mb-2 border-l-2 border-transparent pl-2 last:mb-0 data-[active=true]:border-fg-muted">
       <div className="mb-1 font-medium text-fg">{section.title}</div>
@@ -510,6 +509,10 @@ export function HatchPowerControls({
             }}
             onWheel={(e) => {
               e.stopPropagation();
+              if (e.shiftKey && !e.ctrlKey && !e.metaKey && !raw) {
+                change(tier, stepPowerOfFourAmps(amps, e.deltaY < 0 ? 1 : -1));
+                return;
+              }
               const step = (e.shiftKey ? 100 : 1) * (e.ctrlKey || e.metaKey ? 10 : 1);
               stepAmount(e.deltaY < 0 ? 1 : -1, step);
             }}

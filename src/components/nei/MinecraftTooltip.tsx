@@ -309,7 +309,7 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip={companion ? undefined : "true"}
-                className={companion ? "fixed z-[9999] ui-zoom flex w-max flex-wrap items-start gap-2" : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
+                className={companion ? "fixed z-[9999] ui-zoom flex w-max flex-wrap items-end gap-1" : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
                 onMouseEnter={() => { if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current); }}
                 onMouseLeave={placement === "above-card" ? clearTooltip : undefined}
                 style={{ left: position.x, top: position.y, ...(placement !== "pointer" ? { maxWidth: window.innerWidth / getUiScale() - 16 } : {}), ...(placement === "above-card" ? { maxHeight: position.maxHeight, overflowY: "auto", pointerEvents: "auto" } : {}) }}

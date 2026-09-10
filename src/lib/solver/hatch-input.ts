@@ -110,3 +110,16 @@ export function hatchEquivalent(amps: number, tier: string): string | undefined 
 export function stepWholeAmp(amps: number, direction: -1 | 1, step = 1): number {
   return Math.max(0, direction > 0 ? Math.floor(amps) + step : Math.ceil(amps) - step);
 }
+
+/** Snap in the requested direction through 1, 4, 16, ...; zero is the lower stop. */
+export function stepPowerOfFourAmps(amps: number, direction: -1 | 1): number {
+  if (!Number.isFinite(amps) || amps < 0) return 0;
+  if (direction < 0 && amps <= 1) return 0;
+  let power = 1;
+  if (direction > 0) {
+    while (power <= amps) power *= 4;
+    return Number.isFinite(power) ? power : amps;
+  }
+  while (power * 4 < amps) power *= 4;
+  return power;
+}

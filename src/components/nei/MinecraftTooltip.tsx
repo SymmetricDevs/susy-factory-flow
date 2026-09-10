@@ -31,6 +31,7 @@ export function MinecraftTooltip({
   label,
   content,
   children,
+  placement = "pointer",
 }: {
   label?: string | string[];
   /**
@@ -41,6 +42,8 @@ export function MinecraftTooltip({
    */
   content?: ReactNode | (() => ReactNode);
   children: ReactNode;
+  /** Anchor compact readouts below their controls, flipping above near the foot. */
+  placement?: "pointer" | "below";
 }) {
   const lines = useMemo(
     () => (Array.isArray(label) ? label : label ? label.split("\n") : []),
@@ -52,6 +55,7 @@ export function MinecraftTooltip({
   const pendingPositionRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const pointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const anchorRef = useRef<DOMRect | undefined>(undefined);
   const rootRef = useRef<HTMLSpanElement | null>(null);
 
   useEffect(
@@ -84,12 +88,21 @@ export function MinecraftTooltip({
       // so its left/top and offset size are shell pixels, and the pointer and
       // window (real pixels) are divided by the interface scale (ui-scale.ts).
       const scale = getUiScale();
+      const anchor = placement === "below" ? anchorRef.current : undefined;
+      if (anchor) {
+        const below = anchor.bottom / scale + 6;
+        const above = anchor.top / scale - panelHeight - 6;
+        return {
+          x: Math.max(4, Math.min(anchor.right / scale - panelWidth, window.innerWidth / scale - panelWidth - 8)),
+          y: Math.max(4, Math.min(below + panelHeight <= window.innerHeight / scale - 8 ? below : above, window.innerHeight / scale - panelHeight - 8)),
+        };
+      }
       return {
         x: Math.max(4, Math.min(pointerX / scale + 12, window.innerWidth / scale - panelWidth - 8)),
         y: Math.max(4, Math.min(pointerY / scale + 12, window.innerHeight / scale - panelHeight - 8)),
       };
     },
-    [hasContent],
+    [hasContent, placement],
   );
 
   // The first placement of a fresh tooltip clamps against an ESTIMATED panel
@@ -107,7 +120,7 @@ export function MinecraftTooltip({
     if (Math.abs(corrected.x - position.x) >= 2 || Math.abs(corrected.y - position.y) >= 2) {
       setPosition(corrected);
     }
-  }, [clampToViewport, position]);
+  }, [clampToViewport, position, content]);
 
   const handleMouseMove = (event: MouseEvent) => {
     if (lines.length === 0 && !hasContent) {
@@ -144,6 +157,11 @@ export function MinecraftTooltip({
     // screen; before the first paint we fall back to a generous estimate,
     // and the layout effect below re-clamps against the real size before
     // anything is painted.
+    if (placement === "below" && event.type === "mouseenter") {
+      // The wrapper is display:contents. Read its control once on entry,
+      // never on the mousemove/animation-frame path.
+      anchorRef.current = rootRef.current?.firstElementChild?.getBoundingClientRect();
+    }
     pointerRef.current = { x: event.clientX, y: event.clientY };
     pendingPositionRef.current = clampToViewport(event.clientX, event.clientY);
 
@@ -227,6 +245,11 @@ export function MinecraftTooltip({
         }
         const under = elementUnderPointer(pointer.x, pointer.y);
         if (under === undefined || (under && rootRef.current?.contains(under))) {
+          if (placement === "below") {
+            anchorRef.current = rootRef.current?.firstElementChild?.getBoundingClientRect();
+            const next = clampToViewport(pointer.x, pointer.y);
+            setPosition(current => current && Math.abs(current.x - next.x) < 2 && Math.abs(current.y - next.y) < 2 ? current : next);
+          }
           return;
         }
         clearTooltip();
@@ -251,7 +274,7 @@ export function MinecraftTooltip({
       window.removeEventListener("resize", clearOnInteraction, options);
       window.removeEventListener("blur", clearOnWindowBlur, options);
     };
-  }, [clearTooltip, position, pressKeepsTooltip]);
+  }, [clearTooltip, position, pressKeepsTooltip, placement, clampToViewport]);
 
   return (
     <span
@@ -270,7 +293,7 @@ export function MinecraftTooltip({
                 ref={panelRef}
                 data-minecraft-tooltip="true"
                 className={`${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
-                style={{ left: position.x, top: position.y }}
+                style={{ left: position.x, top: position.y, ...(placement === "below" ? { maxWidth: window.innerWidth / getUiScale() - 16 } : {}) }}
               >
                 {typeof content === "function" ? content() : content}
               </div>

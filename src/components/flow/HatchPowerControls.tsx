@@ -10,13 +10,16 @@ import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import { hatchEquivalent } from "@/lib/solver/hatch-input";
 import { powerNodeAtBudget } from "@/lib/solver/power-wins";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
-import { RecipeTooltip } from "./RecipeTooltip";
 import { GT_TIER_COLORS } from "./tier-colors";
 
 type Tier = NonNullable<FactoryNode["hatchVoltageTier"]>;
 const chip =
   "nodrag nowheel flex h-6 min-w-0 items-center justify-center border-2 px-1 pb-[3px] pt-0 text-center text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110";
-const number = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+const number = (n: number) =>
+  n.toLocaleString(
+    "en-US",
+    n > 0 && n < 0.01 ? { maximumSignificantDigits: 2 } : { maximumFractionDigits: 2 },
+  );
 
 function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
   const report = getNodePowerReport(recipe, node);
@@ -38,61 +41,108 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
     before.overclockSteps === report.overclockSteps
       ? report.poolEuT - previous.euT
       : 0;
+  const next = working.nextWin;
+  const nextNode = next ? powerNodeAtBudget(node, next.euT) : undefined;
+  const nextReport = nextNode ? getNodePowerReport(recipe, nextNode) : undefined;
+  const nextStats = nextNode ? getOverclockedRecipeStats(recipe, nextNode) : undefined;
+  // Round thresholds upward so typing the displayed amount actually reaches them.
+  const nextAmps = next ? Math.ceil((next.euT / voltage) * 100) / 100 : 0;
+  const extraAmps = next ? Math.ceil(((next.euT - report.poolEuT) / voltage) * 100) / 100 : 0;
+  const change = nextReport
+    ? [
+        ...(report.state !== "ok" ? ["Starts the machine"] : []),
+        ...(nextReport.parallels !== report.parallels
+          ? [`${report.parallels} → ${nextReport.parallels} parallels`]
+          : []),
+        ...(nextReport.overclockSteps !== report.overclockSteps
+          ? [`${report.overclockSteps} → ${nextReport.overclockSteps} overclocks`]
+          : []),
+      ].join(" · ")
+    : "";
+  const equivalent = hatchEquivalent(report.amps, report.tier)?.replace(/^= /, "");
+  const duration = stats.durationTicks / 20;
   return (
-    <RecipeTooltip
-      view={{
-        title: "Power input",
-        subtitle: `${number(report.amps)}A × ${report.tier} = ${number(report.poolEuT)} EU/t`,
-        rows: [
-          ...(node.powerInputMode === "eut"
-            ? [{ label: "Hatch voltage", value: `${report.tier} (remembered)` }]
-            : []),
-          ...(hatchEquivalent(report.amps, report.tier)
-            ? [
-                {
-                  label: "Hatches",
-                  value: hatchEquivalent(report.amps, report.tier)!.replace(/^= /, ""),
-                },
-              ]
-            : []),
-          { label: "Parallels", value: String(report.parallels) },
-          {
-            label: "Overclocks",
-            value:
-              working.rows.find((row) => row.id === "overclocks")?.supplied ??
+    <div className="w-[290px] max-w-full text-[12px] leading-4" data-power-readout>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+        <strong>
+          {number(report.amps)}A · {report.tier}
+        </strong>
+        <strong>
+          {formatCompact(report.poolEuT)}{" "}
+          <span className="font-normal text-fg-subtle">EU/t supplied</span>
+        </strong>
+      </div>
+      {equivalent || node.powerInputMode === "eut" ? (
+        <p className="mt-0.5 text-[11px] text-fg-subtle">
+          {equivalent}
+          {equivalent && node.powerInputMode === "eut" ? " · " : ""}
+          {node.powerInputMode === "eut" ? `${report.tier} hatch voltage retained` : ""}
+        </p>
+      ) : null}
+      <div className="my-2 grid grid-cols-2 gap-x-4 gap-y-1.5 border-y border-[var(--mc-33)] py-2">
+        {[
+          ["Parallels", String(report.parallels)],
+          [
+            "Overclocks",
+            working.rows.find((row) => row.id === "overclocks")?.supplied ??
               String(report.overclockSteps),
-          },
-          { label: "Duration", value: `${number(stats.durationTicks / 20)}s / run` },
-          {
-            label: "Energy",
-            value: `${formatCompact(Math.abs(stats.eut) * stats.durationTicks)} EU / run`,
-          },
-          {
-            label: "Output",
-            value: `${report.state === "ok" ? number((report.parallels * 20) / stats.durationTicks) : "0"} runs/s`,
-          },
-          {
-            label: "Next",
-            value: working.nextWin
-              ? `+${number((working.nextWin.euT - report.poolEuT) / voltage)}A · +${formatCompact(working.nextWin.euT - report.poolEuT)} EU/t: ${working.nextWin.gain}`
-              : "No further gain at this voltage",
-          },
-          {
-            label: "Save",
-            value:
-              spare > 1e-9
-                ? `${number(spare / voltage)}A · ${formatCompact(spare)} EU/t with no output loss`
-                : "No spare supply",
-          },
-        ],
-        reason: working.stall ?? working.hint,
-        actions: [
-          { gesture: "left", label: "Unit up · edit amount" },
-          { gesture: "right", label: "Decrease" },
-          { gesture: "wheel", label: "Adjust" },
-        ],
-      }}
-    />
+          ],
+          [
+            "Time / run",
+            duration < 0.01 ? `${formatCompact(duration * 1000)} ms` : `${number(duration)} s`,
+          ],
+          ["Runs / second", report.state === "ok" ? number(report.parallels / duration) : "0"],
+          ["EU / run", formatCompact(Math.abs(stats.eut) * stats.durationTicks)],
+          ["Draw · EU/t", formatCompact(report.drawEuT)],
+        ].map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <div className="text-[10px] text-fg-subtle">{label}</div>
+            <div className="font-bold">{value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        <div>
+          <div className="text-[10px] uppercase text-fg-subtle">Next improvement</div>
+          {next ? (
+            <>
+              <div>
+                <strong className="text-cyan-200">
+                  +{number(extraAmps)}A {report.tier}
+                </strong>
+                <span className="text-fg-subtle"> · {number(nextAmps)}A total</span>
+              </div>
+              <div>
+                {change || next.gain}
+                {nextReport && nextStats
+                  ? ` · ${number((nextReport.parallels * 20) / nextStats.durationTicks)} runs/s`
+                  : ""}
+              </div>
+            </>
+          ) : (
+            <div>No further gain at this voltage.</div>
+          )}
+        </div>
+        {spare > 1e-9 && previous ? (
+          <div>
+            <div className="text-[10px] uppercase text-fg-subtle">Same output with less</div>
+            <div>
+              <strong>
+                {spare / voltage < 0.01
+                  ? "<0.01"
+                  : number(Math.floor((spare / voltage) * 100) / 100)}
+                A {report.tier} spare
+              </strong>
+              <span className="text-fg-subtle">
+                {" "}
+                · keep {number(Math.ceil((previous.euT / voltage) * 100) / 100)}A
+              </span>
+            </div>
+          </div>
+        ) : null}
+        {working.stall ? <p className="text-red-300">{working.stall}</p> : null}
+      </div>
+    </div>
   );
 }
 
@@ -164,7 +214,10 @@ export function HatchPowerControls({
     change(tier, raw ? next / getVoltageTierMaxEuT(tier) : next);
   };
   return (
-    <MinecraftTooltip content={() => <PowerReadout recipe={recipe} node={node} />}>
+    <MinecraftTooltip
+      placement="below"
+      content={() => <PowerReadout recipe={recipe} node={node} />}
+    >
       <div
         className="flex"
         data-power-controls

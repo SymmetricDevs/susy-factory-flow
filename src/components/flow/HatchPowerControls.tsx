@@ -15,7 +15,7 @@ import { GT_TIER_COLORS } from "./tier-colors";
 
 type Tier = NonNullable<FactoryNode["hatchVoltageTier"]>;
 const chip =
-  "nodrag nowheel h-6 min-w-0 border-2 px-1 text-center text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110";
+  "nodrag nowheel flex h-6 min-w-0 items-center justify-center border-2 px-1 pb-[3px] pt-0 text-center text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110";
 const number = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 4 });
 
 function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
@@ -215,7 +215,7 @@ export function HatchPowerControls({
         )}
         <button
           aria-label="Power input unit"
-          className={`${chip} w-[42px]`}
+          className={`${chip} w-[50px]`}
           style={{ ...style, textDecoration: !raw && color.underline ? "underline" : undefined }}
           onClick={() => stepUnit(1)}
           onContextMenu={(e) => {

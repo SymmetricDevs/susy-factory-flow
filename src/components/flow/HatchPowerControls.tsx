@@ -82,7 +82,9 @@ export function PowerReadout({
   const hasParallels = wins.some((win) => win.parallels > 1);
   const stats = getOverclockedRecipeStats(recipe, node);
   const voltage = getVoltageTierMaxEuT(report.tier);
-  const previous = working.previousWin;
+  // Include an exactly reached breakpoint. previousWin is strictly below
+  // the budget, which would put the marker on the older output step.
+  const attained = wins.filter((win) => win.euT <= report.poolEuT * (1 + 1e-9)).at(-1);
   const next = working.nextWin;
   const nextNode = next ? powerNodeAtBudget(node, next.euT) : undefined;
   const nextReport = nextNode ? getNodePowerReport(recipe, nextNode) : undefined;
@@ -93,18 +95,19 @@ export function PowerReadout({
   const ampsPerHatch = report.amps === 1 ? 1 : 2;
   const equivalent = report.amps / ampsPerHatch;
   const duration = stats.durationTicks / 20;
-  const floorEuT = previous?.euT ?? 0;
+  const floorEuT = attained?.euT ?? 0;
+  // Measure the full cost of the next output step, not just the gap since
+  // the last one. A new overclock therefore visibly needs much more power.
   const progress =
-    next && next.euT > floorEuT
-      ? Math.max(0, Math.min(1, (report.poolEuT - floorEuT) / (next.euT - floorEuT)))
+    next && next.euT > 0
+      ? Math.max(0, Math.min(1, report.poolEuT / next.euT))
       : 1;
-  const keepAmps = Math.ceil((floorEuT / voltage) * 100) / 100;
+  const currentThreshold = next && next.euT > 0 ? floorEuT / next.euT : 0;
   const raw = node.powerInputMode === "eut";
   const capacity = getMachineStructuralParallels(applyMachineHandlerToRecipe(recipe, node), node);
   const running = report.state === "ok" ? report.parallels : 0;
   const nextRunning = nextReport?.state === "ok" ? nextReport.parallels : running;
   const suppliedText = raw ? `${formatCompact(report.poolEuT)} EU/t` : `${number(report.amps)}A`;
-  const floorText = raw ? `${formatCompact(floorEuT)} EU/t` : `${number(keepAmps)}A`;
   const nextText = raw ? `${formatCompact(next?.euT ?? 0)} EU/t` : `${number(nextAmps)}A`;
   const machineCount = node.machineCount * Math.max(1, node.parallel);
   const usage = !node.enabled
@@ -235,23 +238,31 @@ export function PowerReadout({
             )}
           </p>
           <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2 tabular-nums">
-            <span className="text-fg-muted">{floorText}</span>
-            <span className="text-center font-medium text-fg">{suppliedText} supplied</span>
+            <span className="text-fg-muted">{raw ? "0 EU/t" : "0A"}</span>
+            <span className="text-center font-medium text-fg">{suppliedText} supplied · {Math.floor(progress * 100)}%</span>
             <span className="text-right text-fg-muted">{next ? nextText : "Maximum"}</span>
           </div>
           <div
             role="progressbar"
-            aria-label="Supply between output thresholds"
+            aria-label="Power supplied toward the next improvement"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={Math.round(progress * 100)}
-            aria-valuetext={`${suppliedText} supplied; ${next ? `next improvement at ${nextText}` : "no further improvement"}`}
+            aria-valuenow={Math.floor(progress * 100)}
+            aria-valuetext={`${suppliedText} supplied, ${Math.floor(progress * 100)}% of the power for the next improvement at ${nextText}`}
             className={track}
           >
             <div
               className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)]"
               style={{ width: `${progress * 100}%` }}
             />
+            {report.state === "ok" && currentThreshold > 0 ? (
+              <span
+                aria-hidden
+                title={`${formatCompact(floorEuT)} EU/t for the current output`}
+                className="absolute inset-y-0 border-l-2 border-dashed border-[var(--mc-15)]"
+                style={{ left: `${currentThreshold * 100}%` }}
+              />
+            ) : null}
             <span
               className="absolute inset-y-0 w-0.5 bg-[var(--mc-ink)]"
               style={{ left: `clamp(1px, ${progress * 100}%, calc(100% - 3px))` }}

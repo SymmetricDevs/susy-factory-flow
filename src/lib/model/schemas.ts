@@ -342,6 +342,7 @@ export const factoryNodeSchema = z.object({
     ])
     .optional(),
   hatchAmps: z.number().nonnegative().finite().optional(),
+  powerInputMode: z.enum(["amps", "eut"]).optional(),
   machineHandlerId: z.string().min(1).optional(),
   coilTier: z.string().min(1).optional(),
   machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),

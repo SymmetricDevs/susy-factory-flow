@@ -1,11 +1,12 @@
 # PRD: Multiblock power input
 
-> UI revision (2026-09-09, Jack): remove Hatch options. Show the machine's
-> result and gain/saving suggestions above a fixed bottom row of amps,
-> voltage and EU/t inputs, with the regular-hatch equivalent above that row.
-> Results and voltage choices scroll independently; edits must not move the
-> input row. This supersedes the picker and layout requirements below.
-
+> UI revision (2026-09-09, Jack): two controls on the main card: amount
+> and voltage/unit. EU/t is one step below ULV; it turns the amount into
+> an exact raw EU/t editor. Switching display modes preserves supply and
+> remembers the hatch voltage for calculations. Tier mode colors both
+> controls; raw mode is neutral. Left card actions collapse into a menu.
+> Hover explains output and next gain/saving; these are information only.
+> No calculator or Hatch options. Supersedes the original UI below.
 
 Status: implemented (branch `codex/hatch-input`)
 Date: 2026-09-09

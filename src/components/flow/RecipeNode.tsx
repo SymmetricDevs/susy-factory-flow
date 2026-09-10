@@ -49,9 +49,9 @@ import {
   getEnergyHatchType,
 
 } from "@/lib/machines/energy-hatches";
-import { HatchPowerMenu } from "./HatchPowerMenu";
+import { HatchPowerControls } from "./HatchPowerControls";
+import { CardActionsMenu } from "./CardActionsMenu";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
-import { listPowerWinsCached, nextPowerWin, previousPowerWin } from "@/lib/solver/power-wins";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { prefersCuratedMachineMath } from "@/lib/solver/runtime-calculation";
 import {
@@ -298,19 +298,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   }>();
   const [isCropMenuOpen, setCropMenuOpen] = useState(false);
   // The hatch-count chip mid-edit: the typed digits, or undefined at rest.
-  // The dropdowns the chips used to open are GONE (Jack, 2026-08-31): the
-  // supply chip types and wheels, the tier chip clicks and wheels, and
-  // there is no menu to manage.
-  // The SUPPLY chip mid-edit (Jack, 2026-09-07): a multiblock's power is one
-  // typed EU/t budget - voltage times amps, the only number the game
-  // overclocks on. The chip types and wheels the budget; the calculator
-  // beside it is where hatches are still picked by name.
-  const [calculatorAnchor, setCalculatorAnchor] = useState<{
-    x: number;
-    top: number;
-    bottom: number;
-  }>();
-  const isHatchMenuOpen = calculatorAnchor !== undefined;
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   // The right panel's PEAK/AVG switch drives the card's power figures too,
   // so the board and the power list always tell one story.
@@ -900,39 +887,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           ? undefined
           : { energyHatchType: undefined }),
       });
-    }
-  };
-  // Walking the power ladder changes amps at the card's own hatch voltage.
-  const commitPowerBudget = (euT: number) => {
-    if (!Number.isFinite(euT) || euT < 0) {
-      return;
-    }
-    const tier = powerReport?.tier ?? getRecipeMinimumVoltageTier(nodeRecipe);
-    // The supply speaks the power dial's electric ladder, quieter: the rung
-    // is the budget's hatch tier, so a bigger number audibly climbs.
-    playBoardSound("dialPower", { step: getVoltageTierIndex(tier) + 1, gain: 0.6 });
-    suppressBoardSound("adjust", 150);
-    updateNode(projectNode.id, {
-      powerEuT: euT,
-      hatchVoltageTier: tier,
-      hatchAmps: euT / getVoltageTierMaxEuT(tier),
-      energyHatchType: undefined,
-    });
-  };
-  // The wheel and right click walk the WINS: the budgets where the build
-  // gains something (starts, another overclock, more parallels). Anything
-  // between two wins is wasted supply, so those are the only stops.
-  const stepPowerBudget = (direction: -1 | 1) => {
-    if (!powerReport) {
-      return;
-    }
-    const wins = listPowerWinsCached(nodeRecipe, projectNode);
-    const win =
-      direction > 0
-        ? nextPowerWin(wins, powerReport.poolEuT)
-        : previousPowerWin(wins, powerReport.poolEuT);
-    if (win) {
-      commitPowerBudget(win.euT);
     }
   };
   const updateCoilTier = (nextTier: string) => {
@@ -1530,7 +1484,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               // have nothing to refactor, so they keep two buttons.
               ...(calmMode
                 ? []
-                : isCropFarmPlaceholder || isCustomRateNode
+                : showHatchControl
+                  ? ["24px"]
+                  : isCropFarmPlaceholder || isCustomRateNode
                   ? ["24px", "24px"]
                   : isCropFarmNode
                     ? ["24px", "24px", "24px", "24px"]
@@ -1551,7 +1507,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             ].join(" "),
           }}
         >
-          {!calmMode ? (
+          {!calmMode && showHatchControl ? <CardActionsMenu onDelete={() => deleteNode(projectNode.id)} onClone={() => duplicateNode(projectNode.id)} onRefactor={() => beginRecipeRefactor(projectNode.id)} onAddRecipe={canShareMachine ? () => browseMachineRecipes(projectNode.id) : undefined} /> : !calmMode ? (
             <>
               <button
                 type="button"
@@ -1796,7 +1752,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }}
             />
           ) : null}
-          {tierControl && tierColor ? (
+          {showHatchControl ? <HatchPowerControls recipe={nodeRecipe} node={projectNode} locked={checklistLocked} onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => {
+            playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
+            suppressBoardSound("adjust", 150);
+            updateNode(projectNode.id, { hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier) });
+          }} /> : tierControl && tierColor ? (
             // The fused chip trio is ONE hover surface telling the whole
             // power story - the same panel the footer's POWER cell shows -
             // so count, hatch and tier all speak one language. The native
@@ -1804,7 +1764,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             <div className="relative">
             <MinecraftTooltip
               content={
-                powerReport && !isHatchMenuOpen && isSharedMachine ? (
+                powerReport && isSharedMachine ? (
                   // A shared machine's chip is a machine fact: its tier and
                   // budget. Each recipe's own story sits on its rule row.
                   <RecipeTooltip
@@ -1817,7 +1777,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                       ],
                     }}
                   />
-                ) : powerReport && !isHatchMenuOpen ? (
+                ) : powerReport ? (
                   <PowerStoryContent
                     report={powerReport}
                     utilization={result?.utilization}
@@ -1829,25 +1789,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }
             >
             <div className="flex">
-              {showHatchControl ? <>
-                <button type="button" data-hatch-menu-anchor aria-label="Power supply"
-                  onClick={event => {
-                    event.stopPropagation();
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setCalculatorAnchor(calculatorAnchor ? undefined : { x: rect.right, top: rect.top, bottom: rect.bottom });
-                  }}
-                  onWheel={event => { if (checklistLocked()) return; event.stopPropagation(); stepPowerBudget(event.deltaY < 0 ? 1 : -1); }}
-                  onContextMenu={event => { event.preventDefault(); event.stopPropagation(); stepPowerBudget(-1); }}
-                  className="nowheel flex h-6 items-center justify-center gap-1 whitespace-nowrap border-2 px-1.5 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
-                  style={SUPPLY_CHIP_STYLE}>{formatCompact(powerReport?.amps ?? 0)}A {powerReport?.tier}</button>
-                {calculatorAnchor ? <HatchPowerMenu anchor={calculatorAnchor} recipe={nodeRecipe} node={projectNode}
-                  onChange={(hatchVoltageTier, hatchAmps) => {
-                    playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
-                    suppressBoardSound("adjust", 150);
-                    updateNode(projectNode.id, { hatchVoltageTier, hatchAmps, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier) });
-                  }} onClose={() => setCalculatorAnchor(undefined)} /> : null}
-              </> : null}
-              {showHatchControl ? null : (
               <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Voltage tier", rows: [{ label: "Configured tier", value: tierControl.current }], actions: [{ gesture: "left", label: "Increase" }, { gesture: "right", label: "Decrease" }, { gesture: "wheel", label: "Adjust tier" }] }} />}>
               <button
                 type="button"
@@ -1884,7 +1825,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 {tierControl.current}
               </button>
               </MinecraftTooltip>
-              )}
             </div>
             </MinecraftTooltip>
             </div>
@@ -4247,17 +4187,6 @@ function normalizeSearch(value: string) {
 }
 
 type VoltageTier = Exclude<MachineTier, "DEMO">;
-
-/**
- * A multiblock's supply chip is a NUMBER, not a tier (Jack, 2026-09-07):
- * "we're not working in tiers any more", so it wears the card's neutral
- * plate rather than a voltage colour. Singleblocks keep their tier paint.
- */
-const SUPPLY_CHIP_STYLE = {
-  backgroundColor: "var(--mc-85)",
-  borderColor: "var(--mc-33)",
-  color: "var(--mc-ink)",
-} as const;
 
 function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
   if (isIndustrialApiaryMachineType(recipe.machineType)) {

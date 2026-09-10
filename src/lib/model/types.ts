@@ -357,6 +357,8 @@ export interface FactoryNode {
   hatchVoltageTier?: Exclude<MachineTier, "DEMO">;
   /** Working input amps. One regular hatch supplies one amp. */
   hatchAmps?: number;
+  /** Card input display only; EU/t retains hatchVoltageTier for machine rules. */
+  powerInputMode?: "amps" | "eut";
   machineHandlerId?: string;
   coilTier?: string;
   machineConfigTiers?: Record<string, string>;

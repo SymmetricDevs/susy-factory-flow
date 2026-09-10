@@ -53,8 +53,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-09",
     headline: "Power by amps and hatch voltage",
     notes: [
-      "Each multiblock has its own *amps and hatch tier*, with editable EU/t and hatch options.",
-      "Power steps show *the output gain* and when spare amps can be removed for free.",
+      "Multiblock cards let you set *amps and voltage*, or switch the input to raw EU/t.",
+      "Hover power controls to see *the next output gain* and how much supply can be saved.",
       "New multiblocks start with *full parallels and no overclock*.",
       "Hatch voltage now enforces the game's *recipe limits*; plan totals read in EU/t.",
     ],

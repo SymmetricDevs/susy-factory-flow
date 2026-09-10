@@ -44,18 +44,15 @@ const track =
   "relative mt-1 h-3 border border-[var(--mc-15)] bg-[var(--mc-33)] p-px shadow-[inset_1px_1px_0_var(--mc-15),inset_-1px_-1px_0_var(--mc-85)]";
 function Comparison({ label, current, next }: { label: string; current: number; next: number }) {
   return (
-    <div className="border border-line bg-[var(--mc-33)] px-2 py-1.5">
-      <div className="text-fg-muted">{label}</div>
-      <div className="mt-1 flex items-center justify-between gap-2 text-[15px] font-semibold text-fg">
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border border-line bg-[var(--mc-33)] px-2 py-1.5">
+      <span className="text-fg-muted">{label}</span>
+      <span className="flex items-center gap-2 font-semibold tabular-nums text-fg">
         <span>{number(current)}</span>
         <span aria-hidden className="font-normal text-fg-muted">
           →
         </span>
         <span>{number(next)}</span>
-      </div>
-      <div className="mt-0.5 text-fg-muted">
-        {next === current ? "Unchanged" : `+${number(next - current)} at next step`}
-      </div>
+      </span>
     </div>
   );
 }
@@ -130,7 +127,7 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
       ) : null}
       <div className="my-3 grid grid-cols-2 gap-x-6 gap-y-2 border-y border-line py-3">
         {[
-          ["Parallels", String(running)],
+          ["Parallels", `${running} / ${capacity}`],
           [
             "Overclocks",
             working.rows.find((row) => row.id === "overclocks")?.supplied ??
@@ -168,7 +165,7 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
               current={report.state === "ok" ? report.overclockSteps : 0}
               next={nextReport.overclockSteps}
             />
-            <Comparison label="Parallel recipes" current={running} next={nextRunning} />
+            <Comparison label="Parallels" current={running} next={nextRunning} />
           </div>
           {nextStats ? (
             <p className="mt-2">
@@ -210,37 +207,6 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
       ) : (
         <p className="text-fg">No further output gain at this voltage.</p>
       )}
-      <section className="mt-3 border-t border-line pt-3">
-        <div className="flex justify-between gap-2">
-          <h3 className="font-semibold text-fg">Parallel capacity</h3>
-          <span className="text-fg">
-            {capacity > 1 ? `${running} / ${capacity} active` : "No parallel processing"}
-          </span>
-        </div>
-        {capacity > 1 ? (
-          <>
-            <div className="mt-2 flex justify-between text-fg-muted">
-              <span>1 recipe</span>
-              <span>{capacity} maximum</span>
-            </div>
-            <div
-              role="progressbar"
-              aria-label="Powered parallel capacity"
-              aria-valuemin={0}
-              aria-valuemax={capacity}
-              aria-valuenow={running}
-              className={track}
-            >
-              <div
-                className="h-full bg-[var(--mc-ink-muted)]"
-                style={{ width: `${Math.min(1, running / capacity) * 100}%` }}
-              />
-            </div>
-          </>
-        ) : (
-          <p className="mt-1 text-fg-muted">This machine runs one recipe at a time.</p>
-        )}
-      </section>
       {spare > 1e-9 ? (
         <section className="mt-3 border-t border-line pt-3">
           <h3 className="font-semibold text-fg">Power needed for this speed</h3>

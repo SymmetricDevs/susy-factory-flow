@@ -112,7 +112,6 @@ export function PowerReadout({
   const stats = getOverclockedRecipeStats(recipe, node);
   const voltage = getVoltageTierMaxEuT(report.tier);
   const next = working.nextWin;
-  const following = next ? wins.find((win) => win.euT > next.euT * (1 + 1e-9)) : undefined;
   const { valueMotion } = useBoardMotion();
   const barTransition = valueMotion ? "width 240ms ease-out, left 240ms ease-out, transform 240ms ease-out" : undefined;
   const nextNode = next ? powerNodeAtBudget(node, next.euT) : undefined;
@@ -123,26 +122,19 @@ export function PowerReadout({
   const ampsPerHatch = report.amps === 1 ? 1 : 2;
   const equivalent = report.amps / ampsPerHatch;
   const duration = stats.durationTicks / 20;
-  const scaleEuT = following?.euT ?? next?.euT ?? 1;
+  const scaleEuT = next?.euT ?? 1;
   const progress = Math.max(0, Math.min(1, report.poolEuT / scaleEuT));
-  const nextPosition = next ? next.euT / scaleEuT : 1;
   const raw = node.powerInputMode === "eut";
   const capacity = getMachineStructuralParallels(applyMachineHandlerToRecipe(recipe, node), node);
   const running = report.state === "ok" ? report.parallels : 0;
   const nextRunning = nextReport?.state === "ok" ? nextReport.parallels : running;
   const suppliedText = raw ? `${formatCompact(report.poolEuT)} EU/t` : `${number(report.amps)}A`;
-  // Closely spaced parallel steps can collapse to the same two-decimal amp
-  // label. Keep enough precision to tell the two upcoming steps apart.
-  let thresholdDigits = 2;
-  while (following && next && thresholdDigits < 8 &&
-    Math.ceil(next.euT / voltage * 10 ** thresholdDigits) ===
-    Math.ceil(following.euT / voltage * 10 ** thresholdDigits)) thresholdDigits++;
+  const thresholdDigits = 2;
   const thresholdText = (euT: number) => raw
     ? formatCompact(euT) + " EU/t"
     : (Math.ceil(euT / voltage * 10 ** thresholdDigits) / 10 ** thresholdDigits)
         .toLocaleString("en-US", { maximumFractionDigits: thresholdDigits }) + "A";
   const nextText = thresholdText(next?.euT ?? 0);
-  const followingText = following ? thresholdText(following.euT) : undefined;
   const machineCount = node.machineCount * Math.max(1, node.parallel);
   const usage = !node.enabled
     ? 0
@@ -269,7 +261,7 @@ export function PowerReadout({
               aria-valuemin={0}
               aria-valuemax={scaleEuT}
               aria-valuenow={Math.min(report.poolEuT, scaleEuT)}
-              aria-valuetext={suppliedText + " supplied; next at " + nextText + (followingText ? "; then at " + followingText : "")}
+              aria-valuetext={suppliedText + " supplied; next at " + nextText}
               className="absolute inset-x-0 top-8 h-2.5 border border-[var(--mc-15)] bg-[var(--mc-33)] p-px shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-15)]"
             >
               <div className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)] motion-reduce:!transition-none"
@@ -287,10 +279,8 @@ export function PowerReadout({
             <PowerScaleMarker position={runningDraw / scaleEuT}
               label={raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A"} caption="draw"
               lane="lower" kind="draw" transition={barTransition} />
-            <PowerScaleMarker position={nextPosition} label={nextText} caption="next" lane="bottom" kind="threshold"
+            <PowerScaleMarker position={1} label={nextText} caption="next" lane="top" kind="threshold"
               transition={barTransition} title={"Next improvement: " + next.euT + " EU/t"} />
-            {following && followingText ? <PowerScaleMarker position={1} label={followingText} caption="later" lane="top" kind="threshold"
-              transition={barTransition} title={"Later improvement: " + following.euT + " EU/t"} /> : null}
           </div>
         </section>
       ) : null}

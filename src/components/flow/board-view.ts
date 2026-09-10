@@ -69,6 +69,8 @@ export function isGlanceMode(value: unknown): value is GlanceMode {
 }
 
 export interface BoardView {
+  /** Draw every connection at the same base width, independent of rate. */
+  fixedEdgeWidth: boolean;
   // No `snapToGrid`. Snapping was a preference back when cards were sized by
   // their contents; now they are sized in grid cells, so it is a fact.
   canvasPattern: CanvasPattern;
@@ -96,10 +98,7 @@ const BOARD_VIEW_STORAGE_KEY = "gtnh-factory-flow-board-view";
 export const DEFAULT_BOARD_VIEW: BoardView = {
   canvasPattern: "dots",
   canvasTheme: DEFAULT_CANVAS_THEME_ID,
-  // Line thickness is no longer a switch (2026-09-08): every wire is drawn
-  // at the width its flow earns. Colour modes stay off - those override
-  // what the board is already telling you with resource colours and paint
-  // tags.
+  fixedEdgeWidth: false,
   // RETIRED (2026-09-07). The marching dashes were a full-board canvas
   // redrawn every frame; in Firefox a dirty canvas re-renders every board
   // tile under it, which cost most of the frame rate at 4K (33 fps sitting
@@ -132,6 +131,7 @@ function readBoardView(): BoardView {
       ? parsed.glanceMode
       : DEFAULT_BOARD_VIEW.glanceMode;
     return {
+      fixedEdgeWidth: parsed.fixedEdgeWidth === true,
       canvasPattern: CANVAS_PATTERNS.includes(parsed.canvasPattern as CanvasPattern)
         ? (parsed.canvasPattern as CanvasPattern)
         : DEFAULT_BOARD_VIEW.canvasPattern,

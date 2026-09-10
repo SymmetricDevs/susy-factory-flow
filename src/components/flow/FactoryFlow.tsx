@@ -51,6 +51,7 @@ import {
   ImagePlus,
   LoaderCircle,
   Magnet,
+  Minus,
   MoveUpRight,
   Network,
   Paintbrush,
@@ -3206,7 +3207,7 @@ export function FactoryFlow() {
       // together or visibly do not.
       publishedEdgeStrokeWidths.set(
         edge.id,
-        laneWidthForHeat(heat),
+        boardView.fixedEdgeWidth ? FLOW_MODE_MIN_WIDTH : laneWidthForHeat(heat),
       );
     }
 
@@ -3502,7 +3503,7 @@ export function FactoryFlow() {
           stroke: edgeColor,
           // Volume is the whole message, so no starved dashes chop up a pipe.
           strokeOpacity: 0.95,
-          strokeWidth: laneWidthForHeat(flowHeat),
+          strokeWidth: boardView.fixedEdgeWidth ? FLOW_MODE_MIN_WIDTH : laneWidthForHeat(flowHeat),
         },
       })];
     });
@@ -3538,6 +3539,7 @@ export function FactoryFlow() {
     );
   }, [
     activeFlowResourceKey,
+    boardView.fixedEdgeWidth,
     anyLineMode,
     speedColorMode,
     layoutVersion,
@@ -8771,6 +8773,14 @@ const BoardViewMenu = memo(function BoardViewMenu({
     Icon: LucideIcon;
     flip: () => void;
   }> = [
+    {
+      id: "fixed-edge-width",
+      on: view.fixedEdgeWidth,
+      label: "Fixed edge width",
+      line: "Keep every connection the same width, regardless of rate.",
+      Icon: Minus,
+      flip: () => onChange({ fixedEdgeWidth: !view.fixedEdgeWidth }),
+    },
     // The two motion switches. Device taste rather than plan dressing, so
     // they write to their own store and never travel with a shared plan.
     {

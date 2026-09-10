@@ -664,6 +664,7 @@ export interface PlanViewState {
   lineHeatMode?: boolean;
   /** Historical: the rate pills on wires were dropped (2026-09-08); nothing reads it. */
   lineLabelsMode?: boolean;
+  fixedEdgeWidth?: boolean;
   linePulseMode?: boolean;
   calmMode?: boolean;
   /** Historical: older plans carry it, nothing applies it. The smart view is

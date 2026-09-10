@@ -77,6 +77,7 @@ export function EnergyHatchArt({
  */
 export function MenuShell({
   anchor,
+  align = "right",
   width,
   maxHeight,
   onClose,
@@ -84,6 +85,7 @@ export function MenuShell({
 }: {
   /** The chip's right edge and its top and bottom, in screen coordinates. */
   anchor: { x: number; top: number; bottom: number };
+  align?: "left" | "right";
   width: number;
   maxHeight: number;
   onClose: () => void;
@@ -121,7 +123,7 @@ export function MenuShell({
       className="ui-zoom nodrag nowheel fixed z-[9999] flex flex-col overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       style={{
         width: Math.min(width, shell(window.innerWidth) - 16),
-        left: Math.max(8, Math.min(shell(anchor.x) - width, shell(window.innerWidth) - width - 8)),
+        left: Math.max(8, Math.min(shell(anchor.x) - (align === "right" ? width : 0), shell(window.innerWidth) - width - 8)),
         ...(opensUp
           ? {
               bottom: shell(window.innerHeight - anchor.top) + 4,

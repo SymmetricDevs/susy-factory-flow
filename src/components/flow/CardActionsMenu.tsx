@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { Copy, Menu, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { getUiScale } from "@/lib/ui-scale";
 import { MenuShell } from "./EnergyHatchMenu";
 export function CardActionsMenu({
   onDelete,
@@ -24,9 +23,9 @@ export function CardActionsMenu({
         data-hatch-menu-anchor
         onClick={(e) => {
           e.stopPropagation();
-          const r = e.currentTarget.getBoundingClientRect();
+          const r = (e.currentTarget.closest("[data-node-glance-root]") ?? e.currentTarget).getBoundingClientRect();
           setAnchor(
-            anchor ? undefined : { x: r.left + 190 * getUiScale(), top: r.top, bottom: r.bottom },
+            anchor ? undefined : { x: r.left, top: r.top, bottom: r.bottom },
           );
         }}
         className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
@@ -34,10 +33,11 @@ export function CardActionsMenu({
         <Menu className="h-3.5 w-3.5" />
       </button>
       {anchor ? (
-        <MenuShell anchor={anchor} width={190} maxHeight={200} onClose={() => setAnchor(undefined)}>
+        <MenuShell anchor={anchor} align="left" width={224} maxHeight={240} onClose={() => setAnchor(undefined)}>
           <div
             role="menu"
             aria-label="Card actions"
+            className="text-[13px] leading-[18px]"
             onKeyDown={(e) => {
               if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
               e.preventDefault();
@@ -71,10 +71,10 @@ export function CardActionsMenu({
                   setAnchor(undefined);
                   run();
                 }}
-                className="flex h-7 w-full items-center gap-2 px-1.5 text-left text-[12px] text-[var(--mc-ink)] hover:bg-[var(--mc-93)]"
+                className="flex min-h-8 w-full items-center gap-2 px-2 py-1.5 text-left text-[var(--mc-ink)] hover:bg-[var(--mc-93)] focus-visible:bg-[var(--mc-93)] focus-visible:outline-none"
               >
-                <Icon className="h-3 w-3" />
-                {label}
+                <Icon className="h-3 w-3 shrink-0" />
+                <span className="min-w-0">{label}</span>
               </button>
             ))}
           </div>

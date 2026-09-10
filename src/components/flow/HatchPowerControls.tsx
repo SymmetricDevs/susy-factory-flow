@@ -61,25 +61,26 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
     : "";
   const equivalent = hatchEquivalent(report.amps, report.tier)?.replace(/^= /, "");
   const duration = stats.durationTicks / 20;
+  const floorEuT = previous?.euT ?? 0;
+  const progress =
+    next && next.euT > floorEuT
+      ? Math.max(0, Math.min(1, (report.poolEuT - floorEuT) / (next.euT - floorEuT)))
+      : 1;
+  const keepAmps = Math.ceil((floorEuT / voltage) * 100) / 100;
   return (
-    <div className="w-[290px] max-w-full text-[12px] leading-4" data-power-readout>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-        <strong>
-          {number(report.amps)}A · {report.tier}
-        </strong>
-        <strong>
-          {formatCompact(report.poolEuT)}{" "}
-          <span className="font-normal text-fg-subtle">EU/t supplied</span>
-        </strong>
+    <div className="w-[380px] max-w-full text-sm leading-5 text-fg-subtle" data-power-readout>
+      <div className="text-base font-semibold leading-6 text-fg">Power input</div>
+      <div className="mt-1 text-base font-medium leading-6 tabular-nums text-fg">
+        {number(report.amps)}A × {report.tier} = {number(report.poolEuT)} EU/t
       </div>
       {equivalent || node.powerInputMode === "eut" ? (
-        <p className="mt-0.5 text-[11px] text-fg-subtle">
+        <p className="text-fg-muted">
           {equivalent}
           {equivalent && node.powerInputMode === "eut" ? " · " : ""}
           {node.powerInputMode === "eut" ? `${report.tier} hatch voltage retained` : ""}
         </p>
       ) : null}
-      <div className="my-2 grid grid-cols-2 gap-x-4 gap-y-1.5 border-y border-[var(--mc-33)] py-2">
+      <div className="my-3 grid grid-cols-2 gap-x-6 gap-y-2 border-y border-line py-3">
         {[
           ["Parallels", String(report.parallels)],
           [
@@ -95,53 +96,91 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
           ["EU / run", formatCompact(Math.abs(stats.eut) * stats.durationTicks)],
           ["Draw · EU/t", formatCompact(report.drawEuT)],
         ].map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <div className="text-[10px] text-fg-subtle">{label}</div>
-            <div className="font-bold">{value}</div>
+          <div
+            key={label}
+            className="min-w-0 flex flex-wrap items-baseline justify-between gap-x-2"
+          >
+            <span className="text-fg-muted">{label}</span>
+            <span className="font-medium tabular-nums text-fg">{value}</span>
           </div>
         ))}
       </div>
-      <div className="space-y-2">
-        <div>
-          <div className="text-[10px] uppercase text-fg-subtle">Next improvement</div>
-          {next ? (
-            <>
-              <div>
-                <strong className="text-cyan-200">
-                  +{number(extraAmps)}A {report.tier}
-                </strong>
-                <span className="text-fg-subtle"> · {number(nextAmps)}A total</span>
-              </div>
-              <div>
-                {change || next.gain}
-                {nextReport && nextStats
-                  ? ` · ${number((nextReport.parallels * 20) / nextStats.durationTicks)} runs/s`
-                  : ""}
-              </div>
-            </>
-          ) : (
-            <div>No further gain at this voltage.</div>
-          )}
-        </div>
-        {spare > 1e-9 && previous ? (
-          <div>
-            <div className="text-[10px] uppercase text-fg-subtle">Same output with less</div>
-            <div>
-              <strong>
-                {spare / voltage < 0.01
-                  ? "<0.01"
-                  : number(Math.floor((spare / voltage) * 100) / 100)}
-                A {report.tier} spare
-              </strong>
-              <span className="text-fg-subtle">
-                {" "}
-                · keep {number(Math.ceil((previous.euT / voltage) * 100) / 100)}A
-              </span>
-            </div>
+      {next ? (
+        <section>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <h3 className="text-base font-semibold text-fg">Next improvement</h3>
+            <span className="font-medium tabular-nums text-fg">
+              +{number(extraAmps)}A {report.tier}
+            </span>
           </div>
-        ) : null}
-        {working.stall ? <p className="text-red-300">{working.stall}</p> : null}
-      </div>
+          <p className="mt-1">
+            At{" "}
+            <strong className="font-medium text-fg">
+              {number(nextAmps)}A {report.tier}
+            </strong>
+            : {change || next.gain}.
+          </p>
+          {nextReport && nextStats ? (
+            <p>
+              Output rises to{" "}
+              <strong className="font-medium text-fg">
+                {number((nextReport.parallels * 20) / nextStats.durationTicks)} runs/s
+              </strong>
+              .
+            </p>
+          ) : null}
+          <div className="mt-3 flex justify-between gap-3 text-fg-muted">
+            <span>{number(keepAmps)}A</span>
+            <span>{number(nextAmps)}A</span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Supply between output thresholds"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            aria-valuetext={`${number(report.amps)}A supplied; next improvement at ${number(nextAmps)}A`}
+            className="relative mt-1 h-3 border border-[var(--mc-15)] bg-[var(--mc-33)] p-px shadow-[inset_1px_1px_0_var(--mc-15),inset_-1px_-1px_0_var(--mc-85)]"
+          >
+            <div
+              className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)]"
+              style={{ width: `${progress * 100}%` }}
+            />
+            <span
+              className="absolute inset-y-0 w-0.5 bg-[var(--mc-ink)]"
+              style={{ left: `clamp(1px, ${progress * 100}%, calc(100% - 3px))` }}
+            />
+          </div>
+          <div className="mt-1 flex flex-wrap justify-between gap-x-3 text-fg-muted">
+            <span>Current output threshold</span>
+            <span>Next improvement</span>
+          </div>
+          <p className="mt-1 text-fg">{number(report.amps)}A supplied now</p>
+        </section>
+      ) : (
+        <p className="text-fg">No further output gain at this voltage.</p>
+      )}
+      {spare > 1e-9 && previous ? (
+        <section className="mt-3 border-t border-line pt-3">
+          <h3 className="text-base font-semibold text-fg">Same output with less</h3>
+          <p className="mt-1">
+            Keep{" "}
+            <strong className="font-medium text-fg">
+              {number(keepAmps)}A {report.tier}
+            </strong>{" "}
+            for the current output.
+          </p>
+          <p>
+            You can remove{" "}
+            <strong className="font-medium text-fg">
+              {spare / voltage < 0.01 ? "<0.01" : number(Math.floor((spare / voltage) * 100) / 100)}
+              A
+            </strong>{" "}
+            ({formatCompact(spare)} EU/t) without losing speed.
+          </p>
+        </section>
+      ) : null}
+      {working.stall ? <p className="mt-3 text-amber-300">{working.stall}</p> : null}
     </div>
   );
 }

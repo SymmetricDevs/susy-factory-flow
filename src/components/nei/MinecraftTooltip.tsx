@@ -94,7 +94,7 @@ export function MinecraftTooltip({
         const above = anchor.top / scale - panelHeight - 6;
         return {
           x: Math.max(4, Math.min(anchor.right / scale - panelWidth, window.innerWidth / scale - panelWidth - 8)),
-          y: Math.max(4, Math.min(below + panelHeight <= window.innerHeight / scale - 8 ? below : above, window.innerHeight / scale - panelHeight - 8)),
+          y: Math.max(4, Math.min(below + panelHeight <= window.innerHeight / scale - 8 || above < 4 ? below : above, window.innerHeight / scale - panelHeight - 8)),
         };
       }
       return {

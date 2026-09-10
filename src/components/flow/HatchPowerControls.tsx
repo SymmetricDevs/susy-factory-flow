@@ -57,9 +57,10 @@ function Comparison({ label, current, next, unit }: { label: string; current: nu
 }
 
 /** Fixed staggered lanes keep coincident draw/supply and adjacent steps legible. */
-function PowerScaleMarker({ position, label, lane, kind, transition, title }: {
+function PowerScaleMarker({ position, label, caption, lane, kind, transition, title }: {
   position: number;
   label: string;
+  caption?: string;
   lane: "top" | "upper" | "lower" | "bottom";
   kind: "supplied" | "draw" | "threshold";
   transition?: string;
@@ -79,7 +80,7 @@ function PowerScaleMarker({ position, label, lane, kind, transition, title }: {
       data-power-scale-label={kind}
       title={title}
       style={{ left: percent + "%", top, transform: "translateX(-" + percent + "%)", transition }}>
-      {label}
+      {caption ? <span className="mr-1 text-[11px] opacity-70">{caption}</span> : null}{label}
     </span>
   </>;
 }
@@ -279,9 +280,9 @@ export function PowerReadout({
             <PowerScaleMarker position={runningDraw / scaleEuT}
               label={(raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A") + " draw"}
               lane="lower" kind="draw" transition={barTransition} />
-            <PowerScaleMarker position={nextPosition} label={nextText} lane="bottom" kind="threshold"
+            <PowerScaleMarker position={nextPosition} label={nextText} caption="Next" lane="bottom" kind="threshold"
               transition={barTransition} title={"Next improvement: " + next.euT + " EU/t"} />
-            {following && followingText ? <PowerScaleMarker position={1} label={followingText} lane="top" kind="threshold"
+            {following && followingText ? <PowerScaleMarker position={1} label={followingText} caption="Following" lane="top" kind="threshold"
               transition={barTransition} title={"Following improvement: " + following.euT + " EU/t"} /> : null}
           </div>
         </section>

@@ -209,6 +209,12 @@ describe("raw EU/t and whole amp steps", () => {
     expect(stepWholeAmp(4, -1)).toBe(3);
     expect(stepWholeAmp(0.2, -1)).toBe(0);
     expect(stepWholeAmp(0, -1)).toBe(0);
+    expect(stepWholeAmp(4, 1, 10)).toBe(14);
+    expect(stepWholeAmp(104, -1, 100)).toBe(4);
+    expect(stepWholeAmp(4, 1, 1000)).toBe(1004);
+    expect(stepWholeAmp(3.75, 1, 100)).toBe(103);
+    expect(stepWholeAmp(103.75, -1, 100)).toBe(4);
+    expect(stepWholeAmp(3.75, -1, 1000)).toBe(0);
   });
   it("assumes legal voltage in raw mode while preserving the exact available power", () => {
     const r = recipe("Industrial Arc Furnace", 120);

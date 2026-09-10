@@ -63,7 +63,7 @@ type Consumption = {
   sharedAverageEuT?: number;
   shared?: boolean;
 };
-function PowerReadout({
+export function PowerReadout({
   recipe,
   node,
   mode,
@@ -395,8 +395,8 @@ export function HatchPowerControls({
     }
     setDraft(undefined);
   };
-  const stepAmount = (direction: number) => {
-    const next = raw ? Math.max(0, amount + direction) : stepWholeAmp(amount, direction as -1 | 1);
+  const stepAmount = (direction: -1 | 1, step = 1) => {
+    const next = raw ? Math.max(0, amount + direction * step) : stepWholeAmp(amount, direction, step);
     change(tier, raw ? next / getVoltageTierMaxEuT(tier) : next);
   };
   return (
@@ -455,7 +455,8 @@ export function HatchPowerControls({
             }}
             onWheel={(e) => {
               e.stopPropagation();
-              stepAmount(e.deltaY < 0 ? 1 : -1);
+              const step = (e.shiftKey ? 100 : 1) * (e.ctrlKey || e.metaKey ? 10 : 1);
+              stepAmount(e.deltaY < 0 ? 1 : -1, step);
             }}
           >
             {formatCompact(amount)}

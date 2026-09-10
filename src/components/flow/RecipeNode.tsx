@@ -51,7 +51,7 @@ import {
   getEnergyHatchType,
 
 } from "@/lib/machines/energy-hatches";
-import { HatchPowerControls } from "./HatchPowerControls";
+import { HatchPowerControls, PowerReadout } from "./HatchPowerControls";
 import { CardActionsMenu } from "./CardActionsMenu";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { describePowerWorking } from "@/lib/solver/power-working";
@@ -765,6 +765,18 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // draw the machine spikes to when it runs, 0 only at exactly 0% (a machine
   // that never starts draws nothing); AVG weights it by the solve's usage.
   const drawScale = drawScaleFor(averageDraw, result?.utilization);
+  const powerReadout: ComponentProps<typeof PowerReadout> | undefined = showHatchControl ? {
+    recipe: nodeRecipe,
+    node: projectNode,
+    mode: tooltipMode(liveProject),
+    // In Solve/Pool, inactive results retain nameplate EU/t for their ports.
+    plannedEuT: result ? [result, ...sectionRails.map((entry) => entry.result)].reduce(
+      (sum, part) => sum + (part?.enabled && part.theoreticalMachinesRequired > 0 ? part.euT : 0), 0,
+    ) : undefined,
+    utilization: sharedUsage ?? result?.utilization,
+    sharedAverageEuT: sharedDraw?.avgEuT,
+    shared: isSharedMachine,
+  } : undefined;
   // The crop harvester's draw for the footer's POWER cell: the Industrial
   // Farm burns `getPowerUsage` continuously spread over its seeds, the Crop
   // Manager spends `maxEUInput() / 8` per harvest - the same arithmetic the
@@ -1756,13 +1768,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }}
             />
           ) : null}
-          {showHatchControl ? <HatchPowerControls recipe={nodeRecipe} node={projectNode}
-            mode={tooltipMode(liveProject)}
-            plannedEuT={result ? [result, ...sectionRails.map((entry) => entry.result)].reduce(
-              // In Solve/Pool, inactive results retain nameplate EU/t for their ports.
-              (sum, part) => sum + (part?.enabled && part.theoreticalMachinesRequired > 0 ? part.euT : 0), 0,
-            ) : undefined}
-            utilization={sharedUsage ?? result?.utilization} sharedAverageEuT={sharedDraw?.avgEuT} shared={isSharedMachine} locked={checklistLocked} onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => {
+          {powerReadout ? <HatchPowerControls {...powerReadout}
+            locked={checklistLocked} onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => {
             playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
             suppressBoardSound("adjust", 150);
             updateNode(projectNode.id, { hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier) });
@@ -2122,6 +2129,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                               recipe={nodeRecipe}
                               node={projectNode}
                               sharedDraw={sharedDraw}
+                              powerReadout={powerReadout}
                             />
                           ) : null}
                           {steamReport ? (
@@ -5776,7 +5784,9 @@ function PowerStat({
   recipe,
   node,
   sharedDraw,
+  powerReadout,
 }: {
+  powerReadout?: ComponentProps<typeof PowerReadout>;
   report: NodePowerReport;
   machineCount: number;
   nodeParallel: number;
@@ -5806,8 +5816,9 @@ function PowerStat({
 
   return (
     <MinecraftTooltip
+      placement={powerReadout ? "above-card" : undefined}
       content={
-        sharedDraw ? (
+        powerReadout ? () => <PowerReadout {...powerReadout} /> : sharedDraw ? (
           <RecipeTooltip
             view={{
               title: "Power",
@@ -5831,6 +5842,7 @@ function PowerStat({
       }
     >
       <div
+        data-power-stat
         className={[
           "min-w-0 border px-1",
           stalled

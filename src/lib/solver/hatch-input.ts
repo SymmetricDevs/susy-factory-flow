@@ -106,7 +106,7 @@ export function hatchEquivalent(amps: number, tier: string): string | undefined 
   return undefined;
 }
 
-/** Scroll onto the adjacent whole amp, including from a fractional raw budget. */
-export function stepWholeAmp(amps: number, direction: -1 | 1): number {
-  return Math.max(0, direction > 0 ? Math.floor(amps) + 1 : Math.ceil(amps) - 1);
+/** Step whole amps, dropping any fraction toward the direction of travel. */
+export function stepWholeAmp(amps: number, direction: -1 | 1, step = 1): number {
+  return Math.max(0, direction > 0 ? Math.floor(amps) + step : Math.ceil(amps) - step);
 }

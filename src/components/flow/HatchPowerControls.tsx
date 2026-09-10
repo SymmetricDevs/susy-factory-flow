@@ -95,28 +95,27 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
     >
       <div className="flex h-5 shrink-0 items-center justify-between text-[15px] font-semibold leading-5 text-fg">
         <span>Power input</span>
-        {raw ? (
-          <span className="text-[13px] font-normal text-fg-muted">Suitable voltage assumed</span>
-        ) : null}
       </div>
-      <div className="mt-1 flex h-6 shrink-0 items-center justify-between gap-3 whitespace-nowrap">
-        <div className="flex min-w-0 items-center gap-1 font-medium tabular-nums text-fg">
-          <span>{number(report.amps)}A ×</span>
-          <TierBadge tier={report.tier} />
-          <span className="truncate">= {number(report.poolEuT)} EU/t</span>
+      {!raw ? (
+        <div className="mt-1 flex h-6 shrink-0 items-center justify-between gap-3 whitespace-nowrap">
+          <div className="flex min-w-0 items-center gap-1 font-medium tabular-nums text-fg">
+            <span>{number(report.amps)}A ×</span>
+            <TierBadge tier={report.tier} />
+            <span className="truncate">= {number(report.poolEuT)} EU/t</span>
+          </div>
+          <span
+            className="flex shrink-0 items-center justify-end gap-1 font-normal text-fg-subtle"
+            data-hatch-equivalent
+          >
+            {equivalent.toLocaleString("en-US", {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            })}{" "}
+            <TierBadge tier={report.tier} /> hatches
+            <span className="ml-1 text-fg-muted">({ampsPerHatch}A per hatch)</span>
+          </span>
         </div>
-        <span
-          className="flex shrink-0 items-center justify-end gap-1 font-normal text-fg-subtle"
-          data-hatch-equivalent
-        >
-          {equivalent.toLocaleString("en-US", {
-            minimumFractionDigits: 1,
-            maximumFractionDigits: 1,
-          })}{" "}
-          <TierBadge tier={report.tier} /> hatches
-          <span className="ml-1 text-fg-muted">({ampsPerHatch}A per hatch)</span>
-        </span>
-      </div>
+      ) : null}
       <div className="my-2 grid h-[84px] shrink-0 grid-cols-2 gap-x-6 gap-y-1 border-y border-line py-2">
         {[
           ["Parallels", `${running} / ${capacity}`],

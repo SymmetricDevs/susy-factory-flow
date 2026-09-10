@@ -354,6 +354,30 @@ export function PowerReadout({
   );
 }
 
+export function PowerControlsGuide({ raw = false, active }: { raw?: boolean; active?: "amount" | "tier" }) {
+  const sections = [
+    { id: "amount", title: raw ? "EU/t" : "Amps", rows: [
+      ["Click", "Enter value"], ["Scroll", "±1"], ["Ctrl + scroll", "±10"],
+      ["Shift + scroll", "±100"], ["Ctrl + Shift + scroll", "±1,000"], ["Right-click", "−1"],
+    ] },
+    { id: "tier", title: "Tier", rows: [
+      ["Scroll", "Previous / next"], ["Click", "Next tier"], ["Right-click", "Previous tier"],
+    ] },
+  ];
+  return <div className="w-[224px] max-w-full text-[13px] leading-[18px] text-fg-subtle">
+    <div className="mb-2 text-fg">Controls</div>
+    {sections.map(section => <section key={section.id} data-power-guide-section={section.id} data-active={active === section.id}
+      className="mb-2 border-l-2 border-transparent pl-2 last:mb-0 data-[active=true]:border-fg-muted">
+      <div className="mb-1 font-medium text-fg">{section.title}</div>
+      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
+        {section.rows.map(([gesture, action]) => <div key={gesture} className="contents">
+          <dt>{gesture}</dt><dd className="text-right tabular-nums text-fg">{action}</dd>
+        </div>)}
+      </dl>
+    </section>)}
+  </div>;
+}
+
 export function HatchPowerControls({
   recipe,
   node,
@@ -373,6 +397,7 @@ export function HatchPowerControls({
   const { tier, amps, poolEuT } = getNodePowerReport(recipe, node);
   const raw = node.powerInputMode === "eut";
   const [draft, setDraft] = useState<string>();
+  const [activeControl, setActiveControl] = useState<"amount" | "tier">("amount");
   const color = GT_TIER_COLORS[tier];
   const style = raw
     ? { backgroundColor: "var(--mc-85)", borderColor: "var(--mc-33)", color: "var(--mc-ink)" }
@@ -429,6 +454,7 @@ export function HatchPowerControls({
   return (
     <MinecraftTooltip
       placement="above-card"
+      companion={() => <PowerControlsGuide raw={raw} active={activeControl} />}
       content={() => (
         <PowerReadout
           recipe={recipe}
@@ -450,6 +476,7 @@ export function HatchPowerControls({
         {draft !== undefined ? (
           <input
             autoFocus
+            onMouseEnter={() => setActiveControl("amount")}
             aria-label={label}
             inputMode="decimal"
             value={draft}
@@ -470,6 +497,7 @@ export function HatchPowerControls({
         ) : (
           <button
             aria-label={label}
+            onMouseEnter={() => setActiveControl("amount")}
             className={`${chip} w-[64px]`}
             style={style}
             onClick={() => {
@@ -492,6 +520,7 @@ export function HatchPowerControls({
         )}
         <button
           aria-label="Power input unit"
+          onMouseEnter={() => setActiveControl("tier")}
           className={`${chip} w-[50px]`}
           style={{ ...style, textDecoration: !raw && color.underline ? "underline" : undefined }}
           onClick={() => stepUnit(1)}

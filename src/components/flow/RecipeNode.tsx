@@ -51,7 +51,7 @@ import {
   getEnergyHatchType,
 
 } from "@/lib/machines/energy-hatches";
-import { HatchPowerControls, PowerReadout } from "./HatchPowerControls";
+import { HatchPowerControls, PowerReadout, PowerControlsGuide } from "./HatchPowerControls";
 import { CardActionsMenu } from "./CardActionsMenu";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { describePowerWorking } from "@/lib/solver/power-working";
@@ -5817,6 +5817,7 @@ function PowerStat({
   return (
     <MinecraftTooltip
       placement={powerReadout ? "above-card" : undefined}
+      companion={powerReadout ? () => <PowerControlsGuide raw={powerReadout.node.powerInputMode === "eut"} /> : undefined}
       content={
         powerReadout ? () => <PowerReadout {...powerReadout} /> : sharedDraw ? (
           <RecipeTooltip

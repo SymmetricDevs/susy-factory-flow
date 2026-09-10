@@ -8769,7 +8769,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
     id: string;
     on: boolean;
     label: string;
-    line: string;
+    line?: string;
     Icon: LucideIcon;
     flip: () => void;
   }> = [
@@ -8777,7 +8777,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
       id: "fixed-edge-width",
       on: view.fixedEdgeWidth,
       label: "Fixed edge width",
-      line: "Keep every connection the same width, regardless of rate.",
       Icon: Minus,
       flip: () => onChange({ fixedEdgeWidth: !view.fixedEdgeWidth }),
     },
@@ -8892,7 +8891,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
                     {on ? "ON" : "OFF"}
                   </span>
                 </span>
-                <span className="font-mono text-[11px] leading-snug opacity-80">{line}</span>
+                {line ? <span className="font-mono text-[11px] leading-snug opacity-80">{line}</span> : null}
               </span>
             </button>
           ))}

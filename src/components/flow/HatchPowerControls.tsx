@@ -254,7 +254,7 @@ export function HatchPowerControls({
   };
   return (
     <MinecraftTooltip
-      placement="below"
+      placement="above"
       content={() => <PowerReadout recipe={recipe} node={node} />}
     >
       <div

@@ -270,7 +270,9 @@ function PowerReadout({
       <div className="mt-2 h-[58px] shrink-0 border-t border-line pt-1" data-power-consumption>
         <p className="text-fg-muted">
           {mode === "build"
-            ? "Supply sets capacity. Actual consumption follows usage."
+            ? shared
+              ? "Supply sets capacity. Recipe mix × usage = average draw."
+              : "Supply sets capacity. Max running × usage = average draw."
             : "Supply sets capacity. Demand follows the calculated production rate."}
         </p>
         {mode !== "build" ? (
@@ -296,14 +298,14 @@ function PowerReadout({
         ) : (
           <>
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-fg-muted">{shared ? "Recipe mix" : "Running"} × usage</span>
+              <span className="text-fg-muted">{shared ? "Recipe mix" : "Max running"} × usage</span>
               <span className="tabular-nums text-fg">
                 {formatCompact(runningDraw)} EU/t × {number(usage * 100)}% ={" "}
                 <strong>{formatCompact(average)} EU/t</strong>
               </span>
             </div>
             <div className="flex items-center justify-between gap-2 text-fg-muted">
-              <span>Average per machine</span>
+              <span>{raw ? "Average draw" : "Average in amps"}</span>
               <span className="flex items-center gap-1">
                 {raw ? (
                   `${formatCompact(average)} EU/t`

@@ -72,12 +72,8 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
   // Round thresholds upward so typing the displayed amount actually reaches them.
   const nextAmps = next ? Math.ceil((next.euT / voltage) * 100) / 100 : 0;
   const extraAmps = next ? Math.ceil(((next.euT - report.poolEuT) / voltage) * 100) / 100 : 0;
-  const equivalent =
-    report.amps === 1
-      ? 1
-      : report.amps >= 4 && Number.isInteger(report.amps / 2)
-        ? report.amps / 2
-        : undefined;
+  const ampsPerHatch = report.amps === 1 ? 1 : 2;
+  const equivalent = report.amps / ampsPerHatch;
   const duration = stats.durationTicks / 20;
   const floorEuT = previous?.euT ?? 0;
   const progress =
@@ -92,28 +88,33 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
   const suppliedText = raw ? `${formatCompact(report.poolEuT)} EU/t` : `${number(report.amps)}A`;
   const floorText = raw ? `${formatCompact(floorEuT)} EU/t` : `${number(keepAmps)}A`;
   const nextText = raw ? `${formatCompact(next?.euT ?? 0)} EU/t` : `${number(nextAmps)}A`;
-  const extraEuT = report.state === "ok" ? Math.max(0, report.poolEuT - floorEuT) : 0;
   return (
     <div
-      className="flex h-[350px] w-[440px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
+      className="flex h-[310px] w-[480px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
       data-power-readout
     >
-      <div className="h-5 shrink-0 text-[15px] font-semibold leading-5 text-fg">Power input</div>
+      <div className="flex h-5 shrink-0 items-center justify-between text-[15px] font-semibold leading-5 text-fg">
+        <span>Power input</span>
+        {raw ? (
+          <span className="text-[13px] font-normal text-fg-muted">Suitable voltage assumed</span>
+        ) : null}
+      </div>
       <div className="mt-1 flex h-6 shrink-0 items-center justify-between gap-3 whitespace-nowrap">
         <div className="flex min-w-0 items-center gap-1 font-medium tabular-nums text-fg">
           <span>{number(report.amps)}A ×</span>
           <TierBadge tier={report.tier} />
           <span className="truncate">= {number(report.poolEuT)} EU/t</span>
         </div>
-        <span className="flex shrink-0 items-center justify-end gap-1 text-fg-muted">
-          {raw ? (
-            "Suitable voltage assumed"
-          ) : equivalent ? (
-            <>
-              {number(equivalent)} <TierBadge tier={report.tier} />{" "}
-              {equivalent === 1 ? "hatch" : "hatches"}
-            </>
-          ) : null}
+        <span
+          className="flex shrink-0 items-center justify-end gap-1 font-normal text-fg-subtle"
+          data-hatch-equivalent
+        >
+          {equivalent.toLocaleString("en-US", {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })}{" "}
+          <TierBadge tier={report.tier} /> hatches
+          <span className="ml-1 text-fg-muted">({ampsPerHatch}A per hatch)</span>
         </span>
       </div>
       <div className="my-2 grid h-[84px] shrink-0 grid-cols-2 gap-x-6 gap-y-1 border-y border-line py-2">
@@ -210,18 +211,6 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
           <span>{next ? `${formatCompact(next.euT)} EU/t for next step` : "Maximum output"}</span>
         </div>
       </section>
-      <p
-        className={`mt-2 h-9 shrink-0 border-t border-line pt-1 ${working.stall ? "text-amber-300" : "text-fg-muted"}`}
-      >
-        {(working.stall
-          ? report.state === "over-tier"
-            ? "Hatch voltage is too low for this recipe."
-            : "Supply is too low to start this recipe."
-          : undefined) ??
-          (extraEuT > 0
-            ? `${formatCompact(extraEuT)} EU/t extra supply — ${next ? "not enough for the next step yet." : "no further output gain."}`
-            : "")}
-      </p>
     </div>
   );
 }

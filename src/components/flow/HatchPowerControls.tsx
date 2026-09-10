@@ -268,13 +268,6 @@ function PowerReadout({
         </section>
       ) : null}
       <div className="mt-2 h-[58px] shrink-0 border-t border-line pt-1" data-power-consumption>
-        <p className="text-fg-muted">
-          {mode === "build"
-            ? shared
-              ? "Supply is capacity. Draw follows the recipes running."
-              : "Supply is capacity. The recipe only draws what it needs."
-            : "Supply sets capacity. Demand follows the calculated production rate."}
-        </p>
         {mode !== "build" ? (
           plannedEuT === undefined ? (
             <p className="text-fg-muted">Power demand appears after calculation.</p>
@@ -297,27 +290,36 @@ function PowerReadout({
           <p className="text-fg-muted">Average consumption appears after calculation.</p>
         ) : (
           <>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="shrink-0 text-fg-muted">{shared ? "Recipe mix" : "Max running"} × usage = average</span>
-              <span className="tabular-nums text-fg">
-                {formatCompact(runningDraw)} EU/t × {number(usage * 100)}% ={" "}
-                <strong>{formatCompact(average)} EU/t</strong>
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2 text-fg-muted">
-              <span>{raw ? "Average draw" : "Average in amps"}</span>
-              <span className="flex items-center gap-1">
-                {raw ? (
-                  `${formatCompact(average)} EU/t`
-                ) : (
-                  <>
-                    {number(average / voltage)}A <TierBadge tier={report.tier} />
-                  </>
-                )}
-                {machineCount > 1 ? (
-                  <span> · {formatCompact(average * machineCount)} EU/t for this card</span>
-                ) : null}
-              </span>
+            <div className="grid grid-cols-[1fr_16px_1fr_12px_0.6fr_12px_1fr] items-center gap-x-1 tabular-nums" aria-label="Average power consumption per machine">
+              <div className="min-w-0">
+                <div className="text-fg-muted">Supplied</div>
+                <div className="whitespace-nowrap font-medium text-fg-subtle">{formatCompact(report.poolEuT)} EU/t</div>
+                <div className="flex h-[18px] items-center gap-1 text-fg-muted">
+                  {raw ? "Available" : <>{number(report.amps)}A <TierBadge tier={report.tier} /></>}
+                </div>
+              </div>
+              <ArrowRight aria-hidden className="h-4 w-4 text-fg-muted" strokeWidth={3} />
+              <div className="min-w-0">
+                <div className="text-fg-muted">{shared ? "Recipe mix" : "Running draw"}</div>
+                <div className="whitespace-nowrap font-medium text-fg">{formatCompact(runningDraw)} EU/t</div>
+                <div className="flex h-[18px] items-center gap-1 text-fg-muted">
+                  {report.state !== "ok" ? "Blocked" : raw ? "While running" : <>{number(runningDraw / voltage)}A <TierBadge tier={report.tier} /></>}
+                </div>
+              </div>
+              <span aria-hidden className="text-fg-muted">×</span>
+              <div>
+                <div className="text-fg-muted">Usage</div>
+                <div className="font-medium text-fg">{number(usage * 100)}%</div>
+                <div className="text-fg-muted">of time</div>
+              </div>
+              <span aria-hidden className="text-fg-muted">=</span>
+              <div className="min-w-0" title={machineCount > 1 ? formatCompact(average * machineCount) + " EU/t average for this card" : "Average draw per machine"}>
+                <div className="text-fg-muted">Average draw</div>
+                <div className="whitespace-nowrap font-semibold text-fg">{formatCompact(average)} EU/t</div>
+                <div className="flex h-[18px] items-center gap-1 text-fg-muted">
+                  {raw ? "Per machine" : <>{number(average / voltage)}A <TierBadge tier={report.tier} /></>}
+                </div>
+              </div>
             </div>
           </>
         )}

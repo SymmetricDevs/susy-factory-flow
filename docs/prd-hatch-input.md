@@ -3,7 +3,7 @@
 > UI revision (2026-09-09, Jack): two controls on the main card: amount
 > and voltage/unit. EU/t is one step below ULV; it turns the amount into
 > an exact raw EU/t editor. Switching display modes preserves supply and
-> remembers the hatch voltage for calculations. Tier mode colors both
+> assumes a suitable voltage while still enforcing the supplied EU/t budget. Tier mode colors both
 > controls; raw mode is neutral. Left card actions collapse into a menu.
 > Hover explains output and next gain/saving; these are information only.
 > No calculator or Hatch options. Supersedes the original UI below.

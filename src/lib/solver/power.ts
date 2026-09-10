@@ -12,11 +12,18 @@ import {
 import type { FactoryNode, MachineTier, Recipe } from "@/lib/model/types";
 
 type VoltageTier = Exclude<MachineTier, "DEMO">;
-type PowerRecipeInput = Partial<Pick<Recipe, "machineType" | "machineHandlers" | "machineProfile">>;
+type PowerRecipeInput = Partial<
+  Pick<Recipe, "machineType" | "machineHandlers" | "machineProfile" | "eut" | "minimumTier">
+>;
 type PowerNodeInput = Partial<
   Pick<
     FactoryNode,
-    "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps"
+    | "energyHatches"
+    | "energyHatchType"
+    | "powerEuT"
+    | "hatchVoltageTier"
+    | "hatchAmps"
+    | "powerInputMode"
   >
 >;
 
@@ -58,6 +65,16 @@ export function isMultiblockRecipe(recipe: PowerRecipeInput): boolean {
   return behaviour !== undefined && behaviour.kind !== "single";
 }
 
+/** Raw EU/t assumes a suitable voltage, but never adds energy to the pool. */
+function rawInputTier(recipe: PowerRecipeInput, node: PowerNodeInput): VoltageTier {
+  const minimum = getRecipeMinimumVoltageTier({
+    eut: recipe.eut ?? 0,
+    minimumTier: recipe.minimumTier ?? "ULV",
+  });
+  const supplied = getVoltageTierWithinEuT(getNodePowerBudget(recipe, node) ?? 0);
+  return getVoltageTierIndex(minimum) > getVoltageTierIndex(supplied) ? minimum : supplied;
+}
+
 /**
  * The tier this node runs at. A singleblock is floored at the recipe's
  * minimum - there is no lower machine to build, and legacy plans store
@@ -72,6 +89,7 @@ export function getNodeRunTier(
   if (!isMultiblockRecipe(recipe)) {
     return getRunVoltageTier(recipe, node.overclockTier);
   }
+  if (node.powerInputMode === "eut") return rawInputTier(recipe, node);
   if (node.hatchVoltageTier !== undefined) return node.hatchVoltageTier;
   // Legacy nodes outside the load funnel retain their historical interpretation.
   // A typed budget names its own hatch tier: the highest voltage that fits
@@ -116,6 +134,10 @@ export function getHatchAmps(hatches: number): number {
  */
 export function getNodePowerAmps(recipe: PowerRecipeInput, node: PowerNodeInput): number {
   if (isMultiblockRecipe(recipe)) {
+    if (node.powerInputMode === "eut")
+      return (
+        (getNodePowerBudget(recipe, node) ?? 0) / getVoltageTierMaxEuT(rawInputTier(recipe, node))
+      );
     if (node.hatchVoltageTier !== undefined && node.hatchAmps !== undefined) return node.hatchAmps;
     // A typed budget is the whole supply: whatever is left over the tier's
     // voltage is amps, fractional or not - the game multiplies the two back

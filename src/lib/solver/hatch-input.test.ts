@@ -8,7 +8,12 @@ import { factoryProjectSchema } from "@/lib/model/schemas";
 import { getNodePowerReport } from "./power-report";
 import { getOverclockedRecipeStats } from "./overclock";
 import { getMachineStructuralParallels } from "./machine-effects";
-import { normalizeHatchInput, hatchEquivalent, roundHatchBudget } from "./hatch-input";
+import {
+  normalizeHatchInput,
+  hatchEquivalent,
+  roundHatchBudget,
+  stepWholeAmp,
+} from "./hatch-input";
 import { listPowerWinsCached } from "./power-wins";
 import { useFactoryStore } from "@/store/factory-store";
 
@@ -78,6 +83,12 @@ describe("per-card hatch input", () => {
     expect(stalled.nodes.a.powerStalled).toBe(true);
     expect(stalled.nodes.a.utilization).toBe(0);
     expect(stalled.edges.ship.transferredPerSecond).toBe(0);
+    const raw = calculateThroughput({
+      ...p,
+      nodes: p.nodes.map((n) => ({ ...n, powerInputMode: "eut" as const })),
+    });
+    expect(raw.nodes.a.powerStalled).not.toBe(true);
+    expect(raw.edges.ship.transferredPerSecond).toBeGreaterThan(0);
     const running = calculateThroughput({
       ...p,
       nodes: [{ ...p.nodes[0], hatchVoltageTier: "UHV", hatchAmps: 256 }],
@@ -187,5 +198,42 @@ describe("per-card hatch input", () => {
     expect(hatchEquivalent(2, "IV")).toBeUndefined();
     expect(roundHatchBudget(32000, 8192)).toBe(4);
     expect(roundHatchBudget(9000, 8192)).toBe(1);
+  });
+});
+
+describe("raw EU/t and whole amp steps", () => {
+  it("steps fractional amps onto adjacent integers without losing typed precision", () => {
+    expect(stepWholeAmp(3.75, 1)).toBe(4);
+    expect(stepWholeAmp(3.75, -1)).toBe(3);
+    expect(stepWholeAmp(4, 1)).toBe(5);
+    expect(stepWholeAmp(4, -1)).toBe(3);
+    expect(stepWholeAmp(0.2, -1)).toBe(0);
+    expect(stepWholeAmp(0, -1)).toBe(0);
+  });
+  it("assumes legal voltage in raw mode while preserving the exact available power", () => {
+    const r = recipe("Industrial Arc Furnace", 120);
+    const lowTier = node({ hatchVoltageTier: "ULV", hatchAmps: 1000 / 8 });
+    expect(getNodePowerReport(r, lowTier).state).toBe("over-tier");
+    const raw = { ...lowTier, powerInputMode: "eut" as const };
+    const report = getNodePowerReport(r, raw);
+    expect(report.state).toBe("ok");
+    expect(report.poolEuT).toBe(1000);
+    expect(getNodePowerReport(r, { ...raw, hatchAmps: 0 }).state).toBe("under-powered");
+    const tiny = getNodePowerReport(r, { ...raw, hatchAmps: 1 / 8 });
+    expect(tiny.state).toBe("under-powered");
+    expect(tiny.poolEuT).toBe(1);
+    const explicit = {
+      ...raw,
+      powerInputMode: "amps" as const,
+      hatchVoltageTier: report.tier,
+      hatchAmps: report.amps,
+    };
+    expect(getOverclockedRecipeStats(r, raw)).toEqual(getOverclockedRecipeStats(r, explicit));
+  });
+  it("keeps raw and explicit hatch power ladders separate", () => {
+    const r = recipe("Industrial Arc Furnace", 120);
+    const n = node({ hatchVoltageTier: "ULV", hatchAmps: 100 });
+    expect(listPowerWinsCached(r, n)).toHaveLength(0);
+    expect(listPowerWinsCached(r, { ...n, powerInputMode: "eut" })).not.toHaveLength(0);
   });
 });

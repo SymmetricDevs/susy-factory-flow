@@ -24,7 +24,7 @@ export type PowerWinNode = Pick<
   Partial<
     Pick<
       FactoryNode,
-      "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps"
+      "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps" | "powerInputMode"
     >
   >;
 
@@ -143,6 +143,7 @@ export function listPowerWinsCached(recipe: Recipe, node: PowerWinNode): PowerWi
     node.coilTier ?? "",
     node.machineConfigTiers ?? null,
     node.hatchVoltageTier ?? "",
+    node.powerInputMode ?? "amps",
     node.energyHatchType ?? "",
     node.energyHatches ?? 1,
   ]);

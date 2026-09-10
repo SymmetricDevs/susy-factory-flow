@@ -43,7 +43,7 @@ type PowerReportNode = Pick<
   Partial<
     Pick<
       FactoryNode,
-      "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps"
+      "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps" | "powerInputMode"
     >
   >;
 

@@ -105,3 +105,8 @@ export function hatchEquivalent(amps: number, tier: string): string | undefined 
   if (amps >= 4 && Number.isInteger(amps / 2)) return `= ${amps / 2} ${tier} hatches`;
   return undefined;
 }
+
+/** Scroll onto the adjacent whole amp, including from a fractional raw budget. */
+export function stepWholeAmp(amps: number, direction: -1 | 1): number {
+  return Math.max(0, direction > 0 ? Math.floor(amps) + 1 : Math.ceil(amps) - 1);
+}

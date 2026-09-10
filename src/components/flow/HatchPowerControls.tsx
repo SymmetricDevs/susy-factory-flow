@@ -364,13 +364,13 @@ export function PowerControlsGuide({ raw = false, active }: { raw?: boolean; act
       ["Click / scroll", "Change tier"],
     ] },
   ];
-  return <div className="w-[190px] max-w-full text-[12px] leading-[16px] text-fg-subtle">
+  return <div className="w-[224px] max-w-full text-[12px] leading-normal text-fg-subtle">
     {sections.map(section => <section key={section.id} data-power-guide-section={section.id} data-active={active === section.id}
       className="mb-2 border-l-2 border-transparent pl-2 last:mb-0 data-[active=true]:border-fg-muted">
       <div className="mb-1 font-medium text-fg">{section.title}</div>
-      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
+      <dl className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
         {section.rows.map(([gesture, action]) => <div key={gesture} className="contents">
-          <dt>{gesture}</dt><dd className="text-right tabular-nums text-fg">{action}</dd>
+          <dt className="min-w-0">{gesture}</dt><dd className="text-right tabular-nums text-fg">{action}</dd>
         </div>)}
       </dl>
     </section>)}

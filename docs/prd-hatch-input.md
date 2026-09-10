@@ -1,5 +1,12 @@
 # PRD: Multiblock power input
 
+> UI revision (2026-09-09, Jack): remove Hatch options. Show the machine's
+> result and gain/saving suggestions above a fixed bottom row of amps,
+> voltage and EU/t inputs, with the regular-hatch equivalent above that row.
+> Results and voltage choices scroll independently; edits must not move the
+> input row. This supersedes the picker and layout requirements below.
+
+
 Status: implemented (branch `codex/hatch-input`)
 Date: 2026-09-09
 Raised by: Raf, Elephant, Corbee (Discord, 2026-09-09), issue #55, and an

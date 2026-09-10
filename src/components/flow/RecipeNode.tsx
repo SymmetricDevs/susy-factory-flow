@@ -49,7 +49,6 @@ import {
   getEnergyHatchType,
 
 } from "@/lib/machines/energy-hatches";
-import { useEnergyHatchCatalog } from "./use-energy-hatch-catalog";
 import { HatchPowerMenu } from "./HatchPowerMenu";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { listPowerWinsCached, nextPowerWin, previousPowerWin } from "@/lib/solver/power-wins";
@@ -338,7 +337,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const dataset = useFactoryStore((state) => state.dataset);
-  const energyHatchCatalog = useEnergyHatchCatalog(dataset?.datasetVersionId);
   const isSearchHighlighted = recipeContainsSearchResource(recipe, recipeSearch);
   const isFlowResourceHighlighted = recipeContainsResourceKey(
     recipe,
@@ -1842,7 +1840,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   onContextMenu={event => { event.preventDefault(); event.stopPropagation(); stepPowerBudget(-1); }}
                   className="nowheel flex h-6 items-center justify-center gap-1 whitespace-nowrap border-2 px-1.5 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
                   style={SUPPLY_CHIP_STYLE}>{formatCompact(powerReport?.amps ?? 0)}A {powerReport?.tier}</button>
-                {calculatorAnchor ? <HatchPowerMenu anchor={calculatorAnchor} recipe={nodeRecipe} node={projectNode} catalog={energyHatchCatalog}
+                {calculatorAnchor ? <HatchPowerMenu anchor={calculatorAnchor} recipe={nodeRecipe} node={projectNode}
                   onChange={(hatchVoltageTier, hatchAmps) => {
                     playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
                     suppressBoardSound("adjust", 150);

@@ -524,7 +524,7 @@ export function HatchPowerControls({
         <button
           aria-label="Power input unit"
           onMouseEnter={() => setActiveControl("tier")}
-          className={`${chip} w-[50px]`}
+          className={`${chip} w-[64px] shrink-0`}
           style={{ ...style, textDecoration: !raw && color.underline ? "underline" : undefined }}
           onClick={() => stepUnit(1)}
           onContextMenu={(e) => {

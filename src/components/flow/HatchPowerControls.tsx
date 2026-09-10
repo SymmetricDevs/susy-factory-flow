@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Equal, X } from "lucide-react";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { GT_VOLTAGE_TIERS, getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { formatCompact } from "@/lib/model";
@@ -290,7 +290,7 @@ function PowerReadout({
           <p className="text-fg-muted">Average consumption appears after calculation.</p>
         ) : (
           <>
-            <div className="grid grid-cols-[1fr_16px_1fr_12px_0.6fr_12px_1fr] items-center gap-x-1 tabular-nums" aria-label="Average power consumption per machine">
+            <div className="grid grid-cols-[auto_minmax(24px,1fr)_auto_minmax(24px,1fr)_auto_minmax(24px,1fr)_auto] items-center gap-x-1 tabular-nums" aria-label="Average power consumption per machine">
               <div className="min-w-0">
                 <div className="text-fg-muted">Supplied</div>
                 <div className="whitespace-nowrap font-medium text-fg-subtle">{formatCompact(report.poolEuT)} EU/t</div>
@@ -298,21 +298,20 @@ function PowerReadout({
                   {raw ? "Available" : <>{number(report.amps)}A <TierBadge tier={report.tier} /></>}
                 </div>
               </div>
-              <ArrowRight aria-hidden className="h-4 w-4 text-fg-muted" strokeWidth={3} />
+              <ArrowRight aria-hidden className="h-5 w-5 justify-self-center text-fg-muted" strokeWidth={2.5} />
               <div className="min-w-0">
-                <div className="text-fg-muted">{shared ? "Recipe mix" : "Running draw"}</div>
+                <div className="text-fg-muted">{shared ? "Recipe mix" : "Actual draw"}</div>
                 <div className="whitespace-nowrap font-medium text-fg">{formatCompact(runningDraw)} EU/t</div>
                 <div className="flex h-[18px] items-center gap-1 text-fg-muted">
                   {report.state !== "ok" ? "Blocked" : raw ? "While running" : <>{number(runningDraw / voltage)}A <TierBadge tier={report.tier} /></>}
                 </div>
               </div>
-              <span aria-hidden className="text-fg-muted">×</span>
-              <div>
+              <X aria-hidden className="h-5 w-5 justify-self-center text-fg-muted" strokeWidth={2.5} />
+              <div className="h-[54px]">
                 <div className="text-fg-muted">Usage</div>
                 <div className="font-medium text-fg">{number(usage * 100)}%</div>
-                <div className="text-fg-muted">of time</div>
               </div>
-              <span aria-hidden className="text-fg-muted">=</span>
+              <Equal aria-hidden className="h-5 w-5 justify-self-center text-fg-muted" strokeWidth={2.5} />
               <div className="min-w-0" title={machineCount > 1 ? formatCompact(average * machineCount) + " EU/t average for this card" : "Average draw per machine"}>
                 <div className="text-fg-muted">Average draw</div>
                 <div className="whitespace-nowrap font-semibold text-fg">{formatCompact(average)} EU/t</div>

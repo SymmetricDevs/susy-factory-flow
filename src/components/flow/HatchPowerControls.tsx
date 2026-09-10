@@ -42,19 +42,46 @@ export function TierBadge({ tier }: { tier: Tier }) {
     </span>
   );
 }
-const track =
-  "relative mt-1 h-3 border border-[var(--mc-15)] bg-[var(--mc-33)] p-px shadow-[inset_1px_1px_0_var(--mc-15),inset_-1px_-1px_0_var(--mc-85)]";
-function Comparison({ label, current, next }: { label: string; current: number; next: number }) {
+function Comparison({ label, current, next, unit }: { label: string; current: number; next: number; unit?: string }) {
+  const format = (value: number) => value >= 10000 ? formatCompact(value) : number(value);
   return (
-    <div className="flex h-8 items-center justify-between gap-x-2 border border-line bg-[var(--mc-33)] px-2 py-1.5">
-      <span className="text-fg-muted">{label}</span>
-      <span className="flex items-center gap-2 font-semibold tabular-nums text-fg">
-        <span>{number(current)}</span>
+    <div className="flex h-[42px] min-w-0 flex-col items-center justify-center border border-line bg-[var(--mc-33)] px-1.5">
+      <span className="text-fg-muted">{label}{unit ? <span className="ml-1 text-[11px]">{unit}</span> : null}</span>
+      <span className="flex items-center justify-center gap-1 font-semibold tabular-nums text-fg" title={number(current) + " → " + number(next) + (unit ? " " + unit : "")}>
+        <span>{format(current)}</span>
         <ArrowRight aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" strokeWidth={3} />
-        <span>{number(next)}</span>
+        <span>{format(next)}</span>
       </span>
     </div>
   );
+}
+
+/** Fixed staggered lanes keep coincident draw/supply and adjacent steps legible. */
+function PowerScaleMarker({ position, label, lane, kind, transition, title }: {
+  position: number;
+  label: string;
+  lane: "top" | "upper" | "lower" | "bottom";
+  kind: "supplied" | "draw" | "threshold";
+  transition?: string;
+  title?: string;
+}) {
+  const percent = Math.max(0, Math.min(1, position)) * 100;
+  const top = { top: 0, upper: 16, lower: 42, bottom: 58 }[lane];
+  return <>
+    <span aria-hidden className="absolute border-l border-[var(--mc-ink-muted)] motion-reduce:!transition-none"
+      style={{ left: percent + "%", top: lane === "top" ? 16 : lane === "upper" ? 30 : 42,
+        height: lane === "top" || lane === "bottom" ? 16 : 2, transition }} />
+    <span aria-hidden className="absolute z-10 w-[3px] bg-[var(--mc-ink)] shadow-[0_0_0_1px_var(--mc-15)] motion-reduce:!transition-none"
+      style={{ left: "clamp(1px, " + percent + "%, calc(100% - 3px))",
+        top: kind === "draw" ? 37 : kind === "supplied" ? 31 : 30,
+        height: kind === "draw" ? 7 : kind === "supplied" ? 12 : 14, transition }} />
+    <span className={"absolute z-20 whitespace-nowrap bg-[var(--mc-49)] px-0.5 leading-4 motion-reduce:!transition-none " + (kind === "supplied" ? "font-medium text-fg" : "text-fg-muted")}
+      data-power-scale-label={kind}
+      title={title}
+      style={{ left: percent + "%", top, transform: "translateX(-" + percent + "%)", transition }}>
+      {label}
+    </span>
+  </>;
 }
 
 type Consumption = {
@@ -86,7 +113,7 @@ export function PowerReadout({
   const next = working.nextWin;
   const following = next ? wins.find((win) => win.euT > next.euT * (1 + 1e-9)) : undefined;
   const { valueMotion } = useBoardMotion();
-  const barTransition = valueMotion ? "width 240ms ease-out, left 240ms ease-out" : undefined;
+  const barTransition = valueMotion ? "width 240ms ease-out, left 240ms ease-out, transform 240ms ease-out" : undefined;
   const nextNode = next ? powerNodeAtBudget(node, next.euT) : undefined;
   const nextReport = nextNode ? getNodePowerReport(recipe, nextNode) : undefined;
   const nextStats = nextNode ? getOverclockedRecipeStats(recipe, nextNode) : undefined;
@@ -217,7 +244,7 @@ export function PowerReadout({
             </span>
           </div>
           <div
-            className={`mt-2 grid gap-2 ${hasParallels && hasOverclocks ? "grid-cols-2" : "grid-cols-1"}`}
+            className={`mt-1.5 grid gap-2 ${hasParallels && hasOverclocks ? "grid-cols-3" : hasParallels || hasOverclocks ? "grid-cols-2" : "grid-cols-1"}`}
           >
             {hasOverclocks ? (
               <Comparison
@@ -229,63 +256,33 @@ export function PowerReadout({
             {hasParallels ? (
               <Comparison label="Parallels" current={running} next={nextRunning} />
             ) : null}
+            <Comparison label="Output" unit="runs/s"
+              current={report.state === "ok" && stats.durationTicks > 0 ? running * 20 / stats.durationTicks : 0}
+              next={nextReport && nextStats && nextStats.durationTicks > 0 ? nextReport.parallels * 20 / nextStats.durationTicks : 0} />
           </div>
-          <p className="mt-2 h-[18px]">
-            {nextReport && nextStats ? (
-              <>
-                {report.state !== "ok" ? "Machine starts at" : "Output rises to"}{" "}
-                <strong className="font-medium text-fg">
-                  {number((nextReport.parallels * 20) / nextStats.durationTicks)} runs/s
-                </strong>
-                .
-              </>
-            ) : (
-              "More supply cannot increase this setup’s output."
-            )}
-          </p>
-          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2 tabular-nums">
-            <span className="text-fg-muted">{raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A"} draw</span>
-            <span className="text-center font-medium text-fg">{suppliedText} supplied</span>
-            <span />
-          </div>
-          <div
-            role="progressbar"
-            aria-label="Supplied power on the upcoming improvement scale"
-            aria-valuemin={0}
-            aria-valuemax={scaleEuT}
-            aria-valuenow={Math.min(report.poolEuT, scaleEuT)}
-            aria-valuetext={suppliedText + " supplied; next at " + nextText + (followingText ? "; then at " + followingText : "")}
-            className={track}
-          >
+          <div className="relative mt-1.5 h-[74px] tabular-nums" data-power-scale>
+            <span className="absolute left-0 top-0 leading-4 text-fg-muted">{raw ? "0 EU/t" : "0A"}</span>
             <div
-              className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)] motion-reduce:!transition-none"
-              style={{ width: progress * 100 + "%", transition: barTransition }}
-            />
-            <span
-              aria-hidden
-              className="absolute inset-y-0 w-0.5 bg-[var(--mc-ink)] motion-reduce:!transition-none"
-              style={{ left: "clamp(1px, " + progress * 100 + "%, calc(100% - 3px))", transition: barTransition }}
-            />
-            <span
-              aria-hidden
-              title={"Next improvement: " + nextText}
-              className="absolute -inset-y-0.5 w-[3px] bg-[var(--mc-ink)] shadow-[0_0_0_1px_var(--mc-15)] motion-reduce:!transition-none"
-              style={{ left: "clamp(1px, " + nextPosition * 100 + "%, calc(100% - 3px))", transition: barTransition }}
-            />
-            {following ? (
-              <span
-                aria-hidden
-                title={"Following improvement: " + followingText}
-                className="absolute -inset-y-0.5 right-0 w-[3px] bg-[var(--mc-ink-muted)] shadow-[0_0_0_1px_var(--mc-15)]"
-              />
-            ) : null}
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-2 tabular-nums text-fg-muted">
-            <span>{raw ? "0 EU/t" : "0A"}</span>
-            <span className="flex items-center gap-2">
-              <span>Next <span className="font-medium text-fg">{nextText}</span></span>
-              {followingText ? <><ArrowRight aria-hidden className="h-3 w-3" /><span>Then {followingText}</span></> : null}
-            </span>
+              role="progressbar"
+              aria-label="Supplied power on the upcoming improvement scale"
+              aria-valuemin={0}
+              aria-valuemax={scaleEuT}
+              aria-valuenow={Math.min(report.poolEuT, scaleEuT)}
+              aria-valuetext={suppliedText + " supplied; next at " + nextText + (followingText ? "; then at " + followingText : "")}
+              className="absolute inset-x-0 top-8 h-2.5 border border-[var(--mc-15)] bg-[var(--mc-33)] p-px shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-15)]"
+            >
+              <div className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)] motion-reduce:!transition-none"
+                style={{ width: progress * 100 + "%", transition: barTransition }} />
+            </div>
+            <PowerScaleMarker position={progress} label={suppliedText + " supplied"}
+              lane="upper" kind="supplied" transition={barTransition} />
+            <PowerScaleMarker position={runningDraw / scaleEuT}
+              label={(raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A") + " draw"}
+              lane="lower" kind="draw" transition={barTransition} />
+            <PowerScaleMarker position={nextPosition} label={nextText} lane="bottom" kind="threshold"
+              transition={barTransition} title={"Next improvement: " + next.euT + " EU/t"} />
+            {following && followingText ? <PowerScaleMarker position={1} label={followingText} lane="top" kind="threshold"
+              transition={barTransition} title={"Following improvement: " + following.euT + " EU/t"} /> : null}
           </div>
         </section>
       ) : null}

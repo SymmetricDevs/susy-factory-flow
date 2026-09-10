@@ -217,11 +217,11 @@ describe("raw EU/t and whole amp steps", () => {
     expect(stepWholeAmp(103.75, -1, 100)).toBe(4);
     expect(stepWholeAmp(3.75, -1, 1000)).toBe(0);
   });
-  it("snaps amps directionally through powers of four without a tier cap", () => {
+  it("snaps amps directionally through powers of four up to the selectable amperage ceiling", () => {
     for (const [amps, down, up] of [
       [0, 0, 1], [0.5, 0, 1], [1, 0, 4], [4, 1, 16],
       [6, 4, 16], [16, 4, 64], [16.01, 16, 64],
-      [65535, 16384, 65536], [16777216, 4194304, 67108864],
+      [65535, 16384, 65536], [16777216, 4194304, 16777216],
     ]) {
       expect(stepPowerOfFourAmps(amps, -1)).toBe(down);
       expect(stepPowerOfFourAmps(amps, 1)).toBe(up);

@@ -8,7 +8,7 @@ import { formatCompact } from "@/lib/model";
 import { getNodePowerReport } from "@/lib/solver/power-report";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
-import { stepWholeAmp, stepPowerOfFourAmps } from "@/lib/solver/hatch-input";
+import { MAX_HATCH_AMPS, stepWholeAmp, stepPowerOfFourAmps } from "@/lib/solver/hatch-input";
 import { listPowerWinsCached, powerNodeAtBudget } from "@/lib/solver/power-wins";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { getMachineStructuralParallels } from "@/lib/solver/machine-effects";
@@ -418,7 +418,7 @@ export function HatchPowerControls({
       !Number.isFinite(nextAmps * getVoltageTierMaxEuT(nextTier))
     )
       return;
-    onChange(nextTier, nextAmps, mode);
+    onChange(nextTier, mode === "amps" ? Math.min(nextAmps, MAX_HATCH_AMPS) : nextAmps, mode);
   };
   const stepUnit = (direction: number) => {
     if (raw) {

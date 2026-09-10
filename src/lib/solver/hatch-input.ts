@@ -15,6 +15,9 @@ import {
   isMultiblockRecipe,
 } from "./power";
 
+/** Highest selectable amperage; raw EU/t remains an explicit power budget. */
+export const MAX_HATCH_AMPS = 16_777_216;
+
 /** One seeding rule for placement and migration: the selected recipe's minimum. */
 export function normalizeHatchInput(
   recipe: Recipe,
@@ -118,7 +121,7 @@ export function stepPowerOfFourAmps(amps: number, direction: -1 | 1): number {
   let power = 1;
   if (direction > 0) {
     while (power <= amps) power *= 4;
-    return Number.isFinite(power) ? power : amps;
+    return Math.min(MAX_HATCH_AMPS, Number.isFinite(power) ? power : amps);
   }
   while (power * 4 < amps) power *= 4;
   return power;

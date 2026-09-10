@@ -1752,7 +1752,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }}
             />
           ) : null}
-          {showHatchControl ? <HatchPowerControls recipe={nodeRecipe} node={projectNode} locked={checklistLocked} onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => {
+          {showHatchControl ? <HatchPowerControls recipe={nodeRecipe} node={projectNode} utilization={sharedUsage ?? result?.utilization} sharedAverageEuT={sharedDraw?.avgEuT} shared={isSharedMachine} locked={checklistLocked} onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => {
             playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
             suppressBoardSound("adjust", 150);
             updateNode(projectNode.id, { hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier) });

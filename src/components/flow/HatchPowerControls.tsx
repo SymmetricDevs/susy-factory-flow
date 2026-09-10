@@ -56,7 +56,14 @@ function Comparison({ label, current, next }: { label: string; current: number; 
   );
 }
 
-function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
+type Consumption = { utilization?: number; sharedAverageEuT?: number; shared?: boolean };
+function PowerReadout({
+  recipe,
+  node,
+  utilization,
+  sharedAverageEuT,
+  shared,
+}: { recipe: Recipe; node: FactoryNode } & Consumption) {
   const report = getNodePowerReport(recipe, node);
   const working = useMemo(
     () => describePowerWorking(recipe, node, report.poolEuT),
@@ -88,9 +95,30 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
   const suppliedText = raw ? `${formatCompact(report.poolEuT)} EU/t` : `${number(report.amps)}A`;
   const floorText = raw ? `${formatCompact(floorEuT)} EU/t` : `${number(keepAmps)}A`;
   const nextText = raw ? `${formatCompact(next?.euT ?? 0)} EU/t` : `${number(nextAmps)}A`;
+  const machineCount = node.machineCount * Math.max(1, node.parallel);
+  const usage = !node.enabled
+    ? 0
+    : utilization === undefined
+      ? undefined
+      : Math.max(0, Math.min(1, utilization));
+  const average =
+    usage === undefined
+      ? undefined
+      : !node.enabled
+        ? 0
+        : shared
+          ? (sharedAverageEuT ?? 0) / Math.max(1, machineCount)
+          : (report.state === "ok" ? report.drawEuT : 0) * usage;
+  const runningDraw = shared
+    ? usage && average !== undefined
+      ? average / usage
+      : 0
+    : report.state === "ok"
+      ? report.drawEuT
+      : 0;
   return (
     <div
-      className="flex h-[310px] w-[480px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
+      className="flex h-[354px] w-[480px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
       data-power-readout
     >
       <div className="flex h-5 shrink-0 items-center justify-between text-[15px] font-semibold leading-5 text-fg">
@@ -210,6 +238,36 @@ function PowerReadout({ recipe, node }: { recipe: Recipe; node: FactoryNode }) {
           <span>{next ? `${formatCompact(next.euT)} EU/t for next step` : "Maximum output"}</span>
         </div>
       </section>
+      <div className="mt-2 h-10 shrink-0 border-t border-line pt-1" data-power-consumption>
+        {usage === undefined || average === undefined ? (
+          <p className="text-fg-muted">Average consumption appears after calculation.</p>
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-fg-muted">{shared ? "Recipe mix" : "Running"} × usage</span>
+              <span className="tabular-nums text-fg">
+                {formatCompact(runningDraw)} EU/t × {number(usage * 100)}% ={" "}
+                <strong>{formatCompact(average)} EU/t</strong>
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-fg-muted">
+              <span>Average per machine</span>
+              <span className="flex items-center gap-1">
+                {raw ? (
+                  `${formatCompact(average)} EU/t`
+                ) : (
+                  <>
+                    {number(average / voltage)}A <TierBadge tier={report.tier} />
+                  </>
+                )}
+                {machineCount > 1 ? (
+                  <span> · {formatCompact(average * machineCount)} EU/t for this card</span>
+                ) : null}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -219,12 +277,15 @@ export function HatchPowerControls({
   node,
   onChange,
   locked,
+  utilization,
+  sharedAverageEuT,
+  shared,
 }: {
   recipe: Recipe;
   node: FactoryNode;
   onChange: (tier: Tier, amps: number, mode: "amps" | "eut") => void;
   locked: () => boolean;
-}) {
+} & Consumption) {
   const { tier, amps, poolEuT } = getNodePowerReport(recipe, node);
   const raw = node.powerInputMode === "eut";
   const [draft, setDraft] = useState<string>();
@@ -284,7 +345,15 @@ export function HatchPowerControls({
   return (
     <MinecraftTooltip
       placement="above-card"
-      content={() => <PowerReadout recipe={recipe} node={node} />}
+      content={() => (
+        <PowerReadout
+          recipe={recipe}
+          node={node}
+          utilization={utilization}
+          sharedAverageEuT={sharedAverageEuT}
+          shared={shared}
+        />
+      )}
     >
       <div
         className="flex"

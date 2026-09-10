@@ -46,7 +46,7 @@ function Comparison({ label, current, next, unit }: { label: string; current: nu
   const format = (value: number) => value >= 10000 ? formatCompact(value) : number(value);
   return (
     <div className="flex h-[42px] min-w-0 flex-col items-center justify-center border border-line bg-[var(--mc-33)] px-1.5">
-      <span className="text-fg-muted">{label}{unit ? <span className="ml-1 text-[11px]">{unit}</span> : null}</span>
+      <span className="text-fg-muted">{label}{unit ? <> <span className="text-[11px]">{unit}</span></> : null}</span>
       <span className="flex items-center justify-center gap-1 font-semibold tabular-nums text-fg" title={number(current) + " → " + number(next) + (unit ? " " + unit : "")}>
         <span>{format(current)}</span>
         <ArrowRight aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" strokeWidth={3} />
@@ -76,11 +76,11 @@ function PowerScaleMarker({ position, label, caption, lane, kind, transition, ti
       style={{ left: "clamp(1px, " + percent + "%, calc(100% - 3px))",
         top: kind === "draw" ? 37 : kind === "supplied" ? 31 : 30,
         height: kind === "draw" ? 7 : kind === "supplied" ? 12 : 14, transition }} />
-    <span className={"absolute z-20 whitespace-nowrap bg-[var(--mc-49)] px-0.5 leading-4 motion-reduce:!transition-none " + (kind === "supplied" ? "font-medium text-fg" : "text-fg-muted")}
+    <span className="absolute z-20 whitespace-nowrap bg-[var(--mc-49)] px-0.5 font-medium leading-4 text-fg motion-reduce:!transition-none"
       data-power-scale-label={kind}
       title={title}
       style={{ left: percent + "%", top, transform: "translateX(-" + percent + "%)", transition }}>
-      {caption ? <span className="mr-1 font-medium text-fg-subtle">{caption}</span> : null}{label}
+      {label}{caption ? <> <span className="font-normal text-fg-muted">{caption}</span></> : null}
     </span>
   </>;
 }
@@ -275,15 +275,22 @@ export function PowerReadout({
               <div className="h-full bg-[var(--mc-ink-muted)] shadow-[inset_0_1px_0_var(--mc-100)] motion-reduce:!transition-none"
                 style={{ width: progress * 100 + "%", transition: barTransition }} />
             </div>
-            <PowerScaleMarker position={progress} label={suppliedText + " supplied"}
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-[29px] h-[5px] opacity-45" data-power-history>
+              {wins.filter((win) => win.euT < next.euT * (1 - 1e-9)).map((win) => (
+                <span key={win.euT}
+                  className="absolute h-full w-px bg-[var(--mc-ink)] motion-reduce:!transition-none"
+                  style={{ left: "clamp(1px, " + win.euT / scaleEuT * 100 + "%, calc(100% - 1px))", transition: barTransition }} />
+              ))}
+            </div>
+            <PowerScaleMarker position={progress} label={suppliedText} caption="supplied"
               lane="upper" kind="supplied" transition={barTransition} />
             <PowerScaleMarker position={runningDraw / scaleEuT}
-              label={(raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A") + " draw"}
+              label={raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A"} caption="draw"
               lane="lower" kind="draw" transition={barTransition} />
-            <PowerScaleMarker position={nextPosition} label={nextText} caption="Next" lane="bottom" kind="threshold"
+            <PowerScaleMarker position={nextPosition} label={nextText} caption="next" lane="bottom" kind="threshold"
               transition={barTransition} title={"Next improvement: " + next.euT + " EU/t"} />
-            {following && followingText ? <PowerScaleMarker position={1} label={followingText} caption="Following" lane="top" kind="threshold"
-              transition={barTransition} title={"Following improvement: " + following.euT + " EU/t"} /> : null}
+            {following && followingText ? <PowerScaleMarker position={1} label={followingText} caption="later" lane="top" kind="threshold"
+              transition={barTransition} title={"Later improvement: " + following.euT + " EU/t"} /> : null}
           </div>
         </section>
       ) : null}

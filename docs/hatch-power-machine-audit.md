@@ -1,5 +1,7 @@
 # Hatch power readout coverage audit
 
+This document is a sweep of the existing planner model, not verification of every machine against game code. The Industrial Farm treatment below is superseded by the [Industrial Farm source audit](industrial-farm-power-audit.md), which found that input power determines overclocks when its upgrade is installed.
+
 The readout uses the same power report, overclock stats, structural parallel limit, and cached power ladder as the solver. Sections describe the current setup: no reachable parallel count above one means no parallels section; no reachable overclock means no overclock section; no next power step means no improvement section.
 
 ## Mode accounting
@@ -12,7 +14,7 @@ The readout uses the same power report, overclock stats, structural parallel lim
 
 | Family | Treatment |
 | --- | --- |
-| Industrial Farm | Dedicated power requirement hover on the card. Existing crop model supplies seed-bed and upgrade draw, whole-farm count, and overclock-upgrade count. Amperage is an equivalent at the seed-bed tier, not an editable production control. No recipe parallels or power-improvement ladder. |
+| Industrial Farm | Superseded: the existing requirement-only hover is incomplete. The source audit calls for editable supply, an installation toggle, and supply-derived overclocks; see the linked audit. |
 | Crop Manager | Dedicated requirement hover reports EU per crop harvested and average consumption; no artificial recipe overclocks or parallels. |
 | Industrial / Mega Apiary, Tree Growth Simulator | Retain their existing specialized controls. They are not covered by the curated hatch calculation; do not invent supply-to-output improvements. |
 | Fusion and other runtime-only machines | Retain the existing voltage/runtime controls. The new editable hatch controls remain restricted to curated multiblocks. |

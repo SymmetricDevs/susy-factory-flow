@@ -66,7 +66,7 @@ const SELECTION_DEBOUNCE_MS = 100;
 
 // One ledger row: icon, resource, Raw and Net. Keep the virtual list
 // height in sync with inspector/panel.css.
-const ROW_HEIGHTS = { header: 24, item: 28, empty: 24, chart: 60, product: 28 };
+const ROW_HEIGHTS = { header: 36, item: 40, empty: 24, chart: 60, product: 28 };
 const ICON_COLUMN = "24px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
@@ -1476,7 +1476,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // crossed, which on a list this dense meant a yellow box trailing the
         // cursor the whole way down. The row already widens on hover to show
         // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 62px 62px auto` }}
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 82px 82px auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon

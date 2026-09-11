@@ -386,7 +386,7 @@ describe("InspectorPanel", () => {
 
       // The mode has to be readable from anywhere in the list, so the ring
       // belongs to the panel that wraps every group.
-      expect(container.querySelector("section.ring-\\[var\\(--selection\\)\\]")).not.toBeNull();
+      expect(container.querySelector("section.inspector-selection-scope")).not.toBeNull();
     });
   });
 });

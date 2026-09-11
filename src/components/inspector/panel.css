@@ -65,12 +65,10 @@
 .inspector-product-target { font-size: 12px; background: #34d39906; }
 .inspector-product-target button, .inspector-product-target input { font-size: 12px; }
 
-/* Align the numbers, not the ends of variable-width /s and L/hr suffixes. */
+/* Keep each reading together and align its unit's end to the right edge. */
 .inspector-resource-rate > span > span:last-child,
 .inspector-resource-net > .inspector-unit {
-  display: inline-block;
-  width: 20px;
-  text-align: right;
+  margin-left: 0;
 }
 .inspector-machine-title > span:first-child > span:last-child { font-size: 13px; }
 

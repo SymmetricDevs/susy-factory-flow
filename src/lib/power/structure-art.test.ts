@@ -59,6 +59,10 @@ describe("the multiblock structure renders", () => {
   });
 
   it("leaves a machine with no render of its own to its item icon", () => {
+    // The old cube filed under Vacuum Furnace was not the 3x5x3 coil-lined
+    // Utupu-Tanuri. Both modes use the actual controller until we have its art.
+    expect(getMachineStructureArt("vacuum-furnace")).toBeUndefined();
+    expect(getMachineStructureArt("multiblock-dehydrator")).toBeUndefined();
     expect(getMachineStructureArt("acid-generator")).toBeUndefined();
     expect(getMachineStructureArt(undefined)).toBeUndefined();
   });

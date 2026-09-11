@@ -219,6 +219,8 @@ export interface MachineConfigControl {
    * curated machine-table controls only; the dataset never emits it.
    */
   minimumFromSpecialValue?: boolean;
+  /** Special value is required heat in K; offer only coils that meet it. */
+  minimumHeatFromSpecialValue?: boolean;
   tiers: MachineConfigTierOption[];
 }
 

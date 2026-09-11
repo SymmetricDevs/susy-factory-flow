@@ -353,6 +353,13 @@ Working notes for future agents on GTNH Factory Flow.
   discount plus perfect overclocks, and that is what we implement. Machines
   that diverge on purpose are listed in `machine-table.test.ts`.
 - Machine config controls are structured data, not frontend hardcoding. Use `machineConfigControls`.
+  - Utupu-Tanuri is BOTH `Multiblock Dehydrator` and `Vacuum Furnace` in
+    the dataset. Keep both aliases on the same table entry: the latter's
+    17 recipes previously bypassed the coils and used runtime-only math.
+    `minimumHeatFromSpecialValue` floors its coil picker at recipe heat
+    (zero for dehydration, e.g. 7200 K for sulfur froth). The vacuum-furnace
+    structure render was incorrect and removed; use the real controller icon
+    until an accurate render is available. See `utupu-tanuri.test.ts`.
 - Neutron Activator pipe height is an integer count, minimum 4 with NO machine
   height cap. `speedingPipeCasing` keeps its existing saved key; its control's
   `numeric` metadata enables typing and stepping rather than a finite ladder.

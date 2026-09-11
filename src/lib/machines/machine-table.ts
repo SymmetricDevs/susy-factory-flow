@@ -883,7 +883,7 @@ const MACHINES: Record<string, MachineBehaviour> = {
     hidesControls: [PIPE],
   },
   /**
-   * The Utupu-Tanuri, which our dataset lists under its recipe map.
+   * The Utupu-Tanuri, exported under both of its recipe maps.
    *
    * MTEIndustrialDehydrator: 220% speed, half the EU/t, a fixed four
    * parallels, plus the heat bonus off its coils - a 5% EU discount for every
@@ -891,11 +891,9 @@ const MACHINES: Record<string, MachineBehaviour> = {
    * 1800 K. Unlike the blast furnaces it reads its coils raw, with no 100 K
    * per voltage tier on top.
    *
-   * The requirement is genuinely zero here. Dehydrator recipes are low
-   * temperature and always start from 0 K, which is why all 88 of them report
-   * a special value of 0 - that is the real number, not a gap in the export.
-   * So the coil tier alone settles the bonus, and a coil picker answers it
-   * exactly.
+   * Dehydrator recipes start from 0 K; Vacuum Furnace recipes carry a real
+   * heat requirement (e.g. the sulfur froth recipe is 7200 K). Both modes
+   * use this same processing logic, including validateRecipe's minimum heat.
    *
    * This deliberately parts company with the reference, which cannot read the
    * requirement out of its own export and so asks the player for the finished
@@ -904,12 +902,12 @@ const MACHINES: Record<string, MachineBehaviour> = {
    * heat), so the coefficient check skips this machine.
    */
   "Multiblock Dehydrator": {
-    aliases: ["Utupu-Tanuri"],
+    aliases: ["Utupu-Tanuri", "Vacuum Furnace"],
     overclock: HEAT_OVERCLOCK,
     speed: 2.2,
     power: 0.5,
     parallels: 4,
-    controls: [HEATING_COIL_CONTROL],
+    controls: [{ ...HEATING_COIL_CONTROL, minimumHeatFromSpecialValue: true }],
   },
   "Industrial Wire Factory": {
     // MTEIndustrialWireMill: throughput is 0.5 x item pipe tier, so a tin

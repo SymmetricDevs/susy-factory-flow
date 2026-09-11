@@ -248,7 +248,7 @@ export function getRecipeCoilTierControl(
   const control =
     getMachineTableControls(recipe.machineType).find((entry) => entry.id === "heatingCoil") ??
     findMachineConfigControl(recipe, "heatingCoil");
-  return control ? resolveMachineConfigTierControl(control, node.coilTier) : undefined;
+  return control ? resolveMachineConfigTierControl(applyControlRecipeMinimum(control, recipe), node.coilTier) : undefined;
 }
 
 export function getRecipeMachineConfigTierControls(
@@ -354,20 +354,23 @@ function findMachineConfigControl(
  * A control whose minimum tier is the recipe's own special value: the recipe
  * says which rung of the ladder it starts at (an NFR recipe's minimum field
  * restriction coil), so the control's static `minimumKey` is replaced with
- * that tier before resolution hides the rungs below it.
+ * that tier before resolution hides the rungs below it. Heat-based controls
+ * instead select the first coil meeting the special value in K.
  */
 function applyControlRecipeMinimum(
   control: MachineConfigControl,
   recipe: Pick<Recipe, "nei">,
 ): MachineConfigControl {
-  if (!control.minimumFromSpecialValue) {
+  if (!control.minimumFromSpecialValue && !control.minimumHeatFromSpecialValue) {
     return control;
   }
   const specialValue = getRecipeSpecialValue(recipe);
   if (specialValue === undefined || specialValue < 1) {
     return control;
   }
-  const minimum = control.tiers[Math.min(control.tiers.length, Math.floor(specialValue)) - 1];
+  const minimum = control.minimumHeatFromSpecialValue
+    ? control.tiers.find((tier) => (tier.heat ?? 0) >= specialValue)
+    : control.tiers[Math.min(control.tiers.length, Math.floor(specialValue)) - 1];
   return minimum ? { ...control, minimumKey: minimum.key } : control;
 }
 

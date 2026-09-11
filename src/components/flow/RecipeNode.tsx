@@ -2249,7 +2249,7 @@ function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCirc
         // the footer's type is measured.
         className={[
           "relative flex shrink-0 items-center justify-center overflow-hidden",
-          small ? "h-[18px] w-[18px]" : "w-9 self-stretch border",
+          small ? "h-[22px] w-[22px]" : "w-9 self-stretch border",
           small ? "" : resource
             ? "border-[var(--mc-47)] bg-[var(--mc-71)] shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
             : // Empty reads as a hole in the card, the way an unfilled slot
@@ -2269,14 +2269,14 @@ function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCirc
             tooltip={false}
             showAmount={false}
             showConsumedState={false}
-            className={small ? "!h-[18px] !w-[18px] origin-center scale-150" : "!h-9 !w-9 origin-center scale-150"}
+            className={small ? "!h-[22px] !w-[22px] origin-center scale-150" : "!h-9 !w-9 origin-center scale-150"}
           />
         ) : (
           // Not an item, a silhouette: the same drawn circuit the recipe book
           // card wears, at a fraction of the ink. An empty slot with nothing
           // in it at all reads as art that failed to load rather than as a
           // machine that does not care what its circuit says.
-          <Cpu aria-hidden className={`${small ? "h-[18px] w-[18px]" : "h-5 w-5"} text-[var(--mc-ink-muted)] opacity-50`} />
+          <Cpu aria-hidden className={`${small ? "h-[22px] w-[22px]" : "h-5 w-5"} text-[var(--mc-ink-muted)] opacity-50`} />
         )}
       </div>
     </MinecraftTooltip>
@@ -3116,15 +3116,15 @@ function SharedMachineRails({
       </MinecraftTooltip>
     );
   };
-  // One cell holds the reading and controls; a further cell separates later
-  // recipes, keeping both rails and their wire endpoints on the board grid.
+  // One cell holds the reading and controls. Half a cell of breathing room
+  // separates later recipes; both rails use the same spacing.
   const rule = (entry: (typeof sections)[number], withKey: boolean) => (
     <div
       className="relative flex items-end pb-0.5"
-      style={{ height: SECTION_RULE_HEIGHT, marginTop: entry.section > 0 ? BOARD_GRID : 0 }}
+      style={{ height: SECTION_RULE_HEIGHT, marginTop: entry.section > 0 ? BOARD_GRID / 2 : 0 }}
     >
       {withKey ? null : reading(entry)}
-      {withKey && entry.circuit ? <span className="absolute bottom-0.5 left-0"><CircuitChip circuit={entry.circuit} small /></span> : null}
+      {withKey && entry.circuit ? <span className="absolute bottom-px left-0 z-10"><CircuitChip circuit={entry.circuit} small /></span> : null}
       {withKey ? (
         <span className="ml-auto flex items-center">
           {key("Move this recipe up", <ChevronUp className="h-3.5 w-3.5" />, () => onMove(entry.section, -1), entry.section === 0)}

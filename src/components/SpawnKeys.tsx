@@ -1,6 +1,5 @@
 "use client";
 
-import { Gauge, Sprout, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import { useFactoryStore } from "@/store/factory-store";
 
@@ -26,7 +25,7 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
   // ground of their own, the column's border, a plain lift on hover - keys that act,
   // a step apart from the filter chips under them, which only narrow.
   const key =
-    "flex h-9 min-w-0 flex-1 flex-col items-center justify-center gap-0 rounded border border-neutral-700 px-1 text-[11px] leading-3 font-medium text-neutral-300 hover:border-neutral-500 hover:text-neutral-100";
+    "flex h-7 min-w-0 flex-1 items-center justify-center rounded border border-neutral-700 px-1 text-[11px] leading-3 font-medium text-neutral-300 hover:border-neutral-500 hover:text-neutral-100";
   if (isReadOnly) return <div className="mx-2 mt-2 flex shrink-0 gap-1">{leading}</div>;
   return (
     <div className="mx-2 mt-2 flex shrink-0 gap-1">
@@ -38,7 +37,6 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
         title="Place a generator"
         aria-label="Place a generator"
       >
-        <Zap className="h-3 w-3 shrink-0" />
         Power
       </button>
       <button
@@ -48,7 +46,6 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
         title="Add custom rate node"
         aria-label="Add custom rate node"
       >
-        <Gauge className="h-3 w-3 shrink-0" />
         Custom
       </button>
       <button
@@ -58,7 +55,6 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
         title="Add crop farm"
         aria-label="Add crop farm"
       >
-        <Sprout className="h-3 w-3 shrink-0" />
         Farm
       </button>
     </div>

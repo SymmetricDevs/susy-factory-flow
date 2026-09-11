@@ -1,5 +1,7 @@
 "use client";
 
+import "./app-chrome.css";
+
 import { Settings } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { OPEN_SHARE_DIALOG_EVENT } from "@/lib/setups-tab";
@@ -127,7 +129,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   const isCompact = useIsCompactViewport();
 
   return (
-    <header className="relative flex shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 py-1.5">
+    <header className="app-header relative flex h-[22px] shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3">
       <h1 className="flex min-w-0 items-center gap-2 text-sm font-bold tracking-tight">
         <span className="shrink-0">
           GTNH <span className="text-cyan-500">Planner</span>
@@ -178,7 +180,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             pinned the same way in AppMenu. */}
         {isCompact || !SHOW_PACK_PICKER ? null : (
           <>
-            <span className="ml-3 h-5 w-px bg-line" aria-hidden />
+            <span className="ml-3 h-3.5 w-px bg-line" aria-hidden />
             <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
           </>
         )}
@@ -205,12 +207,12 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
         // the cluster sets the one size every control in it renders at.
         <div className="flex items-center gap-2 text-xs">
           <HeaderLinks />
-          <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
+          <span className="mx-0.5 h-3.5 w-px bg-line" aria-hidden />
           <BoardActions
             onShare={() => setShareOpen(true)}
             onExportImage={() => setExportOpen(true)}
           />
-          <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
+          <span className="mx-0.5 h-3.5 w-px bg-line" aria-hidden />
           {/* Dressed like the compass and the brand links: settings is a
               utility square, not one of the coloured calls to action. */}
           <button
@@ -218,7 +220,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             onClick={() => setSettingsOpen(true)}
             title="Settings"
             aria-label="Open settings"
-            className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
+            className="inline-flex h-5 w-5 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
           >
             <Settings className="h-3.5 w-3.5" />
           </button>

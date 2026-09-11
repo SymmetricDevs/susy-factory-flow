@@ -367,7 +367,7 @@ export function BoardActions({
             aria-expanded={isExportMenuOpen}
             aria-busy={pendingExport ? true : undefined}
             disabled={Boolean(pendingExport)}
-            className="inline-flex h-7 items-center justify-center gap-0.5 rounded border border-line-strong bg-surface px-1.5 text-fg-subtle hover:bg-surface-raised disabled:cursor-wait disabled:bg-surface-sunken disabled:text-fg-muted"
+            className="inline-flex h-5 items-center justify-center gap-0.5 rounded border border-line-strong bg-surface px-1.5 text-fg-subtle hover:bg-surface-raised disabled:cursor-wait disabled:bg-surface-sunken disabled:text-fg-muted"
           >
             {pendingExport ? (
               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -377,7 +377,7 @@ export function BoardActions({
             <ChevronDown className="h-3 w-3" />
           </button>
           {isExportMenuOpen ? (
-            <div className="absolute right-0 top-8 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+            <div className="absolute right-0 top-full mt-1 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
               {onShare ? (
                 <ExportMenuItem
                   icon={Share2}

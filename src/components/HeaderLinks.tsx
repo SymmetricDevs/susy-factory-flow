@@ -48,7 +48,7 @@ export function HeaderLinks() {
         }}
         title="Welcome"
         aria-label="Open the Welcome tab"
-        className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
+        className="inline-flex h-5 w-5 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
       >
         <Compass className="h-3.5 w-3.5" />
       </button>
@@ -75,7 +75,7 @@ export function ReportBugButton() {
       rel="noreferrer noopener"
       title="Report a bug"
       aria-label="Report a bug"
-      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-red-800 bg-red-950 text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200"
+      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-red-800 bg-red-950 text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200"
     >
       <Bug className="h-3.5 w-3.5" aria-hidden />
     </a>
@@ -98,7 +98,7 @@ export function SupportButton() {
       aria-label="Support GTNH Planner on Ko-fi"
       data-umami-event="support-kofi"
       data-umami-event-source="header"
-      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-pink-800 bg-pink-950 px-2 text-xs font-semibold text-pink-300 hover:border-pink-600 hover:bg-pink-900 hover:text-pink-200 snug:w-7 snug:justify-center snug:px-0"
+      className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-pink-800 bg-pink-950 px-2 text-xs font-semibold text-pink-300 hover:border-pink-600 hover:bg-pink-900 hover:text-pink-200 snug:w-5 snug:justify-center snug:px-0"
     >
       <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
       <span className="snug:hidden">Support</span>
@@ -210,7 +210,7 @@ function HeaderLink({
       rel="noreferrer noopener"
       title={label}
       aria-label={label}
-      className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
+      className="inline-flex h-5 w-5 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
     >
       {children}
     </a>

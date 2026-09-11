@@ -447,7 +447,7 @@ export function DesignTabs() {
   };
 
   if (!isHydrated) {
-    return <div className="h-8 shrink-0 border-b border-line bg-surface" />;
+    return <div className="h-[22px] shrink-0 border-b border-line bg-surface" />;
   }
 
   return (
@@ -459,10 +459,10 @@ export function DesignTabs() {
       */}
       <div
         data-help-anchor="tabs"
-        // h-8, not the 44px this bar used to run: a tab's name is 12px text in
+        // h-[22px], not the 44px this bar used to run: a tab's name is 12px text in
         // a 24px pill, so the row was carrying 20px of nothing above and below
         // it. The board gets the difference.
-        className="flex h-8 min-w-0 shrink-0 items-center gap-1 border-b border-line bg-surface px-2"
+        className="design-tab-strip flex h-[22px] min-w-0 shrink-0 items-center gap-1 border-b border-line bg-surface px-2"
       >
         {/*
           Welcome rides at the head of the strip and outside the scroller, so it
@@ -484,7 +484,7 @@ export function DesignTabs() {
           aria-pressed={shelf.active}
           data-help-anchor="library"
           className={[
-            "flex h-6 shrink-0 items-center gap-1 rounded-t border-b-2 px-2 text-xs font-medium",
+            "flex h-5 shrink-0 items-center gap-1 rounded-t border-b-2 px-2 text-xs font-medium",
             shelf.active
               ? "border-cyan-500 bg-surface-raised text-fg"
               : "border-transparent text-fg-muted hover:bg-surface-sunken hover:text-fg",
@@ -498,7 +498,7 @@ export function DesignTabs() {
           <div className="flex min-w-0 shrink-0 items-center border-b-2 border-amber-500 text-amber-300">
           <button type="button" onClick={() => { leaveLibrary(); leaveWelcomeTab(); }}
             aria-pressed={!coveringPage}
-            className="h-6 max-w-48 truncate px-2 text-xs"
+            className="h-[18px] max-w-48 truncate px-2 text-xs"
             title={`View only: ${publicView.name}`}>
             View only: {publicView.name}
           </button>
@@ -510,7 +510,7 @@ export function DesignTabs() {
         {welcome.open ? (
           <div
             className={[
-              "group flex h-6 shrink-0 items-center rounded-t border-b-2 pl-2 pr-1",
+              "group flex h-5 shrink-0 items-center rounded-t border-b-2 pl-2 pr-1",
               welcome.active
                 ? "border-cyan-500 bg-surface-raised text-fg"
                 : "border-transparent text-fg-muted hover:bg-surface-sunken hover:text-fg",
@@ -592,7 +592,7 @@ export function DesignTabs() {
                     }
                   }}
                   className={[
-                    "group flex h-6 shrink-0 items-center rounded-t border-b-2 pl-2 pr-1",
+                    "group flex h-5 shrink-0 items-center rounded-t border-b-2 pl-2 pr-1",
                     isActive
                       ? "border-cyan-500 bg-surface-raised text-fg"
                       : "border-transparent text-fg-muted hover:bg-surface-sunken hover:text-fg",
@@ -690,7 +690,7 @@ export function DesignTabs() {
             void addDesign();
           }}
           aria-label="New design"
-          className="shrink-0 rounded px-2 py-0.5 text-sm text-fg-muted hover:bg-surface-sunken hover:text-fg"
+          className="shrink-0 rounded px-2 py-0 text-sm text-fg-muted hover:bg-surface-sunken hover:text-fg"
         >
           +
         </button>
@@ -993,7 +993,7 @@ function hasDrawableFace(icon: EntryIcon | undefined): icon is EntryIcon {
 }
 
 /** The face's box: the pill's full height, the way a browser tab wears a favicon. */
-const TAB_FACE_PX = 24;
+const TAB_FACE_PX = 20;
 
 /**
  * The design's saved one-item face at the pill's full height. Same rendering
@@ -1007,7 +1007,7 @@ function TabFace({ icon }: { icon: EntryIcon }) {
   return (
     <span
       aria-hidden
-      className="flex h-6 w-6 shrink-0 translate-y-[1px] items-center justify-center overflow-hidden"
+      className="flex h-5 w-5 shrink-0 translate-y-[1px] items-center justify-center overflow-hidden"
     >
       <ResourceIcon
         resource={{

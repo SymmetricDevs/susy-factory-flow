@@ -6706,6 +6706,7 @@ export function FactoryFlow() {
         folded={toolbarFold.paint}
         foldAll={toolbarFold.paintFoldsAll}
         modesInBuild={toolbarFold.build}
+        modeIconsOnly={toolbarFold.modeIconsOnly}
         openGroup={openToolGroup}
         onToggleGroup={handleToolGroupToggle}
         shiftedDown={false}
@@ -7237,8 +7238,9 @@ function ToolTray({
 }) {
   return (
     <div
+      data-toolbar-tray
       data-help-anchor={helpAnchor}
-      className={`${raised ? "relative z-30 " : ""}pointer-events-auto flex items-start gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] [filter:drop-shadow(6px_8px_7px_rgba(0,0,0,0.45))]`}
+      className={`${raised ? "relative z-30 " : ""}pointer-events-auto flex shrink-0 items-start gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] [filter:drop-shadow(6px_8px_7px_rgba(0,0,0,0.45))]`}
     >
       {children}
     </div>
@@ -7760,7 +7762,7 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
       }}
       onWheel={onWheel}
       className={[
-        "pointer-events-auto relative z-10 flex h-8 touch-none select-none border-2 border-[var(--mc-15)]",
+        "pointer-events-auto relative z-10 flex h-8 shrink-0 touch-none select-none border-2 border-[var(--mc-15)]",
         dragX === undefined ? "" : "cursor-grabbing",
       ].join(" ")}
     >
@@ -7811,7 +7813,7 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
             aria-label={label}
             aria-description={`${setup} Calculates ${result.charAt(0).toLowerCase()}${result.slice(1)}${details ? ` ${details.join(" ")}` : ""}${note ? ` ${note}` : ""}`}
             className={[
-              "flex h-full items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-colors duration-200",
+              "flex h-full shrink-0 items-center justify-center gap-2 font-mono text-[11px] font-black tracking-wide transition-colors duration-200",
               TOOL_FACE_OFF,
               at > 0 ? "border-l-2 border-[var(--mc-15)]" : "",
               // Each key in its own colour always: a deeper shade at rest, the
@@ -8050,7 +8052,7 @@ const SourceToolbar = memo(function SourceToolbar({
       data-board-toolbar
       data-help-anchor="build"
       className={[
-        "nodrag pointer-events-none absolute left-3 flex items-start gap-2",
+        "nodrag pointer-events-none absolute left-[var(--toolbar-inset,0.75rem)] flex items-start gap-2",
         // Lifted while either unit menu hangs below, so a notice card cannot
         // paint over it - the same lift the paint row gives its fold-outs.
         isRateMenuOpen || isPowerUnitMenuOpen ? "z-40" : "z-20",
@@ -9248,6 +9250,7 @@ const PaintToolbar = memo(function PaintToolbar({
   folded,
   foldAll,
   modesInBuild,
+  modeIconsOnly,
   openGroup,
   onToggleGroup,
   shiftedDown,
@@ -9273,6 +9276,7 @@ const PaintToolbar = memo(function PaintToolbar({
    */
   foldAll: boolean;
   modesInBuild: boolean;
+  modeIconsOnly: boolean;
   openGroup?: ToolGroupId;
   onToggleGroup: (group: ToolGroupId | undefined) => void;
   shiftedDown: boolean;
@@ -9515,7 +9519,7 @@ const PaintToolbar = memo(function PaintToolbar({
       ].join(" ")}
     >
       <ToolTray helpAnchor="rules">
-        <ModeKeys />
+        <ModeKeys forceIcons={modeIconsOnly} />
       </ToolTray>
       {/* Pool mode's product key: its OWN plate that appears to the right of
           the switch while that mode is on (Jack, 2026-09-06). Absolutely
@@ -9531,7 +9535,7 @@ const PaintToolbar = memo(function PaintToolbar({
     <div
       data-board-toolbar
       className={[
-        "nodrag pointer-events-none absolute right-3 flex items-start gap-2",
+        "nodrag pointer-events-none absolute right-[var(--toolbar-inset,0.75rem)] flex items-start gap-2",
         shiftedDown ? "top-14" : "top-3",
         // An open fold-out hangs below the row and can cross whatever toolbar
         // sits beneath, which at the same z and later in the DOM would paint

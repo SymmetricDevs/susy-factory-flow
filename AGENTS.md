@@ -1469,6 +1469,10 @@ Working notes for future agents on GTNH Factory Flow.
   Nonzero power readings below 0.01 display `<0.01`; zero stays zero.
   Memoized inspector rows subscribe to both display dials themselves.
   Do not remove this display setting when changing machine power controls.
+  Toolbar folding now has an intermediate `modeIconsOnly` stage based on
+  BOARD width. Its size budget separates rem-sized controls (Firefox text
+  zoom/default fonts) from fixed-pixel mode/power keys; trays and mode keys
+  cannot flex-shrink. Test expanded checklist and manual recalculate too.
 
 - TOOLBAR LAYOUT since the rework (Jack, 2026-09-06): LEFT row = undo
   pair, rate keys, pool mode's product tray (`PoolSpawnKeys`, the whole

@@ -54,7 +54,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Show power as *EU/t or amps at any voltage tier* using the selector beside the rate unit. Your choice is remembered in this browser.",
       "Power readings below 0.01 show *<0.01*, while zero stays zero.",
       "Resource rows update immediately when you change display units or the amps tier, including energy per item or litre.",
-      "The board toolbar compacts earlier to keep its buttons clear of the centered mode switch at different window sizes and zoom levels.",
+      "The board toolbar shrinks in stages: *mode labels, mode icons, then folded tools*, accounting for Firefox text size without squeezing buttons together.",
     ],
   },
   {

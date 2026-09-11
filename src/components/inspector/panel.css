@@ -4,6 +4,16 @@
   font-size: 12px;
 }
 
+/* Paint above full-width row backgrounds so they cannot cover the frame. */
+.inspector-selection-scope::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border: 1px solid var(--selection);
+  pointer-events: none;
+}
+
 .inspector-panel:has(.inspector-machines) {
   --inspector-resource-max: 62%;
 }

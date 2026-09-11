@@ -541,8 +541,8 @@ function FlowIOPanel() {
         // readable from anywhere in the list rather than only at the top.
         // Like the items column: only the controls sit on a card; the list
         // sits on the column itself.
-        "flex min-h-0 flex-1 flex-col",
-        selection ? "ring-1 ring-inset ring-[var(--selection)]" : "",
+        "relative isolate flex min-h-0 flex-1 flex-col",
+        selection ? "inspector-selection-scope" : "",
       ].join(" ")}
     >
       {selection ? (

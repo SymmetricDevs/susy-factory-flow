@@ -66,8 +66,8 @@ const SELECTION_DEBOUNCE_MS = 100;
 
 // One ledger row: icon, resource, Raw and Net. Keep the virtual list
 // height in sync with inspector/panel.css.
-const ROW_HEIGHTS = { header: 24, item: 28, empty: 24, chart: 60, product: 28 };
-const ICON_COLUMN = "24px";
+const ROW_HEIGHTS = { header: 22, item: 24, empty: 22, chart: 60, product: 28 };
+const ICON_COLUMN = "20px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -1523,7 +1523,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
       >
         {/* The icon spans the name and rate lines without growing with the row. */}
         <span
-          style={{ height: 24, width: 24 }}
+          style={{ height: 20, width: 20 }}
           className="relative flex shrink-0 items-center justify-center"
         >
           <ResourceIcon
@@ -1543,7 +1543,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
             tooltip={false}
             className="!h-full !w-full"
           />
-          {productMarker ? <span className="inspector-product-marker" title="Product">◆</span> : null}
+          {productMarker ? <span className="inspector-product-marker" role="img" aria-label="Product">◆</span> : null}
         </span>
 
         {/* Truncates in the wide copy too. The extra width fits most names in

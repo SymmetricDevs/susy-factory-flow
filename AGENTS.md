@@ -887,8 +887,10 @@ Working notes for future agents on GTNH Factory Flow.
 
 - The right inspector is 280 shell pixels wide on desktop and as a drawer.
   Resources and Machines share the dark styling in `inspector/panel.css`.
-  Resource names/rates use two-line 44px rows; keep virtual list measurements
-  in sync with CSS. Machine names and build identity sit above Peak/Avg figures.
+  Resources use 28px ledger rows with simultaneous Raw and Net columns;
+  Net is surplus minus deficit, while Raw keeps each boundary side intact.
+  Keep virtual list measurements in sync with CSS. Machines use the same
+  compact rows with Peak/Average columns. Resource tools live in the header.
   Resource height follows visible rows (capped when Machines is present), so
   a short resource list gives spare height to the machine list.
 

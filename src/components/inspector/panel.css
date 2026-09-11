@@ -10,14 +10,14 @@
 
 .inspector-section-heading {
   display: flex;
-  min-height: 38px;
+  min-height: 30px;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 3px 8px;
 }
 
 .inspector-section-heading h2 {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -48,14 +48,14 @@
 }
 
 .inspector-resource-button {
-  grid-template-rows: 22px 22px;
+  grid-template-rows: 28px;
   font-size: 12px;
 }
 
 .inspector-resource-name {
   grid-column: 2;
   grid-row: 1;
-  align-self: end;
+  align-self: center;
 }
 
 .inspector-resource-name > span {
@@ -64,9 +64,11 @@
 }
 
 .inspector-resource-rate {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: start;
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  justify-content: flex-end;
+  margin-left: 0;
 }
 
 .inspector-resource-rate > span {
@@ -102,6 +104,56 @@
 }
 
 .inspector-machine-figures .tabular-nums {
-  width: auto;
-  font-size: 12px;
+  width: 62px;
+  font-size: 11px;
+}
+
+.inspector-resource-name {
+  margin-left: 4px;
+}
+.inspector-resource-name > span {
+  font-size: 11px;
+}
+.inspector-resource-rate > span {
+  font-size: 11px;
+}
+.inspector-resource-rate .opacity-70,
+.inspector-unit {
+  font-size: 8px;
+  margin-left: 1px;
+  opacity: 0.65;
+}
+.inspector-resource-net {
+  grid-column: 4;
+  grid-row: 1;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #cbd5e1;
+}
+.inspector-rate-heads > span {
+  width: 62px;
+  text-align: right;
+  font-size: 9px !important;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: #a3a3a3;
+}
+.inspector-machine-row {
+  min-height: 28px;
+}
+.inspector-machine-row > span:first-child > span {
+  font-size: 11px;
+}
+.inspector-machine-row > span:first-child > span:first-child {
+  width: 20px;
+  height: 20px;
+}
+.inspector-machine-summary {
+  padding-bottom: 4px;
+}
+.inspector-machine-summary > .flex {
+  font-size: 11px;
+  line-height: 18px;
 }

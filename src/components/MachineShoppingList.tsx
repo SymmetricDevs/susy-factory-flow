@@ -495,7 +495,7 @@ export function MachineShoppingList() {
           const uniform = group.builds.length === 1;
           const build = group.builds[0];
           return (
-            <div key={group.label} className="py-0.5">
+            <div key={group.label} className="py-0">
               <ListLine
                 icon={group.icon}
                 // A uniform group is one whole line: count, chip, draw,
@@ -555,7 +555,7 @@ interface Figure {
 }
 
 /** The two right-hand columns share one width so every row lines up. */
-const COLUMN_CLASS = "w-[76px] shrink-0 whitespace-nowrap text-right tabular-nums";
+const COLUMN_CLASS = "w-[62px] shrink-0 whitespace-nowrap text-right tabular-nums";
 const COLUMN_HEAD_CLASS =
   COLUMN_CLASS + " text-[10px] font-bold uppercase tracking-wider text-[var(--mc-ink-muted)]";
 
@@ -754,9 +754,9 @@ function ListLine({
         // The wash sits at ~12% - present enough to read as the tier's
         // colour without competing with the chips that name it.
         style={{ ...checklistCursorStyle, ...(wash ? { backgroundColor: `${GT_TIER_COLORS[wash].background}1f` } : {}) }}
-        className="inspector-machine-row relative flex w-full flex-col gap-1 px-3 py-2 text-left hover:bg-white/5"
+        className="inspector-machine-row relative flex w-full items-center gap-1 px-2 py-0.5 text-left hover:bg-white/5"
       >
-        <span className="flex w-full min-w-0 items-center gap-1.5">
+        <span className="flex min-w-0 flex-1 items-center gap-1">
         {indent ? (
           /* The branch: a vertical line dropping from under the parent's
              icon, elbowing out to this build's count. Anchored to the
@@ -823,8 +823,8 @@ function ListLine({
           </span>
         ) : null}
         </span>
-        {(peak || average || stalled) && <span className="inspector-machine-figures flex w-full items-center justify-end gap-3">
-        <span className="flex items-baseline gap-1"><span className="inspector-figure-label">Peak</span>
+        {(peak || average || stalled) && <span className="inspector-machine-figures flex shrink-0 items-center gap-1.5">
+        <span className="flex items-baseline gap-1">
         {stalled ? (
           <span className={[COLUMN_CLASS, "font-bold text-red-400"].join(" ")}>
             {state === "under-powered" ? "LOW!" : "TIER!"}
@@ -833,7 +833,7 @@ function ListLine({
           <FigureCell figure={peak} className="text-[13px]" />
         )}
         </span>
-        <span className="flex items-baseline gap-1"><span className="inspector-figure-label">Avg</span>
+        <span className="flex items-baseline gap-1">
         <FigureCell figure={stalled ? undefined : average} className="text-[13px]" />
         </span></span>}
       </button>

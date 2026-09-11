@@ -120,6 +120,24 @@ describe("InspectorPanel", () => {
   // otherwise pile up in the same document.
   afterEach(cleanup);
 
+  it.each([[10, 4, "−6"], [4, 10, "+6"], [4, 4, "0"]] as const)(
+    "shows raw input %s and output %s alongside their net %s",
+    async (input, output, net) => {
+      const balance = makeBalance(1, { deficitPerSecond: input, surplusPerSecond: output });
+      seedResult({ externalInputs: [balance], unconsumedOutputs: [balance] });
+      const { container } = render(<InspectorPanel />);
+      await waitFor(() => {
+        const rows = container.querySelectorAll('[data-resource-row="item:resource_1"]');
+        expect(rows).toHaveLength(2);
+        expect(rows[0].querySelector(".inspector-resource-rate")?.textContent).toContain(String(input));
+        expect(rows[1].querySelector(".inspector-resource-rate")?.textContent).toContain(String(output));
+        for (const row of rows) expect(row.querySelector(".inspector-resource-net")?.textContent).toContain(net);
+      });
+      expect(screen.queryByRole("button", { name: "Show raw rates" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Show net rates" })).toBeNull();
+    },
+  );
+
   it("shows the three groups at once, with Internal folded by default", () => {
     seedResult({
       externalInputs: [makeBalance(1, { deficitPerSecond: 240 })],
@@ -164,8 +182,8 @@ describe("InspectorPanel", () => {
 
     render(<InspectorPanel />);
 
-    expect(screen.getByText(/−240/)).toBeDefined();
-    expect(screen.getByText(/\+64/)).toBeDefined();
+    expect(screen.getAllByText(/−240/)).toHaveLength(2);
+    expect(screen.getAllByText(/\+64/)).toHaveLength(2);
   });
 
   it("windows a large plan instead of rendering every row", () => {

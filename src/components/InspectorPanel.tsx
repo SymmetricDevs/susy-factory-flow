@@ -42,7 +42,6 @@ import {
   writeWorkspaceView,
 } from "@/lib/workspace-view";
 import {
-  applyNetFlow,
   applyResourceMarks,
   buildFlowRows,
   filterFlowBalances,
@@ -63,10 +62,10 @@ import { ResourceIcon } from "./nei/ResourceIcon";
 const FLOW_FILTER_DEBOUNCE_MS = 120;
 const SELECTION_DEBOUNCE_MS = 100;
 
-// Resources use two lines: name above rate, beside a 32px icon. Keep the
-// virtual list height in sync with the two grid rows in inspector/panel.css.
-const ROW_HEIGHTS = { header: 30, item: 44, empty: 28, chart: 60 };
-const ICON_COLUMN = "32px";
+// One ledger row: icon, resource, Raw and Net. Keep the virtual list
+// height in sync with inspector/panel.css.
+const ROW_HEIGHTS = { header: 24, item: 28, empty: 24, chart: 60 };
+const ICON_COLUMN = "24px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -431,23 +430,14 @@ function FlowIOPanel() {
     // reads once and then knows; the glosses were permanent lines of text
     // earning nothing after the first day.
     //
-    // NET collapses any item sitting on both sides of the boundary into one
-    // signed figure before the marks and the filter see it, so the count
-    // badges and the star float always describe the list actually drawn.
-    let boundary = workspace.netFlowRates
-      ? applyNetFlow(scope.externalInputs, scope.unconsumedOutputs)
-      : { needs: scope.externalInputs, outputs: scope.unconsumedOutputs };
+    // Keep both boundary lists intact: Raw and Net are simultaneous columns.
+    let boundary = { needs: scope.externalInputs, outputs: scope.unconsumedOutputs };
     // The declared boundary (see boundaryStorageKeys): rows the drawers vouch
     // for join at 0/s when the books dropped them. Board scope only — the
-    // selection view is a transient analysis, not the plan's ledger. In NET
-    // mode a resource already listed on EITHER side stays where the sign put
-    // it rather than gaining a zero twin.
+    // selection view is a transient analysis, not the plan's ledger.
     if (!selection) {
-      const listedEitherSide = workspace.netFlowRates
-        ? new Set([...boundary.needs, ...boundary.outputs].map((balance) => balance.key))
-        : undefined;
       const augment = (list: ResourceBalance[], keys: ReadonlySet<ResourceKey>) => {
-        const present = listedEitherSide ?? new Set(list.map((balance) => balance.key));
+        const present = new Set(list.map((balance) => balance.key));
         const extras: ResourceBalance[] = [];
         for (const key of keys) {
           const balance = scope.resources[key];
@@ -484,7 +474,6 @@ function FlowIOPanel() {
     scope.resources,
     scope.unconsumedOutputs,
     selection,
-    workspace.netFlowRates,
   ]);
 
   const toggleSection = useCallback((id: FlowSectionId) => {
@@ -522,7 +511,7 @@ function FlowIOPanel() {
     [marks.hidden, scope.resources],
   );
 
-  const contentHeight = 150 + (selection ? 28 : 0) + measureFlowRows(
+  const contentHeight = 78 + (selection ? 28 : 0) + measureFlowRows(
     buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS),
     ROW_HEIGHTS,
   ).totalHeight;
@@ -549,37 +538,13 @@ function FlowIOPanel() {
 
       <div className="inspector-section-heading">
         <h2>Resources</h2>
-          <button
-            type="button"
-            onClick={() => writeWorkspaceView({ rightPanelOpen: false })}
-            title="Hide"
-            aria-label="Hide the resources column"
-            className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
-              "ml-auto",
-            ].join(" ")}
-          >
-            <svg
-              viewBox="0 0 16 16"
-              className="h-3.5 w-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M6 3l5 5-5 5" />
-            </svg>
-          </button>
-      </div>
-      <div className="inspector-controls mx-2 shrink-0 border-b border-neutral-700 py-2">
-        <div className="mb-2 flex flex-wrap items-center gap-1">
+        <div className="inspector-header-actions ml-auto flex items-center gap-1">
           <ToolbarToggle
             on={workspace.showHiddenResources}
             onClick={() =>
               writeWorkspaceView({ showHiddenResources: !workspace.showHiddenResources })
             }
-            title="Hidden resources"
+            title={`Hidden resources (${hiddenCount})`}
             label={
               workspace.showHiddenResources
                 ? "Stop showing hidden resources"
@@ -621,67 +586,39 @@ function FlowIOPanel() {
             <span className="text-[13px] leading-none">★</span>
           </ToolbarToggle>
 
-          {/* RAW against NET, both words always up: a reader who has never met
-              the distinction can see there is one and read both answers before
-              clicking anything - the same rule the drawer mode swap follows.
-              Panel arithmetic, not wiring: an item never moves on the board
-              because of this switch. */}
-          <div
-            role="group"
-            aria-label="Rate display"
-            className="flex h-6 shrink-0 overflow-hidden rounded border border-neutral-700"
-          >
-            <button
-              type="button"
-              onClick={() => writeWorkspaceView({ netFlowRates: false })}
-              title="Raw"
-              aria-label="Show raw rates"
-              aria-pressed={!workspace.netFlowRates}
-              className={[
-                "px-1.5 text-[9px] font-black leading-none tracking-tight",
-                workspace.netFlowRates
-                  ? "text-neutral-400 hover:text-neutral-100"
-                  : "bg-cyan-500/20 text-cyan-200",
-              ].join(" ")}
-            >
-              RAW
-            </button>
-            <button
-              type="button"
-              onClick={() => writeWorkspaceView({ netFlowRates: true })}
-              title="Net"
-              aria-label="Show net rates"
-              aria-pressed={workspace.netFlowRates}
-              className={[
-                "border-l border-neutral-700 px-1.5 text-[9px] font-black leading-none tracking-tight",
-                workspace.netFlowRates
-                  ? "bg-emerald-500/20 text-emerald-200"
-                  : "text-neutral-400 hover:text-neutral-100",
-              ].join(" ")}
-            >
-              NET
-            </button>
-          </div>
-
-          {hiddenCount > 0 ? (
-            <span
-              className="ml-auto shrink-0 text-[11px] tabular-nums text-neutral-400"
-              title={`${hiddenCount} resource${hiddenCount === 1 ? "" : "s"} hidden`}
-            >
-              {hiddenCount} hidden
-            </span>
-          ) : null}
-
-
         </div>
 
+          <button
+            type="button"
+            onClick={() => writeWorkspaceView({ rightPanelOpen: false })}
+            title="Hide"
+            aria-label="Hide the resources column"
+            className={[
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
+
+            ].join(" ")}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 3l5 5-5 5" />
+            </svg>
+          </button>
+      </div>
+      <div className="inspector-controls mx-2 shrink-0 border-b border-neutral-700 pb-1">
         <div className="relative">
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Filter resources…"
             aria-label="Filter flow resources"
-            className="h-8 w-full rounded-[4px] border border-neutral-700 bg-[#17191d] pl-2 pr-14 text-base shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
+            className="h-7 w-full rounded-[4px] border border-neutral-700 bg-[#17191d] pl-2 pr-14 text-base shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
           />
           {filter ? (
             <button
@@ -1398,6 +1335,7 @@ function FlowSectionHeader({
       <span className={["rounded px-1.5 py-0.5 text-xs font-bold tabular-nums", tone.badge].join(" ")}>
         {showRatio ? `${section.items.length} / ${section.totalCount}` : section.totalCount}
       </span>
+      <span className="inspector-rate-heads ml-auto flex"><span>Raw</span><span>Net</span></span>
     </button>
   );
 }
@@ -1450,6 +1388,9 @@ const FlowResourceRow = memo(function FlowResourceRow({
     energyEuT !== undefined && balance.kind !== "power"
       ? energyPerUnit(energyEuT, Math.abs(value))
       : undefined;
+  const netValue = balance.surplusPerSecond - balance.deficitPerSecond;
+  const netEnergy = energyEuT !== undefined && balance.kind !== "power"
+    ? energyPerUnit(energyEuT, Math.abs(netValue)) : undefined;
   const unit = rateUnitFor(balance.kind);
   const prefix = euEach !== undefined ? "" : sign === -1 ? "−" : sign === 1 ? "+" : "";
   const name = balance.displayName ?? balance.resourceId;
@@ -1505,7 +1446,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // crossed, which on a list this dense meant a yellow box trailing the
         // cursor the whole way down. The row already widens on hover to show
         // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) auto` }}
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 62px 62px auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon
@@ -1527,7 +1468,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
       >
         {/* The icon spans the name and rate lines without growing with the row. */}
         <span
-          style={{ height: 32, width: 32, gridRow: "1 / 3" }}
+          style={{ height: 24, width: 24 }}
           className="flex shrink-0 items-center justify-center overflow-hidden"
         >
           <ResourceIcon
@@ -1613,6 +1554,19 @@ const FlowResourceRow = memo(function FlowResourceRow({
           ) : null}
         </span>
 
+
+        <span className="inspector-resource-net" title="Net boundary: outputs minus inputs. In energy units, cost per net unit.">
+          {euEach !== undefined ? (netEnergy === undefined ? "—" : <>
+            {formatEnergyPerUnitParts(netEnergy, balance.kind).value}
+            <span className="inspector-unit">{formatEnergyPerUnitParts(netEnergy, balance.kind).unit}</span>
+          </>) : <>
+          <MotionNumberText
+            values={[netValue]}
+            render={([net = 0]) => `${net < 0 ? "−" : net > 0 ? "+" : ""}${formatRateValue(Math.abs(net), balance.kind)}`}
+          />
+          <span className="inspector-unit">{unit}</span>
+          </>}
+        </span>
         {/*
           The room the mark buttons slide into, on the right where they belong.
           A real grid column rather than a layer on top of the rate: as an
@@ -1629,7 +1583,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
             // The class is the hook for the wide copy's own arrival animation
             // (globals.css): a copy mounts already open, so it has no previous
             // width to transition from.
-            "resource-row-marks-gap row-span-2 col-start-3 row-start-1 overflow-hidden transition-[width] duration-100",
+            "resource-row-marks-gap overflow-hidden transition-[width] duration-100",
             isFavourite
               ? manageMode || expanded
                 ? "w-6"

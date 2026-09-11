@@ -54,8 +54,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Clearer machine controls",
     notes: [
       "Tap multiblock power settings to open *touch controls* for amps, voltage and raw EU/t alongside the power breakdown.",
-      "Shared machines give recipes *more breathing room* and show each recipe's circuit above its outputs.",
-      "Item and hatch icons keep *the same size in Firefox and Chrome*, with undistorted atlas sprites.",
+      "Recipe spacing and circuit icons are clearer, with icons *sized consistently in Firefox and Chrome*.",
+      "Older setups keep their *original operating voltage and amps* when first converted to the new power controls.",
       "Net resources return to *the correct side*: deficits under Inputs and surpluses under Outputs.",
     ],
   },

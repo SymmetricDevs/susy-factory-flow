@@ -150,14 +150,40 @@ describe("per-card hatch input", () => {
     const p = { ...createEmptyProject(), recipes: [r], nodes: [node({ powerEuT: 6000 })] };
     const migrated = normalizeLoadedProject(p);
     expect(migrated.nodes[0]).toMatchObject({
-      hatchVoltageTier: "HV",
-      hatchAmps: 6000 / 512,
+      hatchVoltageTier: "EV",
+      hatchAmps: 6000 / 2048,
       powerEuT: 6000,
     });
     const parsed = factoryProjectSchema.parse(JSON.parse(JSON.stringify(migrated)));
     expect(normalizeLoadedProject(parsed).nodes[0]).toEqual(migrated.nodes[0]);
     expect(normalizeLoadedProject(migrated)).toEqual(migrated);
   });
+  it.each([1, 2])(
+    "preserves legacy voltage and performance with %i energy hatches",
+    (energyHatches) => {
+      const r = recipe("Nano Forge", 120);
+      r.minimumTier = "MV";
+      const old = node({ recipeId: r.id, overclockTier: "HV", energyHatches });
+      const before = getNodePowerReport(r, old);
+      const migrated = normalizeLoadedProject({
+        ...createEmptyProject(),
+        recipes: [r],
+        nodes: [old],
+      }).nodes[0];
+      expect(migrated).toMatchObject({
+        hatchVoltageTier: "HV",
+        hatchAmps: energyHatches === 1 ? 1 : 4,
+      });
+      const after = getNodePowerReport(r, migrated);
+      expect(before.overclockSteps).toBeGreaterThan(0);
+      expect(after.overclockSteps).toBe(before.overclockSteps);
+      expect(after.poolEuT).toBe(before.poolEuT);
+      expect(after.parallels).toBe(before.parallels);
+      expect(getOverclockedRecipeStats(r, migrated).durationTicks).toBe(
+        getOverclockedRecipeStats(r, old).durationTicks,
+      );
+    },
+  );
   it("derives power from the pair even when a persisted total disagrees", () => {
     const n = normalizeHatchInput(
       recipe(),

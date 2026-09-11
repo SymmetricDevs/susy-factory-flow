@@ -18,7 +18,7 @@ import {
 /** Highest selectable amperage; raw EU/t remains an explicit power budget. */
 export const MAX_HATCH_AMPS = 16_777_216;
 
-/** One seeding rule for placement and migration: the selected recipe's minimum. */
+/** Seed new cards at recipe minimum; preserve legacy operating voltage on load. */
 export function normalizeHatchInput(
   recipe: Recipe,
   node: FactoryNode,
@@ -32,7 +32,9 @@ export function normalizeHatchInput(
   }
   const effective = applyMachineHandlerToRecipe(recipe, node);
   if (!isMultiblockRecipe(effective) || effective.eut <= 0 || recipe.power) return node;
-  const hatchVoltageTier = node.hatchVoltageTier ?? getRecipeMinimumVoltageTier(effective);
+  const hatchVoltageTier =
+    node.hatchVoltageTier ??
+    (migrate ? getNodeRunTier(effective, node) : getRecipeMinimumVoltageTier(effective));
   const voltage = getVoltageTierMaxEuT(hatchVoltageTier);
   let amps: number = node.hatchAmps ?? 0;
   if (node.hatchAmps === undefined) {

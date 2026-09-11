@@ -156,7 +156,7 @@
 .inspector-machine-row > span:first-child > span {
   font-size: 11px;
 }
-.inspector-machine-row > span:first-child > span:first-child {
+.inspector-machine-title > span:first-child > span:first-child {
   width: 20px;
   height: 20px;
 }
@@ -188,9 +188,9 @@
 .inspector-machine-summary .inspector-section-heading { gap: 2px; }
 .inspector-machine-summary .inspector-section-heading h2 { font-size: 10px; }
 .inspector-machine-summary .inspector-count { padding: 1px 3px; }
-.inspector-machine-build > span:first-child { overflow: hidden; }
-.inspector-machine-build > span:first-child > span:first-child { width: 12px; }
-.inspector-machine-build > span:first-child > span:nth-child(2) { width: 12px; }
+
+
+
 .inspector-build-config { min-width: 0; flex-shrink: 0; }
 .inspector-build-config > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inspector-build-config > span:last-child { flex-shrink: 0; }
@@ -213,3 +213,21 @@
   font-weight: 400;
   margin-left: 1px;
 }
+
+/* A single selectable rate column leaves room for readable labels. */
+.inspector-resource-name > span,
+.inspector-resource-rate > span,
+.inspector-resource-net,
+.inspector-machine-row > span:first-child > span,
+.inspector-machine-figures .tabular-nums,
+.inspector-machine-summary .tabular-nums { font-size: 11px; }
+.inspector-resource-net { grid-column: 3; border-left: 0; padding-left: 0; }
+.inspector-rate-selector { width: 96px; font-size: 11px; padding-right: 4px; color: #d1d5db; }
+.inspector-rate-selector button { font-size: 11px; color: #9ca3af; }
+.inspector-rate-selector button[aria-pressed="true"] { background: #414750; color: #f3f4f6; }
+.inspector-flow-section > button:first-child { font-size: 11px; }
+.inspector-resource-rate .opacity-70,
+.inspector-resource-rate > span > span:last-child,
+.inspector-unit,
+.inspector-machine-figures .tabular-nums > span:last-child,
+.inspector-machine-summary .tabular-nums > span:last-child { font-size: 8px; }

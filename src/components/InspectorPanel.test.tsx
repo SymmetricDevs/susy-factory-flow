@@ -121,7 +121,7 @@ describe("InspectorPanel", () => {
   afterEach(cleanup);
 
   it.each([[10, 4, "−6"], [4, 10, "+6"], [4, 4, "0"]] as const)(
-    "shows raw input %s and output %s alongside their net %s",
+    "shows raw input %s and output %s and switches all sections to net %s",
     async (input, output, net) => {
       const balance = makeBalance(1, { deficitPerSecond: input, surplusPerSecond: output });
       seedResult({ externalInputs: [balance], unconsumedOutputs: [balance] });
@@ -131,10 +131,19 @@ describe("InspectorPanel", () => {
         expect(rows).toHaveLength(2);
         expect(rows[0].querySelector(".inspector-resource-rate")?.textContent).toContain(String(input));
         expect(rows[1].querySelector(".inspector-resource-rate")?.textContent).toContain(String(output));
-        for (const row of rows) expect(row.querySelector(".inspector-resource-net")?.textContent).toContain(net);
+        for (const row of rows) expect(row.querySelector(".inspector-resource-net")).toBeNull();
       });
-      expect(screen.queryByRole("button", { name: "Show raw rates" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Show net rates" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Show net rates" }));
+      await waitFor(() => {
+        const rows = container.querySelectorAll('[data-resource-row="item:resource_1"]');
+        for (const row of rows) {
+          expect(row.querySelector(".inspector-resource-rate")).toBeNull();
+          expect(row.querySelector(".inspector-resource-net")?.textContent).toContain(net);
+        }
+      });
+      expect(screen.getByRole("button", { name: "Show net rates" }).getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(screen.getByRole("button", { name: "Show raw rates" }));
+      expect(container.querySelectorAll(".inspector-resource-rate")).toHaveLength(2);
     },
   );
 
@@ -182,8 +191,8 @@ describe("InspectorPanel", () => {
 
     render(<InspectorPanel />);
 
-    expect(screen.getAllByText(/−240/)).toHaveLength(2);
-    expect(screen.getAllByText(/\+64/)).toHaveLength(2);
+    expect(screen.getAllByText(/−240/)).toHaveLength(1);
+    expect(screen.getAllByText(/\+64/)).toHaveLength(1);
   });
 
   it("windows a large plan instead of rendering every row", () => {

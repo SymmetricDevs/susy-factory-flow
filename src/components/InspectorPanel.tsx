@@ -809,6 +809,7 @@ function FlowVirtualList({
   onHover: (resourceKey?: string) => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
+  const [rateColumn, setRateColumn] = useState<"raw" | "net">("raw");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(320);
@@ -1079,6 +1080,8 @@ function FlowVirtualList({
     >
       {stickyHeader?.type === "header" ? (
         <FlowSectionHeader
+          rateColumn={rateColumn}
+          onRateColumnChange={setRateColumn}
           section={stickyHeader.section}
           collapsed={stickyHeader.collapsed}
           isFiltered={isFiltered}
@@ -1094,6 +1097,8 @@ function FlowVirtualList({
         if (row.type === "header") {
           return (
             <FlowSectionHeader
+          rateColumn={rateColumn}
+          onRateColumnChange={setRateColumn}
               key={row.key}
               section={row.section}
               collapsed={row.collapsed}
@@ -1163,6 +1168,7 @@ function FlowVirtualList({
 
         return shell(
           <FlowResourceRow
+            rateColumn={rateColumn}
             productMarker={row.section.id === "output" && products.has(row.balance.key) && !expandedProducts.has(row.balance.key)}
             balance={row.balance}
             sectionId={row.section.id}
@@ -1227,6 +1233,7 @@ function FlowVirtualList({
           className="resource-row-expand ui-zoom pointer-events-none fixed z-[60] overflow-hidden rounded bg-[#2a2d33] shadow-xl ring-1 ring-cyan-500/60"
         >
           <FlowResourceRow
+            rateColumn={rateColumn}
             productMarker={expandedRow.section.id === "output" && products.has(expandedRow.balance.key) && !expandedProducts.has(expandedRow.balance.key)}
             balance={expandedRow.balance}
             sectionId={expandedRow.section.id}
@@ -1334,11 +1341,15 @@ const FlowChartRow = memo(function FlowChartRow({
 });
 
 function FlowSectionHeader({
+  rateColumn,
+  onRateColumnChange,
   section,
   collapsed,
   isFiltered,
   onToggle,
 }: {
+  rateColumn: "raw" | "net";
+  onRateColumnChange: (value: "raw" | "net") => void;
   section: FlowSection;
   collapsed: boolean;
   isFiltered: boolean;
@@ -1348,27 +1359,32 @@ function FlowSectionHeader({
   const showRatio = isFiltered && section.items.length !== section.totalCount;
 
   return (
-    <button
-      type="button"
-      onClick={() => onToggle(section.id)}
-      aria-expanded={!collapsed}
+    <div
       style={{ height: ROW_HEIGHTS.header }}
       className={[
         "inspector-flow-section sticky top-0 z-10 flex w-full items-center gap-2 px-2 text-left backdrop-blur-sm",
         tone.header,
       ].join(" ")}
     >
+      <button type="button" onClick={() => onToggle(section.id)} aria-expanded={!collapsed} className="flex min-w-0 flex-1 items-center gap-1 text-left">
       <span className={["text-[11px] leading-none", collapsed ? "" : "rotate-90"].join(" ")}>▶</span>
       <span className="text-sm font-bold uppercase tracking-wider">{section.label}</span>
       <span className={["rounded px-1.5 py-0.5 text-xs font-bold tabular-nums", tone.badge].join(" ")}>
         {showRatio ? `${section.items.length} / ${section.totalCount}` : section.totalCount}
       </span>
-      <span className="inspector-rate-heads ml-auto flex"><span>Raw</span><span>Net</span></span>
-    </button>
+      </button>
+      {section.id === "need" && <span className="inspector-rate-selector ml-auto flex shrink-0 justify-end gap-0.5" role="group" aria-label="Resource rate display">
+        {(["raw", "net"] as const).map(value => <button key={value} type="button" aria-pressed={rateColumn === value}
+          onClick={() => onRateColumnChange(value)} className="px-2 py-0.5" aria-label={value === "raw" ? "Show raw rates" : "Show net rates"}>
+          {value === "raw" ? "Raw" : "Net"}
+        </button>)}
+      </span>}
+    </div>
   );
 }
 
 const FlowResourceRow = memo(function FlowResourceRow({
+  rateColumn,
   productMarker,
   balance,
   sectionId,
@@ -1386,6 +1402,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
   onMarkChanged,
   onFocusBoard,
 }: {
+  rateColumn: "raw" | "net";
   productMarker?: boolean;
   balance: ResourceBalance;
   sectionId: FlowSectionId;
@@ -1476,7 +1493,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // crossed, which on a list this dense meant a yellow box trailing the
         // cursor the whole way down. The row already widens on hover to show
         // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 76px 76px auto` }}
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 96px auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon
@@ -1528,7 +1545,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
           <span className="min-w-0 truncate text-base font-medium text-neutral-100">{name}</span>
         </span>
 
-        <span
+        {rateColumn === "raw" && <span
           className={[
             "inspector-resource-rate ml-2 flex shrink-0 items-baseline",
             euEach !== undefined ? ENERGY_READING_TEXT : toneStyle.value,
@@ -1583,10 +1600,10 @@ const FlowResourceRow = memo(function FlowResourceRow({
               ★
             </span>
           ) : null}
-        </span>
+        </span>}
 
 
-        <span className="inspector-resource-net" title="Net boundary: outputs minus inputs. In energy units, cost per net unit.">
+        {rateColumn === "net" && <span className="inspector-resource-net" title="Net boundary: outputs minus inputs. In energy units, cost per net unit.">
           {euEach !== undefined ? (netEnergy === undefined ? "—" : <>
             {formatEnergyPerUnitParts(netEnergy, balance.kind).value}
             <span className="inspector-unit">{formatEnergyPerUnitParts(netEnergy, balance.kind).unit}</span>
@@ -1597,7 +1614,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
           />
           <span className="inspector-unit">{unit}</span>
           </>}
-        </span>
+        </span>}
         {/*
           The room the mark buttons slide into, on the right where they belong.
           A real grid column rather than a layer on top of the rate: as an

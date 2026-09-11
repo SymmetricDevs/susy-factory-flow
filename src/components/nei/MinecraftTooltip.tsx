@@ -53,9 +53,9 @@ export function MinecraftTooltip({
     [label],
   );
   const hasContent = content !== undefined && content !== null;
-  const [position, setPosition] = useState<{ x: number; y: number; maxHeight?: number } | undefined>();
+  const [position, setPosition] = useState<{ x: number; y: number; maxHeight?: number; belowCard?: boolean } | undefined>();
   const frameRef = useRef<number | undefined>(undefined);
-  const pendingPositionRef = useRef<{ x: number; y: number; maxHeight?: number } | undefined>(undefined);
+  const pendingPositionRef = useRef<{ x: number; y: number; maxHeight?: number; belowCard?: boolean } | undefined>(undefined);
   const pointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<DOMRect | undefined>(undefined);
@@ -99,11 +99,25 @@ export function MinecraftTooltip({
       if (anchor) {
         const below = anchor.bottom / scale + 6;
         const above = anchor.top / scale - panelHeight - 6;
-        const preferredY = placement === "above-card" ? above : placement === "above"
+        if (placement === "above-card") {
+          // Measure the full content, not its currently constrained viewport,
+          // so a clipped panel cannot make the placement oscillate.
+          const naturalHeight = Math.max(panelHeight, panelRef.current?.scrollHeight ?? 0);
+          const aboveSpace = Math.max(0, anchor.top / scale - 14);
+          const belowSpace = Math.max(0, window.innerHeight / scale - below - 8);
+          const belowCard = naturalHeight > aboveSpace && belowSpace > aboveSpace;
+          const maxHeight = belowCard ? belowSpace : aboveSpace;
+          return {
+            belowCard,
+            maxHeight,
+            x: Math.max(4, Math.min(anchor.right / scale - anchorWidth, window.innerWidth / scale - panelWidth - 8)),
+            y: belowCard ? below : Math.max(4, anchor.top / scale - Math.min(naturalHeight, maxHeight) - 6),
+          };
+        }
+        const preferredY = placement === "above"
           ? (above >= 4 ? above : below)
           : (below + panelHeight <= window.innerHeight / scale - 8 || above < 4 ? below : above);
         return {
-          ...(placement === "above-card" ? { maxHeight: Math.max(0, anchor.top / scale - 14) } : {}),
           x: Math.max(4, Math.min(anchor.right / scale - anchorWidth, window.innerWidth / scale - panelWidth - 8)),
           y: Math.max(4, Math.min(preferredY, window.innerHeight / scale - panelHeight - 8)),
         };
@@ -128,7 +142,7 @@ export function MinecraftTooltip({
       return;
     }
     const corrected = clampToViewport(pointer.x, pointer.y);
-    if (Math.abs(corrected.x - position.x) >= 2 || Math.abs(corrected.y - position.y) >= 2 || corrected.maxHeight !== position.maxHeight) {
+    if (Math.abs(corrected.x - position.x) >= 2 || Math.abs(corrected.y - position.y) >= 2 || corrected.maxHeight !== position.maxHeight || corrected.belowCard !== position.belowCard) {
       setPosition(corrected);
     }
   }, [clampToViewport, position, content]);
@@ -189,7 +203,7 @@ export function MinecraftTooltip({
       }
 
       setPosition((currentPosition) =>
-        currentPosition && currentPosition.maxHeight === nextPosition.maxHeight &&
+        currentPosition && currentPosition.maxHeight === nextPosition.maxHeight && currentPosition.belowCard === nextPosition.belowCard &&
         Math.abs(currentPosition.x - nextPosition.x) < 2 &&
         Math.abs(currentPosition.y - nextPosition.y) < 2
           ? currentPosition
@@ -309,9 +323,10 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip={companion ? undefined : "true"}
-                className={companion ? "fixed z-[9999] ui-zoom flex w-max flex-wrap items-end gap-1" : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
+                className={companion ? `fixed z-[9999] ui-zoom flex w-max flex-wrap gap-1 ${position.belowCard ? "items-start" : "items-end"}` : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
                 onMouseEnter={() => { if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current); }}
                 onMouseLeave={placement === "above-card" ? clearTooltip : undefined}
+                data-card-placement={placement === "above-card" ? (position.belowCard ? "below" : "above") : undefined}
                 style={{ left: position.x, top: position.y, ...(placement !== "pointer" ? { maxWidth: window.innerWidth / getUiScale() - 16 } : {}), ...(placement === "above-card" ? { maxHeight: position.maxHeight, overflowY: "auto", pointerEvents: "auto" } : {}) }}
               >
                 {companion ? <>

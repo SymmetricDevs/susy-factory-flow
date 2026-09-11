@@ -2,7 +2,7 @@
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
-import { Compass, Library } from "lucide-react";
+import { Compass, Library, Plus } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
@@ -77,6 +77,32 @@ export function DesignTabs() {
   const trackRef = useRef<HTMLDivElement>(null);
   const stopScrollMotion = useRef(() => {});
   const openTabKey = designs.map((design) => design.id).join(",");
+  const [closingLayout, setClosingLayout] = useState<{ widths: Record<string, number>; trackWidth: number }>();
+  const closingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(closingTimer.current), []);
+
+  const closeFromTab = async (id: string) => {
+    clearTimeout(closingTimer.current);
+    stopScrollMotion.current();
+    const track = trackRef.current;
+    if (!closingLayout && track) {
+      const widths: Record<string, number> = {};
+      track.querySelectorAll<HTMLElement>("[data-design-id]").forEach((tab) => {
+        widths[tab.dataset.designId!] = tab.getBoundingClientRect().width / getUiScale();
+      });
+      setClosingLayout({ widths, trackWidth: track.scrollWidth });
+    }
+    // The next tab slides into the vacated slot, keeping its close key under
+    // the pointer. At the end of the strip, fall back to the previous tab.
+    const index = designs.findIndex((design) => design.id === id);
+    const next = designs[index + 1] ?? designs[index - 1];
+    try {
+      await closeDesigns([id], next?.id);
+    } finally {
+      closingTimer.current = setTimeout(() => setClosingLayout(undefined), 850);
+    }
+  };
+
 
   const closeMenu = () => {
     setOpenMenu(undefined);
@@ -125,7 +151,7 @@ export function DesignTabs() {
   // ids matter too: loading a newly created design and opening its tab can
   // arrive in separate store updates.
   useEffect(() => {
-    if (!activeDesignId) return;
+    if (!activeDesignId || closingLayout) return;
     const frame = requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
       const active = scroller?.querySelector<HTMLElement>(`[data-design-id="${CSS.escape(activeDesignId)}"]`);
@@ -139,7 +165,7 @@ export function DesignTabs() {
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeDesignId, openTabKey, isHydrated]);
+  }, [activeDesignId, openTabKey, isHydrated, closingLayout]);
 
   // The strip is the one horizontal scroller under a vertical wheel, so plain
   // wheel input walks the tabs. Attached natively: React registers wheel
@@ -571,6 +597,7 @@ export function DesignTabs() {
           >
           <nav
             ref={trackRef}
+            style={closingLayout ? { width: closingLayout.trackWidth, maxWidth: "none" } : undefined}
             aria-label="Designs"
             className="design-tabs-track flex w-max max-w-full select-none items-center gap-1"
           >
@@ -594,6 +621,7 @@ export function DesignTabs() {
                   ) : null}
                 <div
                   data-design-id={design.id}
+                  style={closingLayout?.widths[design.id] ? { width: closingLayout.widths[design.id], flexShrink: 0 } : undefined}
                   onPointerDown={(event) => beginTabDrag(event, design.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();
@@ -647,7 +675,7 @@ export function DesignTabs() {
                     type="button"
                     aria-label={`Close ${design.name}`}
                     onPointerDown={(event) => event.stopPropagation()}
-                    onClick={() => void closeDesign(design.id)}
+                    onClick={() => void closeFromTab(design.id)}
                     className="ml-1 shrink-0 rounded px-1 text-xs text-fg-muted hover:bg-surface hover:text-fg"
                   >
                     ×
@@ -684,9 +712,9 @@ export function DesignTabs() {
             void addDesign();
           }}
           aria-label="New design"
-          className="shrink-0 rounded px-2 py-0 text-sm text-fg-muted hover:bg-surface-sunken hover:text-fg"
+          className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded text-fg-muted hover:bg-surface-sunken hover:text-fg"
         >
-          +
+          <Plus className="h-4 w-4" aria-hidden />
         </button>
 
         {/* Everything from here is pinned to the right edge. */}

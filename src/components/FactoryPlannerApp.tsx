@@ -438,7 +438,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
         {/* The browser owns its own header row, so no wrapper here — it stays a
             direct grid item at exactly the column width, as it was before. */}
         {workspace.leftPanelOpen ? (
-          <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
+          <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
         ) : (
           <PanelRail side="left" label="Items" />
         )}
@@ -476,7 +476,7 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
         onOpen={openLeft}
         onClose={() => writeWorkspaceView({ leftPanelOpen: false })}
       >
-        <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
+        <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
       </PanelDrawer>
       {covering ? null : (
         <PanelDrawer
@@ -561,4 +561,18 @@ function scheduleIdleWork(callback: () => void, timeout: number) {
 
   const timeoutId = globalThis.setTimeout(callback, 0);
   return () => globalThis.clearTimeout(timeoutId);
+}
+
+function ViewerAwareBrowser({ onLoadDatasetVersion }: Pick<WorkspaceProps, "onLoadDatasetVersion">) {
+  const readOnly = useFactoryStore(state => state.isReadOnly);
+  if (!readOnly) return <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />;
+  return <div className="relative h-full min-h-0 overflow-hidden">
+    <div inert className="h-full opacity-30 grayscale"><RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} /></div>
+    <div className="absolute inset-x-2 top-2 border border-line bg-surface p-3 text-sm shadow-lg">
+      <div className="flex items-center justify-between gap-2"><strong>View only</strong>
+        <button type="button" aria-label="Hide the items column" onClick={() => writeWorkspaceView({ leftPanelOpen: false })} className="px-2">‹</button>
+      </div>
+      <p className="mt-1 text-xs text-fg-muted">Open a copy to add items and edit this setup.</p>
+    </div>
+  </div>;
 }

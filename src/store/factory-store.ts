@@ -995,7 +995,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
   },
   checklistMode: false,
   setChecklistMode: (checklistMode) => set({ checklistMode, ...(checklistMode ? { nodeColorPaintMode: undefined, pendingResourceConnection: undefined } : {}) }),
-  toggleChecklist: (kind, ids) => set((state) => {
+  toggleChecklist: (kind, ids) => setPresentation((state) => {
     const valid = new Set(kind === "cards"
       ? [...state.project.nodes, ...(state.project.storages ?? [])].map((entry) => entry.id)
       : state.project.edges.map((entry) => entry.id));
@@ -1006,12 +1006,14 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
     const restore = targets.every((id) => checked.has(id));
     for (const id of targets) { if (restore) checked.delete(id); else checked.add(id); }
     playBoardSound(restore ? "checklistRestore" : "checklistCheck");
-    return withProjectHistory(state, { project: touchProject({ ...state.project, checklist: { ...checklist, [kind]: [...checked] } }) });
+    const project = { ...state.project, checklist: { ...checklist, [kind]: [...checked] } };
+    return state.isReadOnly ? { project } : withProjectHistory(state, { project: touchProject(project) });
   }),
-  clearChecklist: () => set((state) => {
+  clearChecklist: () => setPresentation((state) => {
     if (!state.project.checklist) return state;
     playBoardSound("checklistRestore");
-    return withProjectHistory(state, { project: touchProject({ ...state.project, checklist: undefined }) });
+    const project = { ...state.project, checklist: undefined };
+    return state.isReadOnly ? { project } : withProjectHistory(state, { project: touchProject(project) });
   }),
   project: initialProject,
   undoHistory: [],

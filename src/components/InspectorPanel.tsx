@@ -308,6 +308,7 @@ export function InspectorPanel() {
 }
 
 function FlowIOPanel() {
+  const readOnly = useFactoryStore(state => state.isReadOnly);
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
   // Every row prints a rate: follow the rate and power dials.
@@ -361,12 +362,13 @@ function FlowIOPanel() {
   const workspace = useWorkspaceView();
   const marks = useMemo<ResourceMarks>(
     () => ({
-      hidden: new Set(workspace.hiddenResourceKeys),
-      favourites: new Set(workspace.favouriteResourceKeys),
-      showHidden: workspace.showHiddenResources,
-      favouritesOnly: workspace.favouritesOnly,
+      hidden: new Set(readOnly ? [] : workspace.hiddenResourceKeys),
+      favourites: new Set(readOnly ? [] : workspace.favouriteResourceKeys),
+      showHidden: !readOnly && workspace.showHiddenResources,
+      favouritesOnly: !readOnly && workspace.favouritesOnly,
     }),
     [
+      readOnly,
       workspace.favouriteResourceKeys,
       workspace.favouritesOnly,
       workspace.hiddenResourceKeys,
@@ -559,7 +561,7 @@ function FlowIOPanel() {
 
       <div className="inspector-section-heading">
         <h2>Resources</h2>
-        <div className="inspector-header-actions ml-auto flex items-center gap-1">
+        <div hidden={readOnly} className={readOnly ? "ml-auto hidden" : "inspector-header-actions ml-auto flex items-center gap-1"}>
           <ToolbarToggle
             on={workspace.showHiddenResources}
             onClick={() =>
@@ -615,7 +617,7 @@ function FlowIOPanel() {
             title="Hide"
             aria-label="Hide the resources column"
             className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
+              "ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
 
             ].join(" ")}
           >
@@ -665,8 +667,8 @@ function FlowIOPanel() {
         hidden={marks.hidden}
         favourites={marks.favourites}
         // Charts are a whole-plan record, so a scoped panel has none to show.
-        showCharts={workspace.trendsOpen && !selection}
-        manageMode={workspace.showHiddenResources}
+        showCharts={!readOnly && workspace.trendsOpen && !selection}
+        manageMode={!readOnly && workspace.showHiddenResources}
         // Read at render: flipping the unit re-solves, which re-renders here.
         energyEuT={isEnergyRateUnit() ? scope.totalEuT : undefined}
         onToggleSection={toggleSection}
@@ -1432,6 +1434,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
   onMarkChanged?: () => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
+  const readOnly = useFactoryStore(state => state.isReadOnly);
   const toneStyle = TONE_STYLES[tone];
   const value = getFlowRowValue(sectionId, balance);
   // The energy reading: what the whole scope spends per unit of this product.
@@ -1453,6 +1456,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
       // Only the real rows are findable by key: the wide copy is what gets
       // positioned FROM one, so it must not be able to answer that query itself.
       data-resource-row={expanded ? undefined : balance.key}
+      data-viewer-resource={readOnly || undefined}
       data-resource-hidden={isHidden ? "true" : undefined}
       style={{ height: ROW_HEIGHTS.item }}
       className={[
@@ -1656,6 +1660,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         controls should not have to be hunted for one row at a time.
       */}
       <div
+        hidden={readOnly}
         className={[
           "resource-row-marks pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5",
           manageMode || expanded

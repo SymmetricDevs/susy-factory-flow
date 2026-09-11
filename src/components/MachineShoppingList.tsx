@@ -2,7 +2,7 @@
 
 import { checklistCursorStyle } from "./flow/ChecklistMode";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { Cloud, Zap } from "lucide-react";
 import { MotionNumberText } from "./flow/board-motion";
 import { powerDisplayFromEuT, powerDisplaySuffix } from "@/lib/model/rate-unit";
@@ -129,7 +129,7 @@ interface MachineGroup {
  * fused hatch-and-tier chip and the summed draw, whichever cards they came
  * from. Only when one machine exists in more than one BUILD (an HV reactor
  * and an MV one, a one-hatch and a two-hatch) does the machine become a bare
- * name line with one sub-line per build underneath, each washed in its own
+ * name line with one sub-line per build underneath, each identified by its own
  * tier colour and carrying its own count, chip and draw. The name line adds
  * no numbers of its own: a summed figure over different builds answers no
  * question anyone shops with.
@@ -525,7 +525,6 @@ export function MachineShoppingList() {
                       peak={{ euT: buildLine.euT, madeEuT: buildLine.madeEuT, steamLs: buildLine.steamLs }}
                       average={{ euT: buildLine.avgEuT, madeEuT: buildLine.avgMadeEuT, steamLs: buildLine.avgSteamLs }}
                       state={buildLine.state}
-                      wash={buildLine.isMultiblock ? undefined : buildLine.tier}
                       checklist={checklistMode ? buildLine.nodeIds.every((id) => project.checklist?.cards.includes(id)) : undefined}
                       onClick={() => checklistMode ? useFactoryStore.getState().toggleChecklist("cards", buildLine.nodeIds) : focusNext(buildLine.key, buildLine.nodeIds)}
                     />
@@ -634,7 +633,6 @@ function ListLine({
   peak,
   average,
   state,
-  wash,
   onClick,
   checklist,
 }: {
@@ -652,8 +650,6 @@ function ListLine({
   peak?: Figure;
   average?: Figure;
   state: NodePowerState;
-  /** Tier whose colour faintly washes the whole line. */
-  wash?: VoltageTier;
   onClick: () => void;
   checklist?: boolean;
 }) {
@@ -742,9 +738,7 @@ function ListLine({
         aria-pressed={checklist}
         data-checklist-done={checklist}
         data-checklist-row={checklist !== undefined ? "true" : undefined}
-        // The wash sits at ~12% - present enough to read as the tier's
-        // colour without competing with the chips that name it.
-        style={{ ...checklistCursorStyle, ...(wash ? { backgroundColor: `${GT_TIER_COLORS[wash].background}1f` } : {}) }}
+        style={checklistCursorStyle as CSSProperties}
         className={`${chip || indent ? "inspector-machine-build" : "inspector-machine-title"} inspector-machine-row relative flex w-full items-center gap-1 px-2 py-0.5 text-left hover:bg-white/5`}
       >
         <span className="flex min-w-0 flex-1 items-center gap-1">

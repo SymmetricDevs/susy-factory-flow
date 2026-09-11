@@ -6417,7 +6417,7 @@ export function FactoryFlow() {
   const checklistCapture = useChecklistBoard(visibleFlowEdges);
   const viewerCapture = useViewerLock(boardRef, isReadOnly);
   const checklistNodes = useMemo(() => {
-    if (isReadOnly) return visibleFlowNodes.map((node) => ({ ...node, draggable: false, connectable: false }));
+    if (isReadOnly && !checklistMode) return visibleFlowNodes.map((node) => ({ ...node, draggable: false, connectable: false }));
     if (!checklistMode) return visibleFlowNodes;
     const checked = new Set(project.checklist?.cards);
     return visibleFlowNodes.map((node) => ({ ...node, draggable: false,
@@ -6510,13 +6510,13 @@ export function FactoryFlow() {
             : undefined),
         } as CSSProperties
       }
-      onPointerDownCapture={(event) => { if (!viewerCapture(event) && !checklistCapture(event) && !isReadOnly) handleAnnotationPointerDown(event); }}
-      onMouseDownCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
-      onTouchStartCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
-      onClickCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
-      onDoubleClickCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
-      onContextMenuCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
-      onKeyDownCapture={(event) => { if (!viewerCapture(event)) checklistCapture(event); }}
+      onPointerDownCapture={(event) => { if (!checklistCapture(event) && !viewerCapture(event) && !isReadOnly) handleAnnotationPointerDown(event); }}
+      onMouseDownCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
+      onTouchStartCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
+      onClickCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
+      onDoubleClickCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
+      onContextMenuCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
+      onKeyDownCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
       onWheelCapture={checklistCapture}
       // Dragging a picture file straight onto the board drops it where it
       // lands, as an image annotation.
@@ -6708,12 +6708,13 @@ export function FactoryFlow() {
         onToggleGroup={handleToolGroupToggle}
         shiftedDown={false}
       /> : null}
-      {!isReadOnly ? <SourceToolbar
-        folded={toolbarFold.build}
+      <SourceToolbar
+        readOnly={isReadOnly}
+        folded={!isReadOnly && toolbarFold.build}
         openGroup={openToolGroup}
         onToggleGroup={handleToolGroupToggle}
         shiftedDown={false}
-      /> : null}
+      />
       {/* The help layer rings the toolbars; with the paint row folded away
           there is nothing to ring, so it becomes the sheet, as on a phone. */}
       {/* Compact only: a desktop window narrow enough to fold the paint row
@@ -7989,11 +7990,13 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
 
 
 const SourceToolbar = memo(function SourceToolbar({
+  readOnly = false,
   folded,
   openGroup,
   onToggleGroup,
   shiftedDown,
 }: {
+  readOnly?: boolean;
   folded: boolean;
   openGroup?: ToolGroupId;
   onToggleGroup: (group: ToolGroupId | undefined) => void;
@@ -8041,7 +8044,7 @@ const SourceToolbar = memo(function SourceToolbar({
     >
       {/* History first, and set apart on its own plate: it undoes everything
           the rest of the board does, so it belongs to no other group. */}
-      <ToolTray>
+      {!readOnly && <ToolTray>
         <button
           type="button"
           onClick={undo}
@@ -8062,7 +8065,7 @@ const SourceToolbar = memo(function SourceToolbar({
         >
           <Redo2 className="h-4 w-4" />
         </button>
-      </ToolTray>
+      </ToolTray>}
       {/* Undo and redo stay out in the open even on a phone: they are the two
           buttons a mistake sends you looking for, and a mistake is not the
           moment to go hunting through a fold-out. */}
@@ -8075,7 +8078,7 @@ const SourceToolbar = memo(function SourceToolbar({
         label="build tools"
         side="left"
       >
-      {folded && (
+      {folded && !readOnly && (
         <>
           <ToolTray helpAnchor="rules"><ModeKeys forceIcons /></ToolTray>
           <PoolSpawnKeys />
@@ -8151,9 +8154,9 @@ const SourceToolbar = memo(function SourceToolbar({
           ) : null}
         </div>
       </ToolTray>
-      <ToolTray>
+      {!readOnly && <ToolTray>
         <AutoSolveKeys />
-      </ToolTray>
+      </ToolTray>}
       <ToolTray>
         <ChecklistKeys folded={folded} />
       </ToolTray>

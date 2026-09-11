@@ -17,6 +17,7 @@ const keyClass =
   "pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]";
 
 export function ChecklistKeys({ folded = false }: { folded?: boolean }) {
+  const readOnly = useFactoryStore((s) => s.isReadOnly);
   const active = useFactoryStore((s) => s.checklistMode);
   const project = useFactoryStore((s) => s.project);
   const cards = new Set(project.checklist?.cards);
@@ -46,7 +47,7 @@ export function ChecklistKeys({ folded = false }: { folded?: boolean }) {
             title="Completed machines, drawers and wires" aria-label={`${done} of ${total} completed`}>
             {done} / {total}
           </span>
-          <button type="button" aria-label="Reset checklist" title="Reset checklist (can be undone)"
+          <button type="button" aria-label="Reset checklist" title={readOnly ? "Reset checklist" : "Reset checklist (can be undone)"}
             disabled={!done} className="flex h-7 w-7 items-center justify-center hover:bg-white/10 disabled:opacity-30"
             onClick={() => useFactoryStore.getState().clearChecklist()}>
             <RotateCcw className="h-3.5 w-3.5" />

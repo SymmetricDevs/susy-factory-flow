@@ -1,4 +1,6 @@
 /* Shared typography and spacing for both inspector tables. */
+[data-viewer-resource] .resource-row-marks,
+[data-viewer-resource] .resource-row-marks-gap { display: none; }
 .inspector-panel { color: #e5e7eb; font-size: 12px; container-type: inline-size; }
 .inspector-panel:has(.inspector-machines) { --inspector-resource-max: 62%; }
 .inspector-selection-scope::after {

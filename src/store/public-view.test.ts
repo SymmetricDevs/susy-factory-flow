@@ -32,6 +32,35 @@ describe("public viewing edit boundary", () => {
     expect(after.redoHistory).toEqual([]);
   });
 
+  it("allows display units and temporary checklist marks without edits or history", () => {
+    const store = useFactoryStore.getState();
+    store.markHydratedProject(createEmptyProject());
+    store.addCustomRateNode();
+    const original = useFactoryStore.getState().project;
+    store.loadViewedProject(original);
+    const before = useFactoryStore.getState();
+    store.setRateUnit("hour");
+    expect(useFactoryStore.getState().rateUnit).toBe("hour");
+    expect(useFactoryStore.getState().project).toBe(before.project);
+    store.setChecklistMode(true);
+    store.toggleChecklist("cards", [before.project.nodes[0].id]);
+    const checked = useFactoryStore.getState();
+    expect(checked.project.checklist?.cards).toEqual([before.project.nodes[0].id]);
+    expect(original.checklist).toBeUndefined();
+    expect(checked.project.nodes).toBe(before.project.nodes);
+    expect(checked.lastResult).toBe(before.lastResult);
+    expect(checked.undoHistory).toEqual([]);
+    store.updateNode(before.project.nodes[0].id, { machineCount: 99 });
+    expect(useFactoryStore.getState().project).toBe(checked.project);
+    store.clearChecklist();
+    expect(useFactoryStore.getState().project.checklist).toBeUndefined();
+    expect(useFactoryStore.getState().undoHistory).toEqual([]);
+    store.loadViewedProject(original);
+    expect(useFactoryStore.getState().checklistMode).toBe(false);
+    expect(useFactoryStore.getState().project.checklist).toBeUndefined();
+    store.setRateUnit("second");
+  });
+
   it("blocks resource browsing until a personal design opens", () => {
     const store = useFactoryStore.getState();
     store.loadViewedProject(createEmptyProject());

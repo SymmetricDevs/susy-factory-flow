@@ -38,8 +38,7 @@ export function PublicViewBar() {
               setBusy(false);
             }
           }}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded border border-cyan-700 bg-surface-raised px-2 py-1 text-cyan-300 disabled:opacity-50"
-          title="Create a private, editable design in your library"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded border border-line bg-transparent px-2 py-1 text-fg hover:bg-surface-raised hover:border-line-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500 disabled:opacity-50"
         >
           <Copy className="h-3.5 w-3.5" aria-hidden />
           {busy ? "Opening…" : "Open a copy"}

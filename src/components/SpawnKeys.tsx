@@ -26,7 +26,7 @@ export function SpawnKeys({ leading }: { leading?: ReactNode }) {
   // ground of their own, the column's border, a plain lift on hover - keys that act,
   // a step apart from the filter chips under them, which only narrow.
   const key =
-    "flex h-7 min-w-0 flex-auto items-center justify-center gap-0.5 whitespace-nowrap rounded border border-neutral-700 px-0.5 text-[11px] leading-3 font-medium text-neutral-300 hover:border-neutral-500 hover:text-neutral-100";
+    "flex h-7 min-w-0 flex-auto items-center justify-center gap-1 whitespace-nowrap rounded border border-neutral-700 px-1 text-[12px]! leading-3 font-medium text-neutral-300 hover:border-neutral-500 hover:text-neutral-100";
   if (isReadOnly) return <div className="mx-2 mt-2 flex shrink-0 gap-1">{leading}</div>;
   return (
     <div className="mx-2 mt-2 flex shrink-0 gap-1">

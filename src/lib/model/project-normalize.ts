@@ -9,6 +9,7 @@ import { isTrashRecipe } from "./trash";
 import { resynthesizePowerRecipes } from "@/lib/power/power-recipe";
 import { snapPositionToGrid, snapSizeUpToGrid } from "@/lib/board-grid";
 import { sectionNodeView, splitSectionHandleId } from "./shared-machine";
+import { repairWiredInputOverrides } from "./edge-input-overrides";
 
 /**
  * Everything a project must go through on its way in, whether it arrives from
@@ -19,6 +20,7 @@ import { sectionNodeView, splitSectionHandleId } from "./shared-machine";
  * migration — every caller now gets the full set by construction.
  */
 export function normalizeLoadedProject(project: FactoryProject): FactoryProject {
+  project = repairWiredInputOverrides(project);
   return normalizeProjectHatchInputs(
     snapProjectToGrid(
       repairPocketReferences(

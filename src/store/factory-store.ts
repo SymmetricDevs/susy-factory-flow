@@ -33,6 +33,7 @@ import {
   type RateUnit,
 } from "@/lib/model/rate-unit";
 import { registerBooksSink, solveBooks, solveBooksNow } from "./solve-books";
+import { applyEdgeInputOverride } from "@/lib/model/edge-input-overrides";
 import { applyRecipeInputOverrides, inputOverrideAmount } from "@/lib/model/recipe-input-overrides";
 import type { AlternativeCycleFace } from "@/lib/nei/alternative-cycle";
 import { createCropFarmPlaceholderRecipe, isCropFarmRecipe } from "@/lib/model/passive-production";
@@ -5179,83 +5180,6 @@ function isContextualRecipeInput(
 
 function applyEdgeInputOverrides(project: FactoryProject, edges: FactoryEdge[]): FactoryProject {
   return edges.reduce((nextProject, edge) => applyEdgeInputOverride(nextProject, edge), project);
-}
-
-function applyEdgeInputOverride(
-  project: FactoryProject,
-  edge: FactoryEdge,
-  resource?: Pick<
-    ResourceAmount,
-    "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip"
-  > &
-    Partial<Pick<ResourceAmount, "amount">>,
-): FactoryProject {
-  // The pick lands on the SECTION the wire names: a shared machine's second
-  // recipe keeps its own oredict choices.
-  const targetSection = splitSectionHandleId(edge.targetHandle).section;
-  const targetNode = nodeSectionForHandle(project, edge.target, edge.targetHandle);
-  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
-  if (!targetNode || !targetRecipe) {
-    return project;
-  }
-  // Power cards: never stamp an input override. Their slots are exact (no
-  // oredict, no alternatives), and a stamped override OUTLIVES the wire -
-  // wiring benzene once left the slot benzene through every later fuel
-  // switch, because the override repainted whatever the rebuilt recipe said.
-  if (targetRecipe.power) {
-    return project;
-  }
-
-  const targetHandle = parseResourceHandleId(edge.targetHandle);
-  const inputIndex =
-    targetHandle?.side === "input" && targetHandle.slotIndex !== undefined
-      ? targetHandle.slotIndex
-      : targetRecipe.inputs.findIndex(
-          (input) =>
-            isRecipeInputConsumed(input) &&
-            resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, input),
-        );
-  const input = inputIndex >= 0 ? targetRecipe.inputs[inputIndex] : undefined;
-  if (
-    !input ||
-    !isRecipeInputConsumed(input) ||
-    !resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, input)
-  ) {
-    return project;
-  }
-
-  const alternative = input.alternatives?.find(
-    (entry) => entry.kind === edge.resourceKind && entry.id === edge.resourceId,
-  );
-  const override: Recipe["inputs"][number] = {
-    ...input,
-    ...alternative,
-    kind: edge.resourceKind,
-    id: edge.resourceId,
-    // Only converts when the kind actually changes — see the helper. Taking
-    // the cell's fluid amount unconditionally inflated same-kind cell wiring
-    // by 1000×.
-    amount: resource?.amount ?? inputOverrideAmount(input, edge.resourceKind, alternative),
-    displayName:
-      resource?.displayName ?? edge.label ?? alternative?.displayName ?? input.displayName,
-    iconPath: resource?.iconPath ?? alternative?.iconPath ?? input.iconPath,
-    iconAtlas: resource?.iconAtlas ?? alternative?.iconAtlas ?? input.iconAtlas,
-    dominantColor: resource?.dominantColor ?? alternative?.dominantColor ?? input.dominantColor,
-    tooltip: resource?.tooltip ?? alternative?.tooltip ?? input.tooltip,
-    alternatives: undefined,
-  };
-
-  return {
-    ...project,
-    nodes: project.nodes.map((node) =>
-      node.id === edge.target
-        ? withSectionInputOverrides(node, targetSection, {
-            ...targetNode.recipeInputOverrides,
-            [String(inputIndex)]: override,
-          })
-        : node,
-    ),
-  };
 }
 
 /**

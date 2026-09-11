@@ -7,7 +7,7 @@ import type {
   ResourceKind,
   ThroughputResult,
 } from "@/lib/model/types";
-import { isFreeRecipeInput, isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
+import { isFreeRecipeInput, isOreDictionaryResource, isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
 import { getPoolProject, isPoolStorageId } from "@/lib/solver/pool-mode";
 import { findDeathSpirals, type DeathSpiral } from "./death-spiral";
 import { findClogLocks, type ClogLock } from "./clog-lock";
@@ -1748,9 +1748,22 @@ export function buildRailPorts(
       }
       seen.add(key);
 
-      const resource = resources.find(
+      const slot = resources.find(
         (entry) => entry.kind === kind && entry.id === resourceId,
       );
+      // Keep the dictionary's matching/handle identity, but show an actual
+      // accepted item, as the recipe search does before a choice is wired in.
+      const face = slot && isOreDictionaryResource(slot)
+        ? slot.alternatives?.find((entry) => entry.kind === slot.kind && !isOreDictionaryResource(entry))
+        : undefined;
+      const resource = slot && face ? {
+        ...slot,
+        displayName: face.displayName,
+        iconPath: face.iconPath,
+        iconAtlas: face.iconAtlas,
+        dominantColor: face.dominantColor,
+        tooltip: face.tooltip,
+      } : slot;
       if (isInput && resource && !isRecipeInputConsumed(resource)) {
         return;
       }
@@ -1919,7 +1932,7 @@ export function buildRailPorts(
         key,
         kind,
         resourceId,
-        displayName: displayName ?? resource?.displayName ?? resourceId,
+        displayName: face?.displayName ?? displayName ?? resource?.displayName ?? resourceId,
         handleId: handleFor(side, { kind, id: resourceId }),
         resource,
         connected,
@@ -2151,4 +2164,3 @@ export function buildLimitLadder(
   }
   return capped;
 }
-

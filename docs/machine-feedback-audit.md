@@ -13,6 +13,38 @@ Release 3.1.3 is pending deployment; production was 3.1.2 when checked September
 | 5 | LFTR | [Issue #54](https://github.com/jackwrichards/gtnh-factory-flow/issues/54): Fuel 3 shows 1A LuV despite the correct EU/L. | Confirmed and fixed for 3.1.3: numeric fuel energy gives 524,288 EU/t (1A UV); fuels 1/2 stay unchanged and saved cards update on load. |
 | 6 | Hyper-Intensity Laser Engraver | [Issue #50](https://github.com/jackwrichards/gtnh-factory-flow/issues/50): duplicate laser controls, missing amperages and voltage, unstable card size. | Confirmed control/math defects, fixed for 3.1.3: one selector for real voltage/amperage pairs; 65,536A yields up to 40 parallels; source voltage independently gates recipes and caps OCs. Local browser verifies stable dimensions. |
 | 7 | Precise Auto-Assembler MT-3662 (PrAss) | Players report voltage-only controls and ineffective casing parallels. | Confirmed and fixed for 3.1.3. Both modes use curated multiblock power; normal mode gets 16–256 casing parallels and 2x speed, precise mode stays at one parallel and uses casing requirements. Separate machine casing limits working voltage. |
+| 8 | Auto Workbench | [Issue #49](https://github.com/jackwrichards/gtnh-factory-flow/issues/49): resistor ingredients display dictionary names and split into unsatisfied duplicates on wiring. | Confirmed against the attached plan and current code; fixed for 3.1.3. Wires select all repeated slots in the input row, saved partial choices repair on load, and unwired dictionary inputs show concrete item names/icons. |
+
+## Auto Workbench resistor verification — September 11
+
+The [reporter's public plan](https://github.com/user-attachments/files/31819006/passive-lv-circuits.json)
+contains crafting recipe `6a7ad9655f8f9abe` with seven slots: two Sticky Resin,
+two Fine Copper Wire, two 1x Copper Wire, and one Charcoal Dust per Resistor.
+The card groups these into four rows. Its saved Fine Copper Wire edge selected
+slot 1 alone; slot 6 remained `oredict:wireFineCopper`, creating a fifth row
+and a separate solver demand. This is planner wiring/display logic, not a
+machine coefficient or game recipe discrepancy.
+
+`edge-input-overrides.ts` now chooses every repeated slot in the addressed
+resource row, retaining each quantity and NEI position. Both indexed legacy
+handles and current row handles get the same treatment. Existing separate
+variant choices, non-consumed slots, shared-machine sections, generator fuel
+slots and cross-form wires remain scoped appropriately. The load funnel reuses
+this rule to repair saved partial selections without modifying recipe data.
+Wires also move from the vanished dictionary handle to the concrete row's
+handle, so React Flow can continue drawing them after the repair.
+The rail display uses the dictionary's first concrete alternative for its
+name/icon while retaining its matching identity and alternatives.
+
+The regression fixture preserves the reported recipe's real input layout.
+Tests cover fresh wiring, the saved partial choice, reload stability, concrete
+names/icons, separate variants, and shared sections with unequal slot amounts.
+The solver check requires positive transfer from the Wiremill and exactly two
+Fine Copper Wire per Resistor, with no hidden source for a leftover dictionary
+demand. This fix does not require a dataset rebuild.
+Local browser verification imported unwired and saved-wired copies of the real
+recipe: both render four named/icon-bearing inputs, the repaired Fine Copper
+Wire row is connected, and its wire survives a fresh page load.
 
 ## PrAss verification — September 11
 

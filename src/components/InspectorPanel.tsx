@@ -1476,7 +1476,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // crossed, which on a list this dense meant a yellow box trailing the
         // cursor the whole way down. The row already widens on hover to show
         // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 82px 82px auto` }}
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 76px 76px auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon

@@ -418,7 +418,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
   return (
     <>
       {/* The four-column item browser is 256px wide; the resource column
-          keeps 280px for names, rates and controls. A closed column drops to a
+          keeps 312px for names, rates and controls. A closed column drops to a
           rail wide enough for one button, so the way back is always on screen
           and the board never has to give the width back to a hover target. */}
       <main
@@ -429,7 +429,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
             "minmax(0,1fr)",
             // With a page over the board the resource column is not folded, it is
             // GONE: nothing to open, no rail to hint that there is.
-            rightPanelShown ? "280px" : covering ? "0px" : `${RAIL_WIDTH}px`,
+            rightPanelShown ? "312px" : covering ? "0px" : `${RAIL_WIDTH}px`,
           ].join(" "),
         }}
       >

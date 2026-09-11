@@ -179,7 +179,7 @@
 /* Keep dense single-line rows; labels yield space to complete readings. */
 .inspector-resource-rate { min-width: 0; padding-right: 6px; }
 .inspector-resource-net { padding-left: 6px; border-left: 1px solid #ffffff0d; }
-.inspector-rate-heads > span { width: 82px; }
+.inspector-rate-heads > span { width: 76px; }
 .inspector-panel .inspector-flow-section { gap: 2px; padding-left: 4px; padding-right: 4px; }
 .inspector-panel .inspector-flow-section > span:nth-child(2) {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -191,8 +191,25 @@
 .inspector-machine-build > span:first-child { overflow: hidden; }
 .inspector-machine-build > span:first-child > span:first-child { width: 12px; }
 .inspector-machine-build > span:first-child > span:nth-child(2) { width: 12px; }
-.inspector-build-config { min-width: 0; flex-shrink: 1; }
+.inspector-build-config { min-width: 0; flex-shrink: 0; }
 .inspector-build-config > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inspector-build-config > span:last-child { flex-shrink: 0; }
 .inspector-machine-figures .tabular-nums,
-.inspector-machine-summary .tabular-nums { width: 82px; font-size: 11px; }
+.inspector-machine-summary .tabular-nums { width: 76px; font-size: 11px; }
+
+/* Slightly smaller readings and quiet unit suffixes buy space for labels. */
+.inspector-resource-name > span,
+.inspector-resource-rate > span,
+.inspector-resource-net,
+.inspector-machine-row > span:first-child > span,
+.inspector-machine-figures .tabular-nums,
+.inspector-machine-summary .tabular-nums { font-size: 10px; }
+.inspector-resource-rate .opacity-70,
+.inspector-resource-rate > span > span:last-child,
+.inspector-unit,
+.inspector-machine-figures .tabular-nums > span:last-child,
+.inspector-machine-summary .tabular-nums > span:last-child {
+  font-size: 7px;
+  font-weight: 400;
+  margin-left: 1px;
+}

@@ -65,6 +65,10 @@ function ResourceIconComponent({
   showConsumedState = true,
   alternativeState,
 }: ResourceIconProps) {
+  // Artwork deliberately exceeds its clipped slot. Every art renderer below
+  // must opt out of flex shrinking: Firefox shrinks percentage-sized <img>
+  // widths where Chromium keeps their aspect-ratio minimum; atlas spans shrink
+  // in both engines. That made the same sprite smaller or stretched by format.
   const icon = (
     <div
       className={[
@@ -372,7 +376,7 @@ function PowerIconGlyph({ iconPixelSize }: { iconPixelSize?: number }) {
   return (
     <span
       aria-hidden
-      className="flex items-center justify-center"
+      className="flex shrink-0 items-center justify-center"
       style={{ width: size, height: size }}
     >
       <Zap width={bolt} height={bolt} className="fill-current text-amber-400" strokeWidth={1.5} />
@@ -426,8 +430,8 @@ function SpriteImage({
         onError={() => setStatus("failed")}
         className={[
           iconPixelSize
-            ? "minecraft-pixel-art max-w-none object-contain"
-            : "minecraft-pixel-art h-[calc(200%-8px)] w-[calc(200%-8px)] max-w-none object-contain",
+            ? "minecraft-pixel-art shrink-0 max-w-none object-contain"
+            : "minecraft-pixel-art h-[calc(200%-8px)] w-[calc(200%-8px)] shrink-0 max-w-none object-contain",
           // Hidden, not transparent: alt text is what we are keeping off screen,
           // and only `visibility` takes it with the picture.
           status === "loaded" ? "" : "invisible",
@@ -476,8 +480,8 @@ function AspectIconImage({
       aria-label={resourceLabel(resource)}
       className={
         iconPixelSize
-          ? "minecraft-pixel-art relative block max-w-none"
-          : "minecraft-pixel-art relative block h-[72%] w-[72%] max-w-none"
+          ? "minecraft-pixel-art relative block shrink-0 max-w-none"
+          : "minecraft-pixel-art relative block h-[72%] w-[72%] shrink-0 max-w-none"
       }
       style={sizeStyle}
     >
@@ -532,7 +536,7 @@ function FluidIconImage({
     <span
       role="img"
       aria-label={resourceLabel(resource)}
-      className="minecraft-pixel-art relative block overflow-hidden"
+      className="minecraft-pixel-art relative block shrink-0 overflow-hidden"
       style={
         iconPixelSize
           ? { width: iconPixelSize * FLUID_ICON_SCALE, height: iconPixelSize * FLUID_ICON_SCALE }
@@ -726,8 +730,8 @@ function AtlasIconImage({
       aria-label={resourceLabel(resource)}
       className={
         iconPixelSize
-          ? "minecraft-pixel-art block max-w-none bg-no-repeat"
-          : "minecraft-pixel-art block h-[calc(200%-8px)] w-[calc(200%-8px)] max-w-none bg-no-repeat"
+          ? "minecraft-pixel-art block shrink-0 max-w-none bg-no-repeat"
+          : "minecraft-pixel-art block h-[calc(200%-8px)] w-[calc(200%-8px)] shrink-0 max-w-none bg-no-repeat"
       }
       style={{
         ...(iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined),

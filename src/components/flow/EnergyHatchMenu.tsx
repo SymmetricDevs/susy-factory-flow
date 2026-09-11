@@ -31,9 +31,8 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
  * machine sprites are 256px canvases whose block fills only the middle ~45%,
  * so the image is drawn at 220% of the window and the margin cropped away -
  * the block itself fills the box. Sized with a class on the window and
- * percentages on the img, never ResourceIcon's size overrides: this project
- * is Tailwind v4, where the legacy `!h-*` prefix classes those overrides used
- * generate no CSS at all.
+ * percentages on the img. The oversized image must not flex-shrink: Firefox
+ * otherwise narrows it to the window, unlike Chromium's image minimum size.
  */
 export function EnergyHatchArt({
   entry,
@@ -51,7 +50,7 @@ export function EnergyHatchArt({
           src={entry.iconPath}
           alt={entry.displayName}
           draggable={false}
-          className="minecraft-pixel-art h-[220%] w-[220%] max-w-none object-contain"
+          className="minecraft-pixel-art h-[220%] w-[220%] shrink-0 max-w-none object-contain"
         />
       ) : entry?.iconAtlas ? (
         <ResourceIcon

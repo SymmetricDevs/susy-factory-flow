@@ -23,7 +23,7 @@ import { EntryIconSlot, IconPicker, iconSuggestionsFromStats } from "@/component
 import { formatRelativeDate } from "@/components/shelf-cards";
 
 /**
- * The plan bar: one permanent slim row under the board carrying the plan's
+ * The plan bar: one permanent slim row above the board carrying the plan's
  * face - icon, name, blurb - and, when the plan is linked to a community
  * post, that post's life: author, dates, votes, and the way back to the
  * posted version.
@@ -41,7 +41,7 @@ const OPEN_STORAGE_KEY = "gtnh-factory-flow.plan-card-open.v1";
 
 /** The header-family square button the bar is made of. */
 const BAR_BUTTON =
-  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-sunken disabled:text-fg-muted";
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-sunken disabled:text-fg-muted";
 
 export function PlanIdentityDrawer() {
   const project = useFactoryStore((state) => state.project);
@@ -112,9 +112,9 @@ export function PlanIdentityDrawer() {
     // board gets, never the other way round.
     <section
       data-help-anchor="plan-card"
-      className="min-w-0 shrink-0 border-t border-line bg-surface"
+      className="min-w-0 shrink-0 border-b border-line bg-surface"
     >
-      <div className="flex h-9 min-w-0 items-center gap-1.5 px-1.5">
+      <div className="flex h-[29px] min-w-0 items-center gap-1.5 px-1.5">
         <button
           type="button"
           onClick={toggleOpen}
@@ -123,13 +123,13 @@ export function PlanIdentityDrawer() {
           aria-label={isOpen ? "Fold the plan description away" : "Open the plan description"}
           className={BAR_BUTTON}
         >
-          {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+          {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
         <EntryIconSlot
           icon={project.icon}
           editable
           onEdit={() => setPickingIcon(true)}
-          className="!h-7 !w-7 shrink-0 border border-line-strong bg-surface-sunken"
+          className="!h-6 !w-6 shrink-0 border border-line-strong bg-surface-sunken"
         />
         <input
           value={nameDraft ?? project.name}
@@ -143,7 +143,7 @@ export function PlanIdentityDrawer() {
           maxLength={80}
           aria-label="Plan name"
           title="Plan name"
-          className="h-7 min-w-16 flex-1 rounded border border-transparent bg-transparent px-1.5 text-sm font-medium text-fg outline-none hover:border-line focus:border-line-strong focus:bg-surface-sunken"
+          className="h-6 min-w-16 flex-1 rounded border border-transparent bg-transparent px-1.5 text-sm font-medium text-fg outline-none hover:border-line focus:border-line-strong focus:bg-surface-sunken"
         />
         {linkedPlanId ? (
           <LinkedPostStrip key={linkedPlanId} planId={linkedPlanId} />
@@ -379,7 +379,7 @@ function LinkedPostStrip({ planId }: { planId: string }) {
         disabled={busy === "vote"}
         title={post.myVote === 1 ? "You voted this setup up" : "Vote this setup up"}
         className={[
-          "inline-flex h-7 shrink-0 items-center gap-0.5 rounded border px-1.5 text-xs tabular-nums",
+          "inline-flex h-6 shrink-0 items-center gap-0.5 rounded border px-1.5 text-xs tabular-nums",
           post.myVote === 1
             ? "border-emerald-600 text-emerald-500"
             : "border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised",

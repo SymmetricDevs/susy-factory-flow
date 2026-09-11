@@ -352,7 +352,10 @@ function BoardColumn() {
   const publicView = useDesignStore((state) => state.publicView);
 
   return (
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto]">
+    <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
+      <div className="min-w-0">
+        {covering ? null : publicView ? <PublicViewBar key={publicView.id} /> : <PlanIdentityDrawer />}
+      </div>
       {/*
         Welcome COVERS the board rather than replacing it. Unmounting the board
         would throw away the camera, the routed wires and the solve, and put
@@ -371,9 +374,6 @@ function BoardColumn() {
           </div>
         ) : null}
       </div>
-      {/* The plan card describes the board it sits under; while a page
-          covers that board, the card goes with it. */}
-      {covering ? null : publicView ? <PublicViewBar key={publicView.id} /> : <PlanIdentityDrawer />}
     </div>
   );
 }

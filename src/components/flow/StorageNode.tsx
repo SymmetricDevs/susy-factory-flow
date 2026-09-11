@@ -753,7 +753,7 @@ function parseAmountWithSuffix(text: string): number | undefined {
  * byproduct until a number lands). Red when no chain can reach the number at
  * any machine scale.
  */
-function TargetLine({
+export function TargetLine({
   storage,
   result,
 }: {

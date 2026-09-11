@@ -885,6 +885,14 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Interface Size (100% Is The Baseline)
 
+- In Solve/Pool, Outputs lists each actual product drawer as an always-open
+  branch with the same `TargetLine` rate/pencil editor used on the canvas.
+  Rates align right; branches have no invented drawer names. Locate identifies
+  the matching canvas drawer. Byproducts/exports have no target controls.
+  Build/read-only views show a subtle product marker instead. Target editing
+  retains the existing shared-target behavior for matching product drawers.
+  Product rows participate in virtual-list height calculations.
+
 - The right inspector is 280 shell pixels wide on desktop and as a drawer.
   Resources and Machines share the dark styling in `inspector/panel.css`.
   Resources use 28px ledger rows with simultaneous Raw and Net columns;

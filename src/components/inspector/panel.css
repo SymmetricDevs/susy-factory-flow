@@ -37,13 +37,13 @@
   font-size: 11px;
 }
 
-.inspector-panel button[aria-expanded] {
+.inspector-panel .inspector-flow-section {
   font-size: 11px;
   background: #2a2d33;
   border: 0;
 }
 
-.inspector-panel button[aria-expanded] > span {
+.inspector-panel .inspector-flow-section > span {
   font-size: 11px;
 }
 
@@ -162,3 +162,6 @@
 .inspector-machine-build { min-height: 24px; }
 .inspector-build-config { font-size: 10px; }
 .inspector-machine-summary .inspector-section-heading { padding-right: 12px; }
+
+.inspector-product-target { font-size: 11px; background: #34d39906; }
+.inspector-product-target button, .inspector-product-target input { font-size: 11px; }

@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
 import "./inspector/panel.css";
+import { ProductTargetRow } from "./inspector/ProductTargetRow";
 import { MachineShoppingList } from "./MachineShoppingList";
 import { formatCompact } from "@/lib/model";
 import { makeResourceKey } from "@/lib/model/resources";
@@ -27,6 +28,7 @@ import {
 import { ENERGY_READING_TEXT, formatEnergyPerUnitParts } from "./flow/flow-explainers";
 import type {
   FactoryProject,
+  FactoryStorage,
   ResourceAmount,
   ResourceBalance,
   ResourceKey,
@@ -64,7 +66,7 @@ const SELECTION_DEBOUNCE_MS = 100;
 
 // One ledger row: icon, resource, Raw and Net. Keep the virtual list
 // height in sync with inspector/panel.css.
-const ROW_HEIGHTS = { header: 24, item: 28, empty: 24, chart: 60 };
+const ROW_HEIGHTS = { header: 24, item: 28, empty: 24, chart: 60, product: 28 };
 const ICON_COLUMN = "24px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
@@ -511,8 +513,22 @@ function FlowIOPanel() {
     [marks.hidden, scope.resources],
   );
 
+  const canEditProducts = useFactoryStore((state) => !state.isReadOnly && (state.project.solveMode === true || state.project.poolMode === true));
+  const products = useMemo(() => {
+    const roles = getStorageRoles(project);
+    const selected = selection ? new Set(debouncedSelectionKey.split("\0")) : undefined;
+    const result = new Map<string, FactoryStorage[]>();
+    for (const storage of project.storages ?? []) {
+      if (roles.get(storage.id) !== "product" || (selected && !selected.has(storage.id))) continue;
+      const key = makeResourceKey(storage.kind, storage.resourceId);
+      result.set(key, [...(result.get(key) ?? []), storage]);
+    }
+    return result;
+  }, [project, selection, debouncedSelectionKey]);
+  const visibleProducts = useMemo(() => canEditProducts ? new Set(products.keys()) : EMPTY_KEYS, [canEditProducts, products]);
+
   const contentHeight = 78 + (selection ? 28 : 0) + measureFlowRows(
-    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS),
+    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS, products, visibleProducts),
     ROW_HEIGHTS,
   ).totalHeight;
 
@@ -634,6 +650,8 @@ function FlowIOPanel() {
       </div>
 
       <FlowVirtualList
+        products={products}
+        expandedProducts={visibleProducts}
         sections={sections}
         collapsed={collapsed}
         isFiltered={isFiltered}
@@ -758,6 +776,8 @@ function ScopeStrip({
  * section headers use real CSS stickiness instead of hand-positioned overlays.
  */
 function FlowVirtualList({
+  products,
+  expandedProducts,
   sections,
   collapsed,
   isFiltered,
@@ -772,6 +792,8 @@ function FlowVirtualList({
   onHover,
   onFocusBoard,
 }: {
+  products: ReadonlyMap<string, FactoryStorage[]>;
+  expandedProducts: ReadonlySet<string>;
   sections: FlowSection[];
   collapsed: Record<FlowSectionId, boolean>;
   isFiltered: boolean;
@@ -794,8 +816,8 @@ function FlowVirtualList({
   // No chart rows at all when charts are off, so the list closes up rather
   // than leaving gaps where they were.
   const targetRows = useMemo(
-    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS),
-    [collapsed, favourites, sections, showCharts],
+    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS, products, expandedProducts),
+    [collapsed, favourites, sections, showCharts, products, expandedProducts],
   );
   // Membership rides the value-motion clock: rows grow in and fold out, and
   // `rows` below may briefly hold departed rows mid-fold.
@@ -1119,6 +1141,10 @@ function FlowVirtualList({
           );
         }
 
+        if (row.type === "product") {
+          return shell(<ProductTargetRow storage={row.storage} isLast={row.index === (products.get(makeResourceKey(row.storage.kind, row.storage.resourceId))?.length ?? 0) - 1} />);
+        }
+
         if (row.type === "chart") {
           return shell(
             <FlowChartRow
@@ -1137,6 +1163,7 @@ function FlowVirtualList({
 
         return shell(
           <FlowResourceRow
+            productMarker={row.section.id === "output" && products.has(row.balance.key) && !expandedProducts.has(row.balance.key)}
             balance={row.balance}
             sectionId={row.section.id}
             tone={row.section.tone}
@@ -1200,6 +1227,7 @@ function FlowVirtualList({
           className="resource-row-expand ui-zoom pointer-events-none fixed z-[60] overflow-hidden rounded bg-[#2a2d33] shadow-xl ring-1 ring-cyan-500/60"
         >
           <FlowResourceRow
+            productMarker={expandedRow.section.id === "output" && products.has(expandedRow.balance.key) && !expandedProducts.has(expandedRow.balance.key)}
             balance={expandedRow.balance}
             sectionId={expandedRow.section.id}
             tone={expandedRow.section.tone}
@@ -1326,7 +1354,7 @@ function FlowSectionHeader({
       aria-expanded={!collapsed}
       style={{ height: ROW_HEIGHTS.header }}
       className={[
-        "sticky top-0 z-10 flex w-full items-center gap-2 px-2 text-left backdrop-blur-sm",
+        "inspector-flow-section sticky top-0 z-10 flex w-full items-center gap-2 px-2 text-left backdrop-blur-sm",
         tone.header,
       ].join(" ")}
     >
@@ -1341,6 +1369,7 @@ function FlowSectionHeader({
 }
 
 const FlowResourceRow = memo(function FlowResourceRow({
+  productMarker,
   balance,
   sectionId,
   tone,
@@ -1357,6 +1386,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
   onMarkChanged,
   onFocusBoard,
 }: {
+  productMarker?: boolean;
   balance: ResourceBalance;
   sectionId: FlowSectionId;
   tone: FlowSectionTone;
@@ -1494,6 +1524,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
             full, which is the point, but a name longer than even that has to
             end in an ellipsis rather than run under the rate. */}
         <span className="inspector-resource-name ml-2 flex min-w-0 items-center gap-1.5">
+          {productMarker ? <span className="text-[9px] text-emerald-300/70" title="Product">◆</span> : null}
           <span className="min-w-0 truncate text-base font-medium text-neutral-100">{name}</span>
         </span>
 

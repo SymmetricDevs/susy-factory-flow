@@ -161,6 +161,7 @@ export const machineConfigControlSchema = z.object({
   label: z.string().min(1),
   minimumKey: z.string().min(1),
   defaultKey: z.string().min(1).optional(),
+  numeric: z.object({ min: z.number().int(), max: z.number().int().optional() }).optional(),
   tiers: z
     .array(
       z.object({

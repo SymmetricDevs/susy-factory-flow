@@ -37,6 +37,7 @@
  * running the probe described in that test if the reference is ever updated.
  */
 import type { MachineConfigControl } from "@/lib/model/types";
+import { neutronActivatorSpeed, quantiseNeutronActivatorDuration } from "./neutron-activator";
 
 /**
  * How a machine spends each step of spare voltage, mirroring the reference's
@@ -140,6 +141,8 @@ export interface MachineContext {
 type Coefficient = number | ((ctx: MachineContext) => number);
 
 export interface MachineBehaviour {
+  /** A source-verified machine-specific whole/sub-tick rounding rule. */
+  quantiseDuration?: (durationTicks: number) => number;
   /** Throughput multiplier: 2 means the recipe finishes in half the time. */
   speed?: Coefficient;
   /** EU/t multiplier applied before parallels. */
@@ -579,12 +582,11 @@ const STEAM_MULTIBLOCK: MachineBehaviour = {
   controls: [STEAM_PRESSURE_CONTROL],
 };
 
-/** The reference's speeding pipe casing count starts at 4. */
-const NEUTRON_PIPE_CONTROL = countControl(
-  "speedingPipeCasing",
-  "Speeding Pipe Casing",
-  [4, 5, 6, 7, 8, 9, 10, 11, 12],
-);
+/** checkMachine accepts any pipe height >= 4; it never imposes a top rung. */
+const NEUTRON_PIPE_CONTROL: MachineConfigControl = {
+  ...countControl("speedingPipeCasing", "Pipe height", [4]),
+  numeric: { min: 4 },
+};
 
 /**
  * Keyed by the machine name our dataset uses. `aliases` cover the reference's
@@ -941,10 +943,12 @@ const MACHINES: Record<string, MachineBehaviour> = {
   },
   "Neutron Activator": {
     overclock: OVERCLOCK.none(),
-    speed: (c) => Math.pow(1 / 0.9, c.value("speedingPipeCasing") - 4),
+    speed: (c) => neutronActivatorSpeed(c.value("speedingPipeCasing")),
+    quantiseDuration: quantiseNeutronActivatorDuration,
+    unlimitedTierSkip: true,
     power: 0,
     controls: [NEUTRON_PIPE_CONTROL],
-    note: "Power use is not counted.",
+    note: "Assumes neutron kinetic energy is in the recipe's range. Accelerator hatch power is not counted.",
   },
   /**
    * MTENaquadahFuelRefinery: 4 parallels per field restriction coil tier

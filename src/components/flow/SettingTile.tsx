@@ -215,6 +215,16 @@ export function SettingTile({
                 }
               : undefined
           }
+          role={onType ? "button" : undefined}
+          tabIndex={onType && !disabled ? 0 : undefined}
+          aria-label={onType ? `Edit ${caption}` : undefined}
+          onKeyDown={onType ? (event) => {
+            if (!disabled && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault();
+              event.stopPropagation();
+              onType();
+            }
+          } : undefined}
         >
           {face ? <Face resource={face} /> : null}
           <span className="min-w-0 truncate">{value}</span>
@@ -451,6 +461,9 @@ export function LadderTile({
   const [listAt, setListAt] = useState<DOMRect | undefined>();
   const index = Math.max(0, control.tiers.findIndex((tier) => tier.key === control.current.key));
   const faces = controlHasFaces(control);
+  if (control.numeric) {
+    return <MachineNumberTile control={control} onSelect={onSelect} help={help} />;
+  }
   if (control.tiers.length > STEPPER_MAX_RUNGS) {
     return (
       <SettingSelectTile
@@ -501,4 +514,53 @@ export function LadderTile({
       ) : null}
     </>
   );
+}
+
+/** Numeric machine settings keep their value in the existing config map.
+ * Drafts stay local: Enter/blur is one undoable edit, Escape cancels it.
+ */
+function MachineNumberTile({ control, onSelect, help }: {
+  control: MachineConfigTierControl;
+  onSelect: (key: string) => void;
+  help?: ReactNode | (() => ReactNode);
+}) {
+  const [draft, setDraft] = useState<string>();
+  const finished = useRef(false);
+  const shown = Number(control.current.key);
+  const { min, max = Number.MAX_SAFE_INTEGER } = control.numeric!;
+  const clamp = (n: number) => Math.min(max, Math.max(min, Math.trunc(n)));
+  const pick = (n: number) => {
+    const key = String(clamp(n));
+    if (key !== control.current.key) onSelect(key);
+  };
+  const commit = () => {
+    if (finished.current) return;
+    finished.current = true;
+    const text = draft?.replaceAll(",", "").trim() ?? "";
+    const parsed = Number(text);
+    if (text && Number.isSafeInteger(parsed)) pick(parsed);
+    setDraft(undefined);
+  };
+  const caption = settingCaption(control);
+  if (draft !== undefined) {
+    return <div className={`${SETTING_TILE_CLASS} nodrag`} onPointerDown={(event) => event.stopPropagation()}>
+      <div className={SETTING_TILE_CAPTION_CLASS}>{caption}</div>
+      <input autoFocus inputMode="numeric" aria-label={control.label} value={draft}
+        onFocus={(event) => event.target.select()}
+        onChange={(event) => setDraft(event.target.value)} onBlur={commit}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Enter") { event.preventDefault(); commit(); }
+          if (event.key === "Escape") {
+            event.preventDefault(); finished.current = true; setDraft(undefined);
+          }
+        }}
+        className="h-5 w-full min-w-0 border border-[var(--mc-47)] bg-[var(--mc-93)] px-1 text-center text-[13px] font-bold leading-[18px] text-[var(--mc-ink)] outline-none"
+      />
+    </div>;
+  }
+  return <SettingTile caption={caption} value={shown.toLocaleString("en-US")}
+    canStepDown={shown > min} canStepUp={shown < max}
+    onStep={(direction) => pick(shown + direction)}
+    onType={() => { finished.current = false; setDraft(String(shown)); }} help={help} />;
 }

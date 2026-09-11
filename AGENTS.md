@@ -353,6 +353,15 @@ Working notes for future agents on GTNH Factory Flow.
   discount plus perfect overclocks, and that is what we implement. Machines
   that diverge on purpose are listed in `machine-table.test.ts`.
 - Machine config controls are structured data, not frontend hardcoding. Use `machineConfigControls`.
+- Neutron Activator pipe height is an integer count, minimum 4 with NO machine
+  height cap. `speedingPipeCasing` keeps its existing saved key; its control's
+  `numeric` metadata enables typing and stepping rather than a finite ladder.
+  `neutron-activator.ts` follows MTENeutronActivator / ParallelHelper: Java's
+  0.9f per extra layer, CEIL duration above one tick, FLOOR reciprocal parallels
+  below one tick (custom supplier path), bounded by Java's max parallel integer.
+  Do not substitute the generic floor-ticks / ceil-parallels rule. Accelerator
+  hatch power and neutron-energy regulation remain unmodelled; valid products
+  assume the neutron kinetic energy is in the recipe's allowed range.
 - Existing supported tier effects include:
   - `parallelMultiplier`
   - `durationMultiplier`

@@ -182,6 +182,9 @@ describe("curated machine table", () => {
     // several exist because GTNH rewrote the machine after the reference was
     // written, so the reference tracks a class that is no longer craftable.
     const DIVERGES_FROM_REFERENCE = new Set([
+      // Java's 0.9f, ceil ticks and the custom supplier's floored parallels.
+      // Covered at recipe-rate boundaries in neutron-activator.test.ts.
+      "Neutron Activator",
       "Utupu-Tanuri",
       "Zyngen",
       "Exothermic Hearth",

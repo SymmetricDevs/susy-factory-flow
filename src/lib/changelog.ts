@@ -49,6 +49,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.1.3",
+    date: "2026-09-11",
+    headline: "Neutron Activators reach full height",
+    notes: [
+      "Neutron Activators accept *any pipe height from 4 upward*, with accurate recipe times and throughput for tall builds.",
+    ],
+  },
+  {
     version: "3.1.2",
     date: "2026-09-11",
     headline: "Clearer machine controls",

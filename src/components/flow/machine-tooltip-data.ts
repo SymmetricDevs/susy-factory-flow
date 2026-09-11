@@ -41,12 +41,15 @@ export function buildConfigTooltip(recipe: Recipe, node: FactoryNode, control: M
   return {
     title: control.label, subtitle: selected.current.label,
     rows: [
+      ...(control.numeric ? [{ label: "Range", value: control.numeric.max === undefined
+        ? `${control.numeric.min} or more` : `${control.numeric.min} to ${control.numeric.max}` }] : []),
       { label: "Time per operation", value: stats.durationTicks > 0 ? `${number(stats.durationTicks / 20)} s` : "Instant" },
       ...(steam ? [{ label: "Steam per machine", value: `${formatCompact(steam.drawSteamPerTick * 20)} L/s` }]
         : power ? [{ label: "Draw per machine", value: `${formatCompact(power.drawEuT)} EU/t` }] : []),
       { label: "Parallel operations", value: number(power?.parallels ?? getMachineParallelMultiplier(effective, node)) },
     ],
     reason: power && power.state !== "ok" ? describePowerStall(power) : undefined,
-    actions: control.tiers.length > 1 ? [{ gesture: "left", label: "Change setting" }] : [],
+    actions: control.numeric ? [{ gesture: "left", label: "Type a value" }, { gesture: "wheel", label: "Step" }]
+      : control.tiers.length > 1 ? [{ gesture: "left", label: "Change setting" }] : [],
   };
 }

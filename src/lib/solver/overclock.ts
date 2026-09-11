@@ -262,7 +262,7 @@ export function getOverclockedRecipeStats(
     perfectOverclockSteps: perfectSteps,
     perfectSpeedFactor: rule.multiplier,
     perfectEuFactor: rule.euMultiplier ?? rule.multiplier,
-    durationTicks: quantiseDurationToTicks(
+    durationTicks: (getMachineBehaviour(effectiveRecipe.machineType)?.quantiseDuration ?? quantiseDurationToTicks)(
       (effectiveRecipe.durationTicks / rule.multiplier ** perfectSteps / 2 ** normalSteps) *
         durationMultiplier,
       subTickCapable,

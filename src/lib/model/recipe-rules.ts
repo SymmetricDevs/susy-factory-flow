@@ -14,6 +14,7 @@ import {
 export interface MachineConfigTierControl {
   id: string;
   label: string;
+  numeric?: MachineConfigControl["numeric"];
   minimum: MachineConfigTierOption;
   current: MachineConfigTierOption;
   tiers: MachineConfigTierOption[];
@@ -304,6 +305,10 @@ export function getAdjacentMachineConfigTier(
   control: MachineConfigTierControl,
   direction: -1 | 1,
 ): string {
+  if (control.numeric) {
+    return String(Math.min(control.numeric.max ?? Number.MAX_SAFE_INTEGER,
+      Math.max(control.numeric.min, Number(control.current.key) + direction)));
+  }
   const currentIndex = control.tiers.findIndex((entry) => entry.key === control.current.key);
   const minimumIndex = control.tiers.findIndex((entry) => entry.key === control.minimum.key);
   const nextIndex = Math.min(
@@ -373,6 +378,20 @@ function resolveMachineConfigTierControl(
   const minimum = control.tiers.find((tier) => tier.key === control.minimumKey) ?? control.tiers[0];
   if (!minimum) {
     return undefined;
+  }
+
+  if (control.numeric) {
+    const { min, max = Number.MAX_SAFE_INTEGER } = control.numeric;
+    const raw = Number(selectedKey?.trim() || control.defaultKey || control.minimumKey);
+    const value = Number.isFinite(raw) ? Math.min(max, Math.max(min, Math.trunc(raw))) : min;
+    const current = {
+      ...minimum,
+      key: String(value),
+      label: String(value),
+      resource: { ...minimum.resource, displayName: `${control.label}: ${value}` },
+    };
+    return { id: control.id, label: control.label, numeric: control.numeric,
+      minimum, current, tiers: [current], minimumIndex: 0, resource: current.resource };
   }
 
   const minimumIndex = Math.max(

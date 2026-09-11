@@ -890,7 +890,11 @@ Working notes for future agents on GTNH Factory Flow.
   Resources use 28px ledger rows with simultaneous Raw and Net columns;
   Net is surplus minus deficit, while Raw keeps each boundary side intact.
   Keep virtual list measurements in sync with CSS. Machines use the same
-  compact rows with Peak/Average columns. Resource tools live in the header.
+  compact rows with Peak/Average columns. Each machine has a full-width name
+  above its build rows; multiblocks show amperage and tier (typed EU/t budgets
+  display equivalent amps at that tier). Peak/Average share the Machines
+  heading. Resource section headers run edge to edge with no top divider.
+  Resource tools live in the header.
   Resource height follows visible rows (capped when Machines is present), so
   a short resource list gives spare height to the machine list.
 

@@ -457,10 +457,10 @@ export function MachineShoppingList() {
         <div className="inspector-section-heading -mx-3">
           <h2>Machines</h2>
           <span className="inspector-count">{formatCompact(totalMachines)}</span>
-        </div>
-        <div className="flex w-full items-end justify-end gap-1.5 pb-1">
+          <span className="ml-auto flex gap-1.5">
           <span className={COLUMN_HEAD_CLASS}>Peak</span>
           <span className={COLUMN_HEAD_CLASS}>Average</span>
+          </span>
         </div>
         {/* The totals, on top like a sheet: one row when the board only
             draws, three (used, made, net) once a generator sits on it, and
@@ -492,28 +492,16 @@ export function MachineShoppingList() {
           sideways; the name column truncates instead. */}
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-1">
         {groups.map((group) => {
-          const uniform = group.builds.length === 1;
-          const build = group.builds[0];
           return (
             <div key={group.label} className="py-0">
               <ListLine
                 icon={group.icon}
-                // A uniform group is one whole line: count, chip, draw,
-                // warning. A mixed one is a bare NAME — its counts and
-                // numbers all live on the build sub-lines below.
-                count={uniform ? group.count : undefined}
                 label={group.label}
-                chip={uniform ? build : undefined}
-                peak={uniform ? { euT: build?.euT, madeEuT: build?.madeEuT, steamLs: build?.steamLs } : undefined}
-                average={uniform ? { euT: build?.avgEuT, madeEuT: build?.avgMadeEuT, steamLs: build?.avgSteamLs } : undefined}
-                state={uniform ? (build?.state ?? "ok") : "ok"}
-                wash={uniform && build && !build.isMultiblock ? build.tier : undefined}
+                state="ok"
                 checklist={checklistMode ? group.nodeIds.every((id) => project.checklist?.cards.includes(id)) : undefined}
                 onClick={() => checklistMode ? useFactoryStore.getState().toggleChecklist("cards", group.nodeIds) : focusNext(group.label, group.nodeIds)}
               />
-              {uniform
-                ? null
-                : group.builds.map((buildLine, index) => (
+              {group.builds.map((buildLine, index) => (
                     <ListLine
                       key={buildLine.key}
                       indent
@@ -754,7 +742,7 @@ function ListLine({
         // The wash sits at ~12% - present enough to read as the tier's
         // colour without competing with the chips that name it.
         style={{ ...checklistCursorStyle, ...(wash ? { backgroundColor: `${GT_TIER_COLORS[wash].background}1f` } : {}) }}
-        className="inspector-machine-row relative flex w-full items-center gap-1 px-2 py-0.5 text-left hover:bg-white/5"
+        className={`${chip || indent ? "inspector-machine-build" : "inspector-machine-title"} inspector-machine-row relative flex w-full items-center gap-1 px-2 py-0.5 text-left hover:bg-white/5`}
       >
         <span className="flex min-w-0 flex-1 items-center gap-1">
         {indent ? (
@@ -801,27 +789,17 @@ function ListLine({
         <span className="min-w-0 flex-1 truncate whitespace-nowrap text-[14px] leading-6">
           {label ?? ""}
         </span>
-        {chipColor && chip && !chip.isMultiblock ? (
-          /* The card's own chip, verbatim: hatch count fused left of the
-             tier, one paint job, so the panel and the board read as one.
-             Always in the right-hand column, so every chip on the list sits
-             on one line however the rows around it are shaped. */
-          <span className="flex shrink-0 items-center">
-            {/* A multiblock's chip is its supply, in the neutral plate the
-                card's own chip wears; a singleblock's is its tier. */}
-            <span
-              className="h-5 border-2 px-1.5 text-[11px] font-bold leading-4"
-              style={{
-                backgroundColor: chipColor.background,
-                borderColor: chipColor.border,
-                color: chipColor.text,
-                textShadow: `1px 1px 0 ${chipColor.shadow}`,
-              }}
-            >
-              {chip.isMultiblock ? `${formatCompact(supplyEuT)} EU/t` : chip.tier}
+        {chip?.tier && (
+          <span className="inspector-build-config flex shrink-0 items-center gap-1">
+            {chip.isMultiblock && <span className="text-[10px] tabular-nums text-neutral-300">
+              {chip.typedEuT !== undefined ? formatCompact(chip.typedEuT / getVoltageTierMaxEuT(chip.tier)) + "A" : hatchAmps !== undefined ? formatCompact(hatchAmps) + "A" : "—"}
+            </span>}
+            <span className="rounded-sm px-1 text-[10px] font-bold leading-4"
+              style={{ color: GT_TIER_COLORS[chip.tier].text, backgroundColor: GT_TIER_COLORS[chip.tier].background }}>
+              {chip.tier}
             </span>
           </span>
-        ) : null}
+        )}
         </span>
         {(peak || average || stalled) && <span className="inspector-machine-figures flex shrink-0 items-center gap-1.5">
         <span className="flex items-baseline gap-1">

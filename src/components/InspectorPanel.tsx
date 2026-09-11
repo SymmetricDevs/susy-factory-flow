@@ -1053,7 +1053,7 @@ function FlowVirtualList({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
-      className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-2"
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
     >
       {stickyHeader?.type === "header" ? (
         <FlowSectionHeader
@@ -1326,7 +1326,7 @@ function FlowSectionHeader({
       aria-expanded={!collapsed}
       style={{ height: ROW_HEIGHTS.header }}
       className={[
-        "sticky top-0 z-10 flex w-full items-center gap-2 border-y px-2 text-left backdrop-blur-sm",
+        "sticky top-0 z-10 flex w-full items-center gap-2 px-2 text-left backdrop-blur-sm",
         tone.header,
       ].join(" ")}
     >

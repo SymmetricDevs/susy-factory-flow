@@ -13,7 +13,7 @@ import {
   voteCommunityPlan,
 } from "@/lib/community/client";
 import { withAuthor } from "@/lib/community/search-query";
-import { openCommunityPost } from "@/lib/community/open-post";
+import { copyCommunityPost, openCommunityPost } from "@/lib/community/open-post";
 import { sharedPlanLink } from "@/lib/community/shared-link";
 import type { CommunityPlanSort, CommunityPlanSummary, EntryIcon } from "@/lib/community/types";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -308,22 +308,31 @@ export function SetupsGrid({
     }
   };
 
-  // Your own post opens your design; anyone else's opens as a copy of yours.
-  const open = async (plan: CommunityPlanSummary) => {
+  // Viewing and copying are separate choices; owners can still resume their design.
+  const open = async (plan: CommunityPlanSummary, asCopy = false) => {
+    if (busyId) return;
     setBusyId(plan.id);
     try {
-      const outcome = await openCommunityPost({
-        id: plan.id,
-        name: plan.name,
-        isMine: plan.isMine === true,
-        authorName: plan.authorName,
-      });
-      if (outcome === "viewed") {
+      let outcome: "opened" | "viewed" | "copied";
+      if (asCopy) {
+        await copyCommunityPost(plan);
+        outcome = "copied";
+      } else {
+        outcome = await openCommunityPost({
+          id: plan.id,
+          name: plan.name,
+          isMine: plan.isMine === true,
+          authorName: plan.authorName,
+        });
+      }
+      if (outcome === "viewed" || outcome === "copied") {
         patchPlan(plan.id, (entry) => ({ ...entry, downloads: entry.downloads + 1 }));
       }
       setError(undefined);
+      setDetailId(undefined);
     } catch (thrown) {
       fail(thrown, "Opening the setup failed.");
+      setDetailId(undefined);
     } finally {
       setBusyId(undefined);
     }
@@ -458,10 +467,14 @@ export function SetupsGrid({
             primary: {
               label: detailPlan.isMine ? "Open" : "View",
               onClick: () => {
-                setDetailId(undefined);
                 void open(detailPlan);
               },
             },
+            secondary: {
+              label: "Open a copy",
+              onClick: () => void open(detailPlan, true),
+            },
+            actionBusy: busyId === detailPlan.id,
             keys: [
               {
                 label: detailPlan.myVote === 1 ? "Take back your vote" : "Vote this up",

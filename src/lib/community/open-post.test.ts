@@ -22,7 +22,7 @@ vi.mock("@/store/design-store", () => ({
   },
 }));
 vi.mock("@/lib/plan-view", () => ({ applyPlanView: vi.fn() }));
-import { openCommunityPost } from "./open-post";
+import { copyCommunityPost, openCommunityPost } from "./open-post";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,6 +31,19 @@ beforeEach(() => {
 });
 
 describe("opening public posts", () => {
+  it("copies directly into a private design without opening the viewer or resuming a linked design", async () => {
+    mocks.download.mockResolvedValue({
+      plan: { ...createEmptyProject(), metadata: { communityPlanId: "post" } },
+      name: "Public setup",
+    });
+    await copyCommunityPost({ id: "post", name: "Selected setup" });
+    expect(mocks.importProjectAsDesign).toHaveBeenCalledTimes(1);
+    const [project, name] = mocks.importProjectAsDesign.mock.calls[0];
+    expect(project.metadata?.communityPlanId).toBeUndefined();
+    expect(name).toBe("Selected setup");
+    expect(mocks.viewPublicProject).not.toHaveBeenCalled();
+    expect(mocks.switchToDesign).not.toHaveBeenCalled();
+  });
   it("opens another author's setup for viewing, even with an old linked local copy", async () => {
     expect(await openCommunityPost({ id: "post" })).toBe("viewed");
     expect(mocks.viewPublicProject).toHaveBeenCalledWith(

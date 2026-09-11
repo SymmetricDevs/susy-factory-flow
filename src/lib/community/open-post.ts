@@ -71,6 +71,14 @@ export async function openCommunityPost(plan: {
   return "opened";
 }
 
+/** Copy directly from the library, without first opening a viewing session. */
+export async function copyCommunityPost(post: { id: string; name?: string }): Promise<void> {
+  const { plan, name } = await downloadCommunityPlan(post.id);
+  const project = parseFactoryProjectJson(JSON.stringify(untagCommunityPlan(plan)));
+  await useDesignStore.getState().importProjectAsDesign(project, post.name || name || project.name);
+  applyPlanView(project.view);
+}
+
 /** A snapshot of the viewed post becomes a private, editable personal design. */
 export async function copyViewedPost(): Promise<void> {
   const store = useDesignStore.getState();

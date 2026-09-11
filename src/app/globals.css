@@ -1281,6 +1281,12 @@ img {
   border: 1px solid var(--selection);
 }
 
+/* Selected cards already wear blue outlines. Omit the enclosing group frame
+   and its empty-space drag target; drag a selected card to move the group. */
+.factory-flow-board .react-flow__nodesselection {
+  display: none;
+}
+
 .factory-flow-board .react-flow__edge-path {
   cursor: pointer;
   pointer-events: stroke;

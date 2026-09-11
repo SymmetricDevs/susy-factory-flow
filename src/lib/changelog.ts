@@ -51,9 +51,10 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.1.2",
     date: "2026-09-11",
-    headline: "Power controls for touchscreens",
+    headline: "Clearer machine controls",
     notes: [
       "Tap multiblock power settings to open *touch controls* for amps, voltage and raw EU/t alongside the power breakdown.",
+      "Shared machines give recipes *more breathing room* and show each recipe's circuit beside its remove button.",
     ],
   },
   {

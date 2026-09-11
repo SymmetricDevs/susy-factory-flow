@@ -1885,9 +1885,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             <SharedMachineRails
               nodeId={projectNode.id}
               sections={[
-                { section: 0, rails, verdict, powerStalled: result?.powerStalled === true },
+                { section: 0, rails, verdict, circuit: programmedCircuit, powerStalled: result?.powerStalled === true },
                 ...sectionRails.map((entry) => ({
                   ...entry,
+                  circuit: getRecipeProgrammedCircuit(entry.display),
                   powerStalled: entry.result?.powerStalled === true,
                 })),
               ]}
@@ -2235,7 +2236,7 @@ export const RecipeNode = memo(
  * and "runs on whatever the circuit is set to" are different builds and an
  * absent slot cannot tell them apart.
  */
-function CircuitChip({ circuit }: { circuit: RecipeProgrammedCircuit }) {
+function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCircuit; small?: boolean }) {
   const { setting, resource } = circuit;
   return (
     <MinecraftTooltip
@@ -2247,7 +2248,8 @@ function CircuitChip({ circuit }: { circuit: RecipeProgrammedCircuit }) {
         // the row's height and w-9 answers it, so the slot stays a slot however
         // the footer's type is measured.
         className={[
-          "relative flex w-9 shrink-0 self-stretch items-center justify-center overflow-hidden border",
+          "relative flex shrink-0 items-center justify-center overflow-hidden border",
+          small ? "h-[18px] w-[18px]" : "w-9 self-stretch",
           resource
             ? "border-[var(--mc-47)] bg-[var(--mc-71)] shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
             : // Empty reads as a hole in the card, the way an unfilled slot
@@ -2267,15 +2269,16 @@ function CircuitChip({ circuit }: { circuit: RecipeProgrammedCircuit }) {
             tooltip={false}
             showAmount={false}
             showConsumedState={false}
-            className="!h-9 !w-9 origin-center scale-150"
+            className={small ? "!h-[18px] !w-[18px] origin-center scale-150" : "!h-9 !w-9 origin-center scale-150"}
           />
         ) : (
           // Not an item, a silhouette: the same drawn circuit the recipe book
           // card wears, at a fraction of the ink. An empty slot with nothing
           // in it at all reads as art that failed to load rather than as a
           // machine that does not care what its circuit says.
-          <Cpu aria-hidden className="h-5 w-5 text-[var(--mc-ink-muted)] opacity-50" />
+          <Cpu aria-hidden className={`${small ? "h-3.5 w-3.5" : "h-5 w-5"} text-[var(--mc-ink-muted)] opacity-50`} />
         )}
+        {small && setting ? <span className="absolute bottom-0 right-px text-[9px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000,-1px_-1px_0_#000]">{setting}</span> : null}
       </div>
     </MinecraftTooltip>
   );
@@ -3042,6 +3045,7 @@ function SharedMachineRails({
     rails: { inputs: RailPort[]; outputs: RailPort[] };
     verdict: NodeVerdict;
     powerStalled: boolean;
+    circuit?: RecipeProgrammedCircuit;
   }>;
   pending: ComponentProps<typeof PortRail>["pending"];
   picture?: ReactNode;
@@ -3113,19 +3117,19 @@ function SharedMachineRails({
       </MinecraftTooltip>
     );
   };
-  // One cell over every recipe holding its reading and its key, nothing
-  // more: the space and the tiles already say where one recipe ends and
-  // the next begins (Jack, 2026-09-07: no line, less margin).
+  // One cell holds the reading and controls; a further cell separates later
+  // recipes, keeping both rails and their wire endpoints on the board grid.
   const rule = (entry: (typeof sections)[number], withKey: boolean) => (
     <div
       className={["flex items-end pb-0.5", withKey ? "justify-end" : "justify-start"].join(" ")}
-      style={{ height: SECTION_RULE_HEIGHT }}
+      style={{ height: SECTION_RULE_HEIGHT, marginTop: entry.section > 0 ? BOARD_GRID : 0 }}
     >
       {withKey ? null : reading(entry)}
       {withKey ? (
         <span className="flex items-center">
           {key("Move this recipe up", <ChevronUp className="h-3.5 w-3.5" />, () => onMove(entry.section, -1), entry.section === 0)}
           {key("Move this recipe down", <ChevronDown className="h-3.5 w-3.5" />, () => onMove(entry.section, 1), entry.section === last)}
+          {entry.circuit ? <span className="ml-2"><CircuitChip circuit={entry.circuit} small /></span> : null}
           {key("Take this recipe off the machine", <X className="h-3 w-3" />, () => onRemove(entry.section), false, "ml-2")}
         </span>
       ) : null}

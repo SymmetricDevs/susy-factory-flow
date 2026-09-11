@@ -56,7 +56,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Neutron Activators accept *any pipe height from 4 upward*, with accurate recipe times and throughput for tall builds.",
       "Utupu-Tanuri's *Vacuum Furnace mode gains its coil controls* and the same speed, power savings, and heat overclocks as Dehydrator mode. Coils start at the recipe's required heat, and the incorrect structure picture is gone.",
       "The *Chemical Plant, Boldarnator, and Industrial Sledgehammer* now show their own structure pictures; the three images had been assigned to each other's machines.",
-      "Brick Coke Ovens keep their *fixed recipe times* even when an older plan leaves a voltage setting on the card.",
+      "*LFTR Fuel 3 generates the full 1A UV*, and brick Coke Ovens keep their fixed recipe times in older plans.",
     ],
   },
   {

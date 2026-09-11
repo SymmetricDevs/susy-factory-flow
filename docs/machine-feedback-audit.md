@@ -10,6 +10,35 @@ Release 3.1.3 is pending deployment; production was 3.1.2 when checked September
 | 2 | Utupu-Tanuri | Lord Peverell, September 9: missing coil benefits and incorrect structure picture. | Pending 3.1.3. Vacuum Furnace now matches the existing Utupu-Tanuri definition; both modes receive coils, 2.2x speed, half EU, up to 4 power-limited parallels, heat discounts and perfect overclocks. Picker starts at recipe heat. Removed the incorrect render; the actual controller icon is used. |
 | 3 | Chemical Plant, Boldarnator, Industrial Sledgehammer | Screenshot shows wrong structure images on all three cards. | Pending 3.1.3. Verified the wiki images and rotated the three existing PNGs to their correct names. Five other renders from the same import batch match the wiki. |
 | 4 | Coke Oven / Industrial Coke Oven | [Issue #58](https://github.com/jackwrichards/gtnh-factory-flow/issues/58), reported against 3.0.0: missing oven, wrong art, doubled EV output. | Mixed findings; see below. Both maps are published, the art was already fixed, and the linked plan explicitly supplies 2A. A separate brick-oven legacy-voltage bug was reproduced and fixed for 3.1.3. |
+| 5 | LFTR | [Issue #54](https://github.com/jackwrichards/gtnh-factory-flow/issues/54): Fuel 3 shows 1A LuV despite the correct EU/L. | Confirmed and fixed for 3.1.3: numeric fuel energy gives 524,288 EU/t (1A UV); fuels 1/2 stay unchanged and saved cards update on load. |
+
+## Issue #54 verification — September 11
+
+**Confirmed and fixed for 3.1.3:** LFTR Fuel 3 generated 32,768 EU/t (1A LuV)
+instead of 524,288 EU/t (1A UV). The fuel table already contained the correct
+10,485,760 EU/L. The calculation parsed `Net Amps (LuV)` with `[A-Z]+`, missed
+the lowercase `u`, and silently fell back to EV. Fuels 1 and 2 matched and
+were correct. This is a calculation bug independent of browser or dataset.
+
+The model now derives EU/t from the numeric EU/L at the reactor's fixed
+1 L/s consumption, divided by 20 ticks/s. This agrees with local game source
+revision `8e23867`: [RecipeLoaderLFTR.java](https://github.com/GTNewHorizons/GT5-Unofficial/blob/8e23867/src/main/java/gtPlusPlus/xmod/gregtech/loaders/recipe/RecipeLoaderLFTR.java)
+sets fuel output metadata to 8,192 / 32,768 / 131,072, and
+[MTENuclearReactor.java](https://github.com/GTNewHorizons/GT5-Unofficial/blob/8e23867/src/main/java/gtPlusPlus/xmod/gregtech/common/tileentities/machines/multi/production/MTENuclearReactor.java)
+multiplies that by four without overclocking. All three recipes consume
+100 L fuel and 200 L carrier salt over 100 seconds.
+
+| Fuel | EU/L | Correct EU/t | Equivalent output |
+|---|---:|---:|---|
+| 1 | 655,360 | 32,768 | 1A LuV |
+| 2 | 2,621,440 | 131,072 | 1A ZPM |
+| 3 | 10,485,760 | 524,288 | 1A UV |
+
+Regression tests reproduce the Fuel 3 failure before the fix, verify all
+three fuels and their solver-facing EU output ports, and check that existing
+saved Fuel 3 cards are corrected by the normal load-time recipe rebuild.
+The issue's picture fix was already completed; no artwork changed here.
+Recorded from [issue #54](https://github.com/jackwrichards/gtnh-factory-flow/issues/54).
 
 ## Issue #58 verification — September 11
 

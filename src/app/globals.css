@@ -38,7 +38,7 @@
  * server-render defaults.
  */
 :root {
-  --ui-scale: 1.3;
+  --ui-scale: 1.17;
   /* The EXACT reciprocal, never a rounded decimal: 1.3 x 0.76923 is not 1,
      and an effective zoom of 0.99996 on the board put every card on
      sub-pixel geometry, which doubled the compositor's per-frame layer

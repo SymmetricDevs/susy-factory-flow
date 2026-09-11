@@ -304,7 +304,7 @@ import {
 } from "@/lib/model/custom-rate";
 import { isTrashRecipe, TRASH_ANY_RESOURCE_ID } from "@/lib/model/trash";
 import { rateSuffixForKind, rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
-import { useIsCompactViewport } from "@/lib/compact-view";
+import { useIsCompactViewport, useIsSnugViewport } from "@/lib/compact-view";
 import { getUiScale, useUiScale } from "@/lib/ui-scale";
 import { useToolbarFold } from "./toolbar-fold";
 import { browseHoveredPort } from "./port-browse";
@@ -7626,10 +7626,11 @@ const MODE_KEYS: Array<{
   },
 ];
 
-/** One segment of the mode switch, in px: icon, word, and room to breathe. */
-const MODE_STEP = 96;
-
 const ModeKeys = memo(function ModeKeys() {
+  const compact = useIsCompactViewport();
+  const snug = useIsSnugViewport();
+  const iconsOnly = compact || snug;
+  const modeStep = iconsOnly ? 44 : 96;
   const mode = useFactoryStore((state): BoardMode =>
     state.project.poolMode === true ? "pool" : state.project.solveMode === true ? "solve" : "build",
   );
@@ -7672,8 +7673,8 @@ const ModeKeys = memo(function ModeKeys() {
   const pressRef = useRef<{ x: number; dragging: boolean } | undefined>(undefined);
   const DRAG_START_PX = 4;
   const xToIndex = (x: number) =>
-    Math.max(0, Math.min(MODE_KEYS.length - 1, Math.floor(x / MODE_STEP)));
-  // Real px -> shell px: MODE_STEP is the keys' layout pitch.
+    Math.max(0, Math.min(MODE_KEYS.length - 1, Math.floor(x / modeStep)));
+  // Real px -> shell px: modeStep is the keys' layout pitch.
   const localX = (event: ReactPointerEvent<HTMLDivElement>) =>
     (event.clientX - (rowRef.current?.getBoundingClientRect().left ?? 0)) / getUiScale() - 2;
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -7732,11 +7733,11 @@ const ModeKeys = memo(function ModeKeys() {
     }
     steps = 0;
   };
-  const width = MODE_STEP * MODE_KEYS.length;
+  const width = modeStep * MODE_KEYS.length;
   const glassLeft =
     dragX === undefined
-      ? index * MODE_STEP
-      : Math.max(0, Math.min(width - MODE_STEP, dragX - MODE_STEP / 2));
+      ? index * modeStep
+      : Math.max(0, Math.min(width - modeStep, dragX - modeStep / 2));
   const shown = dragX === undefined ? index : xToIndex(dragX);
   return (
     <div
@@ -7811,10 +7812,10 @@ const ModeKeys = memo(function ModeKeys() {
               // read as one you could not press.
               shown === at ? ink : `${dim} hover:brightness-125`,
             ].join(" ")}
-            style={{ width: MODE_STEP }}
+            style={{ width: modeStep }}
           >
             <Icon className="h-4 w-4" />
-            {label.replace(" mode", "").toUpperCase()}
+            {!iconsOnly && label.replace(" mode", "").toUpperCase()}
           </button>
         </MinecraftTooltip>
       ))}
@@ -7833,7 +7834,7 @@ const ModeKeys = memo(function ModeKeys() {
           dragX === undefined ? "transition-[left,background-color] duration-200" : "",
         ].join(" ")}
         style={{
-          width: MODE_STEP,
+          width: modeStep,
           left: glassLeft,
           backgroundColor: MODE_KEYS[shown]!.glass,
         }}

@@ -883,14 +883,17 @@ Working notes for future agents on GTNH Factory Flow.
   so Ctrl+G and the button agree. Boards inside boards is a real feature
   and a separate decision; it must not happen by accident from a marquee.
 
-## Interface Size (130 Is The New 100%)
+## Interface Size (100% Is The Baseline)
 
-- The planner renders a third larger than it used to (Jack, 2026-09-07:
-  "130 is the new 100%"). `src/lib/ui-scale.ts` owns it: a Settings
+- Build/Solve/Pool use icons only on snug or compact windows; wider windows
+  keep the words. The key width and drag hit-testing must use the same pitch.
+
+- The default is 10% smaller than the previous baseline (Jack, 2026-09-10),
+  still labelled 100%. `src/lib/ui-scale.ts` owns it: a Settings
   stepper (Size, minus/plus, 60-200% in tens, Reset) stores a PERCENT of
   the default (`gtnh-factory-flow.ui-scale.v1`), and the factor is
-  percent x `UI_SCALE_BASE` (1.3) - or x1 on a viewport that is compact
-  at 1:1, so phones keep their size. The boot script in layout.tsx
+  percent x `UI_SCALE_BASE` (1.17) - or x `UI_SCALE_PHONE_BASE` (0.9)
+  on a viewport that is compact at 1:1. The boot script in layout.tsx
   (`uiScaleBootScript`, ui-scale-boot.ts, hook-free so the server layout
   may import it) stamps `--ui-scale` / `--ui-scale-inverse` and the
   `data-compact` / `data-snug` attributes before first paint;

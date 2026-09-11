@@ -2,19 +2,20 @@
 
 This is the player-report queue and resolution log. Completed here means the
 specific reported defect was addressed, not that every mechanic is modeled.
-Release 3.1.3 is pending deployment; production was 3.1.2 when checked September 11.
+Release 3.1.4 collects the changes since production commit `453d91c` (3.1.2).
+The full release explanation is in [the 3.1.4 engineering changelog](releases/3.1.4.md).
 
 | Order | Machine | Report | Resolution |
 |---|---|---|---|
-| 1 | Neutron Activator | Astralzx: height should be adjustable; tall builds are unrealistically slow. | Fixed in `7a7021b`, pending 3.1.3. Direct integer entry from 4 pipe casings with no structural maximum; game-source duration rounding and sub-tick throughput. Accelerator power and neutron kinetic energy regulation remain unmodeled. |
-| 2 | Utupu-Tanuri | Lord Peverell, September 9: missing coil benefits and incorrect structure picture. | Pending 3.1.3. Vacuum Furnace now matches the existing Utupu-Tanuri definition; both modes receive coils, 2.2x speed, half EU, up to 4 power-limited parallels, heat discounts and perfect overclocks. Picker starts at recipe heat. Removed the incorrect render; the actual controller icon is used. |
-| 3 | Chemical Plant, Boldarnator, Industrial Sledgehammer | Screenshot shows wrong structure images on all three cards. | Pending 3.1.3. Verified the wiki images and rotated the three existing PNGs to their correct names. Five other renders from the same import batch match the wiki. |
-| 4 | Coke Oven / Industrial Coke Oven | [Issue #58](https://github.com/jackwrichards/gtnh-factory-flow/issues/58), reported against 3.0.0: missing oven, wrong art, doubled EV output. | Mixed findings; see below. Both maps are published, the art was already fixed, and the linked plan explicitly supplies 2A. A separate brick-oven legacy-voltage bug was reproduced and fixed for 3.1.3. |
-| 5 | LFTR | [Issue #54](https://github.com/jackwrichards/gtnh-factory-flow/issues/54): Fuel 3 shows 1A LuV despite the correct EU/L. | Confirmed and fixed for 3.1.3: numeric fuel energy gives 524,288 EU/t (1A UV); fuels 1/2 stay unchanged and saved cards update on load. |
-| 6 | Hyper-Intensity Laser Engraver | [Issue #50](https://github.com/jackwrichards/gtnh-factory-flow/issues/50): duplicate laser controls, missing amperages and voltage, unstable card size. | Confirmed control/math defects, fixed for 3.1.3: one selector for real voltage/amperage pairs; 65,536A yields up to 40 parallels; source voltage independently gates recipes and caps OCs. Local browser verifies stable dimensions. |
-| 7 | Precise Auto-Assembler MT-3662 (PrAss) | Players report voltage-only controls and ineffective casing parallels. | Confirmed and fixed for 3.1.3. Both modes use curated multiblock power; normal mode gets 16–256 casing parallels and 2x speed, precise mode stays at one parallel and uses casing requirements. Separate machine casing limits working voltage. |
-| 8 | Auto Workbench | [Issue #49](https://github.com/jackwrichards/gtnh-factory-flow/issues/49): resistor ingredients display dictionary names and split into unsatisfied duplicates on wiring. | Confirmed against the attached plan and current code; fixed for 3.1.3. Wires select all repeated slots in the input row, saved partial choices repair on load, and unwired dictionary inputs show concrete item names/icons. |
-| 9 | Inspector machine list | Counts/power must follow individual cards, including fractional Solve/Pool counts. | Fixed for 3.1.3. Existing machine-name tree retained; each card has a separate child row even for identical recipes/settings. Build reads stored counts; Solve/Pool read solved counts and scale each card's power accordingly. |
+| 1 | Neutron Activator | Astralzx: height should be adjustable; tall builds are unrealistically slow. | Fixed in `7a7021b`, included in 3.1.4. Direct integer entry from 4 pipe casings with no structural maximum; game-source duration rounding and sub-tick throughput. Accelerator power and neutron kinetic energy regulation remain unmodeled. |
+| 2 | Utupu-Tanuri | Lord Peverell, September 9: missing coil benefits and incorrect structure picture. | Included in 3.1.4. Vacuum Furnace now matches the existing Utupu-Tanuri definition; both modes receive coils, 2.2x speed, half EU, up to 4 power-limited parallels, heat discounts and perfect overclocks. Picker starts at recipe heat. Removed the incorrect render; the actual controller icon is used. |
+| 3 | Chemical Plant, Boldarnator, Industrial Sledgehammer | Screenshot shows wrong structure images on all three cards. | Included in 3.1.4. Verified the wiki images and rotated the three existing PNGs to their correct names. Five other renders from the same import batch match the wiki. |
+| 4 | Coke Oven / Industrial Coke Oven | [Issue #58](https://github.com/jackwrichards/gtnh-factory-flow/issues/58), reported against 3.0.0: missing oven, wrong art, doubled EV output. | Mixed findings; see below. Both maps are published, the art was already fixed, and the linked plan explicitly supplies 2A. A separate brick-oven legacy-voltage bug was reproduced and fixed for 3.1.4. |
+| 5 | LFTR | [Issue #54](https://github.com/jackwrichards/gtnh-factory-flow/issues/54): Fuel 3 shows 1A LuV despite the correct EU/L. | Confirmed and fixed for 3.1.4: numeric fuel energy gives 524,288 EU/t (1A UV); fuels 1/2 stay unchanged and saved cards update on load. |
+| 6 | Hyper-Intensity Laser Engraver | [Issue #50](https://github.com/jackwrichards/gtnh-factory-flow/issues/50): duplicate laser controls, missing amperages and voltage, unstable card size. | Confirmed control/math defects, fixed for 3.1.4: one selector for real voltage/amperage pairs; 65,536A yields up to 40 parallels; source voltage independently gates recipes and caps OCs. Local browser verifies stable dimensions. |
+| 7 | Precise Auto-Assembler MT-3662 (PrAss) | Players report voltage-only controls and ineffective casing parallels. | Confirmed and fixed for 3.1.4. Both modes use curated multiblock power; normal mode gets 16–256 casing parallels and 2x speed, precise mode stays at one parallel and uses casing requirements. Separate machine casing limits working voltage. |
+| 8 | Auto Workbench | [Issue #49](https://github.com/jackwrichards/gtnh-factory-flow/issues/49): resistor ingredients display dictionary names and split into unsatisfied duplicates on wiring. | Confirmed against the attached plan and current code; fixed for 3.1.4. Wires select all repeated slots in the input row, saved partial choices repair on load, and unwired dictionary inputs show concrete item names/icons. |
+| 9 | Inspector machine list | Counts/power must follow individual cards, including fractional Solve/Pool counts. | Fixed for 3.1.4. Existing machine-name tree retained; each card has a separate child row even for identical recipes/settings. Build reads stored counts; Solve/Pool read solved counts and scale each card's power accordingly. |
 
 ## Machine list verification — September 11
 
@@ -155,7 +156,7 @@ Source references:
 
 ## Issue #54 verification — September 11
 
-**Confirmed and fixed for 3.1.3:** LFTR Fuel 3 generated 32,768 EU/t (1A LuV)
+**Confirmed and fixed for 3.1.4:** LFTR Fuel 3 generated 32,768 EU/t (1A LuV)
 instead of 524,288 EU/t (1A UV). The fuel table already contained the correct
 10,485,760 EU/L. The calculation parsed `Net Amps (LuV)` with `[A-Z]+`, missed
 the lowercase `u`, and silently fell back to EV. Fuels 1 and 2 matched and
@@ -222,7 +223,7 @@ setting. `MTECokeOven` instead assigns `mMaxProgresstime = recipe.mDuration`.
 The table now uses the existing slices-control distinction for overclocking
 as well as parallels: industrial ovens retain normal overclocks; brick ovens
 get none. Covered alongside the issue's industrial cases in
-`src/lib/machines/industrial-coke-oven.test.ts`, pending 3.1.3.
+`src/lib/machines/industrial-coke-oven.test.ts`, included in 3.1.4.
 
 ## Structure image audit — September 11
 
@@ -270,3 +271,22 @@ generator render shipped by the app.
 - Tests: `src/lib/machines/utupu-tanuri.test.ts` covers both modes, heat minima,
   old/default coil selections, runtime bypass and the singleblock boundary.
   Structure-art tests prevent the incorrect render from returning.
+
+## EBF quantity override verification — September 11
+
+The two supplied aluminium plans have identical recipe bodies and machine settings.
+The first stores an alumina input override of 5 on a recipe requiring 10; the
+second stores 10 after the intermediate drawer is removed. Carbon remains 3,
+aluminium output 4 and carbon dioxide output 3,000 L per batch. The old
+connection helper accepted the feeder resource amount as the receiving input
+amount. The grouped-input repair in `ebbdfc4` removes that shortcut and always
+uses the receiving slot and its supported alternative ratio.
+
+A local probe ran both supplied JSON files through `normalizeLoadedProject`
+and the actual throughput solver. Both repair to 10 alumina, with alumina
+consumption exactly 2.5 times aluminium production. A separate buffer-insertion
+probe passed a 2,000 L resource batch into `insertStorageOnEdge` for a recipe
+requiring 1,000 L oxygen per dust. Inserting the buffer retained the 1,000:1
+ratio and positive ingot production. The oxygen screenshots establish the
+reported doubling; the synthetic probe verifies the corresponding mutation
+path without claiming to have the original oxygen plan.

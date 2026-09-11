@@ -53,10 +53,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-11",
     headline: "Clearer machine controls",
     notes: [
-      "Tap multiblock power settings to open *touch controls* for amps, voltage and raw EU/t alongside the power breakdown.",
-      "Recipe spacing and circuit icons are clearer, with icons *sized consistently in Firefox and Chrome*.",
+      "Machine cards gain *touch power controls*, clearer recipe spacing and circuit icons, and consistent icon sizes in Firefox and Chrome.",
       "Older setups keep their *original operating voltage and amps* when first converted to the new power controls.",
       "Net resources return to *the correct side*: deficits under Inputs and surpluses under Outputs.",
+      "Private designs retry account saves after interruptions and show *whether the account has a copy*.",
     ],
   },
   {

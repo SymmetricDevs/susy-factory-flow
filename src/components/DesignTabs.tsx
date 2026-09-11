@@ -10,6 +10,8 @@ import { openDesigns, type DesignFolder } from "@/lib/designs/design-library";
 import type { EntryIcon } from "@/lib/model/types";
 import { FLUID_ICON_SCALE, ResourceIcon } from "./nei/ResourceIcon";
 import { useLibrarySyncStore } from "@/lib/library/library-sync";
+import { accountSaveStatus } from "@/lib/library/save-status";
+import { useCommunityAuthStore } from "@/store/community-auth-store";
 import { leaveLibrary, openLibrary, useLibraryTab } from "@/lib/library/library-tab";
 import {
   closeWelcomeTab,
@@ -49,6 +51,8 @@ export function DesignTabs() {
   const saveState = useDesignStore((state) => state.saveState);
   const libraryError = useDesignStore((state) => state.error);
   const sync = useLibrarySyncStore();
+  const signedIn = useCommunityAuthStore((state) => Boolean(state.user));
+  const accountSave = accountSaveStatus(signedIn, sync);
   const switchToDesign = useDesignStore((state) => state.switchToDesign);
   const addDesign = useDesignStore((state) => state.addDesign);
   const copyDesign = useDesignStore((state) => state.copyDesign);
@@ -726,8 +730,9 @@ export function DesignTabs() {
         <span
           className={[
             "ml-auto max-w-[360px] shrink-0 truncate pl-1 text-[11px]",
-            libraryError || sync.state === "error" ? "text-red-400" : "text-fg-muted",
+            libraryError || accountSave.error ? "text-red-400" : "text-fg-muted",
           ].join(" ")}
+          title={libraryError ?? sync.message ?? accountSave.text}
         >
           {publicView && !coveringPage ? "View only" : libraryError
             ? libraryError
@@ -735,13 +740,7 @@ export function DesignTabs() {
               ? "Saving…"
               : saveState === "error"
                 ? "Save failed"
-                : sync.state === "syncing"
-                  ? "Syncing…"
-                  : sync.state === "error"
-                    ? `Sync failed: ${sync.message ?? ""}`
-                    : sync.state === "idle"
-                      ? "Synced"
-                      : "Saved"}
+                : accountSave.text}
         </span>
       </div>
 

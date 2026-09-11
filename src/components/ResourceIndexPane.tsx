@@ -334,10 +334,9 @@ export function ResourceIndexPane({
           {/* One question, six answers, one of them on at a time. There is no
               "fluids a bee makes" to ask for, so there is no second row to pair
               this with; the view toggle sits with the search box it belongs to. */}
-          {/* Four across, two rows, always shown (the fold-away key and the
-              mod filter went on 2026-09-06): the six filters, then the sort
-              across the last two cells so the grid closes square. */}
-          <div className="mt-1 grid grid-cols-4 gap-1">
+          {/* Three across, two rows: keep the full filter names readable in
+              the narrow items panel. Sort gets its own full-width row. */}
+          <div className="mt-1 grid grid-cols-3 gap-1">
             {RESOURCE_FILTER_CHOICES.map((choice) => (
               <button
                 key={choice.mode}
@@ -360,7 +359,7 @@ export function ResourceIndexPane({
               onChange={(event) => setResourceSort(event.target.value as ResourceSortMode)}
               title="Sort results"
               aria-label="Sort results"
-              className="col-span-2 h-6 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-[11px] text-neutral-100 outline-none"
+              className="col-span-3 h-6 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-[11px] text-neutral-100 outline-none"
             >
               <option value="popular">Most popular</option>
               <option value="relevance">Best match</option>

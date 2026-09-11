@@ -543,7 +543,7 @@ interface Figure {
 }
 
 /** The two right-hand columns share one width so every row lines up. */
-const COLUMN_CLASS = "w-[76px] shrink-0 whitespace-nowrap text-right tabular-nums";
+const COLUMN_CLASS = "w-[80px] shrink-0 whitespace-nowrap text-right tabular-nums";
 const COLUMN_HEAD_CLASS =
   COLUMN_CLASS + " text-[10px] font-bold uppercase tracking-wider text-[var(--mc-ink-muted)]";
 

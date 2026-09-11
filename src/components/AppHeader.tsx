@@ -33,7 +33,7 @@ import { BoardActions } from "./BoardActions";
 import { ExportImageDialog } from "./export/ExportImageDialog";
 import { DevMenu } from "./DevMenu";
 import { SettingsDialog } from "./SettingsDialog";
-import { HeaderLinks, ReportBugButton, SupportButton } from "./HeaderLinks";
+import { HeaderLinks, SupportButton } from "./HeaderLinks";
 
 /**
  * The pack picker's switch. See the note where it renders; flip this back to
@@ -130,7 +130,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   const isCompact = useIsCompactViewport();
 
   return (
-    <header className="app-header relative flex h-[22px] shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 compact:h-auto compact:flex-wrap compact:gap-y-0">
+    <header className="app-header relative flex h-[30px] shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 compact:h-auto compact:flex-wrap compact:gap-y-0">
       <h1 className="flex min-w-0 items-center gap-2 text-sm font-bold tracking-tight">
         <span className="shrink-0">
           GTNH <span className="text-cyan-500">Planner</span>
@@ -210,7 +210,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
         // The global `font: inherit` reset outranks any text-* on a button, so
         // the cluster sets the one size every control in it renders at.
         <div className="app-header-tools flex shrink-0 items-center gap-3 text-xs">
-          <HeaderLinks />
           <BoardActions
             onShare={() => setShareOpen(true)}
             onExportImage={() => setExportOpen(true)}
@@ -227,10 +226,10 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             <Settings className="h-3.5 w-3.5" />
           </button>
           <SupportButton />
+          <HeaderLinks />
           {/* No What's new button up here since 2026-09-06: the version chip
               at the other end of the bar opens the same notes and wears the
               unread dot, and the bar was two labelled buttons too wide. */}
-          <ReportBugButton />
           <AccountMenu />
         </div>
       )}

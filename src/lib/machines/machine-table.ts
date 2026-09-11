@@ -1020,9 +1020,11 @@ const MACHINES: Record<string, MachineBehaviour> = {
     // "Coke Oven" is what datasets before the gtpp.recipe.cokeoven rename
     // called this machine, so saved plans still carry it. The Railcraft brick
     // Coke Oven shares that name but never the slices control, which is what
-    // the parallels guard below keys on.
+    // the parallel and overclock guards below key on.
     aliases: ["Coke Oven"],
-    overclock: OVERCLOCK.normal(),
+    // MTECokeOven assigns recipe.mDuration directly. A voltage left on an
+    // old/imported brick-oven node must not buy it free overclocks.
+    overclock: (c) => c.value(COKE_SLICES) > 0 ? OVERCLOCK.normal() : OVERCLOCK.none(),
     // Coils are a 2% EU discount each, compounding, and nothing else:
     // MTEIndustrialCokeOven bills 0.98^(coil tier + 1), cupronickel included.
     power: (c) => 0.98 ** (c.tier(COIL) + 1),

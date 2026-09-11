@@ -9,6 +9,50 @@ Release 3.1.3 is pending deployment; production was 3.1.2 when checked September
 | 1 | Neutron Activator | Astralzx: height should be adjustable; tall builds are unrealistically slow. | Fixed in `7a7021b`, pending 3.1.3. Direct integer entry from 4 pipe casings with no structural maximum; game-source duration rounding and sub-tick throughput. Accelerator power and neutron kinetic energy regulation remain unmodeled. |
 | 2 | Utupu-Tanuri | Lord Peverell, September 9: missing coil benefits and incorrect structure picture. | Pending 3.1.3. Vacuum Furnace now matches the existing Utupu-Tanuri definition; both modes receive coils, 2.2x speed, half EU, up to 4 power-limited parallels, heat discounts and perfect overclocks. Picker starts at recipe heat. Removed the incorrect render; the actual controller icon is used. |
 | 3 | Chemical Plant, Boldarnator, Industrial Sledgehammer | Screenshot shows wrong structure images on all three cards. | Pending 3.1.3. Verified the wiki images and rotated the three existing PNGs to their correct names. Five other renders from the same import batch match the wiki. |
+| 4 | Coke Oven / Industrial Coke Oven | [Issue #58](https://github.com/jackwrichards/gtnh-factory-flow/issues/58), reported against 3.0.0: missing oven, wrong art, doubled EV output. | Mixed findings; see below. Both maps are published, the art was already fixed, and the linked plan explicitly supplies 2A. A separate brick-oven legacy-voltage bug was reproduced and fixed for 3.1.3. |
+
+## Issue #58 verification — September 11
+
+Checked the live 3.1.2 site's published 2.9.0-beta-2 recipe index and recipe
+API, the [linked Benzene plan](https://gtnhplanner.com/?plan=4a49bd06-a91a-441f-950f-ac4e37b04dfd),
+and local GT5-Unofficial source revision `8e23867`.
+
+| Claim | Finding |
+|---|---|
+| Coke Oven disappears after replacement | The original pre-replacement plan is not supplied, so the historical click path cannot be reconstructed. The old industrial map was also named Coke Oven; `06190f5` renamed `gtpp.recipe.cokeoven` to Industrial Coke Oven on August 23. The shared plan uses that industrial map. The brick oven is a separate recipe family and cannot substitute for a Wood Tar recipe. |
+| Coke Oven completely removed | Not true of the current published dataset: 8 Coke Oven recipes and 63 Industrial Coke Oven recipes. A live charcoal search returns two brick-oven recipes, including logs to 1 charcoal + 250 L creosote in 1800 ticks at 0 EU. A Wood Tar search correctly omits the brick oven. |
+| Wrong Industrial Coke Oven image | Valid historical report, already fixed in `c1a07ee` on September 9, after the issue was opened. The Industrial Coke Oven and electrolyzer structure files had been swapped. The current image matches the wiki's `ICO2.png`; no new swap is needed. |
+| One EV hatch becomes 2A and doubles production | The game does clamp one regular hatch to 1A, and the current planner preserves that through migration. However, the supplied plan stores `powerEuT: 4096`, `overclockTier: EV`, and `energyHatches: 2`. The explicit budget takes precedence and correctly migrates to 2A at EV. The saved snapshot does not establish how that budget was originally introduced; do not overwrite explicit budgets globally. |
+
+For the reported recipe (`gtpp.recipe.cokeoven:6661ae242651d73a`), the
+exported base is 512 ticks at 60 EU/t, with 16 logs producing 20 charcoal and
+1500 L Wood Tar. The plan uses Kanthal coils and the default one-slice,
+heat-resistant casing (16 parallels). At full supply and with outputs accepted:
+
+| Working supply | Operation time | Charcoal/s | Wood Tar L/s | Running draw EU/t |
+|---|---:|---:|---:|---:|
+| 1A EV = 2048 EU/t | 512 ticks | 12.5 | 937.5 | 921.984 |
+| Saved 2A EV = 4096 EU/t | 256 ticks | 25 | 1875 | 3687.936 |
+
+These are per-machine capacity figures, not a guarantee that the complete
+Benzene plan has enough inputs and downstream capacity. Two amps buy one normal
+overclock after paying for the 16 parallels. To model the reporter's stated
+single regular EV hatch, the card should be EV / 1A (2048 EU/t).
+
+Source: `MTEIndustrialCokeOven.createProcessingLogic` uses the 0.98-per-coil-tier
+EU modifier and its structural parallel count. Inherited
+`MTEMultiBlockBase.setProcessingLogicPower` clamps a lone regular hatch to 1A.
+The current source model reproduces both rows above; no change to industrial
+hatch math was needed.
+
+**Additional reproduced bug:** the legacy `Coke Oven` alias let an unpowered
+brick oven inherit industrial overclocks when an old node still carried a
+voltage tier. An 1800-tick brick recipe became 225 ticks with a leftover EV
+setting. `MTECokeOven` instead assigns `mMaxProgresstime = recipe.mDuration`.
+The table now uses the existing slices-control distinction for overclocking
+as well as parallels: industrial ovens retain normal overclocks; brick ovens
+get none. Covered alongside the issue's industrial cases in
+`src/lib/machines/industrial-coke-oven.test.ts`, pending 3.1.3.
 
 ## Structure image audit — September 11
 

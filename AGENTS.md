@@ -353,6 +353,13 @@ Working notes for future agents on GTNH Factory Flow.
   discount plus perfect overclocks, and that is what we implement. Machines
   that diverge on purpose are listed in `machine-table.test.ts`.
 - Machine config controls are structured data, not frontend hardcoding. Use `machineConfigControls`.
+  - The legacy `Coke Oven` alias also matches the unpowered brick oven.
+    Its missing `cokeOvenSlices` control means NO overclocks and one parallel;
+    leftover voltage settings on old nodes must not accelerate it. The
+    Industrial Coke Oven keeps ordinary overclocks with the slices control.
+    Issue #58's supplied plan stores an explicit 4096 EU/t budget (2A EV),
+    not a lone 1A EV hatch; do not globally halve saved power budgets to fix
+    that report. See `docs/machine-feedback-audit.md`.
   - Utupu-Tanuri is BOTH `Multiblock Dehydrator` and `Vacuum Furnace` in
     the dataset. Keep both aliases on the same table entry: the latter's
     17 recipes previously bypassed the coils and used runtime-only math.

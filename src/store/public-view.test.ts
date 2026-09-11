@@ -32,12 +32,20 @@ describe("public viewing edit boundary", () => {
     expect(after.redoHistory).toEqual([]);
   });
 
-  it("allows inspection and restores editing when a personal design opens", () => {
+  it("blocks resource browsing until a personal design opens", () => {
     const store = useFactoryStore.getState();
     store.loadViewedProject(createEmptyProject());
-    store.browseResource({ kind: "item", id: "test", displayName: "Test" }, "recipes");
-    expect(useFactoryStore.getState().recipeBrowserResource?.id).toBe("test");
+    const resource = { kind: "item" as const, id: "test", displayName: "Test" };
+    for (const mode of ["recipes", "uses"] as const) {
+      store.browseResource(resource, mode);
+      expect(useFactoryStore.getState().recipeBrowserResource).toBeUndefined();
+    }
     store.markHydratedProject(createEmptyProject());
+    for (const mode of ["recipes", "uses"] as const) {
+      store.browseResource(resource, mode);
+      expect(useFactoryStore.getState().recipeBrowserResource?.id).toBe("test");
+      expect(useFactoryStore.getState().recipeBrowserMode).toBe(mode);
+    }
     store.renameProject("My editable copy");
     expect(useFactoryStore.getState().isReadOnly).toBe(false);
     expect(useFactoryStore.getState().project.name).toBe("My editable copy");

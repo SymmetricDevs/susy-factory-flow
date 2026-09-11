@@ -3796,7 +3796,7 @@ export function PortChip({
   const hasBurst = isInput && wantRatio > 1.005;
 
   return (
-    <div data-viewer-inspect
+    <div
       className={[
         // 40px — two grid cells, fixed. The row is the board's vertical unit:
         // rails have no gaps and the head above them is a whole number of

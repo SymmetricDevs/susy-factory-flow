@@ -2,8 +2,8 @@
 
 import { useEffect, type RefObject, type SyntheticEvent } from "react";
 
-/** Native inert controls also stay out of keyboard focus. Resource inspection
- * and board-window navigation opt in; the factory store is the edit backstop. */
+/** Native inert controls also stay out of keyboard focus. Board-window
+ * navigation opts in; the factory store is the edit backstop. */
 export function useViewerLock(ref: RefObject<HTMLDivElement | null>, locked: boolean) {
   useEffect(() => {
     const root = ref.current;

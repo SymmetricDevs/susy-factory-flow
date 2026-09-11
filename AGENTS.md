@@ -1271,8 +1271,9 @@ Working notes for future agents on GTNH Factory Flow.
 - `factory-store` guards project edits while `isReadOnly`; loading a personal
   design releases it. System dataset hydration and opening/folding board
   windows may update the transient view, without edit history. The UI lock
-  (`use-viewer-lock.ts`) leaves resource inspection and marked board navigation
-  available; `data-viewer-inspect` must never wrap editing controls.
+  (`use-viewer-lock.ts`) leaves marked board navigation available. Resource
+  clicks and shortcuts must not open recipe search in view mode;
+  `data-viewer-inspect` must never wrap resource ports or editing controls.
 - A viewer keeps its public URL across reloads; making a copy removes it.
   An owner's posted design still follows autosaves through `post-follow.ts`.
 

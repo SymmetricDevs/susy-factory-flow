@@ -1253,6 +1253,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
     scheduleIdleBrowserWork(() => saveResourceHistory([]));
   },
   browseResource: (resource, mode = "recipes") => {
+    if (get().isReadOnly) return;
     let nextHistory: RecipeBrowserResource[] | undefined;
     set((state) => {
       const recipeResourceHistory = updateResourceHistory(state.recipeResourceHistory, resource);

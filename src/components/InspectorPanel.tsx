@@ -17,7 +17,7 @@ import "./inspector/panel.css";
 import { ProductTargetRow } from "./inspector/ProductTargetRow";
 import { MachineShoppingList } from "./MachineShoppingList";
 import { formatCompact } from "@/lib/model";
-import { makeResourceKey } from "@/lib/model/resources";
+import { makeResourceKey, formatPowerValue } from "@/lib/model/resources";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import {
   energyPerUnit,
@@ -75,11 +75,12 @@ const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
 /**
  * Rates here obey the board's /s /min /hr switch like every other surface.
- * The unit is a module singleton and the store re-solves when it changes, so
- * these read the live setting at render with nothing to thread through.
+ * Formatters read the unit singleton; rows subscribe to the display dials
+ * and repaint without solving again.
  */
 function formatRateValue(perSecond: number, kind: string = "item"): string {
-  return formatCompact(perSecond * rateMultiplierForKind(kind));
+  const value = perSecond * rateMultiplierForKind(kind);
+  return kind === "power" ? formatPowerValue(value) : formatCompact(value);
 }
 
 function formatSignedRate(perSecond: number, kind: string, sign: number): string {
@@ -1312,6 +1313,7 @@ const FlowChartRow = memo(function FlowChartRow({
   onExpand: (resourceKey: string, top: number, right: number, startWidth: number) => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
+  useRateDisplayUnits();
   return (
     <div
       data-resource-chart={balance.key}
@@ -1443,6 +1445,8 @@ const FlowResourceRow = memo(function FlowResourceRow({
   onMarkChanged?: () => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
+  // Memoized rows keep the same balance when only a display dial changes.
+  useRateDisplayUnits();
   const readOnly = useFactoryStore(state => state.isReadOnly);
   const toneStyle = TONE_STYLES[tone];
   const value = getFlowRowValue(sectionId, balance);

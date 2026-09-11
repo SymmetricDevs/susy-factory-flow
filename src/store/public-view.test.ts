@@ -42,6 +42,10 @@ describe("public viewing edit boundary", () => {
     store.setRateUnit("hour");
     expect(useFactoryStore.getState().rateUnit).toBe("hour");
     expect(useFactoryStore.getState().project).toBe(before.project);
+    store.setPowerDisplayUnit("HV");
+    expect(useFactoryStore.getState().powerDisplayUnit).toBe("HV");
+    expect(useFactoryStore.getState().project).toBe(before.project);
+    expect(useFactoryStore.getState().lastResult).toBe(before.lastResult);
     store.setChecklistMode(true);
     store.toggleChecklist("cards", [before.project.nodes[0].id]);
     const checked = useFactoryStore.getState();
@@ -59,6 +63,7 @@ describe("public viewing edit boundary", () => {
     expect(useFactoryStore.getState().checklistMode).toBe(false);
     expect(useFactoryStore.getState().project.checklist).toBeUndefined();
     store.setRateUnit("second");
+    store.setPowerDisplayUnit("eu");
   });
 
   it("blocks resource browsing until a personal design opens", () => {

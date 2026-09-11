@@ -7,7 +7,9 @@ import { isCompactViewport } from "@/lib/compact-view";
 import { ArrowRight, Equal, X } from "lucide-react";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { GT_VOLTAGE_TIERS, getVoltageTierMaxEuT } from "@/lib/model/tiers";
-import { formatCompact } from "@/lib/model";
+import { formatCompact, formatPowerValue } from "@/lib/model";
+import { powerDisplayFromEuT, powerDisplaySuffix } from "@/lib/model/rate-unit";
+import { useRateDisplayUnits } from "@/store/factory-store";
 import { getNodePowerReport } from "@/lib/solver/power-report";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
@@ -124,6 +126,8 @@ export function PowerReadout({
   shared,
   compact = false,
 }: { recipe: Recipe; node: FactoryNode; compact?: boolean } & Consumption) {
+  useRateDisplayUnits();
+  const displayPower = (euT: number) => `${formatPowerValue(powerDisplayFromEuT(euT))} ${powerDisplaySuffix()}`;
   const report = getNodePowerReport(recipe, node);
   const working = useMemo(
     () => describePowerWorking(recipe, node, report.poolEuT),
@@ -318,7 +322,7 @@ export function PowerReadout({
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-fg-muted">Demand for this card</span>
                 <strong className="tabular-nums text-fg">
-                  {formatCompact(node.enabled ? plannedEuT : 0)} EU/t
+                  {displayPower(node.enabled ? plannedEuT : 0)}
                 </strong>
               </div>
               <p className="text-fg-muted">
@@ -333,14 +337,14 @@ export function PowerReadout({
         ) : compact ? (
           <div className="flex flex-wrap justify-between gap-1">
             <span>Usage: {number(usage * 100)}%</span>
-            <span>Average: {formatCompact(average)} EU/t per machine</span>
+            <span>Average: {displayPower(average)} per machine</span>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-[auto_minmax(24px,1fr)_auto_minmax(24px,1fr)_auto_minmax(24px,1fr)_auto] items-center gap-x-1 tabular-nums" aria-label="Average power consumption per machine">
               <div className="min-w-0">
                 <div className="text-fg-muted">Supplied</div>
-                <div className="whitespace-nowrap font-medium text-fg-subtle">{formatCompact(report.poolEuT)} EU/t</div>
+                <div className="whitespace-nowrap font-medium text-fg-subtle">{displayPower(report.poolEuT)}</div>
                 <div className="flex h-[18px] items-center gap-1 text-fg-muted">
                   {raw ? "Available" : <>{number(report.amps)}A <TierBadge tier={report.tier} /></>}
                 </div>
@@ -348,7 +352,7 @@ export function PowerReadout({
               <ArrowRight aria-hidden className="h-5 w-5 justify-self-center text-fg-muted" strokeWidth={2.5} />
               <div className="min-w-0">
                 <div className="text-fg-muted">{shared ? "Recipe mix" : "Actual draw"}</div>
-                <div className="whitespace-nowrap font-medium text-fg">{formatCompact(runningDraw)} EU/t</div>
+                <div className="whitespace-nowrap font-medium text-fg">{displayPower(runningDraw)}</div>
                 <div className="flex h-[18px] items-center gap-1 text-fg-muted">
                   {report.state !== "ok" ? "Blocked" : raw ? "While running" : <>{number(runningDraw / voltage)}A <TierBadge tier={report.tier} /></>}
                 </div>
@@ -359,9 +363,9 @@ export function PowerReadout({
                 <div className="font-medium text-fg">{number(usage * 100)}%</div>
               </div>
               <Equal aria-hidden className="h-5 w-5 justify-self-center text-fg-muted" strokeWidth={2.5} />
-              <div className="min-w-0" title={machineCount > 1 ? formatCompact(average * machineCount) + " EU/t average for this card" : "Average draw per machine"}>
+              <div className="min-w-0" title={machineCount > 1 ? displayPower(average * machineCount) + " average for this card" : "Average draw per machine"}>
                 <div className="text-fg-muted">Average draw</div>
-                <div className="whitespace-nowrap font-semibold text-fg">{formatCompact(average)} EU/t</div>
+                <div className="whitespace-nowrap font-semibold text-fg">{displayPower(average)}</div>
                 <div className="flex h-[18px] items-center gap-1 text-fg-muted">
                   {raw ? "Per machine" : <>{number(average / voltage)}A <TierBadge tier={report.tier} /></>}
                 </div>

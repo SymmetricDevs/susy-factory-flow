@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import {
@@ -118,7 +118,31 @@ describe("InspectorPanel", () => {
   // This project's vitest config sets neither `globals` nor a setup file, so
   // testing-library's automatic cleanup never registers and renders would
   // otherwise pile up in the same document.
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    useFactoryStore.getState().setRateUnit("second");
+    useFactoryStore.getState().setPowerDisplayUnit("eu");
+  });
+
+  it("updates memoized resource rows when time and power units change without a new solve", async () => {
+    seedResult({ externalInputs: [makeBalance(1, { deficitPerSecond: 10 })] });
+    useFactoryStore.setState({ lastResult: { ...useFactoryStore.getState().lastResult, totalEuT: 100 } });
+    const books = useFactoryStore.getState().lastResult;
+    const { container } = render(<InspectorPanel />);
+    const reading = () => container.querySelector('[data-resource-row="item:resource_1"] .inspector-resource-rate')?.textContent;
+    await waitFor(() => expect(reading()).toContain("10/s"));
+    act(() => useFactoryStore.getState().setRateUnit("minute"));
+    await waitFor(() => expect(reading()).toContain("600/min"));
+    act(() => useFactoryStore.getState().setRateUnit("eu"));
+    await waitFor(() => expect(reading()).toContain("200EU/Item"));
+    act(() => useFactoryStore.getState().setPowerDisplayUnit("LV"));
+    await waitFor(() => expect(reading()).toContain("6.25A LV/Item"));
+    act(() => useFactoryStore.getState().setPowerDisplayUnit("HV"));
+    await waitFor(() => expect(reading()).toContain("0.39A HV/Item"));
+    act(() => useFactoryStore.getState().setPowerDisplayUnit("MAX"));
+    await waitFor(() => expect(reading()).toContain("<0.01A MAX/Item"));
+    expect(useFactoryStore.getState().lastResult).toBe(books);
+  });
 
   it.each([[10, 4, "−6"], [4, 10, "+6"], [4, 4, "0"]] as const)(
     "shows raw input %s and output %s and switches all sections to net %s",

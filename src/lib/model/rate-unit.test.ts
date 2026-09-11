@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { formatPowerValue } from "./resources";
 
 import {
   formatPortRate,
@@ -11,13 +12,52 @@ import {
   energyPerUnitDisplayValue,
   energyPerUnitSuffix,
   isEnergyRateUnit,
+  powerDisplayFromEuT,
+  powerDisplaySuffix,
+  isPowerDisplayUnit,
   rateUnitMultiplier,
   rateUnitSuffix,
+  setActivePowerDisplayUnit,
   setActiveRateUnit,
 } from "./rate-unit";
 
 afterEach(() => {
   setActiveRateUnit("second");
+  setActivePowerDisplayUnit("eu");
+});
+
+describe("power display units", () => {
+  it("bounds tiny displayed power without hiding real flow or changing zero", () => {
+    setActivePowerDisplayUnit("MAX");
+    expect(formatPowerValue(powerDisplayFromEuT(480))).toBe("<0.01");
+    expect(formatSlotRate(480 * 20, "power")).toBe("<0.01 A MAX");
+    expect(formatPowerValue(0)).toBe("0");
+    expect(formatPowerValue(0.009999)).toBe("<0.01");
+    expect(formatPowerValue(0.01)).toBe("0.01");
+    expect(formatPowerValue(0.001, true)).toBe("<0.01");
+    expect(formatPowerValue(0.01, true)).toBe("0.01");
+    expect(formatPowerValue(-0.001)).toBe(">-0.01");
+  });
+  it("converts consumption and power ports without changing item or fluid rates", () => {
+    setActiveRateUnit("minute");
+    setActivePowerDisplayUnit("HV");
+    expect(powerDisplayFromEuT(1280)).toBe(2.5);
+    expect(powerDisplaySuffix()).toBe("A HV");
+    expect(formatSlotRate(25600, "power")).toBe("2.5 A HV");
+    expect(formatSlotRate(2, "item")).toBe("120/min");
+    expect(formatSlotRate(2, "fluid")).toBe("120 L/min");
+    setActivePowerDisplayUnit("eu");
+    expect(powerDisplayFromEuT(1280)).toBe(1280);
+    expect(formatSlotRate(25600, "power")).toBe("1.28k EU/t");
+  });
+
+  it("accepts only real display choices from browser storage", () => {
+    expect(isPowerDisplayUnit("eu")).toBe(true);
+    expect(isPowerDisplayUnit("MAX")).toBe(true);
+    expect(isPowerDisplayUnit("DEMO")).toBe(false);
+    expect(isPowerDisplayUnit("bad-tier")).toBe(false);
+    expect(isPowerDisplayUnit(null)).toBe(false);
+  });
 });
 
 describe("rate units", () => {
@@ -75,11 +115,20 @@ describe("EU per unit made", () => {
   });
 });
 
-describe("energy units stay independent of hatch voltage", () => {
-  it("always reads energy in EU", () => {
+describe("EU per unit under the amps dial", () => {
+  afterEach(() => {
+    setActivePowerDisplayUnit("eu");
+  });
+
+  it("reads the canvas figure in the chosen tier's amps, the browser's stays EU", () => {
     setActiveRateUnit("eu");
-    expect(formatPortRate({ kind: "item", energyPerUnit: 200 }, 10)).toBe("200 EU/Item");
-    expect(energyPerUnitDisplayValue(200)).toBe(200);
+    setActivePowerDisplayUnit("LV");
+    // 200 EU an item over LV's 32 EU/t is 6.25 LV amps an item.
+    expect(formatPortRate({ kind: "item", energyPerUnit: 200 }, 10)).toBe("6.25 A LV/Item");
+    expect(energyPerUnitDisplayValue(200)).toBeCloseTo(6.25);
+    // The plain pair the recipe browser reads never follows the dial.
     expect(energyPerUnitSuffix("item")).toBe(" EU/Item");
+    setActivePowerDisplayUnit("eu");
+    expect(formatPortRate({ kind: "item", energyPerUnit: 200 }, 10)).toBe("200 EU/Item");
   });
 });

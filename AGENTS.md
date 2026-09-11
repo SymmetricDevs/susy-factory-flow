@@ -1460,6 +1460,16 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## The Three Modes (Build, Solve, Pool) And The Rules That Went
 
+- The board-wide POWER DISPLAY selector is restored (Jack, 2026-09-11):
+  beside the rate key, EU/t or amps of a chosen voltage tier, with click
+  selection and wheel stepping. It is separate from each machine's hatch
+  voltage and amperage controls. `powerDisplayUnit` and `useRateDisplayUnits`
+  repaint the numbers without changing the project or solving again.
+  Browser preference: `gtnh-factory-flow.power-display-unit.v1`.
+  Nonzero power readings below 0.01 display `<0.01`; zero stays zero.
+  Memoized inspector rows subscribe to both display dials themselves.
+  Do not remove this display setting when changing machine power controls.
+
 - TOOLBAR LAYOUT since the rework (Jack, 2026-09-06): LEFT row = undo
   pair, rate keys, pool mode's product tray (`PoolSpawnKeys`, the whole
   tray slides in only while pool is on, so no empty plate shows). RIGHT

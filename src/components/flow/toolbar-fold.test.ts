@@ -12,17 +12,24 @@ describe("toolbarFoldFor", () => {
 
   it("folds the paint row first: a 1400px window with both columns open", () => {
     // 1400 - 344 - 332: the width that buried the paint tray under POWER.
-    // With per-card hatch power, the build row is 218 px and the paint row 484.
-    // Both rows fit unfolded from 750 px.
-    expect(toolbarFoldFor(854, false)).toEqual({
+    // Reserve the centered modes as well as the two side rows.
+    expect(toolbarFoldFor(1160, false)).toEqual({
       build: false,
       paint: false,
       paintFoldsAll: false,
     });
-    expect(toolbarFoldFor(740, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
+    expect(toolbarFoldFor(1120, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
     expect(toolbarFoldFor(600, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
-    // A common laptop has enough room to leave the narrower build row open.
-    expect(toolbarFoldFor(750, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
+    // A narrower board folds both rows.
+    expect(toolbarFoldFor(750, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
+  });
+
+  it("folds before the left keys reach the centered mode tray", () => {
+    // These widths used to leave both visible and overlapping.
+    for (const width of [900, 1000, 1080]) {
+      expect(toolbarFoldFor(width, false).build).toBe(true);
+    }
+    expect(FOLD_BUILD_BELOW).toBeGreaterThanOrEqual(2 * (350 + 12 + 32) + 300);
   });
 
   it("folds the build row too when even the folded paint trigger crowds it", () => {

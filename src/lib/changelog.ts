@@ -47,6 +47,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.2.0",
+    date: "2026-09-11",
+    headline: "Power display units return",
+    notes: [
+      "Show power as *EU/t or amps at any voltage tier* using the selector beside the rate unit. Your choice is remembered in this browser.",
+      "Power readings below 0.01 show *<0.01*, while zero stays zero.",
+      "Resource rows update immediately when you change display units or the amps tier, including energy per item or litre.",
+      "The board toolbar compacts earlier to keep its buttons clear of the centered mode switch at different window sizes and zoom levels.",
+    ],
+  },
+  {
     version: "3.1.4",
     date: "2026-09-11",
     headline: "Machine accuracy, wiring, and clearer totals",

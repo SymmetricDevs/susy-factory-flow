@@ -124,6 +124,7 @@ const BUILD: HelpCard = {
   rows: [
     { icon: Undo2, text: "*Undo / redo* changes" },
     { chip: "/s", text: "Change the *rate unit*" },
+    { icon: Zap, text: "Show power as *EU/t or amps of a tier*" },
   ],
 };
 

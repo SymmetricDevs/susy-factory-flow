@@ -8,7 +8,7 @@ import type {
   StorageDrainMode,
   StorageThroughputResult,
 } from "@/lib/model/types";
-import { formatCompact, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
+import { formatCompact, formatPowerValue, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
 import { isDrainRole, storageRoleFor, type StorageRole } from "@/lib/model/storage-role";
 import {
   rateMultiplierForKind,
@@ -1067,6 +1067,7 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
 function formatCompactRate(value: number, kind: string): string {
   const scaled = value * rateMultiplierForKind(kind);
   const unit = rateSuffixForKind(kind).trimStart();
+  if (kind === "power") return `${formatPowerValue(scaled)} ${unit}`;
   const abs = Math.abs(scaled);
 
   // The floor is written per second and scaled with the unit, so "balanced"

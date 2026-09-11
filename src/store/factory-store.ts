@@ -30,6 +30,8 @@ import { playBoardSound, quietBoardSoundsFor, suppressBoardSound } from "@/lib/b
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import {
   setActiveRateUnit,
+  setActivePowerDisplayUnit,
+  type PowerDisplayUnit,
   type RateUnit,
 } from "@/lib/model/rate-unit";
 import { registerBooksSink, solveBooks, solveBooksNow } from "./solve-books";
@@ -245,6 +247,9 @@ interface FactoryStore {
   /** Board-wide display unit for rates: per tick / second / minute / hour. */
   rateUnit: RateUnit;
   setRateUnit: (unit: RateUnit) => void;
+  /** Display only: EU/t or equivalent amps at a chosen voltage. */
+  powerDisplayUnit: PowerDisplayUnit;
+  setPowerDisplayUnit: (unit: PowerDisplayUnit) => void;
   /** Recalculate the books by hand: what the solve key does while automatic recalculation is off. */
   solveNow: () => void;
   setProject: (project: FactoryProject) => void;
@@ -1068,6 +1073,14 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
     set({ rateUnit: unit });
   },
 
+  powerDisplayUnit: "eu",
+  setPowerDisplayUnit: (unit) => {
+    setActivePowerDisplayUnit(unit);
+    set({ powerDisplayUnit: unit });
+    try {
+      localStorage.setItem("gtnh-factory-flow.power-display-unit.v1", unit);
+    } catch { /* Storage can be unavailable; the display still works. */ }
+  },
   solveNow: () => {
     set({ lastResult: solveBooksNow(get().project) });
   },
@@ -6183,4 +6196,5 @@ registerBooksSink((result) => {
  */
 export function useRateDisplayUnits(): void {
   useFactoryStore((state) => state.rateUnit);
+  useFactoryStore((state) => state.powerDisplayUnit);
 }

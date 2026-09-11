@@ -10,7 +10,7 @@ import { GT_TIER_COLORS } from "./flow/tier-colors";
 import { useMachineHandlerIcons, type MachineHandlerIcon } from "./flow/machine-icons";
 import { machineArtPixels } from "./flow/MachinePicker";
 import { ResourceIcon } from "./nei/ResourceIcon";
-import { formatCompact, formatCompactStable } from "@/lib/model/resources";
+import { formatCompact, formatCompactStable, formatPowerValue } from "@/lib/model/resources";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import {
   buildMachineList,
@@ -271,17 +271,19 @@ function FigureCell({ figure, className }: { figure?: Figure; className?: string
     : made
       ? "text-emerald-300"
       : "";
-  const shownValue = steam ? value : powerDisplayFromEuT(Math.abs(value));
   const text = (shown: number, settled: boolean) => {
-    const number = settled ? formatCompact(shownValue) : formatCompactStable(shown);
+    const shownValue = steam ? shown : powerDisplayFromEuT(shown);
+    const number = steam
+      ? settled ? formatCompact(shownValue) : formatCompactStable(shown)
+      : formatPowerValue(shownValue, !settled);
     return net ? `${value >= 0 ? "+" : "-"}${number}` : made ? `+${number}` : number;
   };
   return (
     <span className={[COLUMN_CLASS, tone, className ?? ""].join(" ")}>
       {steam ? <SteamMark /> : <EuMark />}
       <MotionNumberText
-        values={[shownValue]}
-        render={(shown) => text(shown[0] ?? shownValue, shown[0] === shownValue)}
+        values={[Math.abs(value)]}
+        render={(shown) => text(shown[0] ?? Math.abs(value), shown[0] === Math.abs(value))}
       />
       <span className="ml-0.5 text-[8px] font-normal text-[var(--mc-ink-muted)]">
         {steam ? "L/s" : powerDisplaySuffix()}
@@ -428,11 +430,11 @@ function ListLine({
         {peakEuT !== undefined ? (
           <>
             <div className="text-[11px] leading-4 text-slate-300">
-              PEAK <span className="font-bold text-white">{formatCompact(peakEuT)} EU/t</span>
+              PEAK <span className="font-bold text-white">{formatPowerValue(powerDisplayFromEuT(peakEuT))} {powerDisplaySuffix()}</span>
             </div>
             <div className="text-[11px] leading-4 text-slate-300">
               AVG{" "}
-              <span className="font-bold text-white">{formatCompact(averageEuT ?? 0)} EU/t</span>
+              <span className="font-bold text-white">{formatPowerValue(powerDisplayFromEuT(averageEuT ?? 0))} {powerDisplaySuffix()}</span>
             </div>
           </>
         ) : null}

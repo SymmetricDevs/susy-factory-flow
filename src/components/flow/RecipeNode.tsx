@@ -62,6 +62,7 @@ import {
 } from "@/lib/solver/machine-effects";
 import {
   formatCompact,
+  formatPowerValue,
   formatCompactStable,
   formatRate,
   applyMachineHandlerToRecipe,
@@ -1358,8 +1359,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   const value = shown[0] ?? glancePowerCardEuT;
                   const figure =
                     value === glancePowerCardEuT
-                      ? formatCompact(powerDisplayFromEuT(glancePowerCardEuT))
-                      : formatCompactStable(powerDisplayFromEuT(value));
+                      ? formatPowerValue(powerDisplayFromEuT(glancePowerCardEuT))
+                      : formatPowerValue(powerDisplayFromEuT(value), true);
                   return powerCardMakes ? `+${figure}` : figure;
                 }}
               />
@@ -1401,8 +1402,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     // Same pact as the footer's POWER cell: stable widths
                     // mid-tween, the clean compact form at rest.
                     return value === glanceDrawEuT
-                      ? formatCompact(powerDisplayFromEuT(glanceDrawEuT))
-                      : formatCompactStable(powerDisplayFromEuT(value));
+                      ? formatPowerValue(powerDisplayFromEuT(glanceDrawEuT))
+                      : formatPowerValue(powerDisplayFromEuT(value), true);
                   }}
                 />
                 <span className="ml-1.5 text-[18px] font-semibold opacity-70">
@@ -1789,7 +1790,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                       title: "Machine power",
                       rows: [
                         { label: "Tier", value: powerReport.tier },
-                        { label: "Supply per machine", value: `${formatCompact(powerDisplayFromEuT(powerReport.poolEuT))} ${powerDisplaySuffix()}` },
+                        { label: "Supply per machine", value: `${formatPowerValue(powerDisplayFromEuT(powerReport.poolEuT))} ${powerDisplaySuffix()}` },
                         { label: "Recipes", value: String(1 + sectionRails.length) },
                       ],
                     }}
@@ -2110,14 +2111,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                             // is only a bill.
                             <Stat
                               label="Power"
-                              value={`${formatCompact(
-                                powerDisplayFromEuT(
+                              value={`${formatPowerValue(powerDisplayFromEuT(
                                   Math.abs(powerInfo.euPerTick) *
                                     projectNode.machineCount *
                                     Math.max(1, projectNode.parallel) *
                                     drawScale,
-                                ),
-                              )} ${powerDisplaySuffix()}`}
+                                ))} ${powerDisplaySuffix()}`}
                             />
                           ) : null}
                           {powerReport ? (
@@ -2149,9 +2148,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                             // switch like every draw figure on the board.
                             <Stat
                               label="Power"
-                              value={`${formatCompact(
-                                powerDisplayFromEuT(cropDrawEuT * drawScale),
-                              )} ${powerDisplaySuffix()}`}
+                              value={`${formatPowerValue(powerDisplayFromEuT(cropDrawEuT * drawScale))} ${powerDisplaySuffix()}`}
                             />
                           ) : null}
                           {machineParallelMultiplier > 1 && !parallelChipLifts ? (
@@ -3408,7 +3405,7 @@ function PowerEuSocketRow({
               <MotionNumberText
                 values={[totalEuT]}
                 render={(shown) =>
-                  `${formatCompact(powerDisplayFromEuT(shown[0] ?? totalEuT))} ${powerDisplaySuffix()}`
+                  `${formatPowerValue(powerDisplayFromEuT(shown[0] ?? totalEuT))} ${powerDisplaySuffix()}`
                 }
               />
             </span>
@@ -5827,9 +5824,9 @@ function PowerStat({
             view={{
               title: "Power",
               rows: [
-                { label: "Peak", value: `${formatCompact(powerDisplayFromEuT(sharedDraw.peakEuT))} ${powerDisplaySuffix()}` },
-                { label: "Average", value: `${formatCompact(powerDisplayFromEuT(sharedDraw.avgEuT))} ${powerDisplaySuffix()}` },
-                { label: "Supply per machine", value: `${formatCompact(powerDisplayFromEuT(report.poolEuT))} ${powerDisplaySuffix()}` },
+                { label: "Peak", value: `${formatPowerValue(powerDisplayFromEuT(sharedDraw.peakEuT))} ${powerDisplaySuffix()}` },
+                { label: "Average", value: `${formatPowerValue(powerDisplayFromEuT(sharedDraw.avgEuT))} ${powerDisplaySuffix()}` },
+                { label: "Supply per machine", value: `${formatPowerValue(powerDisplayFromEuT(report.poolEuT))} ${powerDisplaySuffix()}` },
               ],
               reason: `${sharedDraw.recipes} recipes share this machine. Peak is the hungriest recipe's draw; average weights each by its share of the time.`,
             }}
@@ -5879,8 +5876,8 @@ function PowerStat({
                 values={[drawEuT]}
                 render={(shown) =>
                   shown[0] === drawEuT
-                    ? formatCompact(powerDisplayFromEuT(drawEuT))
-                    : formatCompactStable(powerDisplayFromEuT(shown[0] ?? drawEuT))
+                    ? formatPowerValue(powerDisplayFromEuT(drawEuT))
+                    : formatPowerValue(powerDisplayFromEuT(shown[0] ?? drawEuT), true)
                 }
               />
               {/* The unit rides small and grey against the number: the row

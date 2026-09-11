@@ -30,7 +30,9 @@ import { useEffect, useState, type RefObject } from "react";
 // Checklist key beside recalculation adds 36 px; its progress opens below.
 // 2026-09-09: power unit removed. Measured 217 shell px with manual solve visible.
 // Checklist adds its own 44 px plate and 8 px gap; progress hangs below.
-const BUILD_ROW_WIDTH = 270;
+// 2026-09-11: restored power unit, measured 314 px with auto solve,
+// 350 px with the manual solve key visible. The wider state decides the fold.
+const BUILD_ROW_WIDTH = 350;
 const BUILD_ROW_FOLDED_WIDTH = 132;
 // The right row: the mode switch's tray first, the paint tray, arrange,
 // the view tray (annotations and view options) and the bin last; mute and
@@ -40,10 +42,22 @@ const BUILD_ROW_FOLDED_WIDTH = 132;
 const PAINT_ROW_WIDTH = 484;
 const PAINT_ROW_FOLDED_WIDTH = 412;
 const SIDE_MARGINS = 24;
-const BREATH = 24;
+const BREATH = 32;
+// The mode tray is centered, so fitting the two side rows together is not
+// enough: the wider left row must fit inside its own half of the board.
+// Reserve the full labeled mode tray even when the viewport shows only icons.
+// This also gives UI zoom and the trays' shadows room before folding kicks in.
+const MODE_ROW_WIDTH = 300;
+const CENTER_CLEARANCE = 2 * (BUILD_ROW_WIDTH + SIDE_MARGINS / 2 + BREATH) + MODE_ROW_WIDTH;
 
-export const FOLD_PAINT_BELOW = BUILD_ROW_WIDTH + PAINT_ROW_WIDTH + SIDE_MARGINS + BREATH;
-export const FOLD_BUILD_BELOW = BUILD_ROW_WIDTH + PAINT_ROW_FOLDED_WIDTH + SIDE_MARGINS + BREATH;
+export const FOLD_PAINT_BELOW = Math.max(
+  BUILD_ROW_WIDTH + PAINT_ROW_WIDTH + SIDE_MARGINS + BREATH,
+  CENTER_CLEARANCE + PAINT_ROW_WIDTH - PAINT_ROW_FOLDED_WIDTH,
+);
+export const FOLD_BUILD_BELOW = Math.max(
+  BUILD_ROW_WIDTH + PAINT_ROW_FOLDED_WIDTH + SIDE_MARGINS + BREATH,
+  CENTER_CLEARANCE,
+);
 /** Under this even both folded rows cross, so the whole paint row folds. */
 export const BOTH_FOLDED_WIDTH =
   BUILD_ROW_FOLDED_WIDTH + PAINT_ROW_FOLDED_WIDTH + SIDE_MARGINS + BREATH;

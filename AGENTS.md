@@ -885,6 +885,10 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Interface Size (100% Is The Baseline)
 
+- The left items panel is 256 shell pixels wide (desktop and mobile drawer
+  cap), fitting four 58px-minimum item columns. Keep drawer measurement and
+  desktop grid widths in sync.
+
 - Build/Solve/Pool use icons only on snug or compact windows; wider windows
   keep the words. When Build tools folds, the mode switch and Pool product
   key move inside it, freeing the centre. The key width and drag hit-testing

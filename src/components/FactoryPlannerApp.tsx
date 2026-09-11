@@ -417,17 +417,15 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
 
   return (
     <>
-      {/* 344/332: the browser column carries three iconed tabs and the setup
-          shelf, so it gets a touch more than the old 312; the resource column
-          went from 277 to fit a rate, a name and the mark buttons on one line
-          without the name truncating to nothing. A closed column drops to a
+      {/* The four-column item browser is 256px wide; the resource column
+          keeps 332px for names, rates and controls. A closed column drops to a
           rail wide enough for one button, so the way back is always on screen
           and the board never has to give the width back to a hover target. */}
       <main
         className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden"
         style={{
           gridTemplateColumns: [
-            workspace.leftPanelOpen ? "344px" : `${RAIL_WIDTH}px`,
+            workspace.leftPanelOpen ? "256px" : `${RAIL_WIDTH}px`,
             "minmax(0,1fr)",
             // With a page over the board the resource column is not folded, it is
             // GONE: nothing to open, no rail to hint that there is.

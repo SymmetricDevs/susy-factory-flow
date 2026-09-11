@@ -14,9 +14,9 @@ import { playBoardSound } from "@/lib/board-sounds";
 
 const cursor = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M3 2v21l5-6 5 10 4-2-5-10h8z" fill="#172922" stroke="#dcfce7" stroke-width="1.5"/><path d="m18 9 4 4 7-8" fill="none" stroke="#86efac" stroke-width="3" stroke-linecap="square"/></svg>')}") 3 2, crosshair`;
 const keyClass =
-  "pointer-events-auto flex h-9 w-full shrink-0 items-center gap-2 border-2 border-[var(--mc-15)] px-2 text-left font-mono text-[11px] font-bold";
+  "pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]";
 
-export function ChecklistKeys() {
+export function ChecklistKeys({ folded = false }: { folded?: boolean }) {
   const active = useFactoryStore((s) => s.checklistMode);
   const project = useFactoryStore((s) => s.project);
   const cards = new Set(project.checklist?.cards);
@@ -26,7 +26,7 @@ export function ChecklistKeys() {
     project.edges.filter((e) => edges.has(e.id)).length;
   const total = project.nodes.length + (project.storages?.length ?? 0) + project.edges.length;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="relative flex items-center gap-2">
       <button
         type="button"
         aria-label="Checklist mode"
@@ -39,30 +39,17 @@ export function ChecklistKeys() {
         }}
       >
         <ClipboardCheck className="h-4 w-4" />
-        <span className="flex-1">Checklist mode</span>
-        <span>{active ? "On" : "Off"}</span>
       </button>
       {active && (
-        <div className="pointer-events-auto w-full border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 text-white shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]">
-          <div className="border-b-2 border-[var(--mc-15)] px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wider">Checklist</div>
-          <div
-            role="status"
-            className="my-1 flex items-center justify-between gap-3 bg-[var(--mc-49)] px-2 py-2 font-mono text-[11px]"
-            title="Completed machines, drawers and wires"
-          >
-            <span>Completed</span>
-            <span className="font-bold tabular-nums">{done} / {total}</span>
-          </div>
-          <button
-            type="button"
-            aria-label="Reset checklist"
-            title="Reset checklist (can be undone)"
-            disabled={!done}
-            className="flex h-8 w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] font-mono text-[11px] font-semibold text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] disabled:opacity-40 hover:enabled:brightness-110"
-            onClick={() => useFactoryStore.getState().clearChecklist()}
-          >
+        <div className={`pointer-events-auto flex h-8 w-max items-center gap-2 whitespace-nowrap text-white ${folded ? "" : "absolute left-0 top-[calc(100%+10px)] z-30 border border-[var(--mc-15)] bg-[var(--mc-49)] px-2 shadow-[2px_2px_0_rgba(0,0,0,0.3)]"}`}>
+          <span role="status" className="font-mono text-[11px] tabular-nums"
+            title="Completed machines, drawers and wires" aria-label={`${done} of ${total} completed`}>
+            {done} / {total}
+          </span>
+          <button type="button" aria-label="Reset checklist" title="Reset checklist (can be undone)"
+            disabled={!done} className="flex h-7 w-7 items-center justify-center hover:bg-white/10 disabled:opacity-30"
+            onClick={() => useFactoryStore.getState().clearChecklist()}>
             <RotateCcw className="h-3.5 w-3.5" />
-            Reset checklist
           </button>
         </div>
       )}

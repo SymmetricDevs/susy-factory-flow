@@ -8154,6 +8154,9 @@ const SourceToolbar = memo(function SourceToolbar({
       <ToolTray>
         <AutoSolveKeys />
       </ToolTray>
+      <ToolTray>
+        <ChecklistKeys folded={folded} />
+      </ToolTray>
       </ToolGroup>
     </div>
   );
@@ -8832,8 +8835,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
       </button>
       {open ? (
         <div className="absolute right-0 top-[calc(100%+6px)] z-30 flex max-h-[calc(70*var(--ui-vh))] w-[300px] max-w-[calc(100*var(--ui-vw)-24px)] flex-col gap-1 overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
-          <ChecklistKeys />
-          <div className="my-1 border-t-2 border-[var(--mc-15)]" />
           {/* The background's paper... */}
           <div className="grid grid-cols-2 gap-1">
             {CANVAS_THEMES.map((theme) => (

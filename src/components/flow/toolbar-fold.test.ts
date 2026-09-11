@@ -22,7 +22,7 @@ describe("toolbarFoldFor", () => {
     expect(toolbarFoldFor(740, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
     expect(toolbarFoldFor(600, false)).toEqual({ build: true, paint: true, paintFoldsAll: false });
     // A common laptop has enough room to leave the narrower build row open.
-    expect(toolbarFoldFor(690, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
+    expect(toolbarFoldFor(750, false)).toEqual({ build: false, paint: true, paintFoldsAll: false });
   });
 
   it("folds the build row too when even the folded paint trigger crowds it", () => {

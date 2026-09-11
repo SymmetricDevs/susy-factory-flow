@@ -35,3 +35,12 @@
 .design-tab > input { min-width: 0; }
 
 @container (max-width: 80px) { .design-tab-face { display: none; } }
+
+/* A quiet identity strip, with editing tucked into its details area. */
+.plan-summary { background: color-mix(in srgb, var(--surface) 92%, var(--surface-raised)); }
+.plan-summary .plan-summary-name { font-size: 13px; line-height: 18px; }
+.plan-summary .plan-summary-description { border-left: 1px solid var(--line); border-radius: 0; }
+.plan-summary .plan-summary-action { font-size: 11px; line-height: 16px; }
+.plan-summary-lock { font-size: 10px; background: var(--surface-raised); }
+.plan-summary-details { grid-template-columns: minmax(120px, 1fr) minmax(0, 3fr); background: var(--surface); }
+:root[data-compact] .plan-summary-details { grid-template-columns: minmax(0, 1fr); }

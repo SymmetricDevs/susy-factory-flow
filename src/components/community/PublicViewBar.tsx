@@ -13,18 +13,17 @@ export function PublicViewBar() {
   if (!view) return null;
   return (
     <section
-      className="min-w-0 border-b border-line bg-surface px-2"
+      className="plan-summary min-w-0 border-b border-line bg-surface px-2"
       aria-label="Public setup viewer"
     >
       <div className="flex h-[29px] min-w-0 items-center gap-2 text-xs">
-        <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
-        <span className="shrink-0 text-amber-400">View only</span>
-        <span className="min-w-0 max-w-[30%] shrink truncate font-medium" title={view.name}>
+        <span className="plan-summary-lock inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-fg-muted"><LockKeyhole className="h-3 w-3" aria-hidden /><span>View only</span></span>
+        <span className="plan-summary-name min-w-0 max-w-[30%] shrink truncate font-semibold" title={view.name}>
           {view.name}
         </span>
         {view.project.description ? <button type="button" aria-label="Show plan description" aria-expanded={descriptionOpen}
           onClick={() => setDescriptionOpen(!descriptionOpen)}
-          className="flex h-6 min-w-0 flex-1 items-center rounded px-1 text-left text-fg-muted hover:bg-surface-raised hover:text-fg">
+          className="plan-summary-description flex h-6 min-w-0 flex-1 items-center rounded px-1 text-left text-fg-muted hover:bg-surface-raised hover:text-fg">
           <span className="block w-full overflow-hidden whitespace-nowrap text-xs" style={{ maskImage: "linear-gradient(to right, black calc(100% - 12px), transparent)" }}>{view.project.description}</span>
         </button> : <span className="flex-1" />}
         {view.authorName ? (
@@ -44,7 +43,7 @@ export function PublicViewBar() {
               setBusy(false);
             }
           }}
-          className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded border border-line bg-transparent px-2 py-0 text-fg hover:bg-surface-raised hover:border-line-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500 disabled:opacity-50"
+          className="plan-summary-action inline-flex h-6 shrink-0 items-center gap-1.5 rounded border border-line bg-transparent px-2 py-0 text-fg hover:bg-surface-raised hover:border-line-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500 disabled:opacity-50"
         >
           <Copy className="h-3.5 w-3.5" aria-hidden />
           {busy ? "Opening…" : "Open a copy"}

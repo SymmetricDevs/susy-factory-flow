@@ -4,6 +4,7 @@ import {
   ArrowBigUp,
   Check,
   Link2,
+  Pencil,
   LoaderCircle,
   Share2,
   Unlink,
@@ -110,33 +111,23 @@ export function PlanIdentityDrawer() {
     // board gets, never the other way round.
     <section
       data-help-anchor="plan-card"
-      className="min-w-0 shrink-0 border-b border-line bg-surface"
+      className="plan-summary min-w-0 shrink-0 border-b border-line bg-surface"
     >
-      <div className="flex h-[29px] min-w-0 items-center gap-1.5 px-1.5">
+      <div className="flex h-[29px] min-w-0 items-center gap-2 px-2">
         <EntryIconSlot
           icon={project.icon}
           editable
           onEdit={() => setPickingIcon(true)}
           className="!h-6 !w-6 shrink-0 border border-line-strong bg-surface-sunken"
         />
-        <input
-          value={nameDraft ?? project.name}
-          onChange={(event) => setNameDraft(event.target.value)}
-          onBlur={commitName}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.currentTarget.blur();
-            }
-          }}
-          maxLength={80}
-          aria-label="Plan name"
-          title="Plan name"
-          style={{ width: `${Math.max(10, (nameDraft ?? project.name).length + 2)}ch`, maxWidth: "30%" }}
-          className="h-6 min-w-16 shrink rounded border border-transparent bg-transparent px-1.5 text-sm font-medium text-fg outline-none hover:border-line focus:border-line-strong focus:bg-surface-sunken"
-        />
+        <button type="button" onClick={toggleOpen} aria-expanded={isOpen}
+          aria-label="Edit plan details" className="plan-summary-name group flex h-6 min-w-0 max-w-[35%] shrink items-center gap-1.5 rounded px-1 text-left font-semibold text-fg hover:bg-surface-raised">
+          <span className="truncate">{nameDraft ?? project.name}</span>
+          <Pencil aria-hidden className="h-3 w-3 shrink-0 text-fg-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" />
+        </button>
         <button type="button" onClick={toggleOpen} aria-expanded={isOpen}
           aria-label={isOpen ? "Fold the plan description away" : "Open the plan description"}
-          className="flex h-6 min-w-0 flex-1 items-center rounded px-1 text-left text-xs text-fg-muted hover:bg-surface-raised hover:text-fg">
+          className="plan-summary-description flex h-6 min-w-0 flex-1 items-center rounded px-2 text-left text-xs text-fg-muted hover:bg-surface-raised hover:text-fg">
           <span className="block w-full overflow-hidden whitespace-nowrap text-xs" style={{ maskImage: "linear-gradient(to right, black calc(100% - 12px), transparent)" }}>
             {(descriptionDraft ?? project.description)?.trim() || "Add description…"}
           </span>
@@ -150,16 +141,35 @@ export function PlanIdentityDrawer() {
             disabled={project.nodes.length === 0}
             title={project.nodes.length === 0 ? "Share: build something first" : "Share"}
             aria-label="Share this setup"
-            className={BAR_BUTTON}
+            className="plan-summary-action inline-flex h-6 shrink-0 items-center justify-center gap-1.5 rounded border border-line-strong px-2 text-fg hover:bg-surface-raised disabled:opacity-40"
           >
-            <Share2 className="h-3.5 w-3.5" />
+            <Share2 className="h-3 w-3" />
+            <span>Share</span>
           </button>
         )}
       </div>
       {isSharing ? <SharePlanDialog onClose={() => setSharing(false)} /> : null}
 
       {isOpen ? (
-        <div className="border-t border-line p-1.5">
+        <div className="plan-summary-details grid gap-2 border-t border-line p-3">
+          <label className="grid gap-1 text-xs text-fg-muted">Name
+        <input
+          value={nameDraft ?? project.name}
+          onChange={(event) => setNameDraft(event.target.value)}
+          onBlur={commitName}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+          maxLength={80}
+          aria-label="Plan name"
+          title="Plan name"
+
+          className="h-8 w-full min-w-0 rounded border border-line bg-surface-sunken px-1.5 text-sm font-medium text-fg outline-none hover:border-line focus:border-line-strong focus:bg-surface-sunken"
+        />
+          </label>
+          <label className="grid gap-1 text-xs text-fg-muted">Description
           <textarea
             value={descriptionDraft ?? project.description ?? ""}
             onChange={(event) => {
@@ -175,6 +185,7 @@ export function PlanIdentityDrawer() {
             aria-label="Plan description"
             className="w-full resize-y rounded border border-line-strong bg-surface-sunken px-2 py-1.5 text-xs"
           />
+          </label>
         </div>
       ) : null}
 

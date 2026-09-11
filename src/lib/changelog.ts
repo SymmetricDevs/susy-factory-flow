@@ -49,6 +49,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.1.1",
+    date: "2026-09-11",
+    headline: "A more compact workspace",
+    notes: [
+      "Public setups open as *view-only tabs*, with private copies, display settings and checklists available.",
+      "A shared header holds *compressible tabs*, with plan details above the canvas and quicker tab closing.",
+      "The compact inspector adds *Raw/Net and Peak/Average switches*, multiblock supply details and editable product targets.",
+      "Power popups *open below machines* when space above is limited, and selection uses clear blue outlines.",
+    ],
+  },
+  {
     version: "3.1.0",
     date: "2026-09-09",
     headline: "Power by amps and hatch voltage",

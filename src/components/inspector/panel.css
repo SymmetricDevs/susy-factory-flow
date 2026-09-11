@@ -26,7 +26,7 @@
 .inspector-rate-selector button[aria-pressed="true"] { background: #414750; color: #f3f4f6; }
 .inspector-resource-button { grid-template-rows: 28px; font-size: 12px; }
 .inspector-resource-name { grid-column: 2; grid-row: 1; align-self: center; margin-left: 4px; }
-.inspector-resource-name > span { font-size: 12px; line-height: 18px; }
+.inspector-resource-name > span { font-size: 13px; line-height: 18px; }
 .inspector-resource-rate {
   grid-column: 3; grid-row: 1; align-self: center; justify-content: flex-end;
   margin-left: 0; min-width: 0;
@@ -34,7 +34,7 @@
 .inspector-resource-rate > span { font-size: 12px; line-height: 18px; }
 .inspector-resource-net {
   grid-column: 3; grid-row: 1; text-align: right; white-space: nowrap;
-  font-size: 12px; font-variant-numeric: tabular-nums; color: #cbd5e1;
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .inspector-resource-rate .opacity-70,
 .inspector-resource-rate > span > span:last-child,
@@ -64,3 +64,12 @@
 .inspector-machine-summary .tabular-nums > svg { display: none; }
 .inspector-product-target { font-size: 12px; background: #34d39906; }
 .inspector-product-target button, .inspector-product-target input { font-size: 12px; }
+
+/* Align the numbers, not the ends of variable-width /s and L/hr suffixes. */
+.inspector-resource-rate > span > span:last-child,
+.inspector-resource-net > .inspector-unit {
+  display: inline-block;
+  width: 27px;
+  text-align: left;
+}
+.inspector-machine-title > span:first-child > span:last-child { font-size: 13px; }

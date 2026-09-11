@@ -147,6 +147,15 @@ describe("InspectorPanel", () => {
     },
   );
 
+  it("does not sign values that round to zero in either rate display", async () => {
+    seedResult({ externalInputs: [makeBalance(1, { deficitPerSecond: 1e-16 })] });
+    const { container } = render(<InspectorPanel />);
+    await waitFor(() => expect(container.querySelector(".inspector-resource-rate")?.textContent).toMatch(/^0/));
+    fireEvent.click(screen.getByRole("button", { name: "Show net rates" }));
+    await waitFor(() => expect(container.querySelector(".inspector-resource-net")?.textContent).toMatch(/^0/));
+    expect(container.textContent).not.toContain("−0");
+  });
+
   it("shows the three groups at once, with Internal folded by default", () => {
     seedResult({
       externalInputs: [makeBalance(1, { deficitPerSecond: 240 })],

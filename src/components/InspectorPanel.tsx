@@ -81,6 +81,11 @@ function formatRateValue(perSecond: number, kind: string = "item"): string {
   return formatCompact(perSecond * rateMultiplierForKind(kind));
 }
 
+function formatSignedRate(perSecond: number, kind: string, sign: number): string {
+  const text = formatRateValue(Math.abs(perSecond), kind);
+  return text === "0" ? text : (sign < 0 ? "−" : sign > 0 ? "+" : "") + text;
+}
+
 function rateUnitFor(kind: ResourceBalance["kind"]): string {
   return rateSuffixForKind(kind).trim();
 }
@@ -432,7 +437,7 @@ function FlowIOPanel() {
     // reads once and then knows; the glosses were permanent lines of text
     // earning nothing after the first day.
     //
-    // Keep both boundary lists intact: Raw and Net are simultaneous columns.
+    // Keep both boundary lists intact when switching between Raw and Net.
     let boundary = { needs: scope.externalInputs, outputs: scope.unconsumedOutputs };
     // The declared boundary (see boundaryStorageKeys): rows the drawers vouch
     // for join at 0/s when the books dropped them. Board scope only — the
@@ -1439,7 +1444,6 @@ const FlowResourceRow = memo(function FlowResourceRow({
   const netEnergy = energyEuT !== undefined && balance.kind !== "power"
     ? energyPerUnit(energyEuT, Math.abs(netValue)) : undefined;
   const unit = rateUnitFor(balance.kind);
-  const prefix = euEach !== undefined ? "" : sign === -1 ? "−" : sign === 1 ? "+" : "";
   const name = balance.displayName ?? balance.resourceId;
 
   return (
@@ -1552,7 +1556,6 @@ const FlowResourceRow = memo(function FlowResourceRow({
           ].join(" ")}
         >
           <span className="text-base font-bold tabular-nums">
-            {prefix}
             {euEach !== undefined ? (
               // The chain's cost per unit, in the gold every energy reading
               // wears, the unit a small grey tail. Not eased: it is a
@@ -1570,7 +1573,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
                     sign and tone flip immediately, only the digits travel. */}
                 <MotionNumberText
                   values={[Math.abs(value)]}
-                  render={(shown) => formatRateValue(shown[0] ?? Math.abs(value), balance.kind)}
+                  render={(shown) => formatSignedRate(shown[0] ?? Math.abs(value), balance.kind, sign)}
                 />
                 <span className="ml-0.5 text-[11px] font-semibold opacity-70">{unit}</span>
               </>
@@ -1603,14 +1606,14 @@ const FlowResourceRow = memo(function FlowResourceRow({
         </span>}
 
 
-        {rateColumn === "net" && <span className="inspector-resource-net" title="Net boundary: outputs minus inputs. In energy units, cost per net unit.">
+        {rateColumn === "net" && <span className={`inspector-resource-net ${euEach !== undefined ? ENERGY_READING_TEXT : toneStyle.value}`}>
           {euEach !== undefined ? (netEnergy === undefined ? "—" : <>
             {formatEnergyPerUnitParts(netEnergy, balance.kind).value}
             <span className="inspector-unit">{formatEnergyPerUnitParts(netEnergy, balance.kind).unit}</span>
           </>) : <>
           <MotionNumberText
             values={[netValue]}
-            render={([net = 0]) => `${net < 0 ? "−" : net > 0 ? "+" : ""}${formatRateValue(Math.abs(net), balance.kind)}`}
+            render={([net = 0]) => formatSignedRate(net, balance.kind, net)}
           />
           <span className="inspector-unit">{unit}</span>
           </>}

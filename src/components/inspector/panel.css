@@ -43,7 +43,8 @@
 .inspector-unit,
 .inspector-machine-figures .tabular-nums > span:last-child,
 .inspector-machine-summary .tabular-nums > span:last-child {
-  font-size: 9px; font-weight: 400; margin-left: 2px;
+  font-size: 8px; font-weight: 400; margin-left: 2px;
+  color: color-mix(in srgb, currentColor 35%, #9ca3af);
 }
 .inspector-machines {
   --mc-ink: #e5e7eb; --mc-ink-muted: #a3a3a3;
@@ -61,9 +62,11 @@
 .inspector-machine-figures .tabular-nums,
 .inspector-machine-summary .tabular-nums { width: 80px; font-size: 12px; }
 .inspector-machine-summary .inspector-section-heading { padding-right: 2px; }
-/* The unit already identifies power/steam; repeated glyphs crowd large totals. */
+/* Small power and steam marks leave the numeric reading dominant. */
 .inspector-machine-figures .tabular-nums > svg,
-.inspector-machine-summary .tabular-nums > svg { display: none; }
+.inspector-machine-summary .tabular-nums > svg {
+  display: inline; width: 8px; height: 8px; margin-right: 1px;
+}
 .inspector-product-target { font-size: 12px; background: #34d39906; }
 .inspector-product-target button, .inspector-product-target input { font-size: 12px; }
 

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
+import "./inspector/panel.css";
 import { MachineShoppingList } from "./MachineShoppingList";
 import { formatCompact } from "@/lib/model";
 import { makeResourceKey } from "@/lib/model/resources";
@@ -62,14 +63,10 @@ import { ResourceIcon } from "./nei/ResourceIcon";
 const FLOW_FILTER_DEBOUNCE_MS = 120;
 const SELECTION_DEBOUNCE_MS = 100;
 
-// A row cannot be shorter than its icon, so row height and icon size are one
-// decision, not two: the icon fills the row edge to edge with no padding, which is
-// what makes consecutive rows butt up with no band between them. Both the icon
-// column and the icon box are derived from ROW_HEIGHTS.item rather than restated
-// as a utility class, so the two can never drift apart. This is the single lever
-// for how many resources fit on screen.
-const ROW_HEIGHTS = { header: 24, item: 30, empty: 24, chart: 60 };
-const ICON_COLUMN = `${ROW_HEIGHTS.item}px`;
+// Resources use two lines: name above rate, beside a 32px icon. Keep the
+// virtual list height in sync with the two grid rows in inspector/panel.css.
+const ROW_HEIGHTS = { header: 30, item: 44, empty: 28, chart: 60 };
+const ICON_COLUMN = "32px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -293,11 +290,9 @@ export function InspectorPanel() {
   return (
     <aside
       data-help-anchor="inspector"
-      className="flex h-full min-h-[360px] compact:min-h-0 flex-col bg-[#25272c]"
+      className="inspector-panel flex h-full min-h-[360px] compact:min-h-0 flex-col bg-[#25272c]"
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <FlowIOPanel />
-      </div>
+      <FlowIOPanel />
       {/* The build list rides the panel's floor: what to build, at which
           tier, what one of each draws - and, when generators stand on the
           board, what they make and the plan's net power. */}
@@ -527,8 +522,14 @@ function FlowIOPanel() {
     [marks.hidden, scope.resources],
   );
 
+  const contentHeight = 150 + (selection ? 28 : 0) + measureFlowRows(
+    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS),
+    ROW_HEIGHTS,
+  ).totalHeight;
+
   return (
     <section
+      style={{ flex: "0 1 auto", height: contentHeight, maxHeight: "var(--inspector-resource-max, 100%)", minHeight: "min(190px, 45%)" }}
       className={[
         // The ring wraps the WHOLE panel, not just the strip: the point is
         // that everything below is about the selection, so the mode has to be
@@ -546,8 +547,33 @@ function FlowIOPanel() {
         />
       ) : null}
 
-      <div className="mx-2 mt-2 shrink-0 rounded-[6px] border border-neutral-700 bg-[#2a2d33] p-2">
-        <div className="mb-1 flex items-center gap-1">
+      <div className="inspector-section-heading">
+        <h2>Resources</h2>
+          <button
+            type="button"
+            onClick={() => writeWorkspaceView({ rightPanelOpen: false })}
+            title="Hide"
+            aria-label="Hide the resources column"
+            className={[
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
+              "ml-auto",
+            ].join(" ")}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 3l5 5-5 5" />
+            </svg>
+          </button>
+      </div>
+      <div className="inspector-controls mx-2 shrink-0 border-b border-neutral-700 py-2">
+        <div className="mb-2 flex flex-wrap items-center gap-1">
           <ToolbarToggle
             on={workspace.showHiddenResources}
             onClick={() =>
@@ -646,28 +672,7 @@ function FlowIOPanel() {
             </span>
           ) : null}
 
-          <button
-            type="button"
-            onClick={() => writeWorkspaceView({ rightPanelOpen: false })}
-            title="Hide"
-            aria-label="Hide the resources column"
-            className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
-              hiddenCount > 0 ? "" : "ml-auto",
-            ].join(" ")}
-          >
-            <svg
-              viewBox="0 0 16 16"
-              className="h-3.5 w-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M6 3l5 5-5 5" />
-            </svg>
-          </button>
+
         </div>
 
         <div className="relative">
@@ -676,7 +681,7 @@ function FlowIOPanel() {
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Filter resources…"
             aria-label="Filter flow resources"
-            className="h-9 w-full rounded-[4px] border border-neutral-700 bg-[#17191d] pl-2 pr-14 text-base shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
+            className="h-8 w-full rounded-[4px] border border-neutral-700 bg-[#17191d] pl-2 pr-14 text-base shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
           />
           {filter ? (
             <button
@@ -1500,7 +1505,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // crossed, which on a list this dense meant a yellow box trailing the
         // cursor the whole way down. The row already widens on hover to show
         // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) auto auto` }}
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon
@@ -1510,7 +1515,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
           // the rate and the collapsed columns after it, so every ordinary row
           // paid for two gaps it could not use and the rates sat well short of
           // the panel edge.
-          "grid h-full w-full items-center rounded pr-1 text-left",
+          "inspector-resource-button grid h-full w-full items-center rounded pr-1 text-left",
           // The wide copy carries no highlight of its own: its wrapper rings
           // the row and the chart together as one block.
           expanded
@@ -1520,14 +1525,9 @@ const FlowResourceRow = memo(function FlowResourceRow({
               : "hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/60",
         ].join(" ")}
       >
-        {/*
-          Sized from ROW_HEIGHTS.item directly. The icon used to carry its own
-          height utility, which left it free to end up shorter than the row and
-          centred there — the band above and below it is what read as space
-          between rows. Filling an explicitly row-height box removes that.
-        */}
+        {/* The icon spans the name and rate lines without growing with the row. */}
         <span
-          style={{ height: ROW_HEIGHTS.item, width: ROW_HEIGHTS.item }}
+          style={{ height: 32, width: 32, gridRow: "1 / 3" }}
           className="flex shrink-0 items-center justify-center overflow-hidden"
         >
           <ResourceIcon
@@ -1552,13 +1552,13 @@ const FlowResourceRow = memo(function FlowResourceRow({
         {/* Truncates in the wide copy too. The extra width fits most names in
             full, which is the point, but a name longer than even that has to
             end in an ellipsis rather than run under the rate. */}
-        <span className="ml-2 flex min-w-0 items-center gap-1.5">
+        <span className="inspector-resource-name ml-2 flex min-w-0 items-center gap-1.5">
           <span className="min-w-0 truncate text-base font-medium text-neutral-100">{name}</span>
         </span>
 
         <span
           className={[
-            "ml-2 flex shrink-0 items-baseline",
+            "inspector-resource-rate ml-2 flex shrink-0 items-baseline",
             euEach !== undefined ? ENERGY_READING_TEXT : toneStyle.value,
           ].join(" ")}
         >
@@ -1629,7 +1629,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
             // The class is the hook for the wide copy's own arrival animation
             // (globals.css): a copy mounts already open, so it has no previous
             // width to transition from.
-            "resource-row-marks-gap overflow-hidden transition-[width] duration-100",
+            "resource-row-marks-gap row-span-2 col-start-3 row-start-1 overflow-hidden transition-[width] duration-100",
             isFavourite
               ? manageMode || expanded
                 ? "w-6"

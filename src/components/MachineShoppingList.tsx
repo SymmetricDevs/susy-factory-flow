@@ -449,13 +449,16 @@ export function MachineShoppingList() {
   return (
     <div
       data-help-anchor="machines"
-      className="flex min-h-0 shrink-0 basis-[40%] flex-col border-t-2 border-[var(--mc-47)]"
+      className="inspector-machines flex min-h-0 flex-1 flex-col border-t border-neutral-700"
     >
-      <div className="border-b border-[var(--mc-47)] bg-[var(--mc-71)] px-2 pb-1 pt-1">
+      <div className="inspector-machine-summary border-b border-neutral-700 px-3 pb-2">
         {/* The sheet's head: the title on the left, the two column labels
             over their columns on the right. */}
-        <div className="flex w-full items-end gap-1.5">
-          <span className="min-w-0 flex-1 text-sm font-bold uppercase tracking-wider">Machines</span>
+        <div className="inspector-section-heading -mx-3">
+          <h2>Machines</h2>
+          <span className="inspector-count">{formatCompact(totalMachines)}</span>
+        </div>
+        <div className="flex w-full items-end justify-end gap-1.5 pb-1">
           <span className={COLUMN_HEAD_CLASS}>Peak</span>
           <span className={COLUMN_HEAD_CLASS}>Average</span>
         </div>
@@ -751,8 +754,9 @@ function ListLine({
         // The wash sits at ~12% - present enough to read as the tier's
         // colour without competing with the chips that name it.
         style={{ ...checklistCursorStyle, ...(wash ? { backgroundColor: `${GT_TIER_COLORS[wash].background}1f` } : {}) }}
-        className="relative flex w-full items-center gap-1.5 py-0.5 pl-2 pr-2 text-left hover:bg-[var(--mc-71)]"
+        className="inspector-machine-row relative flex w-full flex-col gap-1 px-3 py-2 text-left hover:bg-white/5"
       >
+        <span className="flex w-full min-w-0 items-center gap-1.5">
         {indent ? (
           /* The branch: a vertical line dropping from under the parent's
              icon, elbowing out to this build's count. Anchored to the
@@ -818,6 +822,9 @@ function ListLine({
             </span>
           </span>
         ) : null}
+        </span>
+        {(peak || average || stalled) && <span className="inspector-machine-figures flex w-full items-center justify-end gap-3">
+        <span className="flex items-baseline gap-1"><span className="inspector-figure-label">Peak</span>
         {stalled ? (
           <span className={[COLUMN_CLASS, "font-bold text-red-400"].join(" ")}>
             {state === "under-powered" ? "LOW!" : "TIER!"}
@@ -825,7 +832,10 @@ function ListLine({
         ) : (
           <FigureCell figure={peak} className="text-[13px]" />
         )}
+        </span>
+        <span className="flex items-baseline gap-1"><span className="inspector-figure-label">Avg</span>
         <FigureCell figure={stalled ? undefined : average} className="text-[13px]" />
+        </span></span>}
       </button>
     </MinecraftTooltip>
   );

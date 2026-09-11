@@ -1,0 +1,107 @@
+/* One visual language for resource flow and the machine shopping list. */
+.inspector-panel {
+  color: #e5e7eb;
+  font-size: 12px;
+}
+
+.inspector-panel:has(.inspector-machines) {
+  --inspector-resource-max: 62%;
+}
+
+.inspector-section-heading {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.inspector-section-heading h2 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inspector-count {
+  border-radius: 4px;
+  background: #353942;
+  padding: 1px 6px;
+  color: #a3a3a3;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector-controls button,
+.inspector-controls input {
+  font-size: 11px;
+}
+
+.inspector-panel button[aria-expanded] {
+  font-size: 11px;
+  background: #2a2d33;
+  border-bottom: 1px solid #404040;
+}
+
+.inspector-panel button[aria-expanded] > span {
+  font-size: 11px;
+}
+
+.inspector-resource-button {
+  grid-template-rows: 22px 22px;
+  font-size: 12px;
+}
+
+.inspector-resource-name {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+}
+
+.inspector-resource-name > span {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.inspector-resource-rate {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+}
+
+.inspector-resource-rate > span {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.inspector-machines {
+  --mc-ink: #e5e7eb;
+  --mc-ink-muted: #a3a3a3;
+  --mc-71: #30333a;
+  --mc-85: #353942;
+  --mc-33: #525252;
+}
+
+.inspector-machine-summary {
+  background: #25272c;
+}
+
+.inspector-machine-row {
+  font-size: 12px;
+  color: #e5e7eb;
+  border-bottom: 1px solid #ffffff08;
+}
+
+.inspector-machine-row > span:first-child > span {
+  font-size: 12px;
+}
+
+.inspector-machine-figures .inspector-figure-label {
+  color: #a3a3a3;
+  font-size: 10px;
+}
+
+.inspector-machine-figures .tabular-nums {
+  width: auto;
+  font-size: 12px;
+}

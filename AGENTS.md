@@ -885,6 +885,13 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Interface Size (100% Is The Baseline)
 
+- The right inspector is 280 shell pixels wide on desktop and as a drawer.
+  Resources and Machines share the dark styling in `inspector/panel.css`.
+  Resource names/rates use two-line 44px rows; keep virtual list measurements
+  in sync with CSS. Machine names and build identity sit above Peak/Avg figures.
+  Resource height follows visible rows (capped when Machines is present), so
+  a short resource list gives spare height to the machine list.
+
 - The left items panel is 256 shell pixels wide (desktop and mobile drawer
   cap), fitting four 58px-minimum item columns. Keep drawer measurement and
   desktop grid widths in sync.

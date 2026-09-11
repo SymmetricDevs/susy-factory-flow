@@ -7,6 +7,7 @@ import { useDesignStore } from "@/store/design-store";
 
 export function PublicViewBar() {
   const view = useDesignStore((state) => state.publicView);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   if (!view) return null;
@@ -18,9 +19,14 @@ export function PublicViewBar() {
       <div className="flex h-[29px] min-w-0 items-center gap-2 text-xs">
         <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
         <span className="shrink-0 text-amber-400">View only</span>
-        <span className="min-w-0 flex-1 truncate font-medium" title={view.name}>
+        <span className="min-w-0 max-w-[30%] shrink truncate font-medium" title={view.name}>
           {view.name}
         </span>
+        {view.project.description ? <button type="button" aria-label="Show plan description" aria-expanded={descriptionOpen}
+          onClick={() => setDescriptionOpen(!descriptionOpen)}
+          className="flex h-6 min-w-0 flex-1 items-center rounded px-1 text-left text-fg-muted hover:bg-surface-raised hover:text-fg">
+          <span className="block w-full overflow-hidden whitespace-nowrap text-xs" style={{ maskImage: "linear-gradient(to right, black calc(100% - 12px), transparent)" }}>{view.project.description}</span>
+        </button> : <span className="flex-1" />}
         {view.authorName ? (
           <span className="truncate text-fg-muted">by {view.authorName}</span>
         ) : null}
@@ -44,7 +50,7 @@ export function PublicViewBar() {
           {busy ? "Opening…" : "Open a copy"}
         </button>
       </div>
-      {view.project.description ? (
+      {descriptionOpen && view.project.description ? (
         <p className="mb-1 max-h-24 overflow-auto whitespace-pre-wrap text-xs text-fg-muted">
           {view.project.description}
         </p>

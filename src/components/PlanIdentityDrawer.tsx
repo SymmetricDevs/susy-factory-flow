@@ -3,8 +3,6 @@
 import {
   ArrowBigUp,
   Check,
-  ChevronDown,
-  ChevronUp,
   Link2,
   LoaderCircle,
   Share2,
@@ -115,16 +113,6 @@ export function PlanIdentityDrawer() {
       className="min-w-0 shrink-0 border-b border-line bg-surface"
     >
       <div className="flex h-[29px] min-w-0 items-center gap-1.5 px-1.5">
-        <button
-          type="button"
-          onClick={toggleOpen}
-          aria-expanded={isOpen}
-          title={isOpen ? "Fold the description away" : "This plan's description"}
-          aria-label={isOpen ? "Fold the plan description away" : "Open the plan description"}
-          className={BAR_BUTTON}
-        >
-          {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        </button>
         <EntryIconSlot
           icon={project.icon}
           editable
@@ -143,8 +131,16 @@ export function PlanIdentityDrawer() {
           maxLength={80}
           aria-label="Plan name"
           title="Plan name"
-          className="h-6 min-w-16 flex-1 rounded border border-transparent bg-transparent px-1.5 text-sm font-medium text-fg outline-none hover:border-line focus:border-line-strong focus:bg-surface-sunken"
+          style={{ width: `${Math.max(10, (nameDraft ?? project.name).length + 2)}ch`, maxWidth: "30%" }}
+          className="h-6 min-w-16 shrink rounded border border-transparent bg-transparent px-1.5 text-sm font-medium text-fg outline-none hover:border-line focus:border-line-strong focus:bg-surface-sunken"
         />
+        <button type="button" onClick={toggleOpen} aria-expanded={isOpen}
+          aria-label={isOpen ? "Fold the plan description away" : "Open the plan description"}
+          className="flex h-6 min-w-0 flex-1 items-center rounded px-1 text-left text-xs text-fg-muted hover:bg-surface-raised hover:text-fg">
+          <span className="block w-full overflow-hidden whitespace-nowrap text-xs" style={{ maskImage: "linear-gradient(to right, black calc(100% - 12px), transparent)" }}>
+            {(descriptionDraft ?? project.description)?.trim() || "Add description…"}
+          </span>
+        </button>
         {linkedPlanId ? (
           <LinkedPostStrip key={linkedPlanId} planId={linkedPlanId} />
         ) : (

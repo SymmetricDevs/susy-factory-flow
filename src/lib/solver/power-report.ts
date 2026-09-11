@@ -56,6 +56,8 @@ export type NodePowerState = "ok" | "under-powered" | "over-tier";
 
 export interface NodePowerReport {
   state: NodePowerState;
+  /** Machine-specific structural limit, such as the HILE's laser source tier. */
+  recipeGateReason?: string;
   /** The tier the user picked (or the recipe's minimum by default). */
   tier: VoltageTier;
   minimumTier: VoltageTier;
@@ -130,9 +132,13 @@ export function getNodePowerReport(recipe: Recipe, node: PowerReportNode): NodeP
   const runtimeVariant = selectRuntimeCalculationVariant(effectiveRecipe, node);
   const parallels = runtimeVariant?.parallel ?? getMachineParallelMultiplier(effectiveRecipe, node);
   const drawEuT = Math.abs(stats.eut) * parallels;
+  const recipeGateReason = getMachineBehaviour(effectiveRecipe.machineType)?.recipeGate?.(
+    buildMachineContext(effectiveRecipe, node),
+  );
 
   return {
-    state: getPowerState(effectiveRecipe, tier, minimumTier, isMultiblock, poolEuT, singleDrawEuT),
+    state: recipeGateReason ? "over-tier" : getPowerState(effectiveRecipe, tier, minimumTier, isMultiblock, poolEuT, singleDrawEuT),
+    recipeGateReason,
     tier,
     minimumTier,
     hatches,
@@ -283,6 +289,7 @@ export function isPowerStalled(report: NodePowerReport): boolean {
 
 /** One-line reason for a stalled build, used by node warnings. */
 export function describePowerStall(report: NodePowerReport): string | undefined {
+  if (report.recipeGateReason) return report.recipeGateReason;
   if (report.state === "under-powered") {
     if (report.typedBudget) {
       return `Needs ${report.singleDrawEuT} EU/t. Supplied ${formatBudget(report.poolEuT)}.`;

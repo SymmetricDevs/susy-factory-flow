@@ -38,6 +38,7 @@
  */
 import type { MachineConfigControl } from "@/lib/model/types";
 import { neutronActivatorSpeed, quantiseNeutronActivatorDuration } from "./neutron-activator";
+import { HILE_SOURCE_CONTROL, hileSourceAt, normalizeHileSettings } from "./hile";
 
 /**
  * How a machine spends each step of spare voltage, mirroring the reference's
@@ -191,6 +192,10 @@ export interface MachineBehaviour {
    * with no changes, and merged over any control of the same id.
    */
   controls?: MachineConfigControl[];
+  /** Resolve legacy choices before both the UI and the solver read controls. */
+  normalizeConfig?: (settings: Record<string, string>) => Record<string, string>;
+  /** Structural recipe gate independent of how much power the hatches supply. */
+  recipeGate?: (ctx: MachineContext) => string | undefined;
   /**
    * Dataset control ids to drop for this machine, for knobs the scraper
    * invented that the machine does not have. The industrial mixing machine is
@@ -401,12 +406,6 @@ const COOLANT_CONTROL = choiceControl("fridgeCoolant", "Coolant", [
   "Spatially Enlarged Fluid",
   "Molten Eternity",
 ]);
-/** Laser amperage is a raw count in the reference; parallels are its cube root. */
-const LASER_AMPERAGE_CONTROL = countControl(
-  "laserAmperage",
-  "Laser Amperage",
-  [1, 8, 27, 64, 125, 216, 512, 1000, 4096, 32768, 262144],
-);
 const PLASMA_MIXER_PARALLEL_CONTROL = countControl(
   "plasmaMixerParallels",
   "Parallels",
@@ -927,11 +926,25 @@ const MACHINES: Record<string, MachineBehaviour> = {
     controls: [ITEM_PIPE_CONTROL],
   },
   "Hyper-Intensity Laser Engraver": {
-    overclock: OVERCLOCK.normal(),
+    // MTEIndustrialLaserEngraver caps OCs at source tier + 1 - raw recipe
+    // tier, and rejects higher recipes even if the energy supply could pay.
+    overclock: (c) => ({
+      ...OVERCLOCK.normal(),
+      maxNormal: Math.max(0, hileSourceAt(c.tier("laserSource")).ordinal + 1 - (c.recipeVoltageTier ?? 0)),
+    }),
+    recipeGate: (c) => {
+      const source = hileSourceAt(c.tier("laserSource"));
+      return source.ordinal < 13 && (c.recipeVoltageTier ?? 0) > source.ordinal + 1
+        ? `Laser source tier too low: ${source.tier} permits recipes up to one tier above it. Select a higher-tier laser source and matching glass.`
+        : undefined;
+    },
     speed: 3.5,
     power: 0.8,
-    parallels: (c) => Math.floor(Math.cbrt(c.value("laserAmperage"))),
-    controls: [LASER_AMPERAGE_CONTROL],
+    parallels: (c) => Math.floor(Math.cbrt(c.value("laserSource"))),
+    controls: [HILE_SOURCE_CONTROL],
+    hidesControls: ["laserAmperage"],
+    normalizeConfig: normalizeHileSettings,
+    note: "Laser source sets parallels and the recipe/overclock ceiling; it supplies no power. Assumes glass at least the source tier. UEV+ sources allow one multi-amp energy hatch.",
   },
   "Transcendent Plasma Mixer": {
     overclock: OVERCLOCK.none(),

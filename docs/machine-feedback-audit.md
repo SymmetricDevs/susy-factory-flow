@@ -11,6 +11,50 @@ Release 3.1.3 is pending deployment; production was 3.1.2 when checked September
 | 3 | Chemical Plant, Boldarnator, Industrial Sledgehammer | Screenshot shows wrong structure images on all three cards. | Pending 3.1.3. Verified the wiki images and rotated the three existing PNGs to their correct names. Five other renders from the same import batch match the wiki. |
 | 4 | Coke Oven / Industrial Coke Oven | [Issue #58](https://github.com/jackwrichards/gtnh-factory-flow/issues/58), reported against 3.0.0: missing oven, wrong art, doubled EV output. | Mixed findings; see below. Both maps are published, the art was already fixed, and the linked plan explicitly supplies 2A. A separate brick-oven legacy-voltage bug was reproduced and fixed for 3.1.3. |
 | 5 | LFTR | [Issue #54](https://github.com/jackwrichards/gtnh-factory-flow/issues/54): Fuel 3 shows 1A LuV despite the correct EU/L. | Confirmed and fixed for 3.1.3: numeric fuel energy gives 524,288 EU/t (1A UV); fuels 1/2 stay unchanged and saved cards update on load. |
+| 6 | Hyper-Intensity Laser Engraver | [Issue #50](https://github.com/jackwrichards/gtnh-factory-flow/issues/50): duplicate laser controls, missing amperages and voltage, unstable card size. | Confirmed control/math defects, fixed for 3.1.3: one selector for real voltage/amperage pairs; 65,536A yields up to 40 parallels; source voltage independently gates recipes and caps OCs. Local browser verifies stable dimensions. |
+
+## Issue #50 verification — September 11
+
+Checked the actual `MTEIndustrialLaserEngraver.java` and TecTech
+`MachineLoader.java` in local GT5-Unofficial revision `8e23867`, plus the
+wiki contents supplied in the report. The web fetch was blocked; no claim
+is made that the current remote wiki page was independently read.
+
+- The curated table added the impossible cube-number `laserAmperage` list
+  alongside the exporter's real-amperage `laserSource` list; only the former
+  controlled the curated calculation. It also allowed unlimited normal OCs.
+- The replacement is one searchable **Laser source** selector with all 46
+  registered hatch combinations, including the Legendary source. IV has only
+  256A; each higher tier unlocks the next four-times-larger hatch. 65,536A
+  begins at UHV. Legendary is **UXV**, 536,870,912A, not a MAX-tier source.
+- Source amperage gives `floor(cbrt(amps))` structural parallels, from 6
+  through 812. 65,536A gives 40. Actual parallels are still limited by the
+  separate energy supply; the laser source supplies no operating EU.
+- Source tier + 1 gates raw recipe EU/t and caps normal overclocks relative
+  to the raw recipe tier. The source's 3.5x speed and 0.8x EU remain intact.
+  A source-tier failure now stalls the solver and names the laser source
+  in the warning rather than suggesting more energy hatch amps.
+- Glass is assumed to meet the selected source tier; that construction
+  requirement appears in the source tooltip. The UEV+ source permission for
+  one multi-amp energy hatch is also explained, but the general power budget
+  controls do not validate a player's exact physical hatch arrangement.
+- Old `a65536` selections become `uhv-65536`. The named legacy source wins
+  over the conflicting dummy count; if no source was saved, use the count
+  and round up to a real hatch. Old plans recorded no source voltage, so the
+  lowest registered tier for the amperage is the migration default. Players
+  with a higher-tier source should select it to restore their extra OC cap.
+- UI checked using the real Shimmerrock recipe from local dataset shard 532:
+  one source selector, UHV / 65,536A / 40 parallels, searchable with `65536`
+  or commas. Switching to Legendary kept the rendered card at
+  444.59 x 257.41 CSS pixels; its IV/1A energy supply limited it to 85 usable
+  parallels. Source help distinguishes the 812 structural cap.
+- Tests cover all amperage levels, legal hatch combinations, energy-limited
+  parallels, independent OC caps, old selections, handler switching and
+  solver stall/resume when the recipe exceeds the source tier.
+
+Source references:
+[HILE controller](https://github.com/GTNewHorizons/GT5-Unofficial/blob/8e23867/src/main/java/gregtech/common/tileentities/machines/multi/MTEIndustrialLaserEngraver.java),
+[hatch registrations](https://github.com/GTNewHorizons/GT5-Unofficial/blob/8e23867/src/main/java/tectech/loader/thing/MachineLoader.java).
 
 ## Issue #54 verification — September 11
 

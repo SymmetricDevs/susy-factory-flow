@@ -64,7 +64,7 @@ const CAPTIONS: Record<string, string> = {
   preciseCasing: "Casing",
   cuttingSawblade: "Sawblade",
   fluxElectromagnet: "Magnet",
-  laserSource: "Laser",
+  laserSource: "Laser source",
   "structure-tower-height": "Height",
   steamPressure: "Pressure",
 };
@@ -271,8 +271,9 @@ export function SettingListMenu({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
-  const needle = query.trim().toLowerCase();
-  const shown = needle ? rows.filter((row) => row.label.toLowerCase().includes(needle)) : rows;
+  // Numbered hatch choices should match with or without thousands separators.
+  const needle = query.trim().toLowerCase().replaceAll(",", "");
+  const shown = needle ? rows.filter((row) => row.label.toLowerCase().replaceAll(",", "").includes(needle)) : rows;
   useDropdownDismiss(true, { refs: [rootRef], onClose, fade: true });
   if (typeof document === "undefined") return null;
   const width = 240;

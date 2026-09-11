@@ -185,6 +185,9 @@ describe("curated machine table", () => {
       // Java's 0.9f, ceil ticks and the custom supplier's floored parallels.
       // Covered at recipe-rate boundaries in neutron-activator.test.ts.
       "Neutron Activator",
+      // Real hatch combinations and the independent source-voltage OC cap;
+      // the reference only asks for raw amps. See hile.test.ts.
+      "Hyper-Intensity Laser Engraver",
       "Utupu-Tanuri",
       "Zyngen",
       "Exothermic Hearth",

@@ -6,6 +6,7 @@ import type {
   Recipe,
 } from "./types";
 import {
+  getMachineBehaviour,
   getMachineHiddenControlIds,
   getMachineTableControls,
   machineTableSeedsFromBase,
@@ -255,6 +256,8 @@ export function getRecipeMachineConfigTierControls(
   recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
   node: Pick<FactoryNode, "machineConfigTiers">,
 ): MachineConfigTierControl[] {
+  const settings = getMachineBehaviour(recipe.machineType)?.normalizeConfig?.(node.machineConfigTiers ?? {})
+    ?? node.machineConfigTiers;
   const controls = dropHiddenControls(
     mergeMachineConfigControls(
       recipe.machineConfigControls ?? [],
@@ -268,7 +271,7 @@ export function getRecipeMachineConfigTierControls(
     .map((control) =>
       resolveMachineConfigTierControl(
         applyControlRecipeMinimum(control, recipe),
-        node.machineConfigTiers?.[control.id],
+        settings?.[control.id],
       ),
     )
     .filter((control): control is MachineConfigTierControl => Boolean(control));

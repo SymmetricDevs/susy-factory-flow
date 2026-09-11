@@ -353,6 +353,12 @@ Working notes for future agents on GTNH Factory Flow.
   discount plus perfect overclocks, and that is what we implement. Machines
   that diverge on purpose are listed in `machine-table.test.ts`.
 - Machine config controls are structured data, not frontend hardcoding. Use `machineConfigControls`.
+- HILE's `laserSource` is one real voltage/amperage hatch choice (`hile.ts`),
+  replacing the duplicate `laserAmperage` knob. Source amps give floored
+  cube-root parallels; source tier + 1 independently gates recipes and caps
+  overclocks. It supplies no operating power. Glass is assumed to match the
+  source tier. Legacy amperage-only choices resolve to the lowest registered
+  source tier carrying those amps; do not infer its voltage from energy hatches.
   - The legacy `Coke Oven` alias also matches the unpowered brick oven.
     Its missing `cokeOvenSlices` control means NO overclocks and one parallel;
     leftover voltage settings on old nodes must not accelerate it. The

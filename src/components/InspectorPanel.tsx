@@ -1563,7 +1563,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
               // cost drifting on its own.
               <>
                 {formatEnergyPerUnitParts(euEach, balance.kind).value}
-                <span className="ml-0.5 text-[10px] font-medium text-[#8c7d4c]">
+                <span className="inspector-unit">
                   {formatEnergyPerUnitParts(euEach, balance.kind).unit}
                 </span>
               </>
@@ -1575,7 +1575,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
                   values={[Math.abs(value)]}
                   render={(shown) => formatSignedRate(shown[0] ?? Math.abs(value), balance.kind, sign)}
                 />
-                <span className="ml-0.5 text-[11px] font-semibold opacity-70">{unit}</span>
+                <span className="inspector-unit">{unit}</span>
               </>
             )}
           </span>

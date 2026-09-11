@@ -58,7 +58,7 @@
 .inspector-build-config > span { font-size: 11px; white-space: nowrap; }
 .inspector-machine-figures .tabular-nums,
 .inspector-machine-summary .tabular-nums { width: 80px; font-size: 12px; }
-.inspector-machine-summary .inspector-section-heading { padding-right: 12px; }
+.inspector-machine-summary .inspector-section-heading { padding-right: 2px; }
 /* The unit already identifies power/steam; repeated glyphs crowd large totals. */
 .inspector-machine-figures .tabular-nums > svg,
 .inspector-machine-summary .tabular-nums > svg { display: none; }

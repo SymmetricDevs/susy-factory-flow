@@ -446,6 +446,18 @@ Working notes for future agents on GTNH Factory Flow.
   card, never a section id. The machine list's usage is the sections'
   shares added up, PEAK the hungriest section's draw, AVERAGE each
   section's draw weighted by its share.
+- The inspector's MACHINES list is ONE ROW PER CARD (Jack, 2026-09-11),
+  including identical recipes and power configurations. Keep the existing
+  machine-name headers and indented count/power rows; each card gets its own
+  child row, with no recipe/item subtitle. Never combine cards' figures.
+  `buildMachineList` in `src/lib/model/machine-list.ts` supplies its figures:
+  Build uses the card's machineCount; Solve/Pool use the sum of that card's
+  sections' theoreticalMachinesRequired, keeping fractions and zero-demand
+  cards. Parallel processing scales power, not the physical machine count.
+  Shared cards remain one row, with peak draw from the hungriest section and
+  average draw weighted by each section's required count/time share. Crop
+  cards still count their harvesters, not seeds. Row clicks focus that one
+  card; checklist clicks affect that card alone.
 - CARD: every section gets a `SectionLabelRow` (name, share, verdict word,
   remove key) over rails of its own; the picture stays with the first, the
   rest get the bare arrow. The machine menu lists the INTERSECTION of the

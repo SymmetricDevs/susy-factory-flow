@@ -55,7 +55,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "Neutron Activators accept *any pipe height from 4 upward* with accurate throughput, and brick Coke Ovens keep fixed recipe times in older plans.",
       "Utupu-Tanuri gains *Vacuum Furnace coils*, HILE gains *real laser-source choices*, and PrAss gains *amps and working casing controls*.",
-      "The *Chemical Plant, Boldarnator, and Industrial Sledgehammer* now show their own structure pictures; the three images had been assigned to each other's machines.",
+      "The machine list shows *each card and its fractional Solve/Pool count*, and Chemical Plant, Boldarnator, and Industrial Sledgehammer pictures are corrected.",
       "*LFTR Fuel 3 generates the full 1A UV*, and Auto Workbench ingredients show *real item names without duplicate inputs* when wired.",
     ],
   },

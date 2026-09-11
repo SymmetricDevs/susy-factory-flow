@@ -14,6 +14,30 @@ Release 3.1.3 is pending deployment; production was 3.1.2 when checked September
 | 6 | Hyper-Intensity Laser Engraver | [Issue #50](https://github.com/jackwrichards/gtnh-factory-flow/issues/50): duplicate laser controls, missing amperages and voltage, unstable card size. | Confirmed control/math defects, fixed for 3.1.3: one selector for real voltage/amperage pairs; 65,536A yields up to 40 parallels; source voltage independently gates recipes and caps OCs. Local browser verifies stable dimensions. |
 | 7 | Precise Auto-Assembler MT-3662 (PrAss) | Players report voltage-only controls and ineffective casing parallels. | Confirmed and fixed for 3.1.3. Both modes use curated multiblock power; normal mode gets 16–256 casing parallels and 2x speed, precise mode stays at one parallel and uses casing requirements. Separate machine casing limits working voltage. |
 | 8 | Auto Workbench | [Issue #49](https://github.com/jackwrichards/gtnh-factory-flow/issues/49): resistor ingredients display dictionary names and split into unsatisfied duplicates on wiring. | Confirmed against the attached plan and current code; fixed for 3.1.3. Wires select all repeated slots in the input row, saved partial choices repair on load, and unwired dictionary inputs show concrete item names/icons. |
+| 9 | Inspector machine list | Counts/power must follow individual cards, including fractional Solve/Pool counts. | Fixed for 3.1.3. Existing machine-name tree retained; each card has a separate child row even for identical recipes/settings. Build reads stored counts; Solve/Pool read solved counts and scale each card's power accordingly. |
+
+## Machine list verification — September 11
+
+The old list combined cards with the same machine label and power configuration,
+read their stored counts in every mode, and clamped solved utilization to one.
+That lost both fractional requirements and requirements above the stored count.
+It also multiplied physical machine counts by the legacy parallel setting.
+
+`buildMachineList` now computes one entry per card. Presentation retains the
+original machine-name headers and indented count/tier/power rows, with no item
+names or recipe subtitles. Clicking a child row focuses only its card;
+checklist actions on a child likewise affect only that card. Shared-recipe
+cards stay together, with their section requirements summed for the count and
+their own time-weighted average draw. Generator and steam figures follow the
+same count rule. Crop cards retain their harvester count rather than seed count.
+
+Local browser test: three real Wiremill cards, two with the identical Fine
+Copper Wire recipe, stay separate. Build reports counts 2/3/4 and 8/12/16 EU/t,
+total 9 machines and 36 EU/t. Solve and Pool both report pinned requirements
+0.125/6.25/101.375 and 0.5/25/405.5 EU/t, total 107.75 machines and 431 EU/t.
+Counts are never rounded up to whole machines. Tests cover real solves in both
+modes, zero demand, shared recipes, parallel processing, steam/generation,
+fraction formatting, and per-card focus/checklist behavior.
 
 ## Auto Workbench resistor verification — September 11
 

@@ -61,7 +61,7 @@ const CAPTIONS: Record<string, string> = {
   pipeCasing: "Casing",
   solenoidCoil: "Solenoid",
   arcElectrode: "Electrode",
-  preciseCasing: "Casing",
+  preciseCasing: "Unit casing",
   cuttingSawblade: "Sawblade",
   fluxElectromagnet: "Magnet",
   laserSource: "Laser source",

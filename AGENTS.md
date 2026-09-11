@@ -297,8 +297,8 @@ Working notes for future agents on GTNH Factory Flow.
   - Still on scraped data, deliberately: the 11 fusion reactors (need
     `fixedVoltageTier` and their own overclock), and the machines whose
     coefficients read recipe metadata or the recipe type (Nano Forge, PCB
-    Factory, Component Assembly Line, Dangote Distillus, Precise
-    Auto-Assembler, QFT, Eye of Harmony). The Naquadah Fuel Refinery
+    Factory, Component Assembly Line, Dangote Distillus, QFT, Eye of Harmony).
+    PrAss is now curated in both modes; see below. The Naquadah Fuel Refinery
     graduated off that list: its recipe metadata is the special value (the
     minimum field restriction coil tier), which `ctx.recipeSpecialValue`
     now carries into the table, and a control may declare
@@ -359,6 +359,14 @@ Working notes for future agents on GTNH Factory Flow.
   overclocks. It supplies no operating power. Glass is assumed to match the
   source tier. Legacy amperage-only choices resolve to the lowest registered
   source tier carrying those amps; do not infer its voltage from energy hatches.
+- PrAss is curated in two modes: `Precise Auto-Assembler MT-3662` is the normal
+  Assembler handler (2x speed; Imprecise/Mk-I..IV unit casings give 16..256
+  parallels), while `Precise Assembler` is the dedicated precise recipe map
+  (base speed, one parallel, unit casing minimum from recipe special value).
+  Both support ordinary volts/amps controls and zero input tier skips.
+  `prassMachineCasing` caps working voltage before amps; UHV removes the cap
+  and is the legacy default. The normal handler's UHV controller unlock is not
+  a minimum hatch voltage. EV+ glass is assumed. See precise-assembler.test.ts.
   - The legacy `Coke Oven` alias also matches the unpowered brick oven.
     Its missing `cokeOvenSlices` control means NO overclocks and one parallel;
     leftover voltage settings on old nodes must not accelerate it. The

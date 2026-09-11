@@ -39,6 +39,7 @@
 import type { MachineConfigControl } from "@/lib/model/types";
 import { neutronActivatorSpeed, quantiseNeutronActivatorDuration } from "./neutron-activator";
 import { HILE_SOURCE_CONTROL, hileSourceAt, normalizeHileSettings } from "./hile";
+import { PRASS_NORMAL_CASING, PRASS_PRECISE_CASING, PRASS_MACHINE_CASING, prassInputVoltageLimit } from "./precise-assembler";
 
 /**
  * How a machine spends each step of spare voltage, mirroring the reference's
@@ -196,6 +197,10 @@ export interface MachineBehaviour {
   normalizeConfig?: (settings: Record<string, string>) => Record<string, string>;
   /** Structural recipe gate independent of how much power the hatches supply. */
   recipeGate?: (ctx: MachineContext) => string | undefined;
+  /** Structural cap on working voltage, before multiplying by supplied amps. */
+  inputVoltageTierLimit?: (settings: Record<string, string>) => number;
+  /** The controller's unlock tier is not a minimum energy-hatch voltage. */
+  recipeTierFromBase?: boolean;
   /**
    * Dataset control ids to drop for this machine, for knobs the scraper
    * invented that the machine does not have. The industrial mixing machine is
@@ -924,6 +929,30 @@ const MACHINES: Record<string, MachineBehaviour> = {
     power: 0.75,
     parallels: (c) => c.voltageTier * 16,
     controls: [ITEM_PIPE_CONTROL],
+  },
+  // MTEPreciseAssembler's normal Assembler handler. Keep its dedicated
+  // Precise Assembler recipe map separate: the two modes have different math.
+  "Precise Auto-Assembler MT-3662": {
+    recipeTierFromBase: true,
+    overclock: OVERCLOCK.normal(),
+    speed: 2,
+    power: 1,
+    parallels: (c) => 16 * 2 ** c.tier("preciseCasing"),
+    controls: [PRASS_NORMAL_CASING, PRASS_MACHINE_CASING],
+    inputVoltageTierLimit: prassInputVoltageLimit,
+    note: "Normal Assembler mode. Requires EV+ glass. Unit casings set parallels; machine casings limit working voltage, with UHV unlocking all tiers.",
+  },
+  "Precise Assembler": {
+    overclock: OVERCLOCK.normal(),
+    speed: 1,
+    power: 1,
+    parallels: 1,
+    controls: [PRASS_PRECISE_CASING, PRASS_MACHINE_CASING],
+    inputVoltageTierLimit: prassInputVoltageLimit,
+    recipeGate: (c) => (c.recipeSpecialValue ?? 0) > c.tier("preciseCasing") + 1
+      ? "This precise recipe requires a higher unit casing tier."
+      : undefined,
+    note: "Precise mode. Unit casings unlock recipes, not extra parallels or speed. Requires EV+ glass; UHV machine casings remove the voltage cap.",
   },
   "Hyper-Intensity Laser Engraver": {
     // MTEIndustrialLaserEngraver caps OCs at source tier + 1 - raw recipe

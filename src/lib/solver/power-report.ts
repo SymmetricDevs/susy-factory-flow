@@ -132,9 +132,14 @@ export function getNodePowerReport(recipe: Recipe, node: PowerReportNode): NodeP
   const runtimeVariant = selectRuntimeCalculationVariant(effectiveRecipe, node);
   const parallels = runtimeVariant?.parallel ?? getMachineParallelMultiplier(effectiveRecipe, node);
   const drawEuT = Math.abs(stats.eut) * parallels;
-  const recipeGateReason = getMachineBehaviour(effectiveRecipe.machineType)?.recipeGate?.(
+  const behaviour = getMachineBehaviour(effectiveRecipe.machineType);
+  const voltageLimit = behaviour?.inputVoltageTierLimit?.(node.machineConfigTiers ?? {});
+  const casingGateReason = voltageLimit !== undefined && getVoltageTierIndex(getVoltageTierForEuT(rawEuT)) > voltageLimit
+    ? "Machine casing voltage is too low for this recipe. Select a higher machine casing; UHV casings remove the limit."
+    : undefined;
+  const recipeGateReason = behaviour?.recipeGate?.(
     buildMachineContext(effectiveRecipe, node),
-  );
+  ) ?? casingGateReason;
 
   return {
     state: recipeGateReason ? "over-tier" : getPowerState(effectiveRecipe, tier, minimumTier, isMultiblock, poolEuT, singleDrawEuT),

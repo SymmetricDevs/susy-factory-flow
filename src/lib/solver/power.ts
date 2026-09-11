@@ -1,6 +1,7 @@
 import { getEnergyHatchType } from "@/lib/machines/energy-hatches";
 import { getMachineBehaviour } from "@/lib/machines/machine-table";
 import {
+  GT_VOLTAGE_TIERS,
   getRecipeMinimumVoltageTier,
   getRunVoltageTier,
   getVoltageTierForEuT,
@@ -24,6 +25,7 @@ type PowerNodeInput = Partial<
     | "hatchVoltageTier"
     | "hatchAmps"
     | "powerInputMode"
+    | "machineConfigTiers"
   >
 >;
 
@@ -89,16 +91,19 @@ export function getNodeRunTier(
   if (!isMultiblockRecipe(recipe)) {
     return getRunVoltageTier(recipe, node.overclockTier);
   }
-  if (node.powerInputMode === "eut") return rawInputTier(recipe, node);
-  if (node.hatchVoltageTier !== undefined) return node.hatchVoltageTier;
+  const limit = getMachineBehaviour(recipe.machineType)?.inputVoltageTierLimit?.(node.machineConfigTiers ?? {}) ?? Infinity;
+  const limited = (tier: VoltageTier): VoltageTier =>
+    GT_VOLTAGE_TIERS[Math.min(getVoltageTierIndex(tier), limit)]?.tier ?? tier;
+  if (node.powerInputMode === "eut") return limited(rawInputTier(recipe, node));
+  if (node.hatchVoltageTier !== undefined) return limited(node.hatchVoltageTier);
   // Legacy nodes outside the load funnel retain their historical interpretation.
   // A typed budget names its own hatch tier: the highest voltage that fits
   // inside it. The tier-skip rule and the parallel ordinal read that tier.
   const budget = getNodePowerBudget(recipe, node);
   if (budget !== undefined) {
-    return getVoltageTierWithinEuT(budget);
+    return limited(getVoltageTierWithinEuT(budget));
   }
-  return resolveVoltageTier(node.overclockTier, getRecipeMinimumVoltageTier(recipe));
+  return limited(resolveVoltageTier(node.overclockTier, getRecipeMinimumVoltageTier(recipe)));
 }
 
 /**

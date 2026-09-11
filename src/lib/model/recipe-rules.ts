@@ -194,6 +194,8 @@ export function applyMachineHandlerToRecipe(
   // the bonus twice, so a handler whose machine the table covers seeds from
   // the base recipe instead.
   const seedsFromBase = machineTableSeedsFromBase(handler.machineType);
+  const minimumTier = getMachineBehaviour(handler.machineType)?.recipeTierFromBase
+    ? recipe.minimumTier : handler.minimumTier;
   const handlerDurationTicks = seedsFromBase
     ? steamSingleblockDurationTicks(recipe, handler)
     : (handler.durationTicks ?? steamSingleblockDurationTicks(recipe, handler));
@@ -207,7 +209,7 @@ export function applyMachineHandlerToRecipe(
     ...recipe,
     runtimeCalculation,
     machineType: handler.machineType,
-    minimumTier: handler.minimumTier,
+    minimumTier,
     maximumTier: handler.maximumTier,
     durationTicks: handlerDurationTicks ?? recipe.durationTicks,
     eut,
@@ -215,7 +217,7 @@ export function applyMachineHandlerToRecipe(
     machineProfile: {
       ...recipe.machineProfile,
       machineType: handler.machineType,
-      minimumTier: handler.minimumTier,
+      minimumTier,
       maximumTier: handler.maximumTier,
       durationTicks: handlerDurationTicks ?? recipe.machineProfile?.durationTicks,
       eut: handlerEut ?? recipe.machineProfile?.eut,

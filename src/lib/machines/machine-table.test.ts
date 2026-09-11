@@ -324,6 +324,8 @@ describe("curated machine table", () => {
         // gtPlusPlus.xmod.gregtech.common.tileentities.automation; not a
         // recipe-map machine, so the reference never covered it.
         "Auto Workbench",
+        // MTEPreciseAssembler's dedicated precise mode has no speed/parallels bonus.
+        "Precise Assembler",
       ].map(normalizeMachineName),
     );
     // Every entry must trace back to a reference definition or a direct source

@@ -12,6 +12,47 @@ Release 3.1.3 is pending deployment; production was 3.1.2 when checked September
 | 4 | Coke Oven / Industrial Coke Oven | [Issue #58](https://github.com/jackwrichards/gtnh-factory-flow/issues/58), reported against 3.0.0: missing oven, wrong art, doubled EV output. | Mixed findings; see below. Both maps are published, the art was already fixed, and the linked plan explicitly supplies 2A. A separate brick-oven legacy-voltage bug was reproduced and fixed for 3.1.3. |
 | 5 | LFTR | [Issue #54](https://github.com/jackwrichards/gtnh-factory-flow/issues/54): Fuel 3 shows 1A LuV despite the correct EU/L. | Confirmed and fixed for 3.1.3: numeric fuel energy gives 524,288 EU/t (1A UV); fuels 1/2 stay unchanged and saved cards update on load. |
 | 6 | Hyper-Intensity Laser Engraver | [Issue #50](https://github.com/jackwrichards/gtnh-factory-flow/issues/50): duplicate laser controls, missing amperages and voltage, unstable card size. | Confirmed control/math defects, fixed for 3.1.3: one selector for real voltage/amperage pairs; 65,536A yields up to 40 parallels; source voltage independently gates recipes and caps OCs. Local browser verifies stable dimensions. |
+| 7 | Precise Auto-Assembler MT-3662 (PrAss) | Players report voltage-only controls and ineffective casing parallels. | Confirmed and fixed for 3.1.3. Both modes use curated multiblock power; normal mode gets 16–256 casing parallels and 2x speed, precise mode stays at one parallel and uses casing requirements. Separate machine casing limits working voltage. |
+
+## PrAss verification — September 11
+
+Verified against local GT5-Unofficial `8e23867`,
+[MTEPreciseAssembler.java](https://github.com/GTNewHorizons/GT5-Unofficial/blob/8e23867/src/main/java/goodgenerator/blocks/tileEntity/MTEPreciseAssembler.java).
+The structure accepts `ExoticEnergy.or(Energy)` and advertises all energy
+hatch types. It supplies `getMachineVoltageLimit()` times the working amps,
+allows amperage overclocks and sets zero input tier skips. A single regular
+hatch is clamped to 1A; exotic hatches retain their amperage.
+
+Two defects explained the report: neither mode had a curated definition,
+which hid hatch controls, and exported generic runtime ladders never modeled
+the chosen casing parallels. The dedicated Precise Assembler map also
+carried the **normal-mode** casing ladder despite running only one parallel.
+
+- Normal `Precise Auto-Assembler MT-3662` handler: unit casings Imprecise,
+  Mk-I, Mk-II, Mk-III, Mk-IV give 16, 32, 64, 128, 256 parallels and 2x speed.
+  These are capacity limits; working energy pays for parallels before OCs.
+  Baked handler speed is ignored so the bonus is applied once.
+- Dedicated `Precise Assembler` map: 1 parallel, base speed and EU, normal
+  overclocks. The unit-casing picker begins at the recipe's special-value
+  requirement. Upgrading that casing does not increase throughput.
+- Both expose the existing volts/amps power controls. Multi-amp and laser
+  hatches are modeled by their supplied voltage and working amperage; this
+  is not a HILE-style separate laser source.
+- A separate **Machine casing** control limits working voltage to its tier
+  below UHV; UHV removes this cap. The cap applies before multiplying by amps,
+  and recipes above the capped voltage stall even with excess amperage.
+  The default is UHV to preserve the previous assumption of sufficient casings.
+  EV+ glass remains a construction requirement, not another performance knob.
+- The normal handler's exported UHV unlock is the controller's crafting tier,
+  not a required hatch voltage. Its working recipe tier now comes from the
+  base recipe, so low-tier recipes can use low-tier energy hatches.
+- Browser check used real local Ameliorated Superconducting Coil and Potion
+  Flask recipes: both cards show amps, unit casing and machine casing;
+  normal Mk-I to Mk-II changes the displayed parallel capacity from 32 to 64;
+  precise-mode amps accept 1,024A. The user's original design was restored.
+- Regression tests cover both modes, all five normal casing levels, precise
+  recipe requirements, energy-limited parallels, multi-amp OCs, voltage caps,
+  legacy migration, normal-handler switching and solver stall/resume.
 
 ## Issue #50 verification — September 11
 

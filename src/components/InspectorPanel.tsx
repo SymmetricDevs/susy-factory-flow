@@ -66,7 +66,7 @@ const SELECTION_DEBOUNCE_MS = 100;
 
 // One ledger row: icon, resource, Raw and Net. Keep the virtual list
 // height in sync with inspector/panel.css.
-const ROW_HEIGHTS = { header: 36, item: 40, empty: 24, chart: 60, product: 28 };
+const ROW_HEIGHTS = { header: 24, item: 28, empty: 24, chart: 60, product: 28 };
 const ICON_COLUMN = "24px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */

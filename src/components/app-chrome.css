@@ -27,3 +27,11 @@
 .app-header-tabs .design-tab-strip button.h-5,
 .app-header-tabs .design-tab-strip .group.h-5 { height: 26px; }
 .app-header-tabs .design-tab-strip [aria-pressed][title] { height: 24px; }
+
+/* Tabs spend their name space before the strip needs to scroll. */
+.design-tabs-track .design-tab { flex: 0 1 auto; width: 180px; min-width: 64px; container-type: inline-size; }
+.design-tab-name { min-width: 0; overflow: hidden; white-space: nowrap; }
+.design-tab-name[data-clipped="true"] { mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
+.design-tab > input { min-width: 0; }
+
+@container (max-width: 80px) { .design-tab-face { display: none; } }

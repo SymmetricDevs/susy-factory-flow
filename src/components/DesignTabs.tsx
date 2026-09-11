@@ -75,6 +75,8 @@ export function DesignTabs() {
   const suppressClickRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const stopScrollMotion = useRef(() => {});
+  const openTabKey = designs.map((design) => design.id).join(",");
 
   const closeMenu = () => {
     setOpenMenu(undefined);
@@ -119,17 +121,25 @@ export function DesignTabs() {
     // real strip is up.
   }, [syncOverflow, isHydrated]);
 
-  // Switching to a design that sits off-screen should bring it into view rather
-  // than leaving the strip looking unchanged.
+  // Wait for the new tab and its compressed layout, then reveal it. The open
+  // ids matter too: loading a newly created design and opening its tab can
+  // arrive in separate store updates.
   useEffect(() => {
-    if (!activeDesignId) {
-      return;
-    }
-
-    scrollerRef.current
-      ?.querySelector(`[data-design-id="${CSS.escape(activeDesignId)}"]`)
-      ?.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
-  }, [activeDesignId]);
+    if (!activeDesignId) return;
+    const frame = requestAnimationFrame(() => {
+      const scroller = scrollerRef.current;
+      const active = scroller?.querySelector<HTMLElement>(`[data-design-id="${CSS.escape(activeDesignId)}"]`);
+      if (!scroller || !active) return;
+      stopScrollMotion.current();
+      const tabs = scroller.querySelectorAll("[data-design-id]");
+      if (active === tabs[tabs.length - 1]) {
+        scroller.scrollTo({ left: scroller.scrollWidth, behavior: "smooth" });
+      } else {
+        active.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeDesignId, openTabKey, isHydrated]);
 
   // The strip is the one horizontal scroller under a vertical wheel, so plain
   // wheel input walks the tabs. Attached natively: React registers wheel
@@ -235,10 +245,12 @@ export function DesignTabs() {
       }
     };
 
+    stopScrollMotion.current = settle;
     scroller.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       scroller.removeEventListener("wheel", onWheel);
       settle();
+      stopScrollMotion.current = () => {};
     };
     // isHydrated: same as the observer above — no scroller exists at mount.
   }, [isHydrated]);
@@ -560,7 +572,7 @@ export function DesignTabs() {
           <nav
             ref={trackRef}
             aria-label="Designs"
-            className="flex w-max select-none items-center gap-1"
+            className="design-tabs-track flex w-max max-w-full select-none items-center gap-1"
           >
             {designs.map((design, index) => {
               const isActive = design.id === activeDesignId && !coveringPage;
@@ -592,7 +604,7 @@ export function DesignTabs() {
                     }
                   }}
                   className={[
-                    "group flex h-5 shrink-0 items-center rounded-t border-b-2 pl-2 pr-1",
+                    "design-tab group flex h-5 items-center rounded-t border-b-2 pl-2 pr-1",
                     isActive
                       ? "border-cyan-500 bg-surface-raised text-fg"
                       : "border-transparent text-fg-muted hover:bg-surface-sunken hover:text-fg",
@@ -621,11 +633,11 @@ export function DesignTabs() {
                         void switchToDesign(design.id);
                       }}
                       onDoubleClick={() => setRenamingId(design.id)}
-                      className="flex max-w-[166px] items-center gap-1.5 text-xs font-medium"
+                      className="design-tab-label flex min-w-0 max-w-[166px] flex-1 items-center gap-1.5 text-xs font-medium"
                     >
                       {hasDrawableFace(design.icon) ? <TabFace icon={design.icon} /> : null}
                       {isActive ? <TabSolvingSpinner /> : null}
-                      <span className="truncate">{design.name}</span>
+                      <FadingTabName name={design.name} />
                     </button>
                   )}
 
@@ -654,7 +666,7 @@ export function DesignTabs() {
                         top: rect.bottom + 4,
                       });
                     }}
-                    className="ml-1 rounded px-1 text-xs text-fg-muted opacity-0 hover:bg-surface hover:text-fg focus:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100"
+                    className="ml-1 shrink-0 rounded px-1 text-xs text-fg-muted opacity-0 hover:bg-surface hover:text-fg focus:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100"
                   >
                     ⋯
                   </button>
@@ -1007,7 +1019,7 @@ function TabFace({ icon }: { icon: EntryIcon }) {
   return (
     <span
       aria-hidden
-      className="flex h-5 w-5 shrink-0 translate-y-[1px] items-center justify-center overflow-hidden"
+      className="design-tab-face flex h-5 w-5 shrink-0 translate-y-[1px] items-center justify-center overflow-hidden"
     >
       <ResourceIcon
         resource={{
@@ -1058,4 +1070,20 @@ function TabSolvingSpinner() {
       className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-neutral-600 border-t-cyan-400"
     />
   );
+}
+
+/** Fade only overflowing names; actual available width decides, never tab count. */
+function FadingTabName({ name }: { name: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [clipped, setClipped] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const measure = () => setClipped(element.scrollWidth > element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [name]);
+  return <span ref={ref} className="design-tab-name" data-clipped={clipped}>{name}</span>;
 }

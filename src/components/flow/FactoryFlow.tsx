@@ -6703,6 +6703,7 @@ export function FactoryFlow() {
         onAutoArrange={handleAutoArrange}
         folded={toolbarFold.paint}
         foldAll={toolbarFold.paintFoldsAll}
+        modesInBuild={toolbarFold.build}
         openGroup={openToolGroup}
         onToggleGroup={handleToolGroupToggle}
         shiftedDown={false}
@@ -7626,10 +7627,10 @@ const MODE_KEYS: Array<{
   },
 ];
 
-const ModeKeys = memo(function ModeKeys() {
+const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: boolean }) {
   const compact = useIsCompactViewport();
   const snug = useIsSnugViewport();
-  const iconsOnly = compact || snug;
+  const iconsOnly = forceIcons || compact || snug;
   const modeStep = iconsOnly ? 44 : 96;
   const mode = useFactoryStore((state): BoardMode =>
     state.project.poolMode === true ? "pool" : state.project.solveMode === true ? "solve" : "build",
@@ -8074,6 +8075,12 @@ const SourceToolbar = memo(function SourceToolbar({
         label="build tools"
         side="left"
       >
+      {folded && (
+        <>
+          <ToolTray helpAnchor="rules"><ModeKeys forceIcons /></ToolTray>
+          <PoolSpawnKeys />
+        </>
+      )}
       {/* How the numbers read: ONE key wearing the current unit, opening the
           four units as a named list. Four permanent keys spent three slots
           saying nothing but "not this one", and a blind cycle made you walk
@@ -8825,6 +8832,8 @@ const BoardViewMenu = memo(function BoardViewMenu({
       </button>
       {open ? (
         <div className="absolute right-0 top-[calc(100%+6px)] z-30 flex max-h-[calc(70*var(--ui-vh))] w-[300px] max-w-[calc(100*var(--ui-vw)-24px)] flex-col gap-1 overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+          <ChecklistKeys />
+          <div className="my-1 border-t-2 border-[var(--mc-15)]" />
           {/* The background's paper... */}
           <div className="grid grid-cols-2 gap-1">
             {CANVAS_THEMES.map((theme) => (
@@ -9081,6 +9090,7 @@ const PaintToolbar = memo(function PaintToolbar({
   onAutoArrange,
   folded,
   foldAll,
+  modesInBuild,
   openGroup,
   onToggleGroup,
   shiftedDown,
@@ -9105,11 +9115,11 @@ const PaintToolbar = memo(function PaintToolbar({
    * included: a board too narrow for the folded row (toolbar-fold.ts).
    */
   foldAll: boolean;
+  modesInBuild: boolean;
   openGroup?: ToolGroupId;
   onToggleGroup: (group: ToolGroupId | undefined) => void;
   shiftedDown: boolean;
 }) {
-  const checklistMode = useFactoryStore((state) => state.checklistMode);
   const activeColor = GT_NODE_COLORS[activeColorTag];
   // Every fold-out on this row opens on CLICK and closes on outside click or
   // Escape, like the view sheet and the Setup Rules sheet. They used to open
@@ -9338,7 +9348,8 @@ const PaintToolbar = memo(function PaintToolbar({
     <>
     {/* THE MODE SWITCH, top centre of the board on a plate of its own
         (2026-09-06): it changes what the whole board means, so it stands
-        apart from both tool rows and never folds. */}
+        apart from both tool rows until Build tools folds. */}
+    {!modesInBuild && (
     <div
       data-board-toolbar-centre
       className={[
@@ -9359,6 +9370,7 @@ const PaintToolbar = memo(function PaintToolbar({
         <PoolSpawnKeys />
       </div>
     </div>
+    )}
     <div
       data-board-toolbar
       className={[
@@ -9369,14 +9381,11 @@ const PaintToolbar = memo(function PaintToolbar({
         // OVER it and take its clicks: the colours were once visible and
         // unpickable. The row lifts above every other toolbar for as long as
         // any of its fold-outs is out.
-        isDrawMenuOpen || isViewMenuOpen || checklistMode
+        isDrawMenuOpen || isViewMenuOpen
           ? "z-40"
           : "z-20",
       ].join(" ")}
     >
-      <ToolTray>
-        <ChecklistKeys />
-      </ToolTray>
       <ToolGroup
         id="paint"
         folded={folded}

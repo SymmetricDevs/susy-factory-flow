@@ -14,7 +14,7 @@ import { playBoardSound } from "@/lib/board-sounds";
 
 const cursor = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M3 2v21l5-6 5 10 4-2-5-10h8z" fill="#172922" stroke="#dcfce7" stroke-width="1.5"/><path d="m18 9 4 4 7-8" fill="none" stroke="#86efac" stroke-width="3" stroke-linecap="square"/></svg>')}") 3 2, crosshair`;
 const keyClass =
-  "pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]";
+  "pointer-events-auto flex h-9 w-full shrink-0 items-center gap-2 border-2 border-[var(--mc-15)] px-2 text-left font-mono text-[11px] font-bold";
 
 export function ChecklistKeys() {
   const active = useFactoryStore((s) => s.checklistMode);
@@ -26,7 +26,7 @@ export function ChecklistKeys() {
     project.edges.filter((e) => edges.has(e.id)).length;
   const total = project.nodes.length + (project.storages?.length ?? 0) + project.edges.length;
   return (
-    <div className="relative flex">
+    <div className="flex flex-col gap-1">
       <button
         type="button"
         aria-label="Checklist mode"
@@ -39,9 +39,11 @@ export function ChecklistKeys() {
         }}
       >
         <ClipboardCheck className="h-4 w-4" />
+        <span className="flex-1">Checklist mode</span>
+        <span>{active ? "On" : "Off"}</span>
       </button>
       {active && (
-        <div className="pointer-events-auto absolute right-0 top-[calc(100%+10px)] w-48 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 text-white shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]">
+        <div className="pointer-events-auto w-full border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 text-white shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]">
           <div className="border-b-2 border-[var(--mc-15)] px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wider">Checklist</div>
           <div
             role="status"

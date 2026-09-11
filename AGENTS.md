@@ -886,7 +886,9 @@ Working notes for future agents on GTNH Factory Flow.
 ## Interface Size (100% Is The Baseline)
 
 - Build/Solve/Pool use icons only on snug or compact windows; wider windows
-  keep the words. The key width and drag hit-testing must use the same pitch.
+  keep the words. When Build tools folds, the mode switch and Pool product
+  key move inside it, freeing the centre. The key width and drag hit-testing
+  must use the same pitch.
 
 - The default is 10% smaller than the previous baseline (Jack, 2026-09-10),
   still labelled 100%. `src/lib/ui-scale.ts` owns it: a Settings
@@ -960,7 +962,8 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Board Gestures
 
-- Checklist mode (`ChecklistMode.tsx`) has its own tray on the right, beside markup/view. Its active
+- Checklist mode (`ChecklistMode.tsx`) lives in View options, with a labelled
+  on/off control and inline progress/reset. Its active
   tool is session state; `project.checklist` saves checked card and edge ids.
   It only changes presentation, never machine settings or production, and
   supports undo/reset. The Machines list checks the cards in each build row.

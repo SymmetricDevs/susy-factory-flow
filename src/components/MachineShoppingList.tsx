@@ -2,7 +2,7 @@
 
 import { checklistCursorStyle } from "./flow/ChecklistMode";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Cloud, Zap } from "lucide-react";
 import { MotionNumberText } from "./flow/board-motion";
 import { powerDisplayFromEuT, powerDisplaySuffix } from "@/lib/model/rate-unit";
@@ -139,6 +139,7 @@ interface MachineGroup {
  * behind it.
  */
 export function MachineShoppingList() {
+  const [powerColumn, setPowerColumn] = useState<"peak" | "average">("peak");
   const project = useFactoryStore((state) => state.project);
   const checklistMode = useFactoryStore((state) => state.checklistMode);
   const lastResult = useFactoryStore((state) => state.lastResult);
@@ -449,6 +450,7 @@ export function MachineShoppingList() {
   return (
     <div
       data-help-anchor="machines"
+      data-power-column={powerColumn}
       className="inspector-machines flex min-h-0 flex-1 flex-col border-t border-neutral-700"
     >
       <div className="inspector-machine-summary border-b border-neutral-700 px-3 pb-2">
@@ -457,9 +459,12 @@ export function MachineShoppingList() {
         <div className="inspector-section-heading -mx-3">
           <h2>Machines</h2>
           <span className="inspector-count">{formatCompact(totalMachines)}</span>
-          <span className="ml-auto flex gap-1.5">
-          <span className={COLUMN_HEAD_CLASS}>Peak</span>
-          <span className={COLUMN_HEAD_CLASS}>Average</span>
+          <span className="inspector-rate-selector ml-auto flex justify-end gap-0.5" role="group" aria-label="Machine power display">
+            {(["peak", "average"] as const).map(value => <button key={value} type="button"
+              aria-pressed={powerColumn === value} onClick={() => setPowerColumn(value)}
+              aria-label={value === "peak" ? "Show peak power" : "Show average power"} className="px-1 py-0.5">
+              {value === "peak" ? "Peak" : "Average"}
+            </button>)}
           </span>
         </div>
         {/* The totals, on top like a sheet: one row when the board only
@@ -544,8 +549,6 @@ interface Figure {
 
 /** The two right-hand columns share one width so every row lines up. */
 const COLUMN_CLASS = "w-[80px] shrink-0 whitespace-nowrap text-right tabular-nums";
-const COLUMN_HEAD_CLASS =
-  COLUMN_CLASS + " text-[10px] font-bold uppercase tracking-wider text-[var(--mc-ink-muted)]";
 
 /**
  * A figure in its column: the energy's mark, the number, its unit. A
@@ -790,12 +793,12 @@ function ListLine({
           {label ?? ""}
         </span>
         {chip?.tier && (
-          <span className="inspector-build-config flex shrink-0 items-center gap-1">
-            {chip.isMultiblock && <span className="text-[10px] tabular-nums text-neutral-300">
+          <span className="inspector-build-config flex shrink-0 items-center gap-1 rounded-sm px-1 font-bold leading-4"
+            style={{ color: GT_TIER_COLORS[chip.tier].text, backgroundColor: GT_TIER_COLORS[chip.tier].background }}>
+            {chip.isMultiblock && <span className="text-[10px] tabular-nums">
               {chip.typedEuT !== undefined ? formatCompact(chip.typedEuT / getVoltageTierMaxEuT(chip.tier)) + "A" : hatchAmps !== undefined ? formatCompact(hatchAmps) + "A" : "—"}
             </span>}
-            <span className="rounded-sm px-1 text-[10px] font-bold leading-4"
-              style={{ color: GT_TIER_COLORS[chip.tier].text, backgroundColor: GT_TIER_COLORS[chip.tier].background }}>
+            <span className="text-[10px] font-bold leading-4">
               {chip.tier}
             </span>
           </span>

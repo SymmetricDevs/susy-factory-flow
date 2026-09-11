@@ -1,5 +1,5 @@
 /* Shared typography and spacing for both inspector tables. */
-.inspector-panel { color: #e5e7eb; font-size: 12px; }
+.inspector-panel { color: #e5e7eb; font-size: 12px; container-type: inline-size; }
 .inspector-panel:has(.inspector-machines) { --inspector-resource-max: 62%; }
 .inspector-selection-scope::after {
   content: ""; position: absolute; inset: 0; z-index: 20;
@@ -69,7 +69,27 @@
 .inspector-resource-rate > span > span:last-child,
 .inspector-resource-net > .inspector-unit {
   display: inline-block;
-  width: 27px;
-  text-align: left;
+  width: 20px;
+  text-align: right;
 }
 .inspector-machine-title > span:first-child > span:last-child { font-size: 13px; }
+
+.inspector-product-marker {
+  position: absolute; right: -2px; bottom: -2px; z-index: 1;
+  font-size: 13px; line-height: 14px; color: #6ee7b7;
+  text-shadow: -1px 0 #12372b, 1px 0 #12372b, 0 -1px #12372b, 0 1px #12372b;
+  filter: drop-shadow(1px 2px 1px #000b);
+}
+
+
+/* One shared power column, matching the resource table's selector. */
+.inspector-machines[data-power-column="peak"] .inspector-machine-figures > span:nth-child(2),
+.inspector-machines[data-power-column="average"] .inspector-machine-figures > span:first-child,
+.inspector-machines[data-power-column="peak"] .inspector-machine-summary > .flex:not(.inspector-section-heading) > span:nth-child(3),
+.inspector-machines[data-power-column="average"] .inspector-machine-summary > .flex:not(.inspector-section-heading) > span:nth-child(2) { display: none; }
+.inspector-machine-figures .tabular-nums,
+.inspector-machine-summary .tabular-nums { width: 88px; }
+.inspector-machine-summary .inspector-rate-selector { width: auto; }
+.inspector-machine-build { padding-left: 4px; padding-right: 4px; }
+.inspector-machine-build > span:first-child > span:first-child { left: 4px; width: 16px; }
+.inspector-machine-build > span:first-child > span:nth-child(2) { width: 16px; }

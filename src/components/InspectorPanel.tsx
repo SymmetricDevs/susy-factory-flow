@@ -1497,7 +1497,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // crossed, which on a list this dense meant a yellow box trailing the
         // cursor the whole way down. The row already widens on hover to show
         // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 96px auto` }}
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 89px auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon
@@ -1520,7 +1520,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         {/* The icon spans the name and rate lines without growing with the row. */}
         <span
           style={{ height: 24, width: 24 }}
-          className="flex shrink-0 items-center justify-center overflow-hidden"
+          className="relative flex shrink-0 items-center justify-center"
         >
           <ResourceIcon
             resource={{
@@ -1539,13 +1539,13 @@ const FlowResourceRow = memo(function FlowResourceRow({
             tooltip={false}
             className="!h-full !w-full"
           />
+          {productMarker ? <span className="inspector-product-marker" title="Product">◆</span> : null}
         </span>
 
         {/* Truncates in the wide copy too. The extra width fits most names in
             full, which is the point, but a name longer than even that has to
             end in an ellipsis rather than run under the rate. */}
         <span className="inspector-resource-name ml-2 flex min-w-0 items-center gap-1.5">
-          {productMarker ? <span className="text-[9px] text-emerald-300/70" title="Product">◆</span> : null}
           <span className="min-w-0 truncate text-base font-medium text-neutral-100">{name}</span>
         </span>
 

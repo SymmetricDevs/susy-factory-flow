@@ -41,6 +41,7 @@ interface OpenMenu {
 
 export function DesignTabs() {
   const publicView = useDesignStore((state) => state.publicView);
+  const publicViews = useDesignStore((state) => state.publicViews);
   const allDesigns = useDesignStore((state) => state.designs);
   const folders = useDesignStore((state) => state.folders);
   const activeDesignId = useDesignStore((state) => state.activeDesignId);
@@ -76,7 +77,7 @@ export function DesignTabs() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const stopScrollMotion = useRef(() => {});
-  const openTabKey = designs.map((design) => design.id).join(",");
+  const openTabKey = [...publicViews.map((view) => "public:" + view.id), ...designs.map((design) => design.id)].join(",");
   const [closingLayout, setClosingLayout] = useState<{ widths: Record<string, number>; trackWidth: number }>();
   const closingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(closingTimer.current), []);
@@ -151,13 +152,13 @@ export function DesignTabs() {
   // ids matter too: loading a newly created design and opening its tab can
   // arrive in separate store updates.
   useEffect(() => {
-    if (!activeDesignId || closingLayout) return;
+    if ((!activeDesignId && !publicView) || closingLayout) return;
     const frame = requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
-      const active = scroller?.querySelector<HTMLElement>(`[data-design-id="${CSS.escape(activeDesignId)}"]`);
+      const active = scroller?.querySelector<HTMLElement>(publicView ? `[data-public-tab="${CSS.escape(publicView.id)}"]` : `[data-design-id="${CSS.escape(activeDesignId!)}"]`);
       if (!scroller || !active) return;
       stopScrollMotion.current();
-      const tabs = scroller.querySelectorAll("[data-design-id]");
+      const tabs = scroller.querySelectorAll("[data-design-id], [data-public-tab]");
       if (active === tabs[tabs.length - 1]) {
         scroller.scrollTo({ left: scroller.scrollWidth, behavior: "smooth" });
       } else {
@@ -165,7 +166,7 @@ export function DesignTabs() {
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeDesignId, openTabKey, isHydrated, closingLayout]);
+  }, [activeDesignId, publicView?.id, openTabKey, isHydrated, closingLayout]);
 
   // The strip is the one horizontal scroller under a vertical wheel, so plain
   // wheel input walks the tabs. Attached natively: React registers wheel
@@ -532,18 +533,7 @@ export function DesignTabs() {
           Library
         </button>
         <span aria-hidden className="h-3.5 w-px shrink-0 bg-line" />
-        {publicView ? (
-          <div className="flex min-w-0 shrink-0 items-center border-b-2 border-amber-500 text-amber-300">
-          <button type="button" onClick={() => { leaveLibrary(); leaveWelcomeTab(); }}
-            aria-pressed={!coveringPage}
-            className="h-[18px] max-w-48 truncate px-2 text-xs"
-            title={`View only: ${publicView.name}`}>
-            View only: {publicView.name}
-          </button>
-          <button type="button" aria-label="Close public setup view" className="px-1 text-xs hover:text-fg"
-            onClick={() => void useDesignStore.getState().closePublicView()}>✕</button>
-          </div>
-        ) : null}
+
 
         {welcome.open ? (
           <div
@@ -601,6 +591,19 @@ export function DesignTabs() {
             aria-label="Designs"
             className="design-tabs-track flex w-max max-w-full select-none items-center gap-1"
           >
+            {publicViews.map((view) => {
+              const selected = publicView?.id === view.id && !coveringPage;
+              return <div key={view.id} data-public-tab={view.id}
+                className={`design-tab group flex h-5 items-center rounded-t border-b-2 pl-2 pr-1 ${selected ? "border-amber-500 text-amber-300 bg-surface-raised" : "border-transparent text-fg-muted hover:bg-surface-sunken hover:text-fg"}`}>
+                <button type="button" aria-label={`View only: ${view.name}`} aria-pressed={selected}
+                  onClick={() => void useDesignStore.getState().switchToPublicView(view.id)}
+                  className="design-tab-label flex h-full min-w-0 flex-1 items-center text-xs font-medium">
+                  <FadingTabName name={view.name} />
+                </button>
+                {selected ? <button type="button" aria-label="Close public setup view" onClick={() => void useDesignStore.getState().closePublicView(view.id)}
+                  className="ml-1 shrink-0 rounded px-1 text-xs text-fg-muted hover:bg-surface hover:text-fg">×</button> : null}
+              </div>;
+            })}
             {designs.map((design, index) => {
               const isActive = design.id === activeDesignId && !coveringPage;
 
@@ -712,9 +715,9 @@ export function DesignTabs() {
             void addDesign();
           }}
           aria-label="New design"
-          className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded text-fg-muted hover:bg-surface-sunken hover:text-fg"
+          className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded text-fg-muted hover:bg-surface-sunken hover:text-fg"
         >
-          <Plus className="h-4 w-4" aria-hidden />
+          <Plus className="h-3.5 w-3.5" aria-hidden />
         </button>
 
         {/* Everything from here is pinned to the right edge. */}

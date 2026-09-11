@@ -62,10 +62,14 @@ import { LOCAL_STORAGE_KEY, useFactoryStore } from "./factory-store";
 
 export type DesignSaveState = "idle" | "saving" | "saved" | "error";
 
+type PublicView = { id: string; name: string; authorName?: string; project: FactoryProject };
+
 interface DesignStore {
-  publicView?: { id: string; name: string; authorName?: string; project: FactoryProject };
+  publicView?: PublicView;
+  publicViews: PublicView[];
+  switchToPublicView: (id: string) => Promise<void>;
   viewPublicProject: (post: { id: string; name: string; authorName?: string }, project: FactoryProject) => Promise<void>;
-  closePublicView: () => Promise<void>;
+  closePublicView: (id?: string) => Promise<void>;
   /** Every design on this device, open or closed, in strip order. */
   designs: DesignSummary[];
   /** The shelf's folders, by name. */
@@ -214,6 +218,11 @@ function withCurrentView(project: FactoryProject): FactoryProject {
  * drop the last few edits of the design being left behind.
  */
 async function flushCanvasInto(summary: DesignSummary | undefined): Promise<void> {
+  const viewing = useDesignStore.getState().publicView;
+  if (viewing) {
+    const snapshot = { ...viewing, project: withCurrentView(currentProject()) };
+    useDesignStore.setState((state) => ({ publicViews: state.publicViews.map((view) => view.id === viewing.id ? snapshot : view) }));
+  }
   if (!summary || useFactoryStore.getState().isReadOnly) {
     return;
   }
@@ -253,8 +262,20 @@ async function listLibrary(): Promise<Pick<DesignStore, "designs" | "folders">> 
 }
 
 export const useDesignStore = create<DesignStore>((set, get) => ({
-  closePublicView: async () => {
-    if (!get().publicView) return;
+  publicViews: [],
+  switchToPublicView: async (id) => {
+    if (get().publicView?.id === id) { leaveWelcomeTab(); leaveLibrary(); return; }
+    const view = get().publicViews.find((entry) => entry.id === id);
+    if (view) await get().viewPublicProject(view, view.project);
+  },
+  closePublicView: async (id) => {
+    const closingId = id ?? get().publicView?.id;
+    if (!closingId) return;
+    const remaining = get().publicViews.filter((view) => view.id !== closingId);
+    const isActive = get().publicView?.id === closingId;
+    set({ publicViews: remaining });
+    if (!isActive) return;
+    if (remaining.length) { await get().switchToPublicView(remaining[remaining.length - 1].id); return; }
     const remembered = readActiveDesignId();
     const target = get().designs.find((design) => design.id === remembered && !design.closed)
       ?? openDesigns(get().designs)[0];
@@ -268,7 +289,8 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     await flushCanvasInto(designs.find((design) => design.id === activeDesignId));
     beginDesignCameraHandover();
     // No design record is created, and autosave has no design to write into.
-    set({ activeDesignId: undefined, publicView: { ...post, project } });
+    const view = { id: post.id, name: post.name, authorName: post.authorName, project };
+    set({ activeDesignId: undefined, publicView: view, publicViews: get().publicViews.some((entry) => entry.id === post.id) ? get().publicViews.map((entry) => entry.id === post.id ? view : entry) : [...get().publicViews, view] });
     useFactoryStore.getState().loadViewedProject(project);
     applyPlanView(project.view, "board");
     leaveWelcomeTab();

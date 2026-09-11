@@ -257,7 +257,7 @@ describe("public viewing sessions", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     useFactoryStore.getState().markHydratedProject(createEmptyProject());
-    useDesignStore.setState({ activeDesignId: undefined, publicView: undefined });
+    useDesignStore.setState({ activeDesignId: undefined, publicView: undefined, publicViews: [] });
     library(summary("a"));
     storage.readActiveDesignId.mockReturnValue("a");
     await useDesignStore.getState().hydrate();
@@ -282,6 +282,28 @@ describe("public viewing sessions", () => {
     expect(storage.writeDesign).not.toHaveBeenCalled();
     expect(useFactoryStore.getState().isReadOnly).toBe(false);
     expect(useDesignStore.getState().publicView).toBeUndefined();
+  });
+
+  it("keeps multiple public tabs while switching to personal designs and closes only the chosen view", async () => {
+    const store = useDesignStore.getState();
+    await store.viewPublicProject({ id: "one", name: "One" }, { ...createEmptyProject(), name: "One" });
+    await store.viewPublicProject({ id: "two", name: "Two" }, { ...createEmptyProject(), name: "Two" });
+    await store.switchToDesign("a");
+    expect(useDesignStore.getState().publicViews.map((view) => view.id)).toEqual(["one", "two"]);
+    storage.writeDesign.mockClear();
+    await store.switchToPublicView("one");
+    expect(useFactoryStore.getState().isReadOnly).toBe(true);
+    expect(useFactoryStore.getState().project.name).toBe("One");
+    expect(useDesignStore.getState().publicViews.map((view) => view.id)).toEqual(["one", "two"]);
+    storage.writeDesign.mockClear();
+    await store.switchToPublicView("two");
+    expect(storage.writeDesign).not.toHaveBeenCalled();
+    await store.closePublicView("one");
+    expect(useDesignStore.getState().publicView?.id).toBe("two");
+    expect(useDesignStore.getState().publicViews.map((view) => view.id)).toEqual(["two"]);
+    await store.closePublicView("two");
+    expect(useDesignStore.getState().publicViews).toEqual([]);
+    expect(useFactoryStore.getState().isReadOnly).toBe(false);
   });
 
   it("only Open a copy creates a design, and the copy is editable and unlinked", async () => {

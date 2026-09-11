@@ -29,7 +29,7 @@
 .app-header-tabs .design-tab-strip [aria-pressed][title] { height: 24px; }
 
 /* Tabs spend their name space before the strip needs to scroll. */
-.design-tabs-track .design-tab { flex: 0 1 auto; width: 180px; min-width: 64px; container-type: inline-size; }
+.design-tabs-track .design-tab { flex: 0 1 auto; width: 120px; min-width: 64px; container-type: inline-size; }
 .design-tab-name { min-width: 0; overflow: hidden; white-space: nowrap; }
 .design-tab-name[data-clipped="true"] { mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent); }
 .design-tab > input { min-width: 0; }

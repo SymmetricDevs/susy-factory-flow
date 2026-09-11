@@ -56,6 +56,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Tap multiblock power settings to open *touch controls* for amps, voltage and raw EU/t alongside the power breakdown.",
       "Shared machines give recipes *more breathing room* and show each recipe's circuit above its outputs.",
       "Item and hatch icons keep *the same size in Firefox and Chrome*, with undistorted atlas sprites.",
+      "Net resources return to *the correct side*: deficits under Inputs and surpluses under Outputs.",
     ],
   },
   {

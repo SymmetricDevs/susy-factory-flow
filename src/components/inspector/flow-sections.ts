@@ -78,7 +78,7 @@ export function applyNetFlow(
 
   for (const balance of needs) {
     const net = balance.surplusPerSecond - balance.deficitPerSecond;
-    if (balance.surplusPerSecond <= 0) {
+    if (net < 0 && balance.surplusPerSecond <= 0) {
       nettedNeeds.push(balance);
     } else if (net < 0) {
       nettedNeeds.push({ ...balance, deficitPerSecond: -net, surplusPerSecond: 0 });

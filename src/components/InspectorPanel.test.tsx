@@ -136,14 +136,17 @@ describe("InspectorPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Show net rates" }));
       await waitFor(() => {
         const rows = container.querySelectorAll('[data-resource-row="item:resource_1"]');
+        expect(rows).toHaveLength(1);
         for (const row of rows) {
           expect(row.querySelector(".inspector-resource-rate")).toBeNull();
           expect(row.querySelector(".inspector-resource-net")?.textContent).toContain(net);
         }
+        expect(screen.getByText("Inputs").closest("button")?.textContent).toMatch(input > output ? /Inputs\s*1/ : /Inputs\s*0/);
+        expect(screen.getByText("Outputs").closest("button")?.textContent).toMatch(input > output ? /Outputs\s*0/ : /Outputs\s*1/);
       });
       expect(screen.getByRole("button", { name: "Show net rates" }).getAttribute("aria-pressed")).toBe("true");
       fireEvent.click(screen.getByRole("button", { name: "Show raw rates" }));
-      expect(container.querySelectorAll(".inspector-resource-rate")).toHaveLength(2);
+      await waitFor(() => expect(container.querySelectorAll(".inspector-resource-rate")).toHaveLength(2));
     },
   );
 

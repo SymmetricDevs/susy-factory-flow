@@ -44,6 +44,7 @@ import {
   writeWorkspaceView,
 } from "@/lib/workspace-view";
 import {
+  applyNetFlow,
   applyResourceMarks,
   buildFlowRows,
   filterFlowBalances,
@@ -319,6 +320,7 @@ function FlowIOPanel() {
   const focusBoardNode = useFactoryStore((state) => state.focusBoardNode);
 
   const [filter, setFilter] = useState("");
+  const [rateColumn, setRateColumn] = useState<"raw" | "net">("raw");
   // Internal starts folded: it is the long tail, and the group that means
   // "nothing to see". One click opens it, and the state is per visit like the
   // other folds.
@@ -439,7 +441,7 @@ function FlowIOPanel() {
     // reads once and then knows; the glosses were permanent lines of text
     // earning nothing after the first day.
     //
-    // Keep both boundary lists intact when switching between Raw and Net.
+    // Raw lists preserve both boundary sides; Net files each resource by sign.
     let boundary = { needs: scope.externalInputs, outputs: scope.unconsumedOutputs };
     // The declared boundary (see boundaryStorageKeys): rows the drawers vouch
     // for join at 0/s when the books dropped them. Board scope only — the
@@ -467,6 +469,7 @@ function FlowIOPanel() {
         outputs: augment(boundary.outputs, boundaryStorageKeys.drains),
       };
     }
+    if (rateColumn === "net") boundary = applyNetFlow(boundary.needs, boundary.outputs);
     return [
       // One line each: the row is a single fixed-height line, so wrapping
       // would clip.
@@ -479,6 +482,7 @@ function FlowIOPanel() {
     boundaryStorageKeys,
     debouncedFilter,
     marks,
+    rateColumn,
     scope.externalInputs,
     scope.resources,
     scope.unconsumedOutputs,
@@ -657,6 +661,8 @@ function FlowIOPanel() {
       </div>
 
       <FlowVirtualList
+        rateColumn={rateColumn}
+        onRateColumnChange={setRateColumn}
         products={products}
         expandedProducts={visibleProducts}
         sections={sections}
@@ -783,6 +789,8 @@ function ScopeStrip({
  * section headers use real CSS stickiness instead of hand-positioned overlays.
  */
 function FlowVirtualList({
+  rateColumn,
+  onRateColumnChange,
   products,
   expandedProducts,
   sections,
@@ -799,6 +807,8 @@ function FlowVirtualList({
   onHover,
   onFocusBoard,
 }: {
+  rateColumn: "raw" | "net";
+  onRateColumnChange: (value: "raw" | "net") => void;
   products: ReadonlyMap<string, FactoryStorage[]>;
   expandedProducts: ReadonlySet<string>;
   sections: FlowSection[];
@@ -816,7 +826,6 @@ function FlowVirtualList({
   onHover: (resourceKey?: string) => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
-  const [rateColumn, setRateColumn] = useState<"raw" | "net">("raw");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(320);
@@ -1088,7 +1097,7 @@ function FlowVirtualList({
       {stickyHeader?.type === "header" ? (
         <FlowSectionHeader
           rateColumn={rateColumn}
-          onRateColumnChange={setRateColumn}
+          onRateColumnChange={onRateColumnChange}
           section={stickyHeader.section}
           collapsed={stickyHeader.collapsed}
           isFiltered={isFiltered}
@@ -1105,7 +1114,7 @@ function FlowVirtualList({
           return (
             <FlowSectionHeader
           rateColumn={rateColumn}
-          onRateColumnChange={setRateColumn}
+          onRateColumnChange={onRateColumnChange}
               key={row.key}
               section={row.section}
               collapsed={row.collapsed}

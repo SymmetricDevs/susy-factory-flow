@@ -76,7 +76,7 @@
 .inspector-machine-summary .tabular-nums > svg {
   display: inline; width: 8px; height: 8px; margin-right: 1px;
 }
-.inspector-product-target { font-size: 12px; background: #34d39906; }
+.inspector-product-target { font-size: 12px; background: color-mix(in srgb, var(--flow-output) 2.5%, transparent); }
 .inspector-product-target button, .inspector-product-target input { font-size: 12px; }
 
 /* Keep each reading together and align its unit's end to the right edge. */
@@ -88,7 +88,7 @@
 
 .inspector-product-marker {
   position: absolute; right: -2px; bottom: -2px; z-index: 1;
-  font-size: 13px; line-height: 14px; color: #6ee7b7;
+  font-size: 13px; line-height: 14px; color: var(--flow-output);
   text-shadow: -1px 0 #12372b, 1px 0 #12372b, 0 -1px #12372b, 0 1px #12372b;
   filter: drop-shadow(1px 2px 1px #000b);
 }

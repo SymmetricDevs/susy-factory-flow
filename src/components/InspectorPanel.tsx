@@ -1755,20 +1755,20 @@ const TONE_STYLES: Record<
 > = {
   need: {
     header:
-      "border-red-500/40 bg-red-950/85 text-red-100 hover:bg-red-900/60",
-    badge: "bg-red-500/30 text-red-50",
-    value: "text-red-300",
-    tint: "bg-red-500/5",
+      "border-[var(--flow-input)]/40 bg-red-950/85 text-[var(--flow-input)] hover:bg-red-900/60",
+    badge: "bg-[var(--flow-input)]/30 text-[var(--flow-input)]",
+    value: "text-[var(--flow-input)]",
+    tint: "bg-[var(--flow-input)]/5",
   },
   /*
    * One Outputs section, one colour: green, the Output colour this panel has
    * had since before the one-day product/byproduct split. Red in, green out.
    */
   output: {
-    header: "border-emerald-500/40 bg-emerald-950/85 text-emerald-100 hover:bg-emerald-900/60",
-    badge: "bg-emerald-500/30 text-emerald-50",
-    value: "text-emerald-300",
-    tint: "bg-emerald-500/5",
+    header: "border-[var(--flow-output)]/40 bg-emerald-950/85 text-[var(--flow-output)] hover:bg-emerald-900/60",
+    badge: "bg-[var(--flow-output)]/30 text-[var(--flow-output)]",
+    value: "text-[var(--flow-output)]",
+    tint: "bg-[var(--flow-output)]/5",
   },
   internal: {
     header:

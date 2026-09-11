@@ -114,6 +114,10 @@
   --background: #1b1d21;
   --foreground: #f5f5f5;
 
+  /* Shared input/output accents for rates, drawer frames and editable targets. */
+  --flow-output: var(--color-emerald-300);
+  --flow-input: var(--color-red-300);
+
   --surface: #25272c;
   --surface-raised: #303238;
   --surface-sunken: #1b1d21;

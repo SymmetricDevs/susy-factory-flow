@@ -54,7 +54,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Clearer machine controls",
     notes: [
       "Tap multiblock power settings to open *touch controls* for amps, voltage and raw EU/t alongside the power breakdown.",
-      "Shared machines give recipes *more breathing room* and show each recipe's circuit beside its remove button.",
+      "Shared machines give recipes *more breathing room* and show each recipe's circuit above its outputs.",
     ],
   },
   {

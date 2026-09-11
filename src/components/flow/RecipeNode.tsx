@@ -2248,9 +2248,9 @@ function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCirc
         // the row's height and w-9 answers it, so the slot stays a slot however
         // the footer's type is measured.
         className={[
-          "relative flex shrink-0 items-center justify-center overflow-hidden border",
-          small ? "h-[18px] w-[18px]" : "w-9 self-stretch",
-          resource
+          "relative flex shrink-0 items-center justify-center overflow-hidden",
+          small ? "h-[18px] w-[18px]" : "w-9 self-stretch border",
+          small ? "" : resource
             ? "border-[var(--mc-47)] bg-[var(--mc-71)] shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
             : // Empty reads as a hole in the card, the way an unfilled slot
               // does in the machine's own GUI.
@@ -2276,9 +2276,8 @@ function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCirc
           // card wears, at a fraction of the ink. An empty slot with nothing
           // in it at all reads as art that failed to load rather than as a
           // machine that does not care what its circuit says.
-          <Cpu aria-hidden className={`${small ? "h-3.5 w-3.5" : "h-5 w-5"} text-[var(--mc-ink-muted)] opacity-50`} />
+          <Cpu aria-hidden className={`${small ? "h-[18px] w-[18px]" : "h-5 w-5"} text-[var(--mc-ink-muted)] opacity-50`} />
         )}
-        {small && setting ? <span className="absolute bottom-0 right-px text-[9px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000,-1px_-1px_0_#000]">{setting}</span> : null}
       </div>
     </MinecraftTooltip>
   );
@@ -3121,15 +3120,15 @@ function SharedMachineRails({
   // recipes, keeping both rails and their wire endpoints on the board grid.
   const rule = (entry: (typeof sections)[number], withKey: boolean) => (
     <div
-      className={["flex items-end pb-0.5", withKey ? "justify-end" : "justify-start"].join(" ")}
+      className="relative flex items-end pb-0.5"
       style={{ height: SECTION_RULE_HEIGHT, marginTop: entry.section > 0 ? BOARD_GRID : 0 }}
     >
       {withKey ? null : reading(entry)}
+      {withKey && entry.circuit ? <span className="absolute bottom-0.5 left-0"><CircuitChip circuit={entry.circuit} small /></span> : null}
       {withKey ? (
-        <span className="flex items-center">
+        <span className="ml-auto flex items-center">
           {key("Move this recipe up", <ChevronUp className="h-3.5 w-3.5" />, () => onMove(entry.section, -1), entry.section === 0)}
           {key("Move this recipe down", <ChevronDown className="h-3.5 w-3.5" />, () => onMove(entry.section, 1), entry.section === last)}
-          {entry.circuit ? <span className="ml-2"><CircuitChip circuit={entry.circuit} small /></span> : null}
           {key("Take this recipe off the machine", <X className="h-3 w-3" />, () => onRemove(entry.section), false, "ml-2")}
         </span>
       ) : null}

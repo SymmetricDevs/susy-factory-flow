@@ -29,7 +29,7 @@ const MENU_WIDTH = 230;
 const RUBBER_MAX = 24;
 
 /** Which destructive item is one click from firing, if any. */
-type ArmedAction = "right" | "left" | "others";
+type ArmedAction = "right" | "left" | "others" | "all";
 
 interface OpenMenu {
   id: string;
@@ -745,7 +745,7 @@ export function DesignTabs() {
             closeMenu();
           }}
           onCloseMany={(ids) => {
-            void closeDesigns(ids, openMenu.id);
+            void closeDesigns(ids, ids.includes(openMenu.id) ? undefined : openMenu.id);
             closeMenu();
           }}
         />
@@ -833,67 +833,32 @@ function DesignMenu({
         </>
       ) : null}
 
-      {/*
-        Closing puts designs on the shelf, so every close fires on one click;
-        the bulk ones still arm first because a stray click on "close other
-        tabs" empties the strip, and getting it back means a trip to the
-        shelf. Labels stay short enough to sit on one line; a count in the
-        label pushed them onto two.
-
-        An item with nothing to close is left out rather than shown disabled;
-        on the first or last tab half this menu would otherwise be dead text.
-      */}
-      <MenuItem label="Close" onClick={onCloseTab} />
-      {neighbours.left.length > 0 ? (
-        <BulkCloseItem
-          label="Close tabs to left"
-          armed={armed === "left"}
-          onArm={() => onArm("left")}
-          onFire={() => onCloseMany(neighbours.left)}
-        />
-      ) : null}
-      {neighbours.right.length > 0 ? (
-        <BulkCloseItem
-          label="Close tabs to right"
-          armed={armed === "right"}
-          onArm={() => onArm("right")}
-          onFire={() => onCloseMany(neighbours.right)}
-        />
-      ) : null}
-      {neighbours.others.length > 0 ? (
-        <BulkCloseItem
-          label="Close other tabs"
-          armed={armed === "others"}
-          onArm={() => onArm("others")}
-          onFire={() => onCloseMany(neighbours.others)}
-        />
-      ) : null}
+      <div className="border-t border-line p-2">
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">Close</div>
+        <div className="grid grid-cols-5 gap-1 text-xs">
+          <button type="button" role="menuitem" aria-label="Close this tab"
+            onClick={onCloseTab} className="rounded border border-line px-1 py-1 hover:bg-surface-sunken">This</button>
+          {([
+            ["left", "Left", neighbours.left],
+            ["right", "Right", neighbours.right],
+            ["others", "Others", neighbours.others],
+            ["all", "All", [...neighbours.others, menu.id]],
+          ] as const).map(([action, label, ids]) => (
+            <button key={action} type="button" role="menuitem"
+              aria-label={`${armed === action ? "Confirm close" : "Close"} ${action === "left" || action === "right" ? "tabs to the " + action : action + " tabs"}`}
+              disabled={ids.length === 0}
+              onClick={() => armed === action ? onCloseMany([...ids]) : onArm(action)}
+              className={`rounded border px-1 py-1 hover:bg-surface-sunken disabled:opacity-30 disabled:hover:bg-transparent ${armed === action ? "border-red-400/50 text-red-300" : "border-line"}`}>
+              {armed === action ? "Sure?" : label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* No Delete here: a tab is just a tab. Deleting a design for good is
           the library's job, where the design is a thing rather than a tab. */}
     </div>,
     document.body,
-  );
-}
-
-/** One armed-then-fires close. */
-function BulkCloseItem({
-  label,
-  armed,
-  onArm,
-  onFire,
-}: {
-  label: string;
-  armed: boolean;
-  onArm: () => void;
-  onFire: () => void;
-}) {
-  return (
-    <MenuItem
-      label={armed ? "Confirm close" : label}
-      tone={armed ? "danger" : undefined}
-      onClick={armed ? onFire : onArm}
-    />
   );
 }
 

@@ -595,13 +595,16 @@ export function DesignTabs() {
                 <div
                   data-design-id={design.id}
                   onPointerDown={(event) => beginTabDrag(event, design.id)}
-                  // Middle click closes, the way every tab strip does. Safe
-                  // now that closing only puts the design on the shelf.
-                  onAuxClick={(event) => {
-                    if (event.button === 1) {
-                      event.preventDefault();
-                      void closeDesign(design.id);
-                    }
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setArmed(undefined);
+                    setOpenMenu({
+                      id: design.id,
+                      name: design.name,
+                      left: Math.max(8, Math.min(event.clientX || rect.left, window.innerWidth - MENU_WIDTH * getUiScale() - 8)),
+                      top: rect.bottom + 4,
+                    });
                   }}
                   className={[
                     "design-tab group flex h-5 items-center rounded-t border-b-2 pl-2 pr-1",
@@ -632,8 +635,7 @@ export function DesignTabs() {
                         leaveWelcomeTab();
                         void switchToDesign(design.id);
                       }}
-                      onDoubleClick={() => setRenamingId(design.id)}
-                      className="design-tab-label flex min-w-0 max-w-[166px] flex-1 items-center gap-1.5 text-xs font-medium"
+                      className="design-tab-label flex h-full min-w-0 flex-1 items-center gap-1.5 text-xs font-medium"
                     >
                       {hasDrawableFace(design.icon) ? <TabFace icon={design.icon} /> : null}
                       {isActive ? <TabSolvingSpinner /> : null}
@@ -641,35 +643,15 @@ export function DesignTabs() {
                     </button>
                   )}
 
-                  <button
+                  {isActive ? <button
                     type="button"
-                    aria-label={`Design options for ${design.name}`}
-                    aria-expanded={openMenu?.id === design.id}
-                    onClick={(event) => {
-                      if (openMenu?.id === design.id) {
-                        closeMenu();
-                        return;
-                      }
-
-                      // Measured off the trigger because the menu renders in a
-                      // portal: the tab strip scrolls horizontally, and an
-                      // overflow container clips absolutely-positioned children
-                      // whatever their z-index.
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setArmed(undefined);
-                      setOpenMenu({
-                        id: design.id,
-                        name: design.name,
-                        // Real pixels; the menu portal converts to shell
-                        // pixels, so the shell-pixel width is scaled here.
-                        left: Math.min(rect.left, window.innerWidth - MENU_WIDTH * getUiScale() - 8),
-                        top: rect.bottom + 4,
-                      });
-                    }}
-                    className="ml-1 shrink-0 rounded px-1 text-xs text-fg-muted opacity-0 hover:bg-surface hover:text-fg focus:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100"
+                    aria-label={`Close ${design.name}`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => void closeDesign(design.id)}
+                    className="ml-1 shrink-0 rounded px-1 text-xs text-fg-muted hover:bg-surface hover:text-fg"
                   >
-                    ⋯
-                  </button>
+                    ×
+                  </button> : null}
                 </div>
                 </Fragment>
               );

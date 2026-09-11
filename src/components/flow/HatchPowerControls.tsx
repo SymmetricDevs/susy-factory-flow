@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { isTouchPointer } from "@/lib/pointer-kind";
+import { isCompactViewport } from "@/lib/compact-view";
 import { ArrowRight, Equal, X } from "lucide-react";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { GT_VOLTAGE_TIERS, getVoltageTierMaxEuT } from "@/lib/model/tiers";
@@ -17,6 +20,25 @@ import { GT_TIER_COLORS } from "./tier-colors";
 import { useBoardMotion } from "./board-motion";
 
 type Tier = NonNullable<FactoryNode["hatchVoltageTier"]>;
+
+function TouchPowerPanel({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current!;
+    element.showModal();
+    return () => element.close();
+  }, []);
+  return createPortal(<dialog ref={dialog} aria-label="Machine power settings"
+    className="ui-zoom nodrag nopan nowheel m-auto max-h-[calc(100*var(--ui-dvh)-24px)] w-[520px] max-w-[calc(100*var(--ui-vw)-24px)] overflow-y-auto overscroll-contain border-2 border-line bg-surface p-3 text-fg backdrop:bg-black/70"
+    onCancel={onClose} onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
+    onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <strong>Machine power settings</strong>
+      <button autoFocus className="min-h-11 min-w-11 border border-line px-3" onClick={onClose}>Done</button>
+    </div>
+    {children}
+  </dialog>, document.body);
+}
 const chip =
   "nodrag nowheel flex h-6 min-w-0 items-center justify-center border-2 px-1 pb-[3px] pt-0 text-center text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110";
 const number = (n: number) =>
@@ -100,7 +122,8 @@ export function PowerReadout({
   utilization,
   sharedAverageEuT,
   shared,
-}: { recipe: Recipe; node: FactoryNode } & Consumption) {
+  compact = false,
+}: { recipe: Recipe; node: FactoryNode; compact?: boolean } & Consumption) {
   const report = getNodePowerReport(recipe, node);
   const working = useMemo(
     () => describePowerWorking(recipe, node, report.poolEuT),
@@ -160,7 +183,7 @@ export function PowerReadout({
       : 0;
   return (
     <div
-      style={{ height: 372 - (next ? 0 : 158) - (!hasOverclocks && !hasParallels ? 18 : 0) }}
+      style={{ height: compact ? undefined : 372 - (next ? 0 : 158) - (!hasOverclocks && !hasParallels ? 18 : 0) }}
       className="flex w-[480px] max-w-full flex-col text-[13px] leading-[18px] text-fg-subtle"
       data-power-readout
     >
@@ -169,7 +192,7 @@ export function PowerReadout({
         {raw ? <span className="tabular-nums">{formatCompact(report.poolEuT)} EU/t</span> : null}
       </div>
       {!raw ? (
-        <div className="mt-1 flex h-6 shrink-0 items-center justify-between gap-3 whitespace-nowrap">
+        <div className={`mt-1 flex shrink-0 ${compact ? "flex-wrap gap-1" : "h-6 gap-3"} items-center justify-between whitespace-nowrap`}>
           <div className="flex min-w-0 items-center gap-1 font-medium tabular-nums text-fg">
             <span>{number(report.amps)}A ×</span>
             <TierBadge tier={report.tier} />
@@ -286,7 +309,7 @@ export function PowerReadout({
           </div>
         </section>
       ) : null}
-      <div className="mt-2 h-[58px] shrink-0 border-t border-line pt-1" data-power-consumption>
+      <div className={`mt-2 ${compact ? "" : "h-[58px]"} shrink-0 border-t border-line pt-1`} data-power-consumption>
         {mode !== "build" ? (
           plannedEuT === undefined ? (
             <p className="text-fg-muted">Power demand appears after calculation.</p>
@@ -307,6 +330,11 @@ export function PowerReadout({
           )
         ) : usage === undefined || average === undefined ? (
           <p className="text-fg-muted">Average consumption appears after calculation.</p>
+        ) : compact ? (
+          <div className="flex flex-wrap justify-between gap-1">
+            <span>Usage: {number(usage * 100)}%</span>
+            <span>Average: {formatCompact(average)} EU/t per machine</span>
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-[auto_minmax(24px,1fr)_auto_minmax(24px,1fr)_auto_minmax(24px,1fr)_auto] items-center gap-x-1 tabular-nums" aria-label="Average power consumption per machine">
@@ -388,6 +416,8 @@ export function HatchPowerControls({
   const { tier, amps, poolEuT } = getNodePowerReport(recipe, node);
   const raw = node.powerInputMode === "eut";
   const [draft, setDraft] = useState<string>();
+  const [touchOpen, setTouchOpen] = useState(false);
+  const touchPress = useRef(false);
   const [activeControl, setActiveControl] = useState<"amount" | "tier">("amount");
   const color = GT_TIER_COLORS[tier];
   const style = raw
@@ -442,7 +472,39 @@ export function HatchPowerControls({
     const next = raw ? Math.max(0, amount + direction * step) : stepWholeAmp(amount, direction, step);
     change(tier, raw ? next / getVoltageTierMaxEuT(tier) : next);
   };
-  return (
+  const openTouchPanel = () => {
+    if (!touchPress.current && !isTouchPointer() && !isCompactViewport()) return false;
+    if (!locked()) setTouchOpen(true);
+    return true;
+  };
+  const touchButton = "min-h-11 min-w-11 border border-line bg-surface-raised px-3 font-semibold disabled:opacity-40";
+  return (<>
+    {touchOpen ? <TouchPowerPanel onClose={() => { setTouchOpen(false); setDraft(undefined); }}>
+      <div className="mb-4 grid gap-3" data-touch-power-controls>
+        <label className="grid gap-1">{label}
+          <input aria-label={label} inputMode="decimal" className="min-h-11 w-full border border-line bg-surface px-3 text-base"
+            value={draft ?? String(amount)} onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+        </label>
+        <div className="grid grid-cols-4 gap-2">
+          {[-10, -1, 1, 10].map(step => <button key={step} className={touchButton}
+            aria-label={`${step > 0 ? "Increase" : "Decrease"} ${raw ? "EU/t" : "amps"} by ${Math.abs(step)}`}
+            onClick={() => stepAmount(step > 0 ? 1 : -1, Math.abs(step))}>{step > 0 ? "+" : "−"}{Math.abs(step)}</button>)}
+        </div>
+        <label className="grid gap-1">Power input unit
+          <select aria-label="Power input unit" className="min-h-11 w-full border border-line bg-surface px-3 text-base"
+            value={raw ? "eut" : tier} onChange={(event) => {
+              if (event.target.value === "eut") change(tier, amps, "eut");
+              else change(event.target.value as Tier, amps, "amps");
+            }}>
+            <option value="eut">EU/t</option>
+            {GT_VOLTAGE_TIERS.map(value => <option key={value.tier} value={value.tier}>{value.tier}</option>)}
+          </select>
+        </label>
+      </div>
+      <PowerReadout compact recipe={recipe} node={node} mode={mode}
+        plannedEuT={plannedEuT} utilization={utilization} sharedAverageEuT={sharedAverageEuT} shared={shared} />
+    </TouchPowerPanel> : null}
     <MinecraftTooltip
       placement="above-card"
       companion={() => <PowerControlsGuide raw={raw} active={activeControl} />}
@@ -461,7 +523,7 @@ export function HatchPowerControls({
       <div
         className="flex"
         data-power-controls
-        onPointerDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => { touchPress.current = e.pointerType === "touch" || e.pointerType === "pen"; e.stopPropagation(); }}
         onClick={(e) => e.stopPropagation()}
       >
         {draft !== undefined ? (
@@ -492,6 +554,7 @@ export function HatchPowerControls({
             className={`${chip} w-[64px]`}
             style={style}
             onClick={() => {
+              if (openTouchPanel()) return;
               if (!locked()) setDraft(String(amount));
             }}
             onContextMenu={(e) => {
@@ -518,7 +581,7 @@ export function HatchPowerControls({
           onMouseEnter={() => setActiveControl("tier")}
           className={`${chip} w-[64px] shrink-0`}
           style={{ ...style, textDecoration: !raw && color.underline ? "underline" : undefined }}
-          onClick={() => stepUnit(1)}
+          onClick={() => { if (!openTouchPanel()) stepUnit(1); }}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -533,5 +596,6 @@ export function HatchPowerControls({
         </button>
       </div>
     </MinecraftTooltip>
+    </>
   );
 }

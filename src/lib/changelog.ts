@@ -49,6 +49,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.1.2",
+    date: "2026-09-11",
+    headline: "Power controls for touchscreens",
+    notes: [
+      "Tap multiblock power settings to open *touch controls* for amps, voltage and raw EU/t alongside the power breakdown.",
+    ],
+  },
+  {
     version: "3.1.1",
     date: "2026-09-11",
     headline: "A more compact workspace",

@@ -8,6 +8,30 @@ Release 3.1.3 is pending deployment; production was 3.1.2 when checked September
 |---|---|---|---|
 | 1 | Neutron Activator | Astralzx: height should be adjustable; tall builds are unrealistically slow. | Fixed in `7a7021b`, pending 3.1.3. Direct integer entry from 4 pipe casings with no structural maximum; game-source duration rounding and sub-tick throughput. Accelerator power and neutron kinetic energy regulation remain unmodeled. |
 | 2 | Utupu-Tanuri | Lord Peverell, September 9: missing coil benefits and incorrect structure picture. | Pending 3.1.3. Vacuum Furnace now matches the existing Utupu-Tanuri definition; both modes receive coils, 2.2x speed, half EU, up to 4 power-limited parallels, heat discounts and perfect overclocks. Picker starts at recipe heat. Removed the incorrect render; the actual controller icon is used. |
+| 3 | Chemical Plant, Boldarnator, Industrial Sledgehammer | Screenshot shows wrong structure images on all three cards. | Pending 3.1.3. Verified the wiki images and rotated the three existing PNGs to their correct names. Five other renders from the same import batch match the wiki. |
+
+## Structure image audit — September 11
+
+The three reported images were misnamed when added in `1d86caf` (September 6).
+The card-to-file mapping was correct; the PNG contents were under the wrong
+filenames. Reassigned the existing bytes without re-rendering or downloading
+new artwork. The table below records visual checks against the wiki's actual
+full-size images, not just the page titles.
+
+| Machine / local filename | Wiki reference | Finding |
+|---|---|---|
+| Chemical Plant / `chemical-plant.png` | [ExxonMobil Chemical Plant](https://wiki.gtnewhorizons.com/wiki/ExxonMobil_Chemical_Plant), `ChemPlant.png` | Orange casing, grey internal machinery and coils. Was stored as `industrial-sledgehammer.png`; corrected. |
+| Boldarnator / `boldarnator.png` | [Boldarnator](https://wiki.gtnewhorizons.com/wiki/Boldarnator), `Boldarnator2.png` | Red/black structure with water and lava columns. Was stored as `chemical-plant.png`; corrected. |
+| Industrial Sledgehammer / `industrial-sledgehammer.png` | [Industrial Sledgehammer](https://wiki.gtnewhorizons.com/wiki/Industrial_Sledgehammer), `IndustrialSledgeHammer2.png` | Tall black frame with purple central hammer section. Was stored as `boldarnator.png`; corrected. |
+| Coke Oven / `coke-oven.png` | [Coke Oven](https://wiki.gtnewhorizons.com/wiki/Coke_Oven), `CokeOven2.png` | Matches: brown brick cube and dark front opening. |
+| Dissolution Tank / `dissolution-tank.png` | [Dissolution Tank](https://wiki.gtnewhorizons.com/wiki/Dissolution_Tank), `Dissolution Tank.png` | Matches: light-blue casing, glass tank and two legs. |
+| Industrial Coke Oven / `industrial-coke-oven.png` | [Industrial Coke Oven](https://wiki.gtnewhorizons.com/wiki/Industrial_Coke_Oven), `ICO2.png` | Matches: long light-blue structure with repeated framed vertical sections. |
+| Multiblock Electrolyzer / `multiblock-electrolyzer.png` | [Industrial Electrolyzer](https://wiki.gtnewhorizons.com/wiki/Industrial_Electrolyzer), `IndustrialElectrolyzer2.png` | Matches: brown casing, framed pillars and vertical vents. |
+| Pyrolyse Oven / `pyrolyse-oven.png` | [Pyrolyse Oven](https://wiki.gtnewhorizons.com/wiki/Pyrolyse_Oven), `PyrolyseOven2.png` | Matches: silver box, upper coils and two tall vents. |
+
+The ninth render in that batch was `vacuum-furnace.png`, already removed in
+the Utupu-Tanuri fix above. This checks that batch, not every processing or
+generator render shipped by the app.
 
 ## Utupu-Tanuri evidence
 

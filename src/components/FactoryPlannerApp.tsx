@@ -30,7 +30,6 @@ import { SharedAddressSync } from "./SharedAddressSync";
 import { PublicViewBar } from "./community/PublicViewBar";
 import { BlueprintSaveDialog } from "./BlueprintSaveDialog";
 import { PowerSourceOverlay } from "./PowerSourceOverlay";
-import { DesignTabs } from "./DesignTabs";
 import { FactoryFlow } from "./flow/FactoryFlow";
 import { useBoardSoundEffects } from "./flow/use-board-sound-effects";
 import { InspectorPanel } from "./InspectorPanel";
@@ -347,19 +346,13 @@ function PlacementRevealer() {
   return null;
 }
 
-/** The board with the tab strip over it: the same on any window. */
+/** The board and its plan details, below the shared application bar. */
 function BoardColumn() {
   const covering = useCoveringPage();
   const publicView = useDesignStore((state) => state.publicView);
 
   return (
-    /*
-      The tab strip belongs to the canvas, not the window: designs switch
-      what is on the board, while the browser and inspector are fixed
-      furniture. Rows rather than flex so the board keeps its `h-full`.
-    */
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <DesignTabs />
+    <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto]">
       {/*
         Welcome COVERS the board rather than replacing it. Unmounting the board
         would throw away the camera, the routed wires and the solve, and put

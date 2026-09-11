@@ -27,6 +27,7 @@ import { APP_VERSION } from "@/lib/version";
 import { AccountMenu } from "./community/AccountMenu";
 import { SharePlanDialog } from "./community/SharePlanDialog";
 import { AppIdentity } from "./AppIdentity";
+import { DesignTabs } from "./DesignTabs";
 import { AppMenu } from "./AppMenu";
 import { BoardActions } from "./BoardActions";
 import { ExportImageDialog } from "./export/ExportImageDialog";
@@ -129,7 +130,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   const isCompact = useIsCompactViewport();
 
   return (
-    <header className="app-header relative flex h-[22px] shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3">
+    <header className="app-header relative flex h-[22px] shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 compact:h-auto compact:flex-wrap compact:gap-y-0">
       <h1 className="flex min-w-0 items-center gap-2 text-sm font-bold tracking-tight">
         <span className="shrink-0">
           GTNH <span className="text-cyan-500">Planner</span>
@@ -185,6 +186,9 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
           </>
         )}
       </h1>
+      <div className="app-header-tabs min-w-0 flex-1 compact:order-last compact:basis-full">
+        <DesignTabs />
+      </div>
       {shownSpotlight ? (
         <ReleaseSpotlight spotlight={shownSpotlight} onClose={closeSpotlight} />
       ) : null}
@@ -205,14 +209,12 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
       ) : (
         // The global `font: inherit` reset outranks any text-* on a button, so
         // the cluster sets the one size every control in it renders at.
-        <div className="flex items-center gap-2 text-xs">
+        <div className="app-header-tools flex shrink-0 items-center gap-3 text-xs">
           <HeaderLinks />
-          <span className="mx-0.5 h-3.5 w-px bg-line" aria-hidden />
           <BoardActions
             onShare={() => setShareOpen(true)}
             onExportImage={() => setExportOpen(true)}
           />
-          <span className="mx-0.5 h-3.5 w-px bg-line" aria-hidden />
           {/* Dressed like the compass and the brand links: settings is a
               utility square, not one of the coloured calls to action. */}
           <button

@@ -101,7 +101,7 @@ export function SupportButton() {
       className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-pink-800 bg-pink-950 px-2 text-xs font-semibold text-pink-300 hover:border-pink-600 hover:bg-pink-900 hover:text-pink-200 snug:w-5 snug:justify-center snug:px-0"
     >
       <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
-      <span className="snug:hidden">Support</span>
+      <span className="sr-only">Support</span>
     </a>
   );
 }

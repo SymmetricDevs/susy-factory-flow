@@ -182,6 +182,9 @@ describe("curated machine table", () => {
     // several exist because GTNH rewrote the machine after the reference was
     // written, so the reference tracks a class that is no longer craftable.
     const DIVERGES_FROM_REFERENCE = new Set([
+      // Two recipe-map modes; Java charges 15% EU in distillery mode, not
+      // the reference's 85%. Source boundaries covered in dangote-distillus.test.ts.
+      "Dangote Distillus",
       // Java's 0.9f, ceil ticks and the custom supplier's floored parallels.
       // Covered at recipe-rate boundaries in neutron-activator.test.ts.
       "Neutron Activator",

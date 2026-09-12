@@ -121,6 +121,7 @@ export function buildMachineContext(
     voltageTier: getEffectiveVoltageOrdinal(recipe, node, getNodeRunTier(recipe as Recipe, node)),
     recipeVoltageTier: getVoltageTierIndex(getVoltageTierForEuT(Math.abs(recipe.eut ?? 0))),
     recipeSpecialValue: getRecipeSpecialValue(recipe),
+    recipeMap: recipe.source?.recipeMap ?? recipe.machineType,
   };
 }
 

@@ -5,7 +5,7 @@ import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import { getNodePowerReport, getNodeSteamReport, hasPowerReport, describePowerStall } from "@/lib/solver/power-report";
 import { getMachineParallelMultiplier } from "@/lib/solver/machine-effects";
 import { isMultiblockRecipe } from "@/lib/solver/power";
-import { getMachineTableControls } from "@/lib/machines/machine-table";
+import { getMachineBehaviour, getMachineTableControls } from "@/lib/machines/machine-table";
 import type { RecipeTooltipView, TooltipMode } from "./recipe-tooltip-data";
 
 const number = (value: number) => value > 0 && value < 0.001 ? "<0.001" : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
@@ -28,6 +28,7 @@ export function buildMachineTooltip(recipe: Recipe, handler: MachineHandler, nod
   ];
   return {
     title: title ?? handler.label, subtitle: isMultiblockRecipe(effective) ? "Multiblock" : "Machine", mode, rows,
+    requirement: getMachineBehaviour(effective.machineType)?.note,
     reason: power && power.state !== "ok" ? describePowerStall(power) : undefined,
   };
 }

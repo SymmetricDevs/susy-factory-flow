@@ -138,6 +138,8 @@ export interface MachineContext {
    * formula must state its own default.
    */
   recipeSpecialValue?: number;
+  /** Original recipe map, retained when a handler replaces the machine name. */
+  recipeMap?: string;
 }
 
 type Coefficient = number | ((ctx: MachineContext) => number);
@@ -1243,6 +1245,18 @@ const MACHINES: Record<string, MachineBehaviour> = {
     parallels: (c) => c.voltageTier * (c.tier(LATEX_SINGULARITY) === 1 ? 16 : 8),
     controls: [LATEX_SINGULARITY_CONTROL],
     note: "Rubber cost discounts are not counted.",
+  },
+  // MTEAdvDistillationTower: mode follows the recipe map. The reference only
+  // models distillery mode and charges 85% EU; Java charges 15%. mHeight is
+  // the top layer's zero-based index, so (mHeight + 1) is total structure height.
+  "Dangote Distillus": {
+    overclock: OVERCLOCK.normal(),
+    speed: (c) => c.recipeMap?.toLowerCase() === "distillery" ? 2 : 3,
+    power: (c) => c.recipeMap?.toLowerCase() === "distillery" ? 0.15 : 1,
+    parallels: (c) => c.recipeMap?.toLowerCase() === "distillery" ? 8 * c.voltageTier : 12,
+    recipeTierFromBase: true,
+    hidesControls: ["machineParallel", "voltageParallel"],
+    note: "Distillery mode assumes 12 layers: 8 parallels per voltage tier. Tower mode has 12 parallels. Power comes from ordinary energy hatches; multi-amp and laser hatches are not supported.",
   },
 };
 

@@ -54,6 +54,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Item icons keep their zoom while fitting the whole item inside its slot, with matching shadows in the item panel and input/output rows.",
       "Fluid icons share the same shadow and have subtly rounded corners, including textured fluids and plain colour swatches.",
       "Verified icon sizing and shadows across Chrome and Firefox, including interface scaling and board zoom.",
+      "Dangote Distillus now has adjustable power: Distillery mode scales parallels with voltage assuming 12 layers, while Tower mode keeps 12 parallels and 3× speed.",
     ],
   },
   {

@@ -309,7 +309,7 @@ Working notes for future agents on GTNH Factory Flow.
     remains visible. Draconic Evolution Fusion Crafter is unrelated.
   - Still on scraped data, deliberately: the machines whose
     coefficients read recipe metadata or the recipe type (Nano Forge, PCB
-    Factory, Component Assembly Line, Dangote Distillus, QFT, Eye of Harmony).
+    Factory, Component Assembly Line, QFT, Eye of Harmony).
     PrAss is now curated in both modes; see below. The Naquadah Fuel Refinery
     graduated off that list: its recipe metadata is the special value (the
     minimum field restriction coil tier), which `ctx.recipeSpecialValue`
@@ -341,6 +341,13 @@ Working notes for future agents on GTNH Factory Flow.
     tier lists). It should no longer be trusted for effect VALUES: it once
     stamped a heat capacity on every coil, which handed four machines
     overclocks they do not get.
+- Dangote Distillus is curated in both modes (`dangote-distillus.test.ts`),
+  selected by the original `source.recipeMap` carried into `MachineContext`.
+  MTEAdvDistillationTower gives Tower mode 12 parallels and 3x speed, while
+  Distillery mode gets 2x speed, 15% EU and 8 parallels per summed-voltage
+  ordinal assuming the maximum 12-layer height. Ordinary hatches may stack;
+  multi-amp/laser hatches are unsupported. Old baked handler stats and fixed
+  parallel controls must not override this, nor may runtime ladders hide amps.
 - Parallels are paid for with power BEFORE overclocks, and only the leftover
   voltage buys overclock steps. See `src/lib/solver/overclock.ts`. Heat
   overclocks belong to the Electric Blast Furnace, Volcanus, the Exothermic

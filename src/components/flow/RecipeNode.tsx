@@ -167,6 +167,7 @@ import {
 } from "@/components/browse-menu";
 import { isEchoOfTouch } from "@/lib/pointer-kind";
 import { machineIconAtTier, useMachineHandlerIconEntries, useMachineHandlerIcons, useRecipeMapIcons, type MachineHandlerIcon } from "./machine-icons";
+import { getFusionMachine } from "@/lib/machines/fusion";
 import { useRenderedHandles } from "./use-rendered-handles";
 import { MinecraftSelect } from "./MinecraftSelect";
 import {
@@ -415,7 +416,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     // The hatch chip rides only on multiblocks whose maths our own engine
     // runs; runtime-ladder machines would show a knob that changes nothing.
     const showHatchControl = Boolean(
-      powerReport?.isMultiblock && prefersCuratedMachineMath(effectiveRecipe),
+      powerReport?.isMultiblock && prefersCuratedMachineMath(effectiveRecipe) && !getFusionMachine(effectiveRecipe.machineType),
     );
     // Which hatch family feeds the build: the plain 2 A pair, or one exotic
     // hatch (multi-amp, laser) carrying its whole rating. Picked in the
@@ -1807,14 +1808,17 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }
             >
             <div className="flex">
-              <MinecraftTooltip content={() => <RecipeTooltip view={{ title: "Voltage tier", rows: [{ label: "Configured tier", value: tierControl.current }], actions: [{ gesture: "left", label: "Increase" }, { gesture: "right", label: "Decrease" }, { gesture: "wheel", label: "Adjust tier" }] }} />}>
+              <MinecraftTooltip content={() => <RecipeTooltip view={tierControl.fixed
+                ? { title: "Fusion reactor power", rows: [{ label: "Operating tier", value: tierControl.current }], reason: "Fixed by the reactor mark. Select a different controller to change overclocks." }
+                : { title: "Voltage tier", rows: [{ label: "Configured tier", value: tierControl.current }], actions: [{ gesture: "left", label: "Increase" }, { gesture: "right", label: "Decrease" }, { gesture: "wheel", label: "Adjust tier" }] }} />}>
               <button
                 type="button"
+                aria-disabled={tierControl.fixed || undefined}
                 onClick={(event) => {
                   event.stopPropagation();
                   // No dropdown any more: click steps up, right-click steps
                   // down, wheel walks - the classic cycle, everywhere.
-                  updateTier(1);
+                  if (!tierControl.fixed) updateTier(1);
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
@@ -1823,13 +1827,13 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   // requiring shift left plain right click doing nothing,
                   // which read as broken (and Firefox forces its own menu on
                   // shift-right-click, so plain is the one that always works).
-                  updateTier(-1);
+                  if (!tierControl.fixed) updateTier(-1);
                 }}
                 data-hatch-menu-anchor
                 onWheel={(event) => {
                   if (checklistLocked()) return;
                   event.stopPropagation();
-                  updateTier(event.deltaY < 0 ? 1 : -1);
+                  if (!tierControl.fixed) updateTier(event.deltaY < 0 ? 1 : -1);
                 }}
                 className="nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
                 style={{
@@ -4214,6 +4218,8 @@ function normalizeSearch(value: string) {
 type VoltageTier = Exclude<MachineTier, "DEMO">;
 
 function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
+  const fusion = getFusionMachine(recipe.machineType);
+  if (fusion) return { minimum: fusion.tier, maximum: fusion.tier, current: fusion.tier, allowBelowMinimum: false, fixed: true };
   if (isIndustrialApiaryMachineType(recipe.machineType)) {
     return undefined;
   }
@@ -4241,7 +4247,7 @@ function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
       : resolved;
   const current =
     maximum && getVoltageTierIndex(floored) > getVoltageTierIndex(maximum) ? maximum : floored;
-  return { minimum, maximum, current, allowBelowMinimum };
+  return { minimum, maximum, current, allowBelowMinimum, fixed: false };
 }
 
 function isTierDrivenOutputRecipe(recipe: Recipe) {
@@ -5971,7 +5977,7 @@ function PowerStoryContent({ report, utilization, machines = 1, recipe, node, ac
   // The calculator's working, on hover only: the scan behind the next win
   // samples the report a few hundred times.
   const working = useMemo(
-    () => (report.isMultiblock && recipe && node ? describePowerWorking(recipe, node, report.poolEuT) : undefined),
+    () => (report.isMultiblock && recipe && node && !getFusionMachine(applyMachineHandlerToRecipe(recipe, node).machineType) ? describePowerWorking(recipe, node, report.poolEuT) : undefined),
     [report.isMultiblock, report.poolEuT, recipe, node],
   );
   const rows = working

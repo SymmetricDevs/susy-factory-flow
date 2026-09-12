@@ -1,5 +1,6 @@
 import { getVoltageTierIndex, GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import { getMachineBehaviour } from "@/lib/machines/machine-table";
+import { isFusionRecipe } from "@/lib/machines/fusion";
 import type {
   FactoryNode,
   MachineTier,
@@ -27,7 +28,7 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
  * else still uses the runtime data, which remains the best source we have.
  */
 export function prefersCuratedMachineMath(recipe: { machineType?: string }): boolean {
-  return getMachineBehaviour(recipe.machineType) !== undefined;
+  return isFusionRecipe(recipe) || getMachineBehaviour(recipe.machineType) !== undefined;
 }
 
 export function selectRuntimeCalculationVariant(
@@ -39,13 +40,13 @@ export function selectRuntimeCalculationVariant(
   > &
     Partial<Pick<FactoryNode, "hatchVoltageTier" | "hatchAmps">>,
 ): RuntimeCalculationVariant | undefined {
+  // The oracle's generic ladder never called FusionOverclockDescriber.
+  if (isFusionRecipe(recipe)) return undefined;
   // Exported variants never saw the user's power pool or parallel helper.
-  // Fusion keeps its dedicated exported OC ladder; other explicitly supplied
-  // multiblocks must use the live power calculation.
+  // Explicitly supplied multiblocks must use the live power calculation.
   if (
     node.hatchVoltageTier &&
-    recipe.machineProfile?.kind === "multiblock" &&
-    !/fusion/i.test(recipe.machineType ?? "")
+    recipe.machineProfile?.kind === "multiblock"
   )
     return undefined;
   if (node.hatchVoltageTier) node = { ...node, overclockTier: node.hatchVoltageTier };
@@ -101,6 +102,7 @@ export function runtimeCalculationWarning(
   recipe: Pick<Recipe, "runtimeCalculation" | "name"> & { machineType?: string },
   node: Pick<FactoryNode, "machineHandlerId" | "overclockTier" | "coilTier" | "machineConfigTiers">,
 ): string | undefined {
+  if (isFusionRecipe(recipe)) return undefined;
   const runtimeCalculation = recipe.runtimeCalculation;
   if (!runtimeCalculation?.oracleEligible || !runtimeCalculation.strict) {
     return undefined;

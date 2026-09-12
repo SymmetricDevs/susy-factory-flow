@@ -1,3 +1,4 @@
+import { getFusionMachine, getFusionRecipeMark, isFusionRecipe, normalizeFusionHandler } from "@/lib/machines/fusion";
 import type {
   FactoryNode,
   MachineConfigControl,
@@ -34,7 +35,7 @@ export function expandMachineRecipeVariants(recipes: Recipe[]): Recipe[] {
 }
 
 export function getRecipeMachineHandlers(
-  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers">,
+  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> & Partial<Recipe>,
 ): MachineHandler[] {
   // Dataset handler lists are authoritative and always start with the map's
   // primary machine. Synthesizing an extra entry from the recipe map name
@@ -42,8 +43,11 @@ export function getRecipeMachineHandlers(
   // real Electric Blast Furnace), so the fallback only exists for recipes
   // without exported handlers.
   const handlersByFamily = new Map<string, MachineHandler>();
+  const fusionMark = isFusionRecipe(recipe) ? getFusionRecipeMark(recipe) : undefined;
   for (const handler of recipe.machineHandlers ?? []) {
-    const normalized = normalizeMachineHandler(handler);
+    const normalized = normalizeFusionHandler(normalizeMachineHandler(handler), recipe);
+    const fusion = getFusionMachine(normalized.machineType);
+    if (fusion && fusionMark !== undefined && fusion.mark < fusionMark) continue;
     const familyId = slug(normalized.label);
     if (!handlersByFamily.has(familyId)) {
       handlersByFamily.set(familyId, normalized);
@@ -51,6 +55,11 @@ export function getRecipeMachineHandlers(
   }
   if (handlersByFamily.size > 0) {
     return [...handlersByFamily.values()];
+  }
+  // A future recipe outside every known reactor's capacity stays visibly
+  // blocked; do not turn it into a generic machine with ordinary overclocks.
+  if (isFusionRecipe(recipe) && recipe.machineHandlers?.length) {
+    return recipe.machineHandlers.map((handler) => normalizeFusionHandler(handler, recipe));
   }
 
   const baseMachineType = machineHandlerFamilyLabel(recipe.machineType);
@@ -64,7 +73,7 @@ export function getRecipeMachineHandlers(
   if (isHandCraftingRecipeMap(recipe)) {
     return [autoWorkbenchHandler(), fallback];
   }
-  return [fallback];
+  return [normalizeFusionHandler(fallback, recipe)];
 }
 
 /** Whether this recipe comes off the crafting-grid maps the oracle exports. */
@@ -148,7 +157,7 @@ function steamSingleblockDurationTicks(
 }
 
 export function getSelectedMachineHandler(
-  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers">,
+  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> & Partial<Recipe>,
   node: Pick<FactoryNode, "machineHandlerId">,
 ): MachineHandler {
   const handlers = getRecipeMachineHandlers(recipe);
@@ -427,6 +436,9 @@ export function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): s
 }
 
 function normalizeMachineHandler(handler: MachineHandler): MachineHandler {
+  // Fusion's Roman numeral names a different reactor, not a singleblock
+  // voltage suffix. Stripping it merged I/II/III and IV/V into two families.
+  if (getFusionMachine(handler.machineType)) return handler;
   const familyLabel = machineHandlerFamilyLabel(handler.label);
   return {
     ...handler,
@@ -436,6 +448,7 @@ function normalizeMachineHandler(handler: MachineHandler): MachineHandler {
 }
 
 function machineHandlerFamilyLabel(label: string): string {
+  if (getFusionMachine(label)) return label;
   const tierlessLabel = label
     .replace(/\s+\((?:ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\)$/i, "")
     .replace(/\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, "")

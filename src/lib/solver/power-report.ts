@@ -1,4 +1,5 @@
 import { maxInputTierSkips } from "./power-input-rules";
+import { getFusionStats } from "@/lib/machines/fusion";
 import {
   applyMachineHandlerToRecipe,
   getSelectedMachineHandler,
@@ -137,7 +138,12 @@ export function getNodePowerReport(recipe: Recipe, node: PowerReportNode): NodeP
   const casingGateReason = voltageLimit !== undefined && getVoltageTierIndex(getVoltageTierForEuT(rawEuT)) > voltageLimit
     ? "Machine casing voltage is too low for this recipe. Select a higher machine casing; UHV casings remove the limit."
     : undefined;
-  const recipeGateReason = behaviour?.recipeGate?.(
+  const fusion = getFusionStats(effectiveRecipe);
+  const fusionGateReason = fusion && !fusion.eligible
+    ? fusion.recipeMark === undefined ? "Fusion startup metadata is unavailable for this recipe."
+      : `This recipe requires a Mk-${fusion.recipeMark} fusion reactor or higher.`
+    : undefined;
+  const recipeGateReason = fusionGateReason ?? behaviour?.recipeGate?.(
     buildMachineContext(effectiveRecipe, node),
   ) ?? casingGateReason;
 

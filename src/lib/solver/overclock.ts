@@ -1,4 +1,5 @@
 import { hasAmperageOverclock } from "./power-input-rules";
+import { getFusionStats } from "@/lib/machines/fusion";
 import {
   getRecipeMinimumVoltageTier,
   getVoltageTierIndex,
@@ -101,6 +102,15 @@ export function getOverclockedRecipeStats(
     ? applyMachineHandlerToRecipe(recipe as Recipe, node)
     : recipe;
   const minimumTier = getRecipeMinimumVoltageTier(effectiveRecipe);
+  const fusion = getFusionStats(effectiveRecipe);
+  if (fusion) {
+    return {
+      tier: fusion.tier, minimumTier,
+      overclockSteps: fusion.steps, perfectOverclockSteps: fusion.steps,
+      perfectSpeedFactor: fusion.factor, perfectEuFactor: fusion.factor,
+      durationTicks: quantiseDurationToTicks(fusion.durationTicks, true), eut: fusion.eut,
+    };
+  }
   // A multiblock's pick stands even below the recipe's minimum - an
   // underpowered build is shown as one (power-report.ts names the state),
   // never silently promoted. A singleblock is floored at the minimum, because

@@ -1,4 +1,5 @@
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
+import { isFusionRecipe } from "@/lib/machines/fusion";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { getNodePowerReport, type NodePowerReport } from "./power-report";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
@@ -68,6 +69,7 @@ function describe(report: NodePowerReport): string {
  * arithmetic per sample.
  */
 export function listPowerWins(recipe: Recipe, node: PowerWinNode): PowerWin[] {
+  if (isFusionRecipe(recipe)) return [];
   const floor = 1;
   const wins: PowerWin[] = [];
   const stepRatio = 2 ** 0.25;

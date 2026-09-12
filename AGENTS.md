@@ -294,8 +294,20 @@ Working notes for future agents on GTNH Factory Flow.
     behind a count knob (laser amperage, parallels). The reference states some
     choices as raw counts with a minimum, and its formulas read the count, so
     those must use `value`.
-  - Still on scraped data, deliberately: the 11 fusion reactors (need
-    `fixedVoltageTier` and their own overclock), and the machines whose
+  - Fusion reactors use `src/lib/machines/fusion.ts`, independently of the
+    generic voltage overclocker: fixed reactor tier, 2/2 OCs on I-III,
+    4/4 on IV-V, capped by reactor mark minus recipe fusion tier. Compact
+    reactors have 64 base parallels and startup-dependent extraPara bonuses.
+    Startup charging is excluded from steady-state EU/t but its threshold
+    remains essential for eligibility AND compact parallels (strict < bonus
+    boundaries, inclusive <= tier boundaries). `metadata.fusionStartupEu`
+    is exported from FUSION_THRESHOLD, not mSpecialValue; exact runtime
+    recipe fingerprints in `machines/data/fusion-startups.json` repair old
+    exports/plans. Regenerate with `tools/audits/extract-fusion-startups.mjs`.
+    NEVER strip Roman numerals from fusion controller names: I/II/III and
+    IV/V are separate machines. Fusion hatch controls are fixed; EU/t draw
+    remains visible. Draconic Evolution Fusion Crafter is unrelated.
+  - Still on scraped data, deliberately: the machines whose
     coefficients read recipe metadata or the recipe type (Nano Forge, PCB
     Factory, Component Assembly Line, Dangote Distillus, QFT, Eye of Harmony).
     PrAss is now curated in both modes; see below. The Naquadah Fuel Refinery

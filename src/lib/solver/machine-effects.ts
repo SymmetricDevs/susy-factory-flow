@@ -1,3 +1,4 @@
+import { getFusionStats } from "@/lib/machines/fusion";
 import {
   getRecipeCoilTierControl,
   getRecipeMachineConfigTierControls,
@@ -333,6 +334,8 @@ export function getMachineStructuralParallels(
   recipe: MachineEffectRecipe,
   node: MachineEffectNode,
 ): number {
+  const fusion = getFusionStats(recipe);
+  if (fusion) return fusion.parallels;
   // GT++ "Voltage Tier * n Parallels" scales with the tier the machine runs
   // at; the GT tier ordinal counts ULV as 0, LV as 1, and so on. Stacked
   // hatches raise it, because the game reads the tier of the SUMMED voltage.

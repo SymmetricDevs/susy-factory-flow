@@ -1,5 +1,6 @@
 import { getEnergyHatchType } from "@/lib/machines/energy-hatches";
 import { getMachineBehaviour } from "@/lib/machines/machine-table";
+import { getFusionMachine, getFusionStats } from "@/lib/machines/fusion";
 import {
   GT_VOLTAGE_TIERS,
   getRecipeMinimumVoltageTier,
@@ -34,6 +35,8 @@ export function getNodePowerBudget(
   recipe: PowerRecipeInput,
   node: PowerNodeInput,
 ): number | undefined {
+  const fusion = getFusionStats(recipe);
+  if (fusion) return fusion.poolEuT;
   if (!isMultiblockRecipe(recipe)) {
     return undefined;
   }
@@ -61,6 +64,7 @@ export function getNodePowerBudget(
  * instead, whose entries are multiblocks unless marked `kind: "single"`.
  */
 export function isMultiblockRecipe(recipe: PowerRecipeInput): boolean {
+  if (getFusionMachine(recipe.machineType)) return true;
   if (recipe.machineProfile?.kind === "multiblock") return true;
   if ((recipe.machineHandlers?.length ?? 0) > 0) return false;
   const behaviour = getMachineBehaviour(recipe.machineType);
@@ -88,6 +92,8 @@ export function getNodeRunTier(
   recipe: PowerRecipeInput & Pick<Recipe, "eut" | "minimumTier">,
   node: PowerNodeInput & Partial<Pick<FactoryNode, "overclockTier">>,
 ): VoltageTier {
+  const fusion = getFusionMachine(recipe.machineType);
+  if (fusion) return fusion.tier;
   if (!isMultiblockRecipe(recipe)) {
     return getRunVoltageTier(recipe, node.overclockTier);
   }
@@ -138,6 +144,8 @@ export function getHatchAmps(hatches: number): number {
  * hatch is 64 amps, no clamp - which is `getMaxWorkingInputAmpsMulti`.
  */
 export function getNodePowerAmps(recipe: PowerRecipeInput, node: PowerNodeInput): number {
+  const fusion = getFusionMachine(recipe.machineType);
+  if (fusion) return fusion.compact ? 64 * fusion.mark : 1;
   if (isMultiblockRecipe(recipe)) {
     if (node.powerInputMode === "eut")
       return (

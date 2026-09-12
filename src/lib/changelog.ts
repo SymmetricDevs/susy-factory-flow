@@ -49,11 +49,11 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.1.5",
     date: "2026-09-11",
-    headline: "Power display units return",
+    headline: "Fusion reactors and power display units",
     notes: [
       "Show power as *EU/t or amps at any voltage tier* using the selector beside the rate unit. Your choice is remembered in this browser.",
-      "Power readings below 0.01 show *<0.01*, while zero stays zero.",
-      "Resource rows update immediately when you change display units or the amps tier, including energy per item or litre.",
+      "Power readings below 0.01 show *<0.01*, while zero stays zero. Resource rows update immediately when display units change.",
+      "*Fusion reactors keep their correct controllers, overclocks, and compact parallels.* Reactor mark fixes operating power; recipe startup requirements determine which controllers are available.",
       "The board toolbar shrinks in stages: *mode labels, mode icons, then folded tools*, accounting for Firefox text size without squeezing buttons together.",
     ],
   },

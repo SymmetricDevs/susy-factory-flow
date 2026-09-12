@@ -350,6 +350,7 @@ export const factoryNodeSchema = z.object({
   coilTier: z.string().min(1).optional(),
   machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),
   settingsCollapsed: z.boolean().optional(),
+  hatchSupplies: z.array(z.enum(["water", "air"])).optional(),
   recipeInputOverrides: z.record(z.string().min(1), recipeInputSchema).optional(),
   // More recipes the same machine runs (shared-machine.ts), sections 1..n.
   extraRecipes: z

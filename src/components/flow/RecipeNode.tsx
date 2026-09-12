@@ -3925,7 +3925,7 @@ export function PortChip({
         >
           {port.displayName}
         </span>
-        {calmMode ? (
+        {calmMode && !port.supplyHatch ? (
           /* Presentation: no bar, no want marks — the room they used goes to
              the number, which is the thing a viewer actually reads. Muted ink
              a step below the name, so the pair still reads name-first. */
@@ -3950,7 +3950,9 @@ export function PortChip({
             >
               {rateText}
             </span>
-            {port.unsupplied ? (
+            {port.supplyHatch ? (
+              <HatchSupplyButton nodeId={nodeId} port={port} />
+            ) : port.unsupplied ? (
               <span className="block text-[7px] font-black leading-[8px] tracking-[0.5px] text-[var(--verdict-blocked-ink)]">
                 NO SUPPLY
               </span>
@@ -4003,6 +4005,40 @@ export function PortChip({
       </MinecraftTooltip>
       {rowBrowse.menu}
     </div>
+  );
+}
+
+function HatchSupplyButton({ nodeId, port }: { nodeId: string; port: RailPort }) {
+  const locked = useFactoryStore((state) => state.checklistMode || state.isReadOnly);
+  return (
+    <button
+      type="button"
+      aria-pressed={port.hatchSupplied === true}
+      aria-label={`${port.hatchSupplied ? "Stop satisfying" : "Satisfy"} ${port.displayName} with hatch`}
+      title={`${port.supplyHatch}: fully supplies this fluid to every recipe on this machine. Assumes enough hatches; no flow limit. ${port.hatchSupplied ? "Click to restore normal supply." : "Click to satisfy."}`}
+      disabled={locked}
+      data-viewer-disabled="true"
+      style={{ fontSize: 8, lineHeight: "10px", fontWeight: 700 }}
+      className={`nodrag nopan relative z-40 mt-0.5 w-fit rounded-sm border px-1 text-[8px] font-bold leading-[10px] disabled:opacity-40 ${port.hatchSupplied ? "border-emerald-400/40 text-emerald-300" : "border-[var(--mc-47)] text-[var(--mc-ink-muted)] hover:border-cyan-300 hover:text-cyan-200"}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (checklistLocked()) return;
+        const state = useFactoryStore.getState();
+        if (state.isReadOnly) return;
+        const node = state.project.nodes.find((entry) => entry.id === nodeId);
+        if (!node || (port.resourceId !== "water" && port.resourceId !== "air")) return;
+        const supplies = new Set(node.hatchSupplies);
+        if (port.hatchSupplied) supplies.delete(port.resourceId);
+        else supplies.add(port.resourceId);
+        state.updateNode(nodeId, { hatchSupplies: supplies.size ? [...supplies] : undefined });
+        playBoardSound("tick");
+      }}
+    >
+      {port.hatchSupplied ? "Satisfied" : "Satisfy"}
+    </button>
   );
 }
 

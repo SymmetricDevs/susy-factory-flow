@@ -49,12 +49,13 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.1.5",
     date: "2026-09-11",
-    headline: "Fusion reactors and power display units",
+    headline: "Hatch supplies, fusion reactors and power display units",
     notes: [
       "Show power as *EU/t or amps at any voltage tier* using the selector beside the rate unit; your choice is remembered, resource rows update immediately, and readings below 0.01 show *<0.01* while zero stays zero.",
       "Corrected energy-machine unlock labels: *Compact Fusion Reactor LuV, Eye of Harmony UMV, Dyson Swarm UIV, Large Naquadah Reactor ZPM, and Antimatter Forge UIV*.",
       "*Fusion reactors keep their correct controllers, overclocks, and compact parallels.* Reactor mark fixes operating power; recipe startup requirements determine which controllers are available.",
       "The board toolbar shrinks in stages: *mode labels, mode icons, then folded tools*, accounting for Firefox text size without squeezing buttons together.",
+      "*Satisfy water and air with hatches* from eligible multiblock input rows; click again to restore normal supply. Hatch counts and flow limits are assumed sufficient.",
     ],
   },
   {

@@ -370,6 +370,8 @@ export interface FactoryNode {
   machineConfigTiers?: Record<string, string>;
   /** Settings panel folded shut. A view choice, kept so it survives a reload. */
   settingsCollapsed?: boolean;
+  /** Fluids fully supplied by an installed hatch; shared by all recipes on this card. */
+  hatchSupplies?: Array<"water" | "air">;
   recipeInputOverrides?: Record<string, RecipeInput>;
   /**
    * More recipes the SAME machine runs (`shared-machine.ts`): a Large

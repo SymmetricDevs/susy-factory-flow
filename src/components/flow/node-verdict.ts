@@ -17,6 +17,7 @@ import { collectTrashNodeIds } from "@/lib/model/trash";
 import { describeStorage, getStorageRole, getStorageRoles } from "@/lib/model/storage-role";
 import { makeResourceHandleId, sectionHandleId } from "./resource-handles";
 import { sectionOwnerId } from "@/lib/model/shared-machine";
+import { getInputSupplyHatch, isHatchSuppliedInput } from "@/lib/model/hatch-supply";
 import { getSetupRules, type ResolvedSetupRules } from "@/lib/model/setup-rules";
 import { energyPerUnit } from "@/lib/model/rate-unit";
 
@@ -1630,6 +1631,8 @@ function relayedBufferAskPerSecond(
  * recipe slots exactly the way the solver pools their flows.
  */
 export interface RailPort {
+  supplyHatch?: string;
+  hatchSupplied?: boolean;
   side: "input" | "output";
   key: string;
   kind: ResourceKind;
@@ -1713,6 +1716,8 @@ export function buildRailPorts(
   const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
   const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
   const outletCounts = countSourceOutlets(project);
+  const hatchNode = nodesById.get(nodeId);
+  const hatchRecipe = hatchNode ? recipesById.get(hatchNode.recipeId) : undefined;
   const machineNameOf = (id: string): string => {
     const node = nodesById.get(id);
     const recipe = node ? recipesById.get(node.recipeId) : undefined;
@@ -1932,6 +1937,10 @@ export function buildRailPorts(
         key,
         kind,
         resourceId,
+        supplyHatch: isInput && hatchNode && hatchRecipe
+          ? getInputSupplyHatch(hatchRecipe, hatchNode, { kind, id: resourceId }) : undefined,
+        hatchSupplied: Boolean(isInput && hatchNode && hatchRecipe
+          && isHatchSuppliedInput(hatchRecipe, hatchNode, { kind, id: resourceId })),
         displayName: face?.displayName ?? displayName ?? resource?.displayName ?? resourceId,
         handleId: handleFor(side, { kind, id: resourceId }),
         resource,

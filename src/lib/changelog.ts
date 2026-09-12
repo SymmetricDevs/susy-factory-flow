@@ -52,7 +52,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Fusion reactors and power display units",
     notes: [
       "Show power as *EU/t or amps at any voltage tier* using the selector beside the rate unit; your choice is remembered, resource rows update immediately, and readings below 0.01 show *<0.01* while zero stays zero.",
-      "Corrected energy-machine unlock labels: *Eye of Harmony UMV, Dyson Swarm UIV, Large Naquadah Reactor ZPM, and Antimatter Forge UIV*.",
+      "Corrected energy-machine unlock labels: *Compact Fusion Reactor LuV, Eye of Harmony UMV, Dyson Swarm UIV, Large Naquadah Reactor ZPM, and Antimatter Forge UIV*.",
       "*Fusion reactors keep their correct controllers, overclocks, and compact parallels.* Reactor mark fixes operating power; recipe startup requirements determine which controllers are available.",
       "The board toolbar shrinks in stages: *mode labels, mode icons, then folded tools*, accounting for Firefox text size without squeezing buttons together.",
     ],

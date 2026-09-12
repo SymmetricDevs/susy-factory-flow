@@ -105,7 +105,7 @@ function buildFusion(compact: boolean): PowerSourceDefinition {
     id: compact ? "compact-fusion-reactor" : "fusion-reactor",
     name: compact ? "Compact Fusion Reactor" : "Fusion Reactor",
     group: "endgame",
-    unlock: compact ? "UEV" : "LuV",
+    unlock: "LuV",
     blurb: compact
       ? "The fusion recipes at 64x the scale."
       : "Makes plasma; charges its own drain.",

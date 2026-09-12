@@ -47,15 +47,6 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "3.2.0",
-    date: "2026-09-12",
-    headline: "Animation studio for making factory showcases",
-    notes: [
-      "The dev menu now has an animation timeline with editable camera moves, screen tilt, cursor paths and app actions.",
-      "Save shots, retime keyframes, rehearse with undo and redo, and export sequences for later.",
-    ],
-  },
-  {
     version: "3.1.7",
     date: "2026-09-11",
     headline: "Whole item icons and consistent resource shadows",

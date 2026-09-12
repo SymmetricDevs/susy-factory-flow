@@ -11,8 +11,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:icons:browsers": "node tools/browser-tests/icon-sizing.mjs",
-    "test:animation:browsers": "node tools/browser-tests/animation-studio.mjs",
-    "test:animation:app": "node tools/browser-tests/animation-studio-app.mjs",
     "datasets:detect": "node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs",
     "datasets:manifest": "node tools/dataset-pipeline/scripts/rebuild-manifest.mjs",
     "format": "prettier --write .",

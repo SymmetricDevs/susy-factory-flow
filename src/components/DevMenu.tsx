@@ -64,9 +64,6 @@ import { useFactoryStore } from "@/store/factory-store";
 import { readBoardGeometry, readBoardScore, type BoardScore } from "./flow/board-score";
 import { decodeLayout, encodeLayout } from "@/lib/board-layout-string";
 import { getUiScale } from "@/lib/ui-scale";
-import { useAnimationStudio } from "@/lib/animation-studio/store";
-import { leaveWelcomeTab } from "@/lib/welcome/welcome-tab";
-import { leaveLibrary } from "@/lib/library/library-tab";
 
 /** What a dial is and what its ends do, as the hover tooltip. */
 function dialTooltip(field: RouterTuningField): string {
@@ -86,7 +83,6 @@ function dialTooltip(field: RouterTuningField): string {
  * to get out of the way of whatever it is adjusting.
  */
 export function DevMenu({ onClose }: { onClose: () => void }) {
-  const animationEnabled = useAnimationStudio(state => state.enabled);
   const [perfHud, setPerfHud] = useState<boolean>(() => isPerfHudEnabled());
   // Two cards is the least board that reads as a sequence at all.
   const canPlayTimelapse = useFactoryStore(
@@ -296,13 +292,6 @@ export function DevMenu({ onClose }: { onClose: () => void }) {
       </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 compact:p-3">
-          <div className="mb-2 rounded border border-cyan-800 bg-cyan-500/5 px-3 py-2.5">
-            <span className="block text-base leading-tight text-fg">Animation studio</span>
-            <span className="mt-1 block text-xs text-fg-muted">A timeline for camera moves, screen tilt, cursor paths and app actions. Edit keyframes, rehearse, and save sequences.</span>
-            <button type="button" aria-pressed={animationEnabled} onClick={() => { if (!animationEnabled) { leaveWelcomeTab(); leaveLibrary(); } useAnimationStudio.getState().setEnabled(!animationEnabled); onClose(); }} className="mt-2.5 w-full rounded border border-cyan-700 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-500/20">
-              {animationEnabled ? "Turn off animation studio" : "Open animation studio"}
-            </button>
-          </div>
           <button
             type="button"
             onClick={() => {

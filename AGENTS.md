@@ -1597,6 +1597,19 @@ npm run test
 - For frontend behavior, use browser/Playwright screenshots when the bug is visual or interaction-based.
 - For dataset changes, verify actual published `recipes.json.gz` or indexes after pipeline publish.
 
+## Animation Studio (Dev)
+
+- The dev-only animation studio is documented in `docs/animation-studio.md`.
+  Its timeline history is separate from board history. Camera sampling uses
+  world-space centres through `setViewport`; tilt is a temporary surface
+  transform, never a write to the saved board-tilt settings. Scrubbing must
+  never execute action keys. Actions opt in for playback; failures pause and
+  retry without replaying earlier successful keys. Documents are keyed by
+  DESIGN id, since copied tabs can share a project id. On tab handover the
+  departing studio must not restore its camera over the incoming design.
+  `test:animation:browsers` exercises Chrome/Firefox; `test:animation:app`
+  exercises the running app on localhost:3000 (or ANIMATION_APP_URL).
+
 ## Git Hygiene
 
 - The worktree may contain unrelated/untracked files. Do not include them unless the user asked.

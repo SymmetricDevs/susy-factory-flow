@@ -1,6 +1,7 @@
 "use client";
 
 import { ChecklistKeys, useChecklistBoard, checklistCursorStyle } from "./ChecklistMode";
+import { AnimationStudio } from "../animation-studio/AnimationStudio";
 
 import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 
@@ -6648,6 +6649,7 @@ export function FactoryFlow() {
         <SelectionHandoffController signal={selectionHandoffCount} />
         {/* The pan is a scroll offset, not a transform: see scroll-camera.tsx. */}
         <ScrollCamera boardRef={boardRef} />
+        <AnimationStudio boardRef={boardRef} />
         {/* The paper's tooth, in board space so it pans and zooms with the
             factory. Mounted before the pattern so dots ink OVER the grain.
             A pocket keeps its flat violet room. */}

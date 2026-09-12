@@ -47,7 +47,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "3.2.0",
+    version: "3.1.5",
     date: "2026-09-11",
     headline: "Power display units return",
     notes: [

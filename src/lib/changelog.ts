@@ -47,7 +47,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "3.1.5",
+    version: "3.1.6",
     date: "2026-09-11",
     headline: "Hatch supplies, fusion reactors and power display units",
     notes: [

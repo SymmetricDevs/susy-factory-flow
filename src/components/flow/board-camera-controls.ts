@@ -1,10 +1,12 @@
 "use client";
 
+import { emitBoardCameraMove } from "@/lib/board-camera-signal";
+
 import { useEffect } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
 import { isEditableKeyboardTarget } from "./keyboard";
 import { readBoardMotionSnapshot } from "./board-motion";
-import { BOARD_MAX_ZOOM, BOARD_MIN_ZOOM } from "./board-camera";
+import { BOARD_MIN_ZOOM, boardMaxZoom } from "./board-camera";
 
 /**
  * The camera under the hand: eased wheel zoom, a slight glide after a pan,
@@ -84,7 +86,7 @@ const PAN_KEY_VECTORS: Record<string, readonly [number, number]> = {
 const ZOOM_IN_CODES = new Set(["PageUp", "Equal", "NumpadAdd"]);
 const ZOOM_OUT_CODES = new Set(["PageDown", "Minus", "NumpadSubtract"]);
 
-const clampZoom = (zoom: number) => Math.min(BOARD_MAX_ZOOM, Math.max(BOARD_MIN_ZOOM, zoom));
+const clampZoom = (zoom: number) => Math.min(boardMaxZoom(), Math.max(BOARD_MIN_ZOOM, zoom));
 
 export function useBoardCameraControls({
   boardRef,
@@ -237,6 +239,9 @@ export function useBoardCameraControls({
       if (nextX !== current.x || nextY !== current.y || nextZoom !== current.zoom) {
         lastWritten = { x: nextX, y: nextY, zoom: nextZoom };
         void instance.setViewport(lastWritten);
+        // The wheel and WASD write the camera themselves, so the dropdowns
+        // hear about it from here rather than from React Flow.
+        emitBoardCameraMove();
       }
 
       if (anyMotionLeft()) {
@@ -272,12 +277,12 @@ export function useBoardCameraControls({
     const handleWheel = (event: WheelEvent) => {
       const target = event.target as Element | null;
       // Only the canvas: the toolbars live beside the flow element, a
-      // `nowheel` popup is scrolling its own list, and a marked slot is
-      // stepping through its alternatives. Same skip set d3 honoured.
+      // `nowheel` popup is scrolling its own list, and a `data-wheel-steps`
+      // element is stepping through its own choices. Same skip set d3 honoured.
       if (!target?.closest?.(".react-flow")) {
         return;
       }
-      if (target.closest(".nowheel, [data-tooltip-wheel-steps]")) {
+      if (target.closest(".nowheel, [data-wheel-steps]")) {
         return;
       }
       event.preventDefault();

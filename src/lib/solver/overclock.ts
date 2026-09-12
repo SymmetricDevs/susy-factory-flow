@@ -1,3 +1,5 @@
+import { hasAmperageOverclock } from "./power-input-rules";
+import { getFusionStats } from "@/lib/machines/fusion";
 import {
   getRecipeMinimumVoltageTier,
   getVoltageTierIndex,
@@ -5,7 +7,7 @@ import {
 } from "@/lib/model/tiers";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
 import { getHeatOverclockStats } from "./heat";
-import { getEffectiveVoltageOrdinal, getNodePowerAmps, getNodeRunTier } from "./power";
+import { getEffectiveVoltageOrdinal, getNodePowerAmps, getNodeRunTier, isMultiblockRecipe } from "./power";
 import {
   buildMachineContext,
   getBeeMegaApiaryTierEutMultiplier,
@@ -77,12 +79,38 @@ export function getOverclockedRecipeStats(
     FactoryNode,
     "overclockTier" | "coilTier" | "machineHandlerId" | "machineConfigTiers"
   > &
-    Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType">>,
+    Partial<
+      Pick<
+        FactoryNode,
+        "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps" | "powerInputMode"
+      >
+    >,
 ): OverclockedRecipeStats {
+  // A power card's rates are the model's own (src/lib/power): no handler
+  // stats, no overclock ladder, no steam rebilling - the recipe as written.
+  if ((recipe as Recipe).power) {
+    return {
+      tier: getRecipeMinimumVoltageTier(recipe),
+      minimumTier: getRecipeMinimumVoltageTier(recipe),
+      overclockSteps: 0,
+      ...PLAIN_OVERCLOCK_STEPS,
+      durationTicks: recipe.durationTicks,
+      eut: recipe.eut,
+    };
+  }
   const effectiveRecipe = recipe.machineType
     ? applyMachineHandlerToRecipe(recipe as Recipe, node)
     : recipe;
   const minimumTier = getRecipeMinimumVoltageTier(effectiveRecipe);
+  const fusion = getFusionStats(effectiveRecipe);
+  if (fusion) {
+    return {
+      tier: fusion.tier, minimumTier,
+      overclockSteps: fusion.steps, perfectOverclockSteps: fusion.steps,
+      perfectSpeedFactor: fusion.factor, perfectEuFactor: fusion.factor,
+      durationTicks: quantiseDurationToTicks(fusion.durationTicks, true), eut: fusion.eut,
+    };
+  }
   // A multiblock's pick stands even below the recipe's minimum - an
   // underpowered build is shown as one (power-report.ts names the state),
   // never silently promoted. A singleblock is floored at the minimum, because
@@ -123,7 +151,8 @@ export function getOverclockedRecipeStats(
       ...PLAIN_OVERCLOCK_STEPS,
       durationTicks: Math.max(
         1,
-        effectiveRecipe.durationTicks * getMachineDurationMultiplier(effectiveRecipe as Recipe, node),
+        effectiveRecipe.durationTicks *
+          getMachineDurationMultiplier(effectiveRecipe as Recipe, node),
       ),
       eut: effectiveRecipe.eut,
     };
@@ -191,7 +220,7 @@ export function getOverclockedRecipeStats(
   // machine's own amperage for a singleblock - the arc furnaces work with 3),
   // and a recipe drawing under 32 EU/t is billed as 32: "Treat ULV as LV for
   // overclocking".
-  const subTickCapable = canSubTick(recipe, effectiveRecipe);
+  const subTickCapable = canSubTick(effectiveRecipe);
   const machinePower = getVoltageTierMaxEuT(tier) * getNodePowerAmps(effectiveRecipe, node);
   const recipePower = Math.max(Math.ceil(parallelEuT), 32);
   let affordableSteps = Number.isFinite(machinePower)
@@ -203,8 +232,14 @@ export function getOverclockedRecipeStats(
   // because they overclock on amperage. For 1A machines the two limits agree,
   // so this only bites machines like the arc furnace whose amps outrun their
   // voltage tier.
-  if (!subTickCapable && Number.isFinite(machinePower)) {
-    const machineVoltageTier = Math.max(ceilLog4(machinePower / 8), 1);
+  if (
+    (!subTickCapable || !hasAmperageOverclock(effectiveRecipe.machineType)) &&
+    Number.isFinite(machinePower)
+  ) {
+    const machineVoltageTier = Math.max(
+      ceilLog4((subTickCapable ? getVoltageTierMaxEuT(tier) : machinePower) / 8),
+      1,
+    );
     const recipeVoltageTier = Math.max(ceilLog4(Math.abs(effectiveRecipe.eut) / 8), 1);
     affordableSteps = Math.min(affordableSteps, machineVoltageTier - recipeVoltageTier);
   }
@@ -237,7 +272,7 @@ export function getOverclockedRecipeStats(
     perfectOverclockSteps: perfectSteps,
     perfectSpeedFactor: rule.multiplier,
     perfectEuFactor: rule.euMultiplier ?? rule.multiplier,
-    durationTicks: quantiseDurationToTicks(
+    durationTicks: (getMachineBehaviour(effectiveRecipe.machineType)?.quantiseDuration ?? quantiseDurationToTicks)(
       (effectiveRecipe.durationTicks / rule.multiplier ** perfectSteps / 2 ** normalSteps) *
         durationMultiplier,
       subTickCapable,
@@ -279,10 +314,13 @@ function ceilLog4(ratio: number): number {
  * which quietly favours the player. Everything truncates, singleblock or not.
  *
  * Below one tick, a machine cannot run a recipe faster than the game's clock.
- * A multiblock spends the leftover on extra parallels instead, so its
- * throughput keeps climbing and modelling it as a fractional duration gives
- * the same answer. A singleblock has no parallels to spend it on, so it sits
- * at one tick and the rest is simply lost.
+ * A multiblock spends the leftover on extra parallels instead: ParallelHelper
+ * multiplies its parallels by `calculateMultiplierUnderOneTick`, which is
+ * `ceil(1 / duration)`, so 0.625 ticks runs TWO recipes a tick (not 1.6) and
+ * 0.156 runs seven. Rounding the duration DOWN to the nearest natural
+ * fraction (1/2, 1/7) reproduces that once the parallels are multiplied in.
+ * A singleblock has no parallels to spend it on, so it sits at one tick and
+ * the rest is simply lost.
  */
 export function quantiseDurationToTicks(durationTicks: number, subTickCapable: boolean): number {
   if (!Number.isFinite(durationTicks) || durationTicks <= 0) {
@@ -291,7 +329,7 @@ export function quantiseDurationToTicks(durationTicks: number, subTickCapable: b
   if (durationTicks > 1) {
     return Math.floor(durationTicks);
   }
-  return subTickCapable ? durationTicks : 1;
+  return subTickCapable ? 1 / Math.ceil(1 / durationTicks) : 1;
 }
 
 /**
@@ -304,12 +342,8 @@ export function quantiseDurationToTicks(durationTicks: number, subTickCapable: b
  * `kind: "single"` (the arc furnace family). Anything unrecognised stays at
  * the one-tick floor rather than suddenly claiming more output.
  */
-function canSubTick(recipe: OverclockRecipeInput, effectiveRecipe: OverclockRecipeInput): boolean {
-  if ((recipe.machineHandlers?.length ?? 0) > 0) {
-    return effectiveRecipe.machineProfile?.kind === "multiblock";
-  }
-  const behaviour = getMachineBehaviour(effectiveRecipe.machineType);
-  return behaviour !== undefined && behaviour.kind !== "single";
+function canSubTick(effectiveRecipe: OverclockRecipeInput): boolean {
+  return isMultiblockRecipe(effectiveRecipe);
 }
 
 /**

@@ -1,10 +1,15 @@
+import { normalizeFullFarms } from "./full-farms";
+import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 import type { FactoryProject } from "./types";
 import { energyHatchTypeExistsAtTier } from "@/lib/machines/energy-hatches";
 import { normalizeProjectFuelProfiles } from "./fuels";
 import { isCustomRateRecipe, releaseCustomRates } from "./custom-rate";
 import { dedupeEdgeWires } from "./edge-identity";
 import { isTrashRecipe } from "./trash";
+import { resynthesizePowerRecipes } from "@/lib/power/power-recipe";
 import { snapPositionToGrid, snapSizeUpToGrid } from "@/lib/board-grid";
+import { sectionNodeView, splitSectionHandleId } from "./shared-machine";
+import { repairWiredInputOverrides } from "./edge-input-overrides";
 
 /**
  * Everything a project must go through on its way in, whether it arrives from
@@ -15,15 +20,27 @@ import { snapPositionToGrid, snapSizeUpToGrid } from "@/lib/board-grid";
  * migration — every caller now gets the full set by construction.
  */
 export function normalizeLoadedProject(project: FactoryProject): FactoryProject {
-  return snapProjectToGrid(
-    repairPocketReferences(
-      unpaintCustomRateCards(
-        releaseCustomRates(
-          dropDuplicateEdges(
-            dropCrossFormConnections(
-              migrateTrashCansToDrawers(
-                dropImpossibleEnergyHatchTypes(
-                  normalizeProjectFuelProfiles(renameOpvTier(adoptSetupRules(project))),
+  project = repairWiredInputOverrides(project);
+  return normalizeProjectHatchInputs(
+    snapProjectToGrid(
+      repairPocketReferences(
+        unpaintCustomRateCards(
+          releaseCustomRates(
+            dropDuplicateEdges(
+              dropCrossFormConnections(
+                migrateTrashCansToDrawers(
+                  dropImpossibleEnergyHatchTypes(
+                    // Power cards rebuild their synthesized recipe from the
+                    // node's settings, so stored plans pick up corrected
+                    // generator math. BEFORE the wire checks: a power recipe
+                    // saved slotless would otherwise read as a card with no
+                    // fluid slot and lose its fuel wire to the cross-form drop.
+                    resynthesizePowerRecipes(
+                      normalizeProjectFuelProfiles(
+                        normalizeFullFarms(renameOpvTier(adoptSetupRules(requireSolveForPool(project)))),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -31,6 +48,7 @@ export function normalizeLoadedProject(project: FactoryProject): FactoryProject 
         ),
       ),
     ),
+    true,
   );
 }
 
@@ -271,12 +289,20 @@ function dropCrossFormConnections(project: FactoryProject): FactoryProject {
   // cannot happen is a card with no fluid slot at all on the end of a fluid
   // wire, and that is exactly the shape cross-form connections left behind.
   const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
-  const endpointHandles = (id: string, side: "source" | "target", kind: string): boolean => {
+  const endpointHandles = (
+    id: string,
+    side: "source" | "target",
+    kind: string,
+    handleId: string | undefined,
+  ): boolean => {
     const storage = storagesById.get(id);
     if (storage) {
       return storage.kind === kind;
     }
-    const node = project.nodes.find((entry) => entry.id === id);
+    // The wire's handle names which recipe of a shared machine it lands on;
+    // that section's slots are the ones to ask.
+    const card = project.nodes.find((entry) => entry.id === id);
+    const node = card ? sectionNodeView(card, splitSectionHandleId(handleId).section) : undefined;
     const recipe = node ? recipesById.get(node.recipeId) : undefined;
     if (!recipe) {
       // A pocket card, or a recipe this plan does not carry. Not ours to judge.
@@ -301,8 +327,8 @@ function dropCrossFormConnections(project: FactoryProject): FactoryProject {
       // other, and its stored Canner ratio is fetched, never guessed. The
       // legacy shape this pass hunts had no such field.
       edge.crossForm !== undefined ||
-      (endpointHandles(edge.source, "source", edge.resourceKind) &&
-        endpointHandles(edge.target, "target", edge.resourceKind)),
+      (endpointHandles(edge.source, "source", edge.resourceKind, edge.sourceHandle) &&
+        endpointHandles(edge.target, "target", edge.resourceKind, edge.targetHandle)),
   );
 
   if (!nodesChanged && edges.length === project.edges.length) {
@@ -403,4 +429,16 @@ function snapProjectToGrid(project: FactoryProject): FactoryProject {
         : undefined),
     })),
   };
+}
+
+/**
+ * Pool mode is the deeper solve mode: a plan that says pool without solve
+ * (hand-edited, or saved by a build where the rule did not exist yet)
+ * opens with solve mode on, exactly as the store keeps them.
+ */
+function requireSolveForPool(project: FactoryProject): FactoryProject {
+  if (project.poolMode && !project.solveMode) {
+    return { ...project, solveMode: true };
+  }
+  return project;
 }

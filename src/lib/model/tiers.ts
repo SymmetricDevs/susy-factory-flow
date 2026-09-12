@@ -31,6 +31,24 @@ export function getVoltageTierForEuT(euT: number): Exclude<MachineTier, "DEMO"> 
   return GT_VOLTAGE_TIERS.find((entry) => absEuT <= entry.maxEuT)?.tier ?? "MAX";
 }
 
+/**
+ * The highest tier whose voltage fits INSIDE a power budget: the hatch tier
+ * a typed EU/t reads as (6,000 EU/t is EV hatches carrying 2.93 amps, never
+ * an IV hatch fed short). Floors at ULV.
+ */
+export function getVoltageTierWithinEuT(euT: number): Exclude<MachineTier, "DEMO"> {
+  if (!Number.isFinite(euT) || euT <= 0) {
+    return "ULV";
+  }
+  let tier: Exclude<MachineTier, "DEMO"> = "ULV";
+  for (const entry of GT_VOLTAGE_TIERS) {
+    if (entry.maxEuT <= euT) {
+      tier = entry.tier;
+    }
+  }
+  return tier;
+}
+
 export function getRecipePowerTier(recipe: Pick<Recipe, "eut">): Exclude<MachineTier, "DEMO"> {
   return getVoltageTierForEuT(recipe.eut);
 }
@@ -90,11 +108,24 @@ export function getRecipeMinimumVoltageTier(
  * which honours an under-tiered hatch choice and lets power-report call it.
  */
 export function getRunVoltageTier(
-  recipe: Pick<Recipe, "eut" | "minimumTier">,
+  recipe: Pick<Recipe, "eut" | "minimumTier"> & Partial<Pick<Recipe, "maximumTier">>,
   requestedTier: string | undefined,
 ): Exclude<MachineTier, "DEMO"> {
   const minimumTier = getRecipeMinimumVoltageTier(recipe);
   const requested = resolveVoltageTier(requestedTier, minimumTier);
+  if (getVoltageTierIndex(requested) < getVoltageTierIndex(minimumTier)) {
+    return minimumTier;
+  }
+  // No machine above the family's last one: a plan that stored a higher
+  // tier runs the highest block that exists.
+  const maximum = getRecipeMaximumVoltageTier(recipe);
+  return maximum && getVoltageTierIndex(requested) > getVoltageTierIndex(maximum) ? maximum : requested;
+}
 
-  return getVoltageTierIndex(requested) < getVoltageTierIndex(minimumTier) ? minimumTier : requested;
+/** The family's highest real machine, when the recipe's handler names one. */
+export function getRecipeMaximumVoltageTier(
+  recipe: Partial<Pick<Recipe, "maximumTier">>,
+): Exclude<MachineTier, "DEMO"> | undefined {
+  const value = recipe.maximumTier;
+  return value ? GT_VOLTAGE_TIERS.find((entry) => entry.tier === value)?.tier : undefined;
 }

@@ -1,3 +1,5 @@
+import { maxInputTierSkips } from "./power-input-rules";
+import { getFusionStats } from "@/lib/machines/fusion";
 import {
   applyMachineHandlerToRecipe,
   getSelectedMachineHandler,
@@ -27,6 +29,7 @@ import {
   getEffectiveVoltageOrdinal,
   getNodeEnergyHatches,
   getNodePowerAmps,
+  getNodePowerBudget,
   getNodeRunTier,
   isMultiblockRecipe,
 } from "./power";
@@ -38,7 +41,12 @@ type PowerReportNode = Pick<
   FactoryNode,
   "overclockTier" | "coilTier" | "machineHandlerId" | "machineConfigTiers"
 > &
-  Partial<Pick<FactoryNode, "energyHatches" | "energyHatchType">>;
+  Partial<
+    Pick<
+      FactoryNode,
+      "energyHatches" | "energyHatchType" | "powerEuT" | "hatchVoltageTier" | "hatchAmps" | "powerInputMode"
+    >
+  >;
 
 /**
  * Whether the build can start at all, straight from the game's checks. There
@@ -49,6 +57,8 @@ export type NodePowerState = "ok" | "under-powered" | "over-tier";
 
 export interface NodePowerReport {
   state: NodePowerState;
+  /** Machine-specific structural limit, such as the HILE's laser source tier. */
+  recipeGateReason?: string;
   /** The tier the user picked (or the recipe's minimum by default). */
   tier: VoltageTier;
   minimumTier: VoltageTier;
@@ -58,6 +68,11 @@ export interface NodePowerReport {
   hatchTypeLabel?: string;
   /** Its short amp badge ("256A"), worn where the hatch count would sit. */
   hatchChip?: string;
+  /**
+   * A supply expressed as working amps (or a legacy EU/t budget). The
+   * legacy hatch-count fields do not describe this build.
+   */
+  typedBudget: boolean;
   isMultiblock: boolean;
   /** Working amps: hatch amps on a multiblock, machine amperage otherwise. */
   amps: number;
@@ -100,6 +115,7 @@ export function getNodePowerReport(recipe: Recipe, node: PowerReportNode): NodeP
   const isMultiblock = isMultiblockRecipe(effectiveRecipe);
   const hatches = getNodeEnergyHatches(effectiveRecipe, node);
   const hatchType = getEnergyHatchType(node.energyHatchType);
+  const typedBudget = getNodePowerBudget(effectiveRecipe, node) !== undefined;
   const amps = getNodePowerAmps(effectiveRecipe, node);
   const poolEuT = getVoltageTierMaxEuT(tier) * amps;
 
@@ -117,14 +133,29 @@ export function getNodePowerReport(recipe: Recipe, node: PowerReportNode): NodeP
   const runtimeVariant = selectRuntimeCalculationVariant(effectiveRecipe, node);
   const parallels = runtimeVariant?.parallel ?? getMachineParallelMultiplier(effectiveRecipe, node);
   const drawEuT = Math.abs(stats.eut) * parallels;
+  const behaviour = getMachineBehaviour(effectiveRecipe.machineType);
+  const voltageLimit = behaviour?.inputVoltageTierLimit?.(node.machineConfigTiers ?? {});
+  const casingGateReason = voltageLimit !== undefined && getVoltageTierIndex(getVoltageTierForEuT(rawEuT)) > voltageLimit
+    ? "Machine casing voltage is too low for this recipe. Select a higher machine casing; UHV casings remove the limit."
+    : undefined;
+  const fusion = getFusionStats(effectiveRecipe);
+  const fusionGateReason = fusion && !fusion.eligible
+    ? fusion.recipeMark === undefined ? "Fusion startup metadata is unavailable for this recipe."
+      : `This recipe requires a Mk-${fusion.recipeMark} fusion reactor or higher.`
+    : undefined;
+  const recipeGateReason = fusionGateReason ?? behaviour?.recipeGate?.(
+    buildMachineContext(effectiveRecipe, node),
+  ) ?? casingGateReason;
 
   return {
-    state: getPowerState(effectiveRecipe, tier, minimumTier, isMultiblock, poolEuT, singleDrawEuT),
+    state: recipeGateReason ? "over-tier" : getPowerState(effectiveRecipe, tier, minimumTier, isMultiblock, poolEuT, singleDrawEuT),
+    recipeGateReason,
     tier,
     minimumTier,
     hatches,
-    hatchTypeLabel: isMultiblock && hatchType.exotic ? hatchType.label : undefined,
-    hatchChip: isMultiblock && hatchType.exotic ? hatchType.chip : undefined,
+    hatchTypeLabel: isMultiblock && !typedBudget && hatchType.exotic ? hatchType.label : undefined,
+    hatchChip: isMultiblock && !typedBudget && hatchType.exotic ? hatchType.chip : undefined,
+    typedBudget,
     isMultiblock,
     amps,
     poolEuT,
@@ -164,12 +195,14 @@ function getPowerState(
   }
 
   if (isMultiblock) {
+    // No supply at all (a typed zero) is underpowered before it is anything
+    // else: the tier-skip rule below would read 0 as ULV hatches.
+    if (poolEuT <= 0 && singleDrawEuT > 0) {
+      return "under-powered";
+    }
     // `OverclockCalculator.getAllowedTierSkip`: a recipe more than one tier
     // above the hatch voltage never runs, however many amps are stacked.
-    if (
-      rawEuT > getVoltageTierMaxEuT(tier) * 4 &&
-      !getMachineBehaviour(effectiveRecipe.machineType)?.unlimitedTierSkip
-    ) {
+    if (rawEuT > getVoltageTierMaxEuT(tier) * 4 ** maxInputTierSkips(effectiveRecipe.machineType)) {
       return "over-tier";
     }
     // `ParallelHelper.determineParallel`: the pool must carry one whole
@@ -267,7 +300,11 @@ export function isPowerStalled(report: NodePowerReport): boolean {
 
 /** One-line reason for a stalled build, used by node warnings. */
 export function describePowerStall(report: NodePowerReport): string | undefined {
+  if (report.recipeGateReason) return report.recipeGateReason;
   if (report.state === "under-powered") {
+    if (report.typedBudget) {
+      return `Needs ${report.singleDrawEuT} EU/t. Supplied ${formatBudget(report.poolEuT)}.`;
+    }
     const supply = report.hatchTypeLabel
       ? `the ${report.tier} ${report.hatchTypeLabel} supplies`
       : `${report.hatches}x ${report.tier} ${report.hatches === 1 ? "hatch supplies" : "hatches supply"}`;
@@ -283,4 +320,8 @@ export function describePowerStall(report: NodePowerReport): string | undefined 
     );
   }
   return undefined;
+}
+
+function formatBudget(euT: number): string {
+  return Number.isInteger(euT) ? String(euT) : euT.toFixed(1);
 }

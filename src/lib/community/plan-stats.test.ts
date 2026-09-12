@@ -89,7 +89,7 @@ describe("computeCommunityPlanStats", () => {
   it("counts crop cards by the harvesters their crops fill, not by seeds", () => {
     const project = makeProject(
       [
-        // 50 oilberries under an LV Crop Manager (605 sticks per layer x 5):
+        // 50 oilberries under an LV Crop Manager (121 sticks a layer, three layers, less its own block: 362):
         // one machine to build, not fifty.
         makeNode({
           id: "managed",
@@ -99,9 +99,10 @@ describe("computeCommunityPlanStats", () => {
           machineHandlerId: "crop-manager",
           machineConfigTiers: { cropManagerTier: "1" },
         }),
-        // Hand-picked sticks build nothing at all.
+        // A bare crop card runs the default LV manager now (the by-hand rung
+        // is gone), so it builds one machine too.
         makeNode({
-          id: "by-hand",
+          id: "bare",
           recipeId: "crop-1",
           machineCount: 20,
           overclockTier: "NONE",
@@ -114,7 +115,7 @@ describe("computeCommunityPlanStats", () => {
 
     const stats = computeCommunityPlanStats(project, makeResult({}));
 
-    expect(stats.machineCount).toBe(4);
+    expect(stats.machineCount).toBe(5);
   });
 
   it("ignores unknown tier strings instead of crashing", () => {

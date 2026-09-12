@@ -6,42 +6,84 @@
  * share the screen with both side columns. The height half catches a phone held
  * sideways, which is wider than the width test but only ~430px tall.
  *
- * The same thresholds as COMPACT_MAX_WIDTH and COMPACT_MAX_HEIGHT in
- * `src/lib/compact-view.ts`, which owns the behavioural half of the switch
- * (drawers instead of columns, one menu instead of a top bar, folded toolbars).
- * This variant is for the style-only half: heights, minimum heights, tap
- * targets, font sizes. Change one, change the other.
+ * Keyed on the `data-compact` attribute that `src/lib/compact-view.ts` stamps
+ * on <html> (and the boot script in layout.tsx stamps before first paint),
+ * not on a media query of its own: the numbers are shell pixels and the shell
+ * is zoomed by the interface size (`--ui-scale`), so the query has to be built
+ * from the live factor, which CSS cannot do. compact-view.ts owns the numbers
+ * (COMPACT_MAX_WIDTH, COMPACT_MAX_HEIGHT) and the behavioural half of the
+ * switch (drawers instead of columns, one menu instead of a top bar, folded
+ * toolbars). This variant is for the style-only half: heights, minimum
+ * heights, tap targets, font sizes.
  */
-/* Two blocks rather than one comma-separated query: the comma form makes
-   Tailwind emit a rule with an empty selector, and `or` inside one media query
-   asks more of a browser than two plain ones do. */
-@custom-variant compact {
-  @media (max-width: 899.98px) {
-    & {
-      @slot;
-    }
-  }
-  @media (max-height: 559.98px) {
-    & {
-      @slot;
-    }
-  }
-}
+@custom-variant compact (&:where(html[data-compact], html[data-compact] *));
 
 /*
  * `snug:` — wide enough for the full top bar, not wide enough for every button
- * to keep its word. Between the compact cutoff and ~1280px the bar's labelled
- * buttons (Support, What's new, Report Bug) drop to their icons; the bar used
- * to overflow here, and an overflowing bar is what makes a phone browser widen
- * its layout viewport and shrink the whole page to fit (see AppMenu).
+ * to keep its word. Between the compact cutoff and SNUG_MAX_WIDTH the bar's
+ * labelled buttons (Support, What's new, Report Bug) drop to their icons; the
+ * bar used to overflow here, and an overflowing bar is what makes a phone
+ * browser widen its layout viewport and shrink the whole page to fit (see
+ * AppMenu). Same attribute scheme as `compact:`.
  */
-@custom-variant snug {
-  @media (max-width: 1279.98px) {
-    & {
-      @slot;
-    }
-  }
+@custom-variant snug (&:where(html[data-snug], html[data-snug] *));
+
+/*
+ * The interface size (src/lib/ui-scale.ts). The shell is drawn at
+ * `--ui-scale` with CSS zoom; the board unzooms itself back to real pixels
+ * because React Flow cannot measure under zoom, and scales through its own
+ * camera instead. Viewport units are not divided by zoom, so inside the shell
+ * `100vh` is taller than the window: the `--ui-vh` family is the unit to use
+ * there. The boot script stamps the live values on <html>; these are the
+ * server-render defaults.
+ */
+:root {
+  --ui-scale: 1.17;
+  /* The EXACT reciprocal, never a rounded decimal: 1.3 x 0.76923 is not 1,
+     and an effective zoom of 0.99996 on the board put every card on
+     sub-pixel geometry, which doubled the compositor's per-frame layer
+     rebuild while panning (measured 2026-09-07). calc(1 / 1.3) cancels
+     exactly. ui-scale.ts and the boot script write the same form. */
+  --ui-scale-inverse: calc(1 / var(--ui-scale));
+  --ui-vh: calc(1vh * var(--ui-scale-inverse));
+  --ui-vw: calc(1vw * var(--ui-scale-inverse));
+  --ui-dvh: calc(1dvh * var(--ui-scale-inverse));
 }
+
+.ui-scale-shell {
+  zoom: var(--ui-scale);
+}
+
+/* A portal to the body sits outside the shell: its positioning box stays in
+   real pixels and its visual box wears this. */
+.ui-zoom {
+  zoom: var(--ui-scale);
+}
+
+/* THE BOARD IS ITS OWN COMPOSITOR LAYER. A pan moves the viewport's
+   composited transform, and Chrome then re-tests everything painted after
+   it on the PAGE for overlap with that moving layer, expanded out to the
+   nearest COMPOSITED clip. The board had none, so the clip was the whole
+   page: ~200 rows in the two side columns became layers of their own, and
+   rebuilding that layer list cost ~40 ms on every pan frame (a 13 fps pan
+   on a 100-card plan, measured 2026-09-07). will-change: opacity gives the
+   board a composited layer of its own, so its overflow clip bounds the
+   test; unlike transform it is not a containing block for fixed
+   descendants (the in-board menus are body portals regardless). Layer
+   build fell from 41 ms to 14 ms a frame, the overview pan from 13 to
+   ~48 fps. Do not swap it for isolation or contain: paint - neither
+   composites, both were measured doing nothing. */
+.factory-flow-board {
+  will-change: opacity;
+}
+
+/* The board, back at 1:1. Nested zooms multiply, so this cancels the shell's;
+   the element is still sized by its zoomed parent, so it fills the same space
+   and simply has more pixels in it. */
+.ui-scale-shell .react-flow {
+  zoom: var(--ui-scale-inverse);
+}
+
 
 
 /*
@@ -60,15 +102,21 @@
   color-scheme: dark;
 
   /*
-   * The one font the whole app renders in. Monocraft unless the settings
-   * dialog stamped a choice on <html>; the option list, the storage key and
-   * these same stacks live in src/lib/app-font.ts, and the boot script in
-   * layout.tsx restores the attribute before first paint.
+   * The one font the whole app renders in. Inter unless the settings dialog
+   * stamped a choice on <html> (Jack, 2026-09-07: the pixel font read as
+   * bloomed and shadowed on smaller screens, so Monocraft became the option
+   * and Inter the default); the option list, the storage key and these same
+   * stacks live in src/lib/app-font.ts, and the boot script in layout.tsx
+   * restores the attribute before first paint.
    */
-  --app-font: var(--font-minecraft), monospace;
+  --app-font: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
   --background: #1b1d21;
   --foreground: #f5f5f5;
+
+  /* Shared input/output accents for rates, drawer frames and editable targets. */
+  --flow-output: var(--color-emerald-300);
+  --flow-input: var(--color-red-300);
 
   --surface: #25272c;
   --surface-raised: #303238;
@@ -180,6 +228,34 @@
    full size read as a popup rather than as the row itself widening. */
 .resource-row-expand {
   animation: resource-row-expand 130ms ease-out;
+}
+
+/*
+ * The item search box, lit for a moment when something outside the column
+ * (the Welcome page's "Find a recipe") lands the cursor in it. Two beats of
+ * the app's cyan ring, then back to plain.
+ */
+.search-box-flash {
+  animation: search-box-flash 1.4s ease-out;
+}
+
+@keyframes search-box-flash {
+  0%,
+  45% {
+    border-color: #22d3ee;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 0 3px rgba(34, 211, 238, 0.45);
+  }
+  22%,
+  70% {
+    border-color: #404040;
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  100% {
+    border-color: #404040;
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.08);
+  }
 }
 
 @keyframes resource-row-expand {
@@ -370,8 +446,8 @@
 }
 
 /* Kept in step with APP_FONTS in src/lib/app-font.ts. */
-html[data-app-font="inter"] {
-  --app-font: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+html[data-app-font="minecraft"] {
+  --app-font: var(--font-minecraft), monospace;
 }
 
 html[data-app-font="jetbrains-mono"] {
@@ -495,48 +571,10 @@ textarea {
   }
 }
 
-/*
- * Just landed. A card added to a plan of two hundred is indistinguishable from
- * the other hundred and ninety-nine, and on a phone it arrives behind whichever
- * drawer you added it from — so it says where it is, twice, and then stops.
- *
- * An outline and a filter on the wrapper: no layout, no repaint of the card's
- * contents, and nothing that could be confused with the board's own signals. The
- * amber glow means "this carries the resource you are pointing at" and cyan means
- * "this is selected" (which a new card also is); white belongs to neither.
- */
-.board-card-placed {
-  /* Half a second before the first pulse: the card has just appeared and the
-     panel that placed it is still sliding away, and a flash underneath all that
-     is one more thing happening at the same time. It waits until the eye is
-     free. Then four slow pulses, which reads as a beacon rather than a glitch. */
-  outline: 4px solid transparent;
-  outline-offset: 4px;
-  animation: board-card-placed 620ms ease-in-out 500ms 4;
-}
-
-/* Not just a frame. On a board of framed cards an outline alone is another frame;
-   the wash is what carries at a glance, the same trick the hovered-resource glow
-   uses. Opacity on one absolutely positioned layer, so the card's own contents
-   are never repainted. */
-.board-card-placed::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: #ffffff;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 3;
-  animation: board-card-placed-wash 620ms ease-in-out 500ms 4;
-}
-
-@keyframes board-card-placed {
-  50% {
-    outline-color: rgba(255, 255, 255, 0.95);
-    filter: brightness(1.28);
-  }
-}
+/* The white placed-flash beacon (four pulses, white outline and wash on a
+   fresh card) used to live here. Removed by request 2026-08-28: the landing
+   thump and the arrive pop carry the moment, and the flash read as noise on
+   a polished board. */
 
 /* The chip the recipe book leaves behind while a pressed plus button's recipe
    is still on the wire. The animation delay is the point: an add answered
@@ -550,74 +588,6 @@ textarea {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes board-card-placed-wash {
-  50% {
-    opacity: 0.26;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .board-card-placed,
-  .board-card-placed::after {
-    animation: none;
-  }
-}
-
-/*
- * The guided tour's hole in the screen (see TourOverlay).
- *
- * One element does both jobs: the border rings whatever the step points at, and
- * a spread far larger than any window dims everything else. That means moving
- * between steps is a transition of four numbers rather than a re-composited
- * mask, and there is no second full-screen layer to keep in step with it.
- *
- * The heartbeat is a separate ring on ::after, animating opacity and transform
- * only. Pulsing the big shadow instead would repaint the whole window every
- * frame for the sake of a glow a few pixels wide.
- */
-.tour-spotlight {
-  border: 2px solid #22d3ee;
-  border-radius: 4px;
-  box-shadow: 0 0 0 9999px rgba(6, 9, 13, 0.74);
-  transition:
-    left 220ms ease-out,
-    top 220ms ease-out,
-    width 220ms ease-out,
-    height 220ms ease-out;
-}
-
-.tour-spotlight::after {
-  content: "";
-  position: absolute;
-  inset: -5px;
-  border: 2px solid #22d3ee;
-  border-radius: 7px;
-  animation: tour-spotlight-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes tour-spotlight-pulse {
-  0%,
-  100% {
-    opacity: 0.12;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.75;
-    transform: scale(1.012);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tour-spotlight {
-    transition: none;
-  }
-
-  .tour-spotlight::after {
-    animation: none;
-    opacity: 0.4;
   }
 }
 
@@ -664,7 +634,13 @@ textarea {
   z-index: auto !important;
 }
 
-.factory-flow-board--moving .react-flow__viewport {
+/* Always, not only while a gesture is flagged as moving: a keyboard pan
+   calls setViewport per frame, which fires move start and end per frame, so
+   the flag flickered and the layer was promoted and dropped every frame. The
+   pan is a scroll offset now (scroll-camera.tsx) and this transform only
+   changes on zoom; the retained layer is what keeps a zoom from repainting
+   the whole board. */
+.factory-flow-board .react-flow__viewport {
   will-change: transform;
 }
 
@@ -729,6 +705,120 @@ textarea {
 @keyframes board-card-arrive-pop {
   from {
     transform: scale(0.92);
+  }
+}
+
+/* The dev-menu build timelapse (board-timelapse.ts): every card and wire
+   MOUNTS on the beat it is revealed, so the arrival dress rides the board
+   class instead of a per-card one. Same split as the arrive pop above:
+   opacity on the wrapper (its transform is React Flow's positioning and
+   must not be animated), the scale-up on the card root inside it. Wires
+   fade in a touch slower, landing after the card they plug into. */
+.factory-flow-board--timelapse .react-flow__node {
+  animation: board-card-arrive var(--timelapse-pop, 260ms) cubic-bezier(0.25, 1, 0.5, 1)
+    backwards;
+}
+
+.factory-flow-board--timelapse .react-flow__node > * {
+  animation: board-card-arrive-pop calc(var(--timelapse-pop, 260ms) * 1.15)
+    cubic-bezier(0.3, 1.4, 0.5, 1) backwards;
+}
+
+/* PENDING: mounted so its wire can render and draw toward it, but held at
+   nothing until its pop beat. The release is a TRANSITION, not the mount
+   keyframe - the node mounted invisible beats ago - so dropping the class
+   fades and grows it over the same pop duration. */
+.factory-flow-board--timelapse .react-flow__node {
+  transition: opacity var(--timelapse-pop, 260ms) ease-out;
+}
+
+.factory-flow-board--timelapse .react-flow__node > * {
+  transition: scale var(--timelapse-pop, 260ms) cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.factory-flow-board--timelapse .react-flow__node.timelapse-pending {
+  animation: none;
+  opacity: 0;
+}
+
+.factory-flow-board--timelapse .react-flow__node.timelapse-pending > * {
+  animation: none;
+  scale: 0.6;
+}
+
+/* A wire DRAWS itself from source to target when it mounts mid-show: a
+   long dash slid in by its offset, so the ink travels the route the way a
+   pen would. The dash length is a generous ceiling over real wire lengths
+   - shorter wires just finish their stroke early inside the same window.
+   The duration variable comes from the board (the dev menu's wire-draw
+   slider over the playback speed), and the beat scheduler waits the same
+   number, so the next thing happens after the ink is dry. Dashed channel
+   wires render solid for the run's duration; their pattern returns with
+   the class's exit. */
+.factory-flow-board--timelapse .react-flow__edge path.react-flow__edge-path {
+  /* Against pathLength=1 (set on exactly these BaseEdge paths during a
+     run), so the stroke covers ANY route exactly and every wire spends
+     the full duration drawing. The first cut used a big pixel dash
+     instead, and a short wire completed inside the first few percent of
+     the window - which read as no animation at all. Scoped to the
+     BaseEdge class: a unit dash on a path WITHOUT the normalized length
+     renders as one-pixel dots. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: timelapse-wire-draw var(--timelapse-wire-draw, 450ms)
+    cubic-bezier(0.3, 0.55, 0.4, 1) forwards;
+}
+
+@keyframes timelapse-wire-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The demo-card tilt (board-tilt.ts): the whole canvas leans like a
+   product page showing off a card, with a slow breathing drift on the
+   inner renderer so it feels held rather than pinned. Angles ride CSS
+   variables from the board container, so the dev menu's sliders apply
+   live; the cover scale keeps the leaning plane's corners under the 2D
+   chrome (a rotated plane's projection shrinks toward the centre, and
+   the canvas edges peeked out from behind the toolbars without it).
+   Only the visual layer tilts - React Flow's own viewport transform
+   stays 2D, so the camera math never knows. The transition lives on the
+   base class so putting the tilt on and taking it off both ease; the
+   timelapse finale takes it off by dropping the class for the wide
+   reveal (the drift rides a separate element, so killing its animation
+   mid-swing costs at most a couple of degrees under a moving camera). */
+.factory-flow-board .react-flow {
+  transition: transform 1200ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.factory-flow-board--tilted {
+  perspective: 1600px;
+}
+
+.factory-flow-board--tilted .react-flow {
+  /* The breathe variables are the timelapse follower's: written straight
+     onto the board element per frame from the camera's velocity, additive
+     over the dev menu's base angles, never touched by React. The
+     transition above is what turns per-frame writes into a lean. */
+  transform: rotateX(
+      calc(var(--board-tilt-pitch, 7deg) + var(--board-tilt-breathe-pitch, 0deg))
+    )
+    rotateY(calc(var(--board-tilt-yaw, -3deg) + var(--board-tilt-breathe-yaw, 0deg)))
+    scale(var(--board-tilt-cover, 1.12));
+  transform-style: preserve-3d;
+}
+
+.factory-flow-board--tilted-drift .react-flow__renderer {
+  animation: timelapse-tilt-drift 9s ease-in-out infinite alternate;
+}
+
+@keyframes timelapse-tilt-drift {
+  from {
+    transform: rotateY(-2deg);
+  }
+  to {
+    transform: rotateY(2.5deg);
   }
 }
 
@@ -798,14 +888,6 @@ textarea {
   opacity: 0;
 }
 
-/* The machine tab zone protrudes ABOVE the recipe card's window, outside its
-   glance root, so the rule above cannot reach it — hide it here. Zoomed out
-   the tabs are a few pixels of noise over the glance figure. */
-.factory-flow-board[data-detail-level="glance"] .machine-tab-zone {
-  visibility: hidden;
-  opacity: 0;
-}
-
 .factory-flow-board[data-detail-level="glance"] [data-node-detail="glance"] {
   opacity: 1;
   visibility: visible;
@@ -840,8 +922,7 @@ textarea {
 }
 
 .factory-flow-board--value-motion [data-node-glance-root] > *:not([data-node-detail="glance"]),
-.factory-flow-board--value-motion [data-node-glance-root] > [data-tooltip-root] > *,
-.factory-flow-board--value-motion .machine-tab-zone {
+.factory-flow-board--value-motion [data-node-glance-root] > [data-tooltip-root] > * {
   transition: opacity 560ms ease, visibility 0s;
 }
 
@@ -875,8 +956,7 @@ textarea {
 .factory-flow-board--value-motion[data-detail-level="glance"]
   [data-node-glance-root]
   > [data-tooltip-root]
-  > *,
-.factory-flow-board--value-motion[data-detail-level="glance"] .machine-tab-zone {
+  > * {
   transition: opacity 560ms ease, visibility 0s 560ms;
 }
 
@@ -1205,6 +1285,12 @@ img {
   border: 1px solid var(--selection);
 }
 
+/* Selected cards already wear blue outlines. Omit the enclosing group frame
+   and its empty-space drag target; drag a selected card to move the group. */
+.factory-flow-board .react-flow__nodesselection {
+  display: none;
+}
+
 .factory-flow-board .react-flow__edge-path {
   cursor: pointer;
   pointer-events: stroke;
@@ -1412,9 +1498,19 @@ img {
   font-weight: 400;
   letter-spacing: 0;
   color: #ffffff;
+}
+
+/* The hard pixel drop shadow belongs to the pixel font alone: under a
+   vector face it read as a blur. This covers the title class and every
+   inline Tailwind text-shadow utility on the NEI chrome. */
+html[data-app-font="minecraft"] .minecraft-title {
   text-shadow:
     1px 1px 0 var(--mc-24),
     2px 2px 0 var(--mc-24);
+}
+
+html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
+  text-shadow: none;
 }
 
 /* ===== Painted cards =====================================================
@@ -2096,6 +2192,20 @@ img {
     inset -1px -1px 0 var(--mc-47);
 }
 
+/* A port name wraps to TWO compact lines instead of ending in three dots:
+   the chip gave up 8px when the card came back to 21 cells, and a second
+   line is what pays for it. CLAMP ONLY — the size and weight are utilities
+   on the element, so a name whose stylesheet has not arrived is small and
+   unclamped rather than 16px text bursting out of the chip. Pure CSS: no
+   text measurement and no observers on a board of a hundred cards. */
+.flow-port-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 /* A pocket card's port chip: the machine chip's raised tile, in purple. */
 /* Blueprint overwrite picker: every folded board is a target. Amber dashed
    ring on all of them, solid and brighter under the pointer — hover answers
@@ -2135,7 +2245,7 @@ img {
 
 .flow-port-bar {
   position: relative;
-  height: 5px;
+  height: 3px;
   overflow: visible;
   background: var(--rail-bar-track);
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.35);
@@ -2246,17 +2356,17 @@ img {
    by the coupling's state. Sits INSIDE the card at the row's right edge —
    wires reach it exactly the way they reach an input chip. Everything wordy
    (who asks, gets/asks, ×N, the fix) lives in its hover. */
-/* 34px, and the output rail is exactly chip + 2px gap + this — a coupling
+/* 30px, and the output rail is exactly chip + 2px gap + this — a coupling
    wider than the rail hangs off the card's right edge. Keep the two in step:
-   PORT_CHIP_WIDTH_CLASS (140) + 2 + 34 = the rail's w-[176px], which with the
-   input rail (140), the divider (16) and two 4px gaps fills the card's 340px
+   PORT_CHIP_WIDTH_CLASS (132) + 2 + 30 = the rail's w-[164px], which with the
+   input rail (132), the picture (96) and two 4px gaps fills the card's 400px
    inner width exactly. See src/lib/board-grid.ts. */
 .flow-plug {
   position: relative;
   z-index: 5;
   display: flex;
   flex: none;
-  width: 34px;
+  width: 30px;
   align-self: stretch;
   margin-left: 2px;
   flex-direction: column;
@@ -2274,7 +2384,7 @@ img {
 .flow-plug-top {
   display: flex;
   justify-content: center;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   line-height: 10px;
   font-variant-numeric: tabular-nums;
@@ -2334,7 +2444,7 @@ img {
   position: relative;
   display: flex;
   flex: none;
-  width: 34px;
+  width: 30px;
   align-self: stretch;
   margin-left: 2px;
   align-items: center;
@@ -2473,3 +2583,58 @@ img {
 }
 
 
+
+/* The connection line's SNAPPED state: white marching dots riding the green
+   pipe toward the slot it caught. Class-gated so reduced motion simply
+   leaves the dots parked. */
+@keyframes connection-march {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+.connection-march {
+  animation: connection-march 0.45s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-march {
+    animation: none;
+  }
+}
+
+/* A wire whose pair is snapped by the CURRENT drag - releasing would toggle
+   it away. Dashed, red, breathing: "this is what gets deleted". Applied
+   imperatively to the one edge element by the snap loop. */
+@keyframes edge-doomed-flash {
+  from {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px #ef4444) drop-shadow(0 0 10px rgba(239, 68, 68, 0.8));
+  }
+  to {
+    opacity: 0.3;
+    filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.5));
+  }
+}
+.edge-doomed path {
+  stroke: #ff5555 !important;
+  stroke-width: 7px !important;
+  stroke-dasharray: 10 8 !important;
+  stroke-linecap: round;
+}
+.edge-doomed {
+  animation: edge-doomed-flash 0.35s linear infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .edge-doomed {
+    animation: none;
+    opacity: 0.8;
+    filter: drop-shadow(0 0 5px #ef4444);
+  }
+}
+
+/* Public viewing keeps configuration readable, but the controls are inert. */
+[data-view-only] [data-viewer-disabled] {
+  cursor: default;
+}
+[data-view-only] button[data-viewer-disabled] {
+  opacity: 0.5;
+}

@@ -5,8 +5,13 @@ import { memo, useState, type CSSProperties } from "react";
 import { Copy, Maximize2, PackageOpen, Save } from "lucide-react";
 import type { FactoryPocket } from "@/lib/model/types";
 import { RECIPE_NODE_WIDTH } from "@/lib/board-grid";
+import { LOGIN_ENABLED } from "@/lib/feature-toggles";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
-import { captureBoardSelection, useFactoryStore } from "@/store/factory-store";
+import {
+  captureBoardSelection,
+  useFactoryStore,
+  useRateDisplayUnits,
+} from "@/store/factory-store";
 import { useBlueprintStore } from "@/store/blueprint-store";
 
 import { formatSlotRateOrNull } from "./flow-explainers";
@@ -87,6 +92,8 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
   // anonymous purple card.
   const chrome = boardChrome(pocket.id, pocket.theme, pocket.colorTag);
   const expandPocket = useFactoryStore((state) => state.expandPocket);
+  // The summary rows print rates, so the card follows the rate dials.
+  useRateDisplayUnits();
   const dissolvePocket = useFactoryStore((state) => state.dissolvePocket);
   const renamePocket = useFactoryStore((state) => state.renamePocket);
   const deleteBoardSelection = useFactoryStore((state) => state.deleteBoardSelection);
@@ -317,6 +324,7 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
             )}
             {!calmMode ? (
               <>
+                {!LOGIN_ENABLED ? null : (
                 <button
                   type="button"
                   onClick={(event) => {
@@ -330,6 +338,7 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
                 >
                   <Save aria-hidden className="h-3.5 w-3.5" />
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={(event) => {
@@ -343,7 +352,7 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
                 >
                   <PackageOpen aria-hidden className="h-3.5 w-3.5" />
                 </button>
-                <button
+                <button data-viewer-inspect
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
@@ -551,6 +560,8 @@ function CrossingRow({
   const icon = (
     <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden">
       <ResourceIcon
+
+        itemZoom={1.5}
         resource={{ ...crossing, id: crossing.resourceId, amount: 1 }}
         bare
         tooltip={false}
@@ -562,7 +573,7 @@ function CrossingRow({
               : fluidArtPixels(24)
             : undefined
         }
-        className={crossing.kind === "fluid" ? "!h-6 !w-6" : "!h-6 !w-6 origin-center scale-150"}
+        className="!h-6 !w-6"
       />
     </span>
   );
@@ -712,6 +723,8 @@ function PocketGlanceIoRow({
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
         <ResourceIcon
+
+          itemZoom={1.5}
           resource={{ ...crossing, id: crossing.resourceId, amount: 1 }}
           bare
           tooltip={false}
@@ -723,7 +736,7 @@ function PocketGlanceIoRow({
                 : fluidArtPixels(36)
               : undefined
           }
-          className={crossing.kind === "fluid" ? "!h-9 !w-9" : "!h-9 !w-9 origin-center scale-150"}
+          className="!h-9 !w-9"
         />
       </span>
       <span className="flex min-w-0 flex-1 flex-col">

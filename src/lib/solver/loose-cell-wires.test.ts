@@ -191,10 +191,9 @@ describe("loose cell wires", () => {
     expect(Object.keys(result.edges).sort()).toEqual(["out", "w"]);
   });
 
-  it("a cross-form wire carries nothing once the rule is turned off", () => {
-    // The wire and its ratio survive on the board, but with looseCellWires
-    // off the conversion does not exist: the drinker reads unsupplied, same
-    // as if the wire were not there. Turning the rule back on revives it.
+  it("a stored off setting disables the conversion", () => {
+    // Loose cell wires are configurable again so a plan can choose whether a
+    // cross-form wire behaves like an explicit tank/canner connection.
     const result = calculateThroughput(
       project({
         setupRules: { looseCellWires: false },

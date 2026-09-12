@@ -4,10 +4,12 @@ import {
   WIRE_NODE_MARGIN,
   laneWidthForHeat,
   solveGridRoutes,
+  type GridEndpoint,
   type GridObstacle,
   type GridPoint,
   type GridRouteRequest,
 } from "./grid-edge-router";
+import { DEFAULT_ROUTER_TUNING } from "./router-tuning";
 
 /** A recipe-card-shaped obstacle on the grid. */
 function card(id: string, x: number, y: number, width = 360, height = 160): GridObstacle {
@@ -41,19 +43,72 @@ function violatesMargin(points: GridPoint[], obstacle: GridObstacle, skipEnds = 
   const all = segments(points);
   // Stubs at either end legitimately cross their own card's margin.
   const middle = all.slice(skipEnds, all.length - skipEnds);
+  // Liang-Barsky against the OPEN rectangle: a segment that only touches
+  // the margin's boundary (or skims its corner on a diagonal) is legal.
   return middle.some(({ a, b }) => {
-    const loX = Math.min(a.x, b.x);
-    const hiX = Math.max(a.x, b.x);
-    const loY = Math.min(a.y, b.y);
-    const hiY = Math.max(a.y, b.y);
-    return hiX > left + 0.01 && loX < right - 0.01 && hiY > top + 0.01 && loY < bottom - 0.01;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    let t0 = 0;
+    let t1 = 1;
+    const clip = (p: number, q: number): boolean => {
+      if (Math.abs(p) < 1e-9) {
+        return q > 0;
+      }
+      const r = q / p;
+      if (p < 0) {
+        if (r > t1) return false;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return false;
+        if (r < t1) t1 = r;
+      }
+      return true;
+    };
+    const inside =
+      clip(-dx, a.x - left) && clip(dx, right - a.x) && clip(-dy, a.y - top) && clip(dy, bottom - a.y);
+    return inside && t1 - t0 > 1e-6;
   });
 }
 
+/** Proper crossings between segments of different wires; touches and shared ends do not count. */
+function countCrossings(routes: Map<string, { points: GridPoint[] }>): number {
+  const segs: Array<{ id: string; a: GridPoint; b: GridPoint }> = [];
+  for (const [id, route] of routes) {
+    for (const seg of segments(route.points)) {
+      segs.push({ id, ...seg });
+    }
+  }
+  const cross = (o: GridPoint, a: GridPoint, b: GridPoint) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  let count = 0;
+  for (let i = 0; i < segs.length; i += 1) {
+    for (let j = i + 1; j < segs.length; j += 1) {
+      const s = segs[i];
+      const t = segs[j];
+      if (s.id === t.id) continue;
+      const d1 = cross(s.a, s.b, t.a);
+      const d2 = cross(s.a, s.b, t.b);
+      const d3 = cross(t.a, t.b, s.a);
+      const d4 = cross(t.a, t.b, s.b);
+      const eps = 0.5;
+      if (
+        ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) &&
+        ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps))
+      ) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+/** Every segment runs along the grid: horizontal, vertical, or a true 45° diagonal. */
 function isOrthogonal(points: GridPoint[]): boolean {
-  return segments(points).every(
-    ({ a, b }) => Math.abs(a.x - b.x) < 0.01 || Math.abs(a.y - b.y) < 0.01,
-  );
+  return segments(points).every(({ a, b }) => {
+    const dx = Math.abs(a.x - b.x);
+    const dy = Math.abs(a.y - b.y);
+    return dx < 0.01 || dy < 0.01 || Math.abs(dx - dy) < 0.01;
+  });
 }
 
 describe("laneWidthForHeat", () => {
@@ -545,5 +600,293 @@ describe("solveGridRoutes", () => {
           point.y <= frame.bottom,
       ),
     ).toBe(true);
+  });
+});
+
+/** The whole rim as candidate docks, the way the board offers it in free-dock mode. */
+function rim(obstacle: GridObstacle): GridEndpoint[] {
+  const out: GridEndpoint[] = [];
+  const keepOut = 40;
+  for (let x = obstacle.left + keepOut; x <= obstacle.right - keepOut; x += 20) {
+    out.push({ x, y: obstacle.top, side: "top" }, { x, y: obstacle.bottom, side: "bottom" });
+  }
+  for (let y = obstacle.top + keepOut; y <= obstacle.bottom - keepOut; y += 20) {
+    out.push({ x: obstacle.left, y, side: "left" }, { x: obstacle.right, y, side: "right" });
+  }
+  return out;
+}
+
+
+describe("wires plan together", () => {
+  it("a fan of four products leaves a tall card without crossing", () => {
+    // Jack's distillation tower board (2026-09-07): a tall card at the
+    // bottom left, three product drawers along the top and one to the
+    // right. Routed one at a time each wire left by the right side and the
+    // top-bound ones climbed across the one heading right. Zero crossings
+    // is possible here and is what the plan must find.
+    const tower = card("tower", -320, 400, 600, 500);
+    const creosote = card("creosote", 200, 80, 140, 120);
+    const phenol = card("phenol", 400, 80, 140, 120);
+    const benzene = card("benzene", 560, 80, 140, 120);
+    const naphtha = card("naphtha", 480, 320, 140, 120);
+    const obstacles = [tower, creosote, phenol, benzene, naphtha];
+    const requests = [creosote, phenol, benzene, naphtha].map((drawer, index) =>
+      request({
+        edgeId: `to-${drawer.id}`,
+        order: index,
+        sources: rim(tower),
+        targets: rim(drawer),
+        strokeWidth: 8,
+        sourceCardId: tower.id,
+        targetCardId: drawer.id,
+      }),
+    );
+    const solved = solveGridRoutes(obstacles, requests);
+    for (const routed of solved.values()) {
+      expect(routed.points.length).toBeGreaterThanOrEqual(2);
+      expect(isOrthogonal(routed.points)).toBe(true);
+      for (const obstacle of obstacles) {
+        expect(violatesMargin(routed.points, obstacle)).toBe(false);
+      }
+    }
+    expect(countCrossings(solved)).toBe(0);
+    // The wire heading straight over the top leaves by the top.
+    expect(solved.get("to-creosote")!.points[0].y).toBe(tower.top);
+    // The wire heading right leaves by the right.
+    expect(solved.get("to-naphtha")!.points[0].x).toBe(tower.right);
+  });
+
+  it("two wires between the same pair of cards run parallel, never swapped", () => {
+    const left = card("left", 0, 0);
+    const right = card("right", 600, 0);
+    const obstacles = [left, right];
+    const requests = ["a", "b"].map((id, index) =>
+      request({
+        edgeId: id,
+        order: index,
+        sources: rim(left),
+        targets: rim(right),
+        strokeWidth: 8,
+        sourceCardId: left.id,
+        targetCardId: right.id,
+      }),
+    );
+    const solved = solveGridRoutes(obstacles, requests);
+    expect(countCrossings(solved)).toBe(0);
+  });
+
+  it("a later wire can move an earlier one out of its way", () => {
+    // A leaves first, straight down from the card's centre; B then has to
+    // get from the card's left end to a drawer below-right of A's target.
+    // Alone, B would cross A. Negotiation moves whichever of them costs
+    // less to move, and the board ends with no crossing.
+    const top = card("top", 0, 0, 440, 160);
+    const near = card("near", 100, 400, 140, 120);
+    const far = card("far", 400, 600, 140, 120);
+    const obstacles = [top, near, far];
+    const requests = [
+      request({ edgeId: "a", order: 0, sources: rim(top), targets: rim(near), strokeWidth: 8, sourceCardId: "top", targetCardId: "near" }),
+      request({ edgeId: "b", order: 1, sources: rim(top), targets: rim(far), strokeWidth: 8, sourceCardId: "top", targetCardId: "far" }),
+    ];
+    const solved = solveGridRoutes(obstacles, requests);
+    expect(countCrossings(solved)).toBe(0);
+  });
+});
+
+describe("exits and landings", () => {
+  it("two cards a cell apart take the straight shot", () => {
+    const machine = card("machine", 0, 0, 440, 300);
+    const drawer = card("drawer", 460, 100, 100, 80);
+    const solved = solveGridRoutes(
+      [machine, drawer],
+      [
+        request({
+          edgeId: "e1",
+          sources: rim(machine),
+          targets: rim(drawer),
+          sourceCardId: "machine",
+          targetCardId: "drawer",
+        }),
+      ],
+    );
+    const points = solved.get("e1")!.points;
+    expect(points).toHaveLength(2);
+    expect(points[0].x).toBe(440);
+    expect(points[1].x).toBe(460);
+    expect(points[0].y).toBe(points[1].y);
+  });
+
+  it("aligned ports go straight rather than out at 45 and back", () => {
+    // Out at 45°, one bend, straight in must never beat the straight shot.
+    const a = card("a", 0, 0, 440, 300);
+    const b = card("b", 600, 0, 440, 300);
+    const solved = solveGridRoutes(
+      [a, b],
+      [
+        request({
+          edgeId: "e1",
+          sources: [{ x: 440, y: 140, side: "right" }],
+          targets: [{ x: 600, y: 140, side: "left" }],
+        }),
+      ],
+    );
+    const points = solved.get("e1")!.points;
+    expect(points.every((point) => Math.abs(point.y - 140) < 0.01)).toBe(true);
+  });
+});
+
+describe("straight shots and self loops", () => {
+  it("a one-cell diagonal gap uses a visible square elbow", () => {
+    const route = solveGridRoutes([], [request({
+      edgeId: "short",
+      sources: [{ x: 0, y: 0, side: "right" }],
+      targets: [{ x: 20, y: 20, side: "top" }],
+    })]).get("short")!;
+    expect(route.points).toEqual([{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }]);
+  });
+
+  it("nearby staggered cards keep their connection and use square bends", () => {
+    const a = card("a", 0, 0, 440, 300);
+    const b = card("b", 460, 300, 100, 80);
+    const route = solveGridRoutes([a, b], [request({
+      edgeId: "short",
+      sources: [{ x: 440, y: 280, side: "right" }],
+      targets: [{ x: 480, y: 300, side: "top" }],
+      sourceCardId: "a", targetCardId: "b",
+    })]).get("short")!;
+    expect(route.points.length).toBeGreaterThan(2);
+    expect(segments(route.points).every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
+  });
+
+  it("diagonal runs span at least two cells, while long diagonals remain available", () => {
+    let diagonalCount = 0;
+    for (const y of [20, 40, 60, 100, 160]) {
+      const route = solveGridRoutes([], [request({
+        edgeId: "diagonal",
+        sources: [{ x: 0, y: 0, side: "right" }],
+        targets: [{ x: 200, y, side: "left" }],
+      })]).get("diagonal")!;
+      expect(route.points.length).toBeGreaterThan(1);
+      for (const { a, b } of segments(route.points)) {
+        if (a.x === b.x || a.y === b.y) continue;
+        diagonalCount += 1;
+        expect(Math.abs(a.x - b.x)).toBeGreaterThanOrEqual(40);
+        expect(Math.abs(a.y - b.y)).toBeGreaterThanOrEqual(40);
+      }
+    }
+    expect(diagonalCount).toBeGreaterThan(0);
+  });
+
+  it("two cards two cells apart take the straight shot", () => {
+    const machine = card("machine", 0, 0, 440, 300);
+    const drawer = card("drawer", 480, 100, 100, 80);
+    const solved = solveGridRoutes(
+      [machine, drawer],
+      [
+        request({
+          edgeId: "e1",
+          sources: rim(machine),
+          targets: rim(drawer),
+          sourceCardId: "machine",
+          targetCardId: "drawer",
+        }),
+      ],
+    );
+    const points = solved.get("e1")!.points;
+    expect(points).toHaveLength(2);
+    expect(points[0].x).toBe(440);
+    expect(points[1].x).toBe(480);
+    expect(points[0].y).toBe(points[1].y);
+  });
+
+  it("neighbouring cards cannot earn diagonals by moving their docks farther apart", () => {
+    const a = card("a", 0, 0, 440, 300);
+    const b = card("b", 460, 320, 360, 300);
+    const points = solveGridRoutes([a, b], [request({
+      edgeId: "roof", sources: rim(a), targets: rim(b), sourceCardId: "a", targetCardId: "b",
+    })]).get("roof")!.points;
+    expect(points.length).toBeGreaterThan(2);
+    expect(segments(points).every(({ a, b }) => a.x === b.x || a.y === b.y)).toBe(true);
+    expect(segments(points).some(({ a, b }) => Math.hypot(a.x - b.x, a.y - b.y) >= 40)).toBe(true);
+    const first = points[0], last = points[points.length - 1];
+    expect(Math.abs(last.x - first.x) + Math.abs(last.y - first.y)).toBeGreaterThanOrEqual(120);
+  });
+
+  it("reserves diagonals for trips of at least six grid spaces, including at the docks", () => {
+    for (const cells of [3, 4, 5, 6, 20, 100]) {
+      const points = solveGridRoutes([], [request({
+        edgeId: "trip", sources: [{ x: 0, y: 0, side: "right" }],
+        targets: [{ x: cells * 20, y: cells * 20, side: "left" }],
+      })]).get("trip")!.points;
+      expect(points.length).toBeGreaterThan(1);
+      const diagonal = segments(points).filter(({ a, b }) => a.x !== b.x && a.y !== b.y);
+      if (cells < 6) expect(diagonal).toHaveLength(0);
+      else {
+        expect(diagonal.length).toBeGreaterThan(0);
+        // Long trips may leave diagonally immediately.
+        expect(points[1].x).not.toBe(points[0].x);
+        expect(points[1].y).not.toBe(points[0].y);
+      }
+    }
+  });
+
+  it("keeps a one-cell connection when only fixed facing docks are available", () => {
+    const points = solveGridRoutes([], [request({
+      edgeId: "fixed", sources: [{ x: 0, y: 0, side: "right" }],
+      targets: [{ x: 20, y: 0, side: "left" }],
+    })]).get("fixed")!.points;
+    expect(points).toEqual([{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+  });
+
+  it("can turn off the breathing-room preference with the routing dial", () => {
+    const a = card("a", 0, 0, 440, 300), b = card("b", 460, 300, 100, 80);
+    const points = solveGridRoutes([a, b], [request({
+      edgeId: "short", sources: rim(a), targets: rim(b), sourceCardId: "a", targetCardId: "b",
+    })], undefined, { ...DEFAULT_ROUTER_TUNING, dockTravelCells: 0, earlyTurn: 0 }).get("short")!.points;
+    const first = points[0], last = points[points.length - 1];
+    expect(Math.abs(last.x - first.x) + Math.abs(last.y - first.y)).toBeLessThan(120);
+  });
+
+  it("a straight shot of any length beats leaving by another side", () => {
+    const machine = card("machine", 0, 0, 440, 300);
+    const drawer = card("drawer", 640, 100, 100, 80);
+    const solved = solveGridRoutes(
+      [machine, drawer],
+      [
+        request({
+          edgeId: "e1",
+          sources: rim(machine),
+          targets: rim(drawer),
+          sourceCardId: "machine",
+          targetCardId: "drawer",
+        }),
+      ],
+    );
+    const points = solved.get("e1")!.points;
+    expect(points.length).toBe(2);
+    expect(points[0].y).toBe(points[1].y);
+  });
+
+  it("a card wired to itself docks freely, turns only at 90 degrees, and lands a cell or more from its exit", () => {
+    const machine = card("machine", 0, 0, 440, 300);
+    const solved = solveGridRoutes(
+      [machine],
+      [
+        request({
+          edgeId: "loop",
+          sources: rim(machine),
+          targets: rim(machine),
+          sourceCardId: "machine",
+          targetCardId: "machine",
+        }),
+      ],
+    );
+    const points = solved.get("loop")!.points;
+    expect(points.length).toBeGreaterThanOrEqual(3);
+    const first = points[0];
+    const last = points[points.length - 1];
+    expect(Math.max(Math.abs(first.x - last.x), Math.abs(first.y - last.y))).toBeGreaterThanOrEqual(20);
+    // Ninety-degree turns only: every run is horizontal or vertical.
+    expect(isOrthogonal(points)).toBe(true);
   });
 });

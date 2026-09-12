@@ -7,14 +7,19 @@ import type {
   ResourceKind,
   ThroughputResult,
 } from "@/lib/model/types";
-import { isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
+import { isFreeRecipeInput, isOreDictionaryResource, isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
+import { getPoolProject, isPoolStorageId } from "@/lib/solver/pool-mode";
 import { findDeathSpirals, type DeathSpiral } from "./death-spiral";
 import { findClogLocks, type ClogLock } from "./clog-lock";
+import { findBareSlots } from "./bare-slots";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { collectTrashNodeIds } from "@/lib/model/trash";
 import { describeStorage, getStorageRole, getStorageRoles } from "@/lib/model/storage-role";
-import { makeResourceHandleId } from "./resource-handles";
+import { makeResourceHandleId, sectionHandleId } from "./resource-handles";
+import { sectionOwnerId } from "@/lib/model/shared-machine";
+import { getInputSupplyHatch, isHatchSuppliedInput } from "@/lib/model/hatch-supply";
 import { getSetupRules, type ResolvedSetupRules } from "@/lib/model/setup-rules";
+import { energyPerUnit } from "@/lib/model/rate-unit";
 
 type ProjectEdge = FactoryProject["edges"][number];
 
@@ -77,7 +82,8 @@ export type NodeVerdictKind =
   | "clog-lock"
   | "demand-set"
   | "paced"
-  | "balanced";
+  | "balanced"
+  | "busy";
 
 /**
  * The two supply-short states. Both mean "the inputs, not this card, set the
@@ -112,6 +118,17 @@ export interface NodeVerdict {
   kind: NodeVerdictKind;
   /** Clamped display percentage, 0-100. */
   pct: number;
+  /**
+   * Busy: this recipe shares its machine with others (shared-machine.ts) and
+   * the machine's time is spent. The section that took the most of it.
+   */
+  busy?: {
+    sharerName: string;
+    /** That section's share of the machine's time, display percent. */
+    sharerPct: number;
+    /** How many other recipes the machine runs. */
+    sharers: number;
+  };
   /** Starved/blocked: the input that pins the machine below what's asked. */
   binding?: {
     resourceKey: string;
@@ -177,6 +194,18 @@ export interface NodeVerdict {
     surplusPerSecond: number;
     /** Percentage points this card would climb if the surplus had a home. */
     heldBackPct: number;
+    /**
+     * Set when nothing takes the output because every machine that would is
+     * itself stopped: the card is waiting on THAT machine, not on a drawer.
+     */
+    stoppedTakerName?: string;
+    /**
+     * Set when the output's takers all run but none can take more: the
+     * card is held at their pace, and their own cards say what holds them.
+     */
+    heldTakerName?: string;
+    /** The held taker's own speed, display percent, for the hover. */
+    heldTakerPct?: number;
   };
   /** Dead-loop: the ring this card is trapped in, and who else is in it. */
   spiral?: DeathSpiral;
@@ -190,6 +219,16 @@ export interface NodeVerdict {
 /** Half a percent: below this, converged solver states are just float noise. */
 const VERDICT_EPSILON = 0.005;
 const RATE_EPSILON = 1e-6;
+/**
+ * A shortfall is real only against the size of the ask. LP flows carry
+ * solver dust proportional to board scale (balances.ts snaps at 1e-5
+ * relative), and a hundred fusion reactors at a million litres a second
+ * carried a fourteen-millionths gap that read as BOTTLENECK at 1.4%.
+ */
+const SHORTFALL_RELATIVE_EPSILON = 1e-5;
+function isMaterialShortfall(missing: number, reference: number): boolean {
+  return missing > Math.max(RATE_EPSILON, Math.abs(reference) * SHORTFALL_RELATIVE_EPSILON);
+}
 
 function clamp01(value: number | undefined, fallback: number): number {
   if (value === undefined || !Number.isFinite(value)) {
@@ -347,6 +386,274 @@ function getBufferRelayIndex(
   return index;
 }
 
+/** A machine that could turn at all: powered, and inputs allowing something. */
+function isMachineAbleToRun(nodeResult: NodeThroughputResult | undefined): boolean {
+  if (!nodeResult) {
+    return true;
+  }
+  if (nodeResult.powerStalled) {
+    return false;
+  }
+  return clamp01(nodeResult.capableUtilization, 1) > VERDICT_EPSILON;
+}
+
+/**
+ * A machine stopped by its own unfinished setup - no power for its hatches,
+ * or a slot with no wire on it - as opposed to one stopped by what its
+ * neighbours do. Its card already says so; every neighbour's card should
+ * point at it rather than tell a story of its own.
+ */
+function isStoppedBySetup(
+  nodeResult: NodeThroughputResult | undefined,
+  incoming: ProjectEdge[],
+  outgoing: ProjectEdge[],
+  rules: ResolvedSetupRules,
+): boolean {
+  if (!nodeResult) {
+    return false;
+  }
+  if (nodeResult.powerStalled) {
+    return true;
+  }
+  return findBareSlots(nodeResult, incoming, outgoing, rules) !== undefined;
+}
+
+/**
+ * The output that holds this card at a dead stop because every machine
+ * taking it has stopped. Walks through drawers to the machines behind them;
+ * a port with no machine takers at all (a drawer only, a can) is never it.
+ */
+function findStoppedTakerClog(
+  project: FactoryProject,
+  result: ThroughputResult,
+  nodeResult: NodeThroughputResult,
+  outgoing: ProjectEdge[],
+): NodeVerdict["clog"] {
+  const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
+  const recipeById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+  const nodeById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  const outgoingBy = outgoingByNode(project);
+  const capable = clamp01(nodeResult.capableUtilization, 1);
+  const utilization = clamp01(nodeResult.utilization, 0);
+  for (const [key, flow] of Object.entries(nodeResult.outputs).sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  )) {
+    if (flow.amountPerSecond <= RATE_EPSILON || flow.kind === "power") {
+      continue;
+    }
+    const edges = outgoing.filter(
+      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
+    );
+    if (edges.length === 0) {
+      continue;
+    }
+    let transferred = 0;
+    for (const edge of edges) {
+      transferred += result.edges[edge.id]?.transferredPerSecond ?? 0;
+    }
+    if (transferred > RATE_EPSILON) {
+      continue;
+    }
+    const takers = new Set<string>();
+    const seen = new Set<string>();
+    const walk = (edgesOut: ProjectEdge[]) => {
+      for (const edge of edgesOut) {
+        if (storageIds.has(edge.target)) {
+          if (!seen.has(edge.target)) {
+            seen.add(edge.target);
+            walk(outgoingBy.get(edge.target) ?? []);
+          }
+        } else if (nodeById.has(edge.target)) {
+          takers.add(edge.target);
+        }
+      }
+    };
+    walk(edges);
+    if (takers.size === 0) {
+      continue;
+    }
+    let stoppedTaker: string | undefined;
+    let allStopped = true;
+    for (const taker of takers) {
+      const takerResult = result.nodes[taker];
+      const takerNode = nodeById.get(taker);
+      const stopped =
+        takerNode?.enabled === false ||
+        !takerResult ||
+        takerResult.status === "missing-recipe" ||
+        clamp01(takerResult.utilization, 0) <= VERDICT_EPSILON;
+      if (!stopped) {
+        allStopped = false;
+        break;
+      }
+      if (stoppedTaker === undefined) {
+        const recipe = takerNode ? recipeById.get(takerNode.recipeId) : undefined;
+        stoppedTaker = recipe?.machineType ?? recipe?.name ?? takerResult?.recipeName;
+      }
+    }
+    if (!allStopped) {
+      continue;
+    }
+    const made = flow.amountPerSecond * capable;
+    return {
+      resourceKey: key,
+      kind: flow.kind,
+      displayName: flow.displayName ?? flow.resourceId ?? key,
+      madePerSecond: made,
+      takenPerSecond: 0,
+      surplusPerSecond: made,
+      heldBackPct: Math.max(0, Math.round((capable - utilization) * 1000) / 10),
+      stoppedTakerName: stoppedTaker,
+    };
+  }
+  return undefined;
+}
+
+/**
+ * The output that holds a FED card below the speed its hungry takers want.
+ *
+ * The books never idle a fed machine with somewhere to put its output, so a
+ * card whose inputs are covered, whose one output is over-asked and which
+ * still sits below full speed is being held by ANOTHER output: every wire
+ * on it lands on a machine that cannot take more, and no drawer absorbs
+ * the rest. That is a clog, one machine removed - two more of this card
+ * would only make more of the stuck thing. The old diagnosis filed the
+ * taker's smaller ask as demand, so `clogOutputKey` never named it and the
+ * card fell through to BOTTLENECK with advice to add machines here.
+ *
+ * Prefers an output whose taker is visibly held (clogged, stopped, or at
+ * full speed) over one merely pacing, so the name on the hover is the card
+ * whose own story explains this one.
+ */
+function findHeldOutputClog(
+  project: FactoryProject,
+  result: ThroughputResult,
+  nodeResult: NodeThroughputResult,
+  outgoing: ProjectEdge[],
+  hungryKey: string,
+  utilization: number,
+  wanted: number,
+): NodeVerdict["clog"] {
+  let best: { rank: number; clog: NonNullable<NodeVerdict["clog"]> } | undefined;
+  for (const [key, flow] of Object.entries(nodeResult.outputs).sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  )) {
+    if (key === hungryKey || flow.amountPerSecond <= RATE_EPSILON || flow.kind === "power") {
+      continue;
+    }
+    const edges = outgoing.filter(
+      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
+    );
+    if (edges.length === 0) {
+      continue;
+    }
+    const takers = machineTakersBehindOutput(project, edges);
+    if (!takers || takers.size === 0) {
+      continue;
+    }
+    let taken = 0;
+    for (const edge of edges) {
+      taken += result.edges[edge.id]?.transferredPerSecond ?? 0;
+    }
+    const made = flow.amountPerSecond * wanted;
+    if (!isMaterialShortfall(made - taken, made)) {
+      continue;
+    }
+    const named = rankHeldTaker(project, result, takers);
+    const clog: NonNullable<NodeVerdict["clog"]> = {
+      resourceKey: key,
+      kind: flow.kind,
+      displayName: flow.displayName ?? flow.resourceId ?? key,
+      madePerSecond: made,
+      takenPerSecond: taken,
+      surplusPerSecond: made - taken,
+      heldBackPct: Math.max(0, Math.round((wanted - utilization) * 1000) / 10),
+      heldTakerName: named.name,
+      heldTakerPct: named.pct,
+    };
+    if (!best || named.rank > best.rank) {
+      best = { rank: named.rank, clog };
+    }
+  }
+  return best?.clog;
+}
+
+/**
+ * The machines behind one output port, through any buffers on the way.
+ * Absent when a drain drawer or an overflow buffer sits on the route: those
+ * absorb a surplus, so nothing on that port can be holding the card.
+ */
+function machineTakersBehindOutput(
+  project: FactoryProject,
+  edges: ProjectEdge[],
+): Set<string> | undefined {
+  const storageById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
+  const nodeIds = new Set(project.nodes.map((entry) => entry.id));
+  const outgoingBy = outgoingByNode(project);
+  const takers = new Set<string>();
+  const seen = new Set<string>();
+  let absorbed = false;
+  const walk = (edgesOut: ProjectEdge[]) => {
+    for (const edge of edgesOut) {
+      const storage = storageById.get(edge.target);
+      if (storage) {
+        const isDrain = (outgoingBy.get(storage.id) ?? []).length === 0;
+        if (isDrain || (storage.bufferMode ?? "overflow") === "overflow") {
+          absorbed = true;
+          return;
+        }
+        if (!seen.has(storage.id)) {
+          seen.add(storage.id);
+          walk(outgoingBy.get(storage.id) ?? []);
+        }
+      } else if (nodeIds.has(edge.target)) {
+        takers.add(edge.target);
+      }
+    }
+  };
+  walk(edges);
+  return absorbed ? undefined : takers;
+}
+
+/**
+ * Which taker to name on a held output. A stopped or clogged one explains
+ * itself best (rank 3), a full one next (2), a merely pacing one last (1).
+ * Deterministic: ties go to the first id in sort order.
+ */
+function rankHeldTaker(
+  project: FactoryProject,
+  result: ThroughputResult,
+  takers: Set<string>,
+): { rank: number; name: string; pct: number } {
+  const recipeById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+  const nodeById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  let best: { rank: number; name: string; pct: number } | undefined;
+  for (const taker of [...takers].sort()) {
+    const takerResult = result.nodes[taker];
+    const takerNode = nodeById.get(taker);
+    const takerUtil = clamp01(takerResult?.utilization, 0);
+    const takerCapable = clamp01(takerResult?.capableUtilization, 1);
+    const takerDisposal = clamp01(takerResult?.disposalUtilization, 1);
+    const rank =
+      takerNode?.enabled === false || !takerResult || takerUtil <= VERDICT_EPSILON
+        ? 3
+        : takerDisposal < 1 - VERDICT_EPSILON && takerDisposal < takerCapable - VERDICT_EPSILON
+          ? 3
+          : takerUtil >= 1 - VERDICT_EPSILON
+            ? 2
+            : 1;
+    if (!best || rank > best.rank) {
+      const recipe = takerNode ? recipeById.get(takerNode.recipeId) : undefined;
+      best = {
+        rank,
+        name: recipe?.machineType ?? recipe?.name ?? takerResult?.recipeName ?? taker,
+        pct: Math.round(takerUtil * 1000) / 10,
+      };
+    }
+  }
+  return best ?? { rank: 0, name: "", pct: 0 };
+}
+
 /**
  * What ONE inbound line can honestly deliver, buffers included.
  *
@@ -365,10 +672,16 @@ function honestInboundAvailablePerSecond(
   sourceIsStorage: boolean,
   sourceHasSoleOutlet: boolean,
 ): number {
+  // The sole-outlet uplift says "this producer could ramp to full blast if
+  // asked". A producer at a dead stop for its own reasons - no power, or
+  // inputs that allow nothing - cannot, so its line honestly delivers what
+  // it delivers: nothing. Without this a machine starved by an unwired
+  // feeder read as fully supplied and never got to say who stopped it.
+  const sourceCanRamp = sourceIsStorage || isMachineAbleToRun(result?.nodes[edge.source]);
   return honestEdgeAvailablePerSecond(
     result?.edges[edge.id],
     sourceIsStorage,
-    sourceHasSoleOutlet,
+    sourceHasSoleOutlet && sourceCanRamp,
     sourceIsStorage
       ? bufferRelaySupplyPerSecond(project, result, edge.source, edge.id)
       : Number.POSITIVE_INFINITY,
@@ -392,6 +705,29 @@ export function honestEdgeAvailablePerSecond(
   return allocated;
 }
 
+const edgeIndexCache = new WeakMap<
+  FactoryProject,
+  { incoming: Map<string, ProjectEdge[]>; outgoing: Map<string, ProjectEdge[]> }
+>();
+function edgeIndex(project: FactoryProject) {
+  let cached = edgeIndexCache.get(project);
+  if (!cached) {
+    cached = { incoming: new Map(), outgoing: new Map() };
+    for (const edge of project.edges) {
+      cached.incoming.set(edge.target, [...(cached.incoming.get(edge.target) ?? []), edge]);
+      cached.outgoing.set(edge.source, [...(cached.outgoing.get(edge.source) ?? []), edge]);
+    }
+    edgeIndexCache.set(project, cached);
+  }
+  return cached;
+}
+function incomingByNode(project: FactoryProject): Map<string, ProjectEdge[]> {
+  return edgeIndex(project).incoming;
+}
+function outgoingByNode(project: FactoryProject): Map<string, ProjectEdge[]> {
+  return edgeIndex(project).outgoing;
+}
+
 /** How many outgoing lines each source has per resource — the sole-outlet test. */
 export function countSourceOutlets(project: FactoryProject): Map<string, number> {
   const counts = new Map<string, number>();
@@ -411,6 +747,9 @@ export function deriveNodeVerdict(
   result: ThroughputResult | undefined,
   nodeId: string,
 ): NodeVerdict {
+  // Pool mode: every story below reads the graph the solve ran on, pools
+  // and all, never the wireless drawing.
+  project = getPoolProject(project);
   const node = project.nodes.find((entry) => entry.id === nodeId);
   if (!node || node.enabled === false) {
     return { kind: "off", pct: 0 };
@@ -443,13 +782,27 @@ export function deriveNodeVerdict(
   // rules are separate on purpose, and half a closed plan is still a plan.
   const rules = getSetupRules(project);
   if (!rules.freeInputs || !rules.freeOutputs) {
-    const bare = findBareSlots(project, nodeResult, incoming, outgoing, rules);
-    if (bare || (incoming.length === 0 && outgoing.length === 0)) {
-      // The second clause catches a card with no wires AND nothing to wire -
-      // a recipe the solver has no flows for. There are no bare slots to mark,
-      // but "unwired" is still the only true thing to say about it.
+    const bare = findBareSlots(nodeResult, incoming, outgoing, rules);
+    // A machine whose recipe has NO slots at all (a solar panel: nothing in,
+    // EU out through no port) has nothing to wire, so "unwired" would nag
+    // about a wire that cannot exist. It runs; the ordinary readings apply.
+    const recipe = project.recipes.find((entry) => entry.id === node.recipeId);
+    const hasSlots = (recipe?.inputs.length ?? 0) > 0 || (recipe?.outputs.length ?? 0) > 0;
+    if (bare || (hasSlots && incoming.length === 0 && outgoing.length === 0)) {
+      // The second clause catches a SLOTTED card with no wires whose slots
+      // the solver has no flows for. There are no bare slots to mark, but
+      // "unwired" is still the only true thing to say about it.
       return { kind: "unwired", pct, bare };
     }
+  }
+
+  // SOLVE MODE: the books are the solved build, not the player's, and every
+  // diagnosis below (spirals, clog locks, deficits, starvation ladders)
+  // describes a FIXED build that is not what is on screen. A solved machine
+  // runs by construction; one at zero is simply not needed by any typed
+  // amount - a quiet reading, never an alarm.
+  if (project.solveMode) {
+    return utilization > VERDICT_EPSILON ? { kind: "balanced", pct } : { kind: "demand-set", pct };
   }
 
   // A dead ring outranks every other reading. Its members ARE starved and
@@ -469,6 +822,18 @@ export function deriveNodeVerdict(
     return { kind: "clog-lock", pct, clogLock, clogLockNodeId: nodeId };
   }
 
+  // A card at a dead stop whose takers have ALL stopped is waiting on them,
+  // not choking on a surplus and not short of machines. Unwire one slot on
+  // the machine downstream and this one falls to 0% with everything it
+  // needs; the only true thing to say is which machine stopped, so the
+  // player goes there instead of adding machines here or hanging a drawer.
+  if (utilization <= VERDICT_EPSILON && capable > VERDICT_EPSILON && result) {
+    const waiting = findStoppedTakerClog(project, result, nodeResult, outgoing);
+    if (waiting) {
+      return { kind: "clogged", pct, clog: waiting };
+    }
+  }
+
   const deficit = findWorstOutputDeficit(project, result, nodeResult, nodeId, outgoing);
 
   // Conservation outranks supply and demand both. A machine held below full
@@ -486,6 +851,21 @@ export function deriveNodeVerdict(
   ) {
     const clog = describeClog(nodeResult, utilization, disposal);
     if (clog) {
+      // Name the machine on the other end when there is one: "nowhere to
+      // go" with an address sends the player to the card that says why.
+      if (result) {
+        const takers = machineTakersBehindOutput(
+          project,
+          outgoing.filter(
+            (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === clog.resourceKey,
+          ),
+        );
+        if (takers && takers.size > 0) {
+          const named = rankHeldTaker(project, result, takers);
+          clog.heldTakerName = named.name;
+          clog.heldTakerPct = named.pct;
+        }
+      }
       return { kind: "clogged", pct, clog, deficit };
     }
   }
@@ -493,6 +873,34 @@ export function deriveNodeVerdict(
   if (utilization >= 1 - VERDICT_EPSILON) {
     return deficit ? { kind: "bottleneck", pct, deficit } : { kind: "balanced", pct };
   }
+
+  // SHARED MACHINE: a recipe held below what its inputs and takers allow
+  // because the machine's time went to the other recipes on it. The card
+  // names the section that took the most, and more machines is the fix.
+  if (utilization < Math.min(capable, demand) - VERDICT_EPSILON) {
+    const busy = findBusySharer(project, result, nodeId, utilization);
+    if (busy) {
+      return { kind: "busy", pct, busy, deficit };
+    }
+  }
+
+  // Below full speed with a hungry taker, BOTTLENECK is only true if this
+  // card could actually ramp. When another wired output has no home for
+  // the extra, it cannot, and the honest word is CLOGGED naming that
+  // output's taker. Asked only on the paths that would otherwise say
+  // bottleneck, after a genuinely short input has had its say.
+  const heldClog = () =>
+    deficit && result
+      ? findHeldOutputClog(
+          project,
+          result,
+          nodeResult,
+          outgoing,
+          deficit.resourceKey,
+          utilization,
+          Math.min(1, capable, Math.max(demand, utilization)),
+        )
+      : undefined;
 
   // Below full speed there is always a cause. Downstream owns it only when
   // demand is the strictly smaller limit; a tie means something upstream
@@ -503,7 +911,10 @@ export function deriveNodeVerdict(
     // solver just isn't relaying the pull. Its inputs are covered, so this
     // card is where the fix goes — a bottleneck like any other.
     if (deficit) {
-      return { kind: "bottleneck", pct, deficit };
+      const held = heldClog();
+      return held
+        ? { kind: "clogged", pct, clog: held, deficit }
+        : { kind: "bottleneck", pct, deficit };
     }
     // No headroom figure: it was old-engine capability minus the books'
     // utilization, a percentage of nothing a player can see on the card.
@@ -520,14 +931,62 @@ export function deriveNodeVerdict(
   // at its level - and blaming the least-oversupplied input then produced
   // "gets 2,000/s, wants 100/s, so you are short", which is nonsense. No
   // genuinely short input means no shortage story: the line is pacing it.
-  if (!binding || binding.shortfallPerSecond <= RATE_EPSILON) {
-    return deficit ? { kind: "bottleneck", pct, deficit } : { kind: "paced", pct };
+  if (!binding || !isMaterialShortfall(binding.shortfallPerSecond, binding.neededPerSecond)) {
+    if (!deficit) {
+      return { kind: "paced", pct };
+    }
+    const held = heldClog();
+    return held
+      ? { kind: "clogged", pct, clog: held, deficit }
+      : { kind: "bottleneck", pct, deficit };
   }
   return {
     kind: deficit ? "blocked" : "starved",
     pct,
     binding,
     deficit,
+  };
+}
+
+/**
+ * The recipe that took a shared machine's time, when this section is held
+ * below its own ceiling by the machine being full. Undefined for a card that
+ * shares nothing, or whose sections together leave time to spare.
+ */
+function findBusySharer(
+  project: FactoryProject,
+  result: ThroughputResult | undefined,
+  nodeId: string,
+  utilization: number,
+): NodeVerdict["busy"] | undefined {
+  if (!result) {
+    return undefined;
+  }
+  const owner = sectionOwnerId(nodeId);
+  const members = project.nodes.filter(
+    (entry) => entry.id !== nodeId && sectionOwnerId(entry.id) === owner,
+  );
+  if (members.length === 0) {
+    return undefined;
+  }
+  let total = utilization;
+  let top: { name: string; share: number } | undefined;
+  const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+  for (const member of members) {
+    const share = clamp01(result.nodes[member.id]?.utilization, 0);
+    total += share;
+    if (!top || share > top.share) {
+      const recipe = recipesById.get(member.recipeId);
+      top = { name: recipe?.name ?? "another recipe", share };
+    }
+  }
+  if (total < 1 - VERDICT_EPSILON || !top) {
+    return undefined;
+  }
+  return {
+    sharerName: top.name,
+    sharerPct: Math.round(top.share * 100),
+    sharers: members.length,
   };
 }
 
@@ -544,6 +1003,7 @@ export function findUnwiredNodeIds(
   project: FactoryProject,
   result: ThroughputResult | undefined,
 ): string[] {
+  project = getPoolProject(project);
   // With both board rules on, the solve feeds and drains every bare slot
   // itself; a checklist of things the rules already handled would just nag.
   const rules = getSetupRules(project);
@@ -578,59 +1038,23 @@ export function findUnwiredNodeIds(
     }
     const incoming = incomingBy.get(node.id) ?? [];
     const outgoing = outgoingBy.get(node.id) ?? [];
+    // Same rule as the verdict: a machine whose recipe has no slots at all
+    // (a solar panel) has nothing to wire, so the checklist skips it.
+    const recipe = project.recipes.find((entry) => entry.id === node.recipeId);
+    const hasSlots = (recipe?.inputs.length ?? 0) > 0 || (recipe?.outputs.length ?? 0) > 0;
     if (
-      findBareSlots(project, nodeResult, incoming, outgoing, rules) ||
-      (incoming.length === 0 && outgoing.length === 0)
+      findBareSlots(nodeResult, incoming, outgoing, rules) ||
+      (hasSlots && incoming.length === 0 && outgoing.length === 0)
     ) {
-      ids.push(node.id);
+      // A shared machine's section answers as its card: the card is what
+      // the notice rings and flies to.
+      const owner = sectionOwnerId(node.id);
+      if (!ids.includes(owner)) {
+        ids.push(owner);
+      }
     }
   }
   return ids;
-}
-
-/**
- * Every slot with no wire on it, or undefined when the card is fully wired.
- *
- * Consumed inputs and real outputs only: a non-consumed input is not an
- * ingredient and a zero-rate output is not a product, so neither has anything
- * to connect. Matching is by resource key, the same way ports pool.
- */
-function findBareSlots(
-  project: FactoryProject,
-  nodeResult: NodeThroughputResult,
-  incoming: ProjectEdge[],
-  outgoing: ProjectEdge[],
-  rules: ResolvedSetupRules,
-): NodeVerdict["bare"] {
-  const describe = (
-    flow: { kind: ResourceKind; resourceId: string; displayName?: string },
-    key: string,
-  ) => ({ resourceKey: key, kind: flow.kind, displayName: flow.displayName ?? flow.resourceId });
-
-  const wiredOn = (edges: ProjectEdge[], key: string) =>
-    edges.some((edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key);
-
-  // A side the board rules answer has no bare slots to report: the solve fed
-  // or drained it, so there is nothing left for the player to do there.
-  const inputs: NonNullable<NodeVerdict["bare"]>["inputs"] = [];
-  if (!rules.freeInputs) {
-    for (const [key, flow] of Object.entries(nodeResult.inputs)) {
-      if (flow.amountPerSecond > RATE_EPSILON && !wiredOn(incoming, key)) {
-        inputs.push(describe(flow, key));
-      }
-    }
-  }
-
-  const outputs: NonNullable<NodeVerdict["bare"]>["outputs"] = [];
-  if (!rules.freeOutputs) {
-    for (const [key, flow] of Object.entries(nodeResult.outputs)) {
-      if (flow.amountPerSecond > RATE_EPSILON && !wiredOn(outgoing, key)) {
-        outputs.push(describe(flow, key));
-      }
-    }
-  }
-
-  return inputs.length > 0 || outputs.length > 0 ? { inputs, outputs } : undefined;
 }
 
 /**
@@ -770,9 +1194,38 @@ function findWorstOutputDeficit(
     if (!edgeResult) {
       continue;
     }
-    const wanted = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target], edge);
+    // An output-throttled consumer (disposal its binding limit — the same
+    // predicate the CLOGGED branch reads) cannot run faster however much it
+    // is fed, so its leftover ask is not hunger this card can answer. Its
+    // damped ask never collapses to shipped, and counting it crowned feeders
+    // BOTTLENECK at 18% while the real jam sat on the consumer's output side.
+    const targetResult = result.nodes[edge.target];
+    // A taker stopped by its own setup (no power, a bare slot) is not hungry
+    // for anything this card makes; its ask stays on the books at nameplate
+    // and crowned feeders BOTTLENECK at 0% for a wire nobody has drawn yet.
+    if (
+      isStoppedBySetup(
+        targetResult,
+        incomingByNode(project).get(edge.target) ?? [],
+        outgoingByNode(project).get(edge.target) ?? [],
+        getSetupRules(project),
+      )
+    ) {
+      continue;
+    }
+    if (targetResult) {
+      const targetDisposal = clamp01(targetResult.disposalUtilization, 1);
+      const targetCapable = clamp01(targetResult.capableUtilization, 1);
+      if (
+        targetDisposal < 1 - VERDICT_EPSILON &&
+        targetDisposal < targetCapable - VERDICT_EPSILON
+      ) {
+        continue;
+      }
+    }
+    const wanted = honestEdgeAskPerSecond(edgeResult, targetResult, edge);
     const missing = Math.max(0, wanted - (edgeResult.transferredPerSecond ?? 0));
-    if (missing <= RATE_EPSILON) {
+    if (!isMaterialShortfall(missing, wanted)) {
       continue;
     }
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
@@ -789,7 +1242,7 @@ function findWorstOutputDeficit(
       nodeResult.outputs[key as keyof typeof nodeResult.outputs]?.amountPerSecond ?? 0;
     wantedByKey.set(key, Math.max(wantedByKey.get(key) ?? 0, ask));
     const missing = Math.max(0, ask - nameplate * utilization);
-    if (missing > RATE_EPSILON) {
+    if (isMaterialShortfall(missing, ask)) {
       missingByKey.set(key, Math.max(missingByKey.get(key) ?? 0, missing));
     }
   }
@@ -1017,6 +1470,26 @@ function findUpstreamCulprit(
 
   const storage = (project.storages ?? []).find((entry) => entry.id === pick.source);
   if (storage) {
+    // A POOL is not a place to go fix: look through it to the machines
+    // feeding it and name the one that matters, exactly as a direct wire
+    // would. A pool fed only by a source drawer names that drawer.
+    if (isPoolStorageId(storage.id)) {
+      const feeders = project.edges.filter((edge) => edge.target === storage.id);
+      const machineFeeders = feeders.filter((edge) =>
+        project.nodes.some((entry) => entry.id === edge.source),
+      );
+      const through = findUpstreamCulprit(
+        project,
+        result,
+        nodeId,
+        machineFeeders.length > 0 ? machineFeeders : feeders,
+        shortfallPerSecond,
+        neededPerSecond,
+      );
+      if (through) {
+        return through;
+      }
+    }
     return {
       name: describeStorage(storage, getStorageRole(project, storage.id)),
       kind: "buffer",
@@ -1158,6 +1631,8 @@ function relayedBufferAskPerSecond(
  * recipe slots exactly the way the solver pools their flows.
  */
 export interface RailPort {
+  supplyHatch?: string;
+  hatchSupplied?: boolean;
   side: "input" | "output";
   key: string;
   kind: ResourceKind;
@@ -1201,6 +1676,19 @@ export interface RailPort {
   badge?: { kind: "short" | "asked"; perSecond: number };
   /** Render "current / nameplate" instead of the bare current rate. */
   showNameplate: boolean;
+  /**
+   * The EU this card spends per unit crossing this port (its EU/t over the
+   * port's flow, both from the same books): per unit MADE on an output, per
+   * unit EATEN on an input. The "EU" rate unit shows it in place of the
+   * rate; every other unit ignores it.
+   */
+  energyPerUnit?: number;
+  /**
+   * Free in the game (free-input.ts): drawn so the player knows to set it
+   * down, but nothing to wire, nothing to supply, no rate and no bar. Every
+   * figure above is zero and no handle is rendered for it.
+   */
+  free?: boolean;
 }
 
 export function buildRailPorts(
@@ -1209,7 +1697,12 @@ export function buildRailPorts(
   nodeId: string,
   displayRecipe: Pick<Recipe, "inputs" | "outputs">,
   verdict: NodeVerdict,
+  /** A shared machine section: its ports wear this section prefix on their handles. */
+  options?: { handleSection?: number },
 ): { inputs: RailPort[]; outputs: RailPort[] } {
+  const handleFor = (side: "input" | "output", resource: { kind: ResourceKind; id: string }) =>
+    sectionHandleId(options?.handleSection ?? 0, makeResourceHandleId(side, resource));
+  project = getPoolProject(project);
   const nodeResult = result?.nodes[nodeId];
   const utilization = clamp01(nodeResult?.utilization, 0);
   const demand = clamp01(nodeResult?.demandUtilization, utilization);
@@ -1223,6 +1716,8 @@ export function buildRailPorts(
   const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
   const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
   const outletCounts = countSourceOutlets(project);
+  const hatchNode = nodesById.get(nodeId);
+  const hatchRecipe = hatchNode ? recipesById.get(hatchNode.recipeId) : undefined;
   const machineNameOf = (id: string): string => {
     const node = nodesById.get(id);
     const recipe = node ? recipesById.get(node.recipeId) : undefined;
@@ -1258,9 +1753,22 @@ export function buildRailPorts(
       }
       seen.add(key);
 
-      const resource = resources.find(
+      const slot = resources.find(
         (entry) => entry.kind === kind && entry.id === resourceId,
       );
+      // Keep the dictionary's matching/handle identity, but show an actual
+      // accepted item, as the recipe search does before a choice is wired in.
+      const face = slot && isOreDictionaryResource(slot)
+        ? slot.alternatives?.find((entry) => entry.kind === slot.kind && !isOreDictionaryResource(entry))
+        : undefined;
+      const resource = slot && face ? {
+        ...slot,
+        displayName: face.displayName,
+        iconPath: face.iconPath,
+        iconAtlas: face.iconAtlas,
+        dominantColor: face.dominantColor,
+        tooltip: face.tooltip,
+      } : slot;
       if (isInput && resource && !isRecipeInputConsumed(resource)) {
         return;
       }
@@ -1429,8 +1937,12 @@ export function buildRailPorts(
         key,
         kind,
         resourceId,
-        displayName: displayName ?? resource?.displayName ?? resourceId,
-        handleId: makeResourceHandleId(side, { kind, id: resourceId }),
+        supplyHatch: isInput && hatchNode && hatchRecipe
+          ? getInputSupplyHatch(hatchRecipe, hatchNode, { kind, id: resourceId }) : undefined,
+        hatchSupplied: Boolean(isInput && hatchNode && hatchRecipe
+          && isHatchSuppliedInput(hatchRecipe, hatchNode, { kind, id: resourceId })),
+        displayName: face?.displayName ?? displayName ?? resource?.displayName ?? resourceId,
+        handleId: handleFor(side, { kind, id: resourceId }),
         resource,
         connected,
         unsupplied: isInput && !connected && !freeSide,
@@ -1444,6 +1956,13 @@ export function buildRailPorts(
         plug,
         badge,
         showNameplate: isInput && isBinding,
+        // A flow-less port (no books yet) has no power to divide; a power
+        // port IS the EU, so it never reads as EU per EU. Inputs carry it
+        // too - the EU spent per unit eaten - drawn in a much quieter gold.
+        energyPerUnit:
+          kind !== "power" && flows && nodeResult
+            ? energyPerUnit(nodeResult.euT, nameplate)
+            : undefined,
       });
     };
 
@@ -1463,6 +1982,39 @@ export function buildRailPorts(
           resource.displayName,
           0,
         );
+      }
+    }
+
+    // Free-in-the-game inputs never reach the solver's flows and pushPort
+    // skips them as non-consumed, so they are added last as inert rows:
+    // the item and its name, every figure zero, no handle to wire.
+    if (isInput) {
+      for (const resource of resources) {
+        const key = makeResourceKey(resource.kind, resource.id);
+        if (!isFreeRecipeInput(resource) || seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        ports.push({
+          side,
+          key,
+          kind: resource.kind,
+          resourceId: resource.id,
+          displayName: resource.displayName ?? resource.id,
+          handleId: handleFor(side, { kind: resource.kind, id: resource.id }),
+          resource,
+          connected: false,
+          unsupplied: false,
+          boundaryFree: true,
+          currentPerSecond: 0,
+          nameplatePerSecond: 0,
+          wantedPerSecond: 0,
+          couldPerSecond: 0,
+          fillFraction: 0,
+          tone: "calm",
+          showNameplate: false,
+          free: true,
+        });
       }
     }
 
@@ -1494,6 +2046,7 @@ export function buildLimitLadder(
   result: ThroughputResult | undefined,
   nodeId: string,
 ): LimitRung[] {
+  project = getPoolProject(project);
   const nodeResult = result?.nodes[nodeId];
   const node = project.nodes.find((entry) => entry.id === nodeId);
   if (!nodeResult || !node || node.enabled === false) {
@@ -1620,4 +2173,3 @@ export function buildLimitLadder(
   }
   return capped;
 }
-

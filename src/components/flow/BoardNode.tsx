@@ -1,5 +1,7 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { NodeToolbar, Position, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import { memo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Copy, Minimize2, PackageOpen, Save, X } from "lucide-react";
@@ -12,6 +14,7 @@ import {
   BOARD_WINDOW_MIN_WIDTH,
   BOARD_WINDOW_TITLE_HEIGHT,
 } from "@/lib/board-grid";
+import { LOGIN_ENABLED } from "@/lib/feature-toggles";
 import { captureBoardSelection, useFactoryStore } from "@/store/factory-store";
 import { useBlueprintStore } from "@/store/blueprint-store";
 import { useBoardView } from "./board-view";
@@ -229,6 +232,15 @@ function BoardNodeComponent({
   const { getZoom, getNodes, getInternalNode } = useReactFlow();
   const [draftName, setDraftName] = useState<string | undefined>(undefined);
   const [isPaletteOpen, setPaletteOpen] = useState(false);
+  // The palette used to close only on a pick; now it follows the one
+  // dropdown rule (use-dropdown-dismiss.ts). Its own key is "inside".
+  const paletteRef = useRef<HTMLDivElement>(null);
+  useDropdownDismiss(isPaletteOpen, {
+    refs: [paletteRef],
+    onClose: () => setPaletteOpen(false),
+    insideSelector: "[data-board-palette-toggle]",
+    fade: true,
+  });
   const isRenaming = draftName !== undefined && !calmMode;
   const chrome = boardChrome(pocket.id, pocket.theme, pocket.colorTag);
   // What clearing the paper hands the board back to: a colour of its own,
@@ -458,7 +470,8 @@ function BoardNodeComponent({
         align="end"
         style={{ zIndex: 30 }}
       >
-        <div className="nodrag flex w-[340px] flex-col gap-1 border-2 border-[#8d6fd1] bg-[#241b33] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+        {/* ui-zoom: the toolbar portal lives inside .react-flow, which is unzoomed. */}
+        <div ref={paletteRef} className="ui-zoom nodrag flex w-[340px] flex-col gap-1 border-2 border-[#8d6fd1] bg-[#241b33] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
@@ -661,6 +674,7 @@ function BoardNodeComponent({
                 event.stopPropagation();
                 setPaletteOpen((open) => !open);
               }}
+              data-board-palette-toggle=""
               className="nodrag flex h-6 w-6 shrink-0 items-center justify-center border-2 hover:brightness-125"
               style={buttonStyle}
               title="Paper"
@@ -676,6 +690,7 @@ function BoardNodeComponent({
                 }}
               />
             </button>
+            {!LOGIN_ENABLED ? null : (
             <button
               type="button"
               onClick={(event) => {
@@ -689,6 +704,7 @@ function BoardNodeComponent({
             >
               <Save aria-hidden className="h-3.5 w-3.5" />
             </button>
+            )}
             <button
               type="button"
               onClick={(event) => {
@@ -702,7 +718,7 @@ function BoardNodeComponent({
             >
               <PackageOpen aria-hidden className="h-3.5 w-3.5" />
             </button>
-            <button
+            <button data-viewer-inspect
               type="button"
               onClick={(event) => {
                 event.stopPropagation();

@@ -1,7 +1,10 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
 import { Zap } from "lucide-react";
 import {
   ENERGY_HATCH_TYPES,
@@ -10,6 +13,8 @@ import {
 } from "@/lib/machines/energy-hatches";
 import { GT_OVERCLOCK_TIERS, getVoltageTierIndex } from "@/lib/model/tiers";
 import type { MachineTier } from "@/lib/model/types";
+import { hatchEuT, hatchRowLabel } from "@/lib/solver/power-working";
+
 import { formatCompact } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { GT_TIER_COLORS } from "./tier-colors";
@@ -26,9 +31,8 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
  * machine sprites are 256px canvases whose block fills only the middle ~45%,
  * so the image is drawn at 220% of the window and the margin cropped away -
  * the block itself fills the box. Sized with a class on the window and
- * percentages on the img, never ResourceIcon's size overrides: this project
- * is Tailwind v4, where the legacy `!h-*` prefix classes those overrides used
- * generate no CSS at all.
+ * percentages on the img. The oversized image must not flex-shrink: Firefox
+ * otherwise narrows it to the window, unlike Chromium's image minimum size.
  */
 export function EnergyHatchArt({
   entry,
@@ -46,7 +50,7 @@ export function EnergyHatchArt({
           src={entry.iconPath}
           alt={entry.displayName}
           draggable={false}
-          className="minecraft-pixel-art h-[220%] w-[220%] max-w-none object-contain"
+          className="minecraft-pixel-art h-[220%] w-[220%] shrink-0 max-w-none object-contain"
         />
       ) : entry?.iconAtlas ? (
         <ResourceIcon
@@ -70,8 +74,9 @@ export function EnergyHatchArt({
  * any scroll outside - a fixed panel over a moving board must never be left
  * stranded where the chip used to be.
  */
-function MenuShell({
+export function MenuShell({
   anchor,
+  align = "right",
   width,
   maxHeight,
   onClose,
@@ -79,6 +84,7 @@ function MenuShell({
 }: {
   /** The chip's right edge and its top and bottom, in screen coordinates. */
   anchor: { x: number; top: number; bottom: number };
+  align?: "left" | "right";
   width: number;
   maxHeight: number;
   onClose: () => void;
@@ -86,43 +92,26 @@ function MenuShell({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    // The anchor button is "inside": it runs its own toggle, and closing here
-    // first would make that toggle reopen the menu instead.
-    const outside = (target: EventTarget | null) =>
-      panelRef.current &&
-      !panelRef.current.contains(target as Node) &&
-      !(target instanceof Element && target.closest("[data-hatch-menu-anchor]"));
-    const onPointer = (event: PointerEvent) => {
-      if (outside(event.target)) {
-        onClose();
-      }
-    };
-    const onWheel = (event: WheelEvent) => {
-      if (outside(event.target)) {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointer, true);
-    document.addEventListener("wheel", onWheel, true);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer, true);
-      document.removeEventListener("wheel", onWheel, true);
-    };
-  }, [onClose]);
+  // The one dropdown rule (use-dropdown-dismiss.ts). The anchor button is
+  // "inside": it runs its own toggle, and closing here first would make that
+  // toggle reopen the menu instead.
+  useDropdownDismiss(true, {
+    refs: [panelRef],
+    onClose,
+    insideSelector: "[data-hatch-menu-anchor]",
+    fade: true,
+  });
 
   // Prefer opening UPWARD (the card stays visible for the hover-preview),
   // but flip downward when the chip is too close to the top of the screen -
   // a menu must never run off the viewport. Height caps to the chosen side.
-  const spaceAbove = anchor.top - 16;
-  const spaceBelow = window.innerHeight - anchor.bottom - 16;
+  // The anchor rect and the window are real px; width and maxHeight are
+  // shell px, and so are the fixed offsets of this zoomed box. Everything is
+  // brought to shell px here.
+  const scale = getUiScale();
+  const shell = (px: number) => px / scale;
+  const spaceAbove = shell(anchor.top) - 16;
+  const spaceBelow = shell(window.innerHeight - anchor.bottom) - 16;
   const opensUp = spaceAbove >= Math.min(maxHeight, 260) || spaceAbove >= spaceBelow;
 
   return createPortal(
@@ -130,17 +119,17 @@ function MenuShell({
       ref={panelRef}
       // "nowheel" stops React Flow from zooming the canvas when scrolling the
       // list: its native wheel handler runs before React's synthetic one.
-      className="nodrag nowheel fixed z-[9999] flex flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className="ui-zoom nodrag nowheel fixed z-[9999] flex flex-col overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       style={{
-        width,
-        left: Math.max(8, Math.min(anchor.x - width, window.innerWidth - width - 8)),
+        width: Math.min(width, shell(window.innerWidth) - 16),
+        left: Math.max(8, Math.min(shell(anchor.x) - (align === "right" ? width : 0), shell(window.innerWidth) - width - 8)),
         ...(opensUp
           ? {
-              bottom: window.innerHeight - anchor.top + 4,
+              bottom: shell(window.innerHeight - anchor.top) + 4,
               maxHeight: Math.min(maxHeight, spaceAbove),
             }
           : {
-              top: anchor.bottom + 4,
+              top: shell(anchor.bottom) + 4,
               maxHeight: Math.min(maxHeight, spaceBelow),
             }),
       }}
@@ -163,8 +152,8 @@ export interface EnergySupplyOption {
   entry?: EnergyHatchCatalogEntry;
 }
 
-/** The regular hatch counts offered; the game's common cap is two, GT++ takes more. */
-const REGULAR_COUNTS = [1, 2, 3, 4, 6, 8, 12, 16];
+/** Every whole hatch count the wheel walks; the chip's editor types any. */
+const REGULAR_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
 export function energySupplyOptionsForTier(
   tier: string,
@@ -236,9 +225,7 @@ export function EnergySupplyMenu({
       const label = option.label.toLowerCase().replace(/\s+/g, "");
       const amps = String(option.amps);
       return (
-        label.includes(needle) ||
-        amps.startsWith(needle.replace(/a$/, "")) ||
-        `${amps}a` === needle
+        label.includes(needle) || amps.startsWith(needle.replace(/a$/, "")) || `${amps}a` === needle
       );
     });
   }, [allOptions, query]);
@@ -283,7 +270,9 @@ export function EnergySupplyMenu({
               ref={selected ? selectedRef : undefined}
               type="button"
               onClick={() => onPick(option.familyId, option.hatches)}
-              onMouseEnter={() => onPreview?.({ familyId: option.familyId, hatches: option.hatches })}
+              onMouseEnter={() =>
+                onPreview?.({ familyId: option.familyId, hatches: option.hatches })
+              }
               onMouseLeave={() => onPreview?.(undefined)}
               className={`grid w-full grid-cols-[minmax(0,1fr)_44px_64px] items-center gap-x-1.5 border py-0.5 pl-0.5 pr-1 text-left text-[13px] font-bold leading-5 ${
                 firstExotic ? "mt-1 border-t-2 border-t-[var(--mc-47)]" : ""
@@ -397,4 +386,121 @@ export function EnergyTierMenu({
 export function energySupplyChipText(familyId: string | undefined, hatches: number): string {
   const type = getEnergyHatchType(familyId);
   return type.exotic ? type.chip : `${hatches}×`;
+}
+
+/** How many of a hatch: whole numbers plain, fractions to two places, thousands compact. */
+function formatCount(value: number): string {
+  return value.toLocaleString("en-US", { maximumSignificantDigits: 16 });
+}
+
+/**
+ * A number that types: shows the value at rest (compact), the plain digits
+ * while focused, commits on blur or Enter, forgets on Escape. Shared by the
+ * EU/t well and every row's "how many of this hatch" well.
+ */
+export function NumberWell({
+  value,
+  ariaLabel,
+  onCommit,
+  onStep,
+  className,
+  compact,
+}: {
+  value: number;
+  ariaLabel: string;
+  onCommit: (value: number) => void;
+  /** The wheel, when the well has somewhere to step. */
+  onStep?: (direction: 1 | -1) => void;
+  /** Sizing only: height, width, text size. */
+  className: string;
+  /** At rest, the app's k/M/G form; counts show whole and two-place figures. */
+  compact?: boolean;
+}) {
+  const [draft, setDraft] = useState<string>();
+  const cancelled = useRef(false);
+  const shown = draft ?? (compact ? formatCompact(value) : formatCount(value));
+  return (
+    <input
+      value={shown}
+      onFocus={(event) => {
+        cancelled.current = false;
+        setDraft(event.currentTarget.value);
+        event.currentTarget.select();
+      }}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        const parsed = Number.parseFloat((draft ?? "").trim().replace(/,/g, ""));
+        setDraft(undefined);
+        if (!cancelled.current && Number.isFinite(parsed) && parsed >= 0) {
+          onCommit(parsed);
+        }
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+        if (event.key === "Escape") {
+          cancelled.current = true;
+          setDraft(undefined);
+          event.currentTarget.blur();
+        }
+        event.stopPropagation();
+      }}
+      onWheel={
+        onStep
+          ? (event) => {
+              event.stopPropagation();
+              onStep(event.deltaY < 0 ? 1 : -1);
+            }
+          : undefined
+      }
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      className={`min-w-0 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1.5 font-bold tabular-nums text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-93)] ${className}`}
+    />
+  );
+}
+
+interface HatchRow {
+  key: string;
+  tier: VoltageTier;
+  familyId: string;
+  /** The row's short name: the tier, or the rating for an exotic hatch. */
+  label: string;
+  /** The item's full name, for the search and the button labels. */
+  fullName: string;
+  euT: number;
+  entry?: EnergyHatchCatalogEntry;
+}
+
+/**
+ * Every energy hatch in the game, once: the catalog's items when it has
+ * loaded (the dataset knows which ratings exist at which tier), else the
+ * families' own floors. Regular hatches first, then each exotic family,
+ * each family walking up the tiers.
+ */
+export function listHatchRows(catalog: EnergyHatchCatalog): HatchRow[] {
+  const rows: HatchRow[] = [];
+  for (const type of ENERGY_HATCH_TYPES) {
+    for (const { tier } of GT_OVERCLOCK_TIERS) {
+      const entry = catalog.get(energyHatchCatalogKey(tier, type.id));
+      const exists =
+        catalog.size > 0
+          ? entry !== undefined
+          : getVoltageTierIndex(type.minTier as VoltageTier) <= getVoltageTierIndex(tier);
+      if (!exists) {
+        continue;
+      }
+      rows.push({
+        key: energyHatchCatalogKey(tier, type.id),
+        tier,
+        familyId: type.id,
+        label: hatchRowLabel(tier, type.id),
+        fullName: entry?.displayName ?? `${tier} ${type.label}`,
+        euT: hatchEuT(tier, type.id),
+        entry,
+      });
+    }
+  }
+  return rows;
 }

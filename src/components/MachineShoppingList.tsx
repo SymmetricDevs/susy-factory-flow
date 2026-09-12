@@ -1,364 +1,167 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { checklistCursorStyle } from "./flow/ChecklistMode";
+
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { Cloud, Zap } from "lucide-react";
 import { MotionNumberText } from "./flow/board-motion";
+import { powerDisplayFromEuT, powerDisplaySuffix } from "@/lib/model/rate-unit";
 import { GT_TIER_COLORS } from "./flow/tier-colors";
 import { useMachineHandlerIcons, type MachineHandlerIcon } from "./flow/machine-icons";
 import { machineArtPixels } from "./flow/MachinePicker";
 import { ResourceIcon } from "./nei/ResourceIcon";
-import { getSelectedMachineHandler } from "@/lib/model/recipe-rules";
-import { isCustomRateRecipe } from "@/lib/model/custom-rate";
+import { formatCompact, formatCompactStable, formatPowerValue } from "@/lib/model/resources";
+import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import {
-  CROP_HARVESTER_INDUSTRIAL_FARM_ID,
-  cropsNhHarvesterFromTiers,
-  cropsNhHarvesterMachineCount,
-  cropsNhHarvesterTierName,
-  cropsNhIsHandPicked,
-  getCropsNhStats,
-  isCropProductionRecipe,
-} from "@/lib/model/passive-production";
-import { formatCompact, formatCompactStable } from "@/lib/model/resources";
-import { getVoltageTierIndex } from "@/lib/model/tiers";
-import type { MachineTier } from "@/lib/model/types";
-import {
-  getNodePowerReport,
-  getNodeSteamReport,
-  hasPowerReport,
-  type NodePowerState,
-} from "@/lib/solver/power-report";
-import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
-import { useFactoryStore } from "@/store/factory-store";
+  buildMachineList,
+  formatMachineListCount,
+  type MachineListEntry,
+} from "@/lib/model/machine-list";
+import type { NodePowerState } from "@/lib/solver/power-report";
+import { getPowerMachineIcon } from "@/lib/power/planner-data";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { getEnergyHatchType } from "@/lib/machines/energy-hatches";
 import { getHatchAmps } from "@/lib/solver/power";
-import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
-import { EnergyHatchArt } from "@/components/flow/EnergyHatchMenu";
-import {
-  energyHatchCatalogKey,
-  useEnergyHatchCatalog,
-} from "@/components/flow/use-energy-hatch-catalog";
 
-type VoltageTier = Exclude<MachineTier, "DEMO">;
-
-/**
- * One BUILD: a machine at one power configuration, summed across every card
- * that runs it. A singleblock build is its tier; a multiblock build is its
- * tier AND its hatch count, because a two-hatch reactor and a one-hatch
- * reactor are different things to construct even at the same voltage.
- */
-interface BuildLine {
-  key: string;
-  count: number;
-  hatches: number;
-  /** An exotic hatch family's amp badge, worn instead of the count. */
-  hatchChip?: string;
-  /** The family itself, so the row can wear the hatch item's art. */
-  hatchTypeId?: string;
-  /** Working amps of the build, singleblocks included (arc furnaces run 3). */
-  amps?: number;
-  isMultiblock: boolean;
-  tier?: VoltageTier;
-  tierIndex: number;
-  euT?: number;
-  steamLs?: number;
-  /** The same figures weighted by each card's solved usage, for AVG mode. */
-  avgEuT?: number;
-  avgSteamLs?: number;
-  /** Set on steam machines: bronze and high pressure are different builds. */
-  pressure?: "bronze" | "high-pressure";
-  state: NodePowerState;
-  nodeIds: string[];
+/** A generator group's face in the list: the machine item the picker shows. */
+const powerIconCache = new Map<string, MachineHandlerIcon | undefined>();
+function powerMachineListIcon(sourceId: string): MachineHandlerIcon | undefined {
+  if (!powerIconCache.has(sourceId)) {
+    const icon = getPowerMachineIcon(sourceId);
+    powerIconCache.set(
+      sourceId,
+      icon
+        ? ({
+            kind: "item",
+            id: icon.id,
+            displayName: icon.displayName,
+            iconPath: icon.iconPath,
+            dominantColor: icon.dominantColor,
+          } as unknown as MachineHandlerIcon)
+        : undefined,
+    );
+  }
+  return powerIconCache.get(sourceId);
 }
 
-interface MachineGroup {
-  label: string;
-  icon?: MachineHandlerIcon;
-  count: number;
-  euT?: number;
-  steamLs?: number;
-  avgEuT?: number;
-  avgSteamLs?: number;
-  builds: BuildLine[];
-  nodeIds: string[];
-  minTierIndex: number;
-}
+const NEUTRAL_CHIP = {
+  background: "var(--mc-85)",
+  border: "var(--mc-33)",
+  text: "var(--mc-ink)",
+  shadow: "transparent",
+};
 
-/**
- * The build list, a permanent fixture on the panel's floor — and one list
- * that reads two ways at once. Machines group by WHAT they are: every
- * electrolyzer on the board lands on one line with the total to build, the
- * fused hatch-and-tier chip and the summed draw, whichever cards they came
- * from. Only when one machine exists in more than one BUILD (an HV reactor
- * and an MV one, a one-hatch and a two-hatch) does the machine become a bare
- * name line with one sub-line per build underneath, each washed in its own
- * tier colour and carrying its own count, chip and draw. The name line adds
- * no numbers of its own: a summed figure over different builds answers no
- * question anyone shops with.
- *
- * Clicking a line jumps to its card; clicking again walks to the NEXT card
- * of that kind, so an aggregated line still leads to every board location
- * behind it.
- */
+/** One row per board card, using its solved count in Solve and Pool. */
 export function MachineShoppingList() {
+  const [powerColumn, setPowerColumn] = useState<"peak" | "average">("peak");
   const project = useFactoryStore((state) => state.project);
+  const checklistMode = useFactoryStore((state) => state.checklistMode);
   const lastResult = useFactoryStore((state) => state.lastResult);
+  // The power column follows the power dial (EU/t or amps of a tier).
+  useRateDisplayUnits();
   const focusBoardNode = useFactoryStore((state) => state.focusBoardNode);
   const machineIcons = useMachineHandlerIcons();
-  // PEAK against AVG, panel arithmetic only: PEAK is every machine at full
-  // draw at once (what the cables must carry), AVG weights each card by how
-  // hard the solve says it actually runs (what the setup burns over time).
-  const average = useWorkspaceView().averageMachineDraw;
+  const entries = useMemo(() => buildMachineList(project, lastResult), [project, lastResult]);
 
-  const groups = useMemo<MachineGroup[]>(() => {
-    const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
-    const byMachine = new Map<
-      string,
-      MachineGroup & { buildsByKey: Map<string, BuildLine> }
-    >();
-
-    for (const node of project.nodes) {
-      if (node.enabled === false) {
-        continue;
-      }
-      const recipe = recipesById.get(node.recipeId);
-      if (!recipe || isCustomRateRecipe(recipe)) {
-        continue;
-      }
-      const handler = getSelectedMachineHandler(recipe, node);
-      // A crop card's machineCount is planted crops, not machines. What it
-      // builds is the manager or farm those crops fill; a hand-picked or
-      // legacy passive crop builds nothing and stays off the list.
-      const crop = getCropsNhStats(recipe)
-        ? cropsNhHarvesterFromTiers(node.machineConfigTiers, node.machineHandlerId)
-        : undefined;
-      if (crop ? cropsNhIsHandPicked(crop) : isCropProductionRecipe(recipe)) {
-        continue;
-      }
-      // A steam machine's row bills litres, never EU: its power report would
-      // only carry a phantom tier chip and a zero draw.
-      const steam = getNodeSteamReport(recipe, node);
-      const report =
-        !steam && hasPowerReport(recipe) ? getNodePowerReport(recipe, node) : undefined;
-      const count = crop
-        ? cropsNhHarvesterMachineCount(crop, node.machineCount)
-        : node.machineCount * Math.max(1, node.parallel);
-      if (crop && count <= 0) {
-        continue;
-      }
-      // A machine at 30% runs at full draw 30% of the time, so its
-      // time-averaged burn is the nameplate figure times its solved usage.
-      // At exactly 0% it never starts, so even PEAK bills it nothing; any
-      // usage above zero still spikes to the full draw when it runs.
-      const usage = Math.min(
-        1,
-        Math.max(0, lastResult.nodes[node.id]?.utilization ?? 1),
-      );
-      const runningCount = usage > 0 ? count : 0;
-      const euT = report ? report.drawEuT * runningCount : undefined;
-      const steamLs = steam ? steam.drawSteamPerTick * 20 * runningCount : undefined;
-
-      const group =
-        byMachine.get(handler.label) ??
-        (() => {
-          const created = {
-            label: handler.label,
-            icon: undefined as MachineHandlerIcon | undefined,
-            count: 0,
-            euT: undefined as number | undefined,
-            steamLs: undefined as number | undefined,
-            avgEuT: undefined as number | undefined,
-            avgSteamLs: undefined as number | undefined,
-            builds: [],
-            nodeIds: [],
-            minTierIndex: Number.POSITIVE_INFINITY,
-            buildsByKey: new Map<string, BuildLine>(),
-          };
-          byMachine.set(handler.label, created);
-          return created;
-        })();
-      group.icon ??= machineIcons.get(handler.id);
-      group.count += count;
-      group.nodeIds.push(node.id);
-      if (euT !== undefined) {
-        group.euT = (group.euT ?? 0) + euT;
-        group.avgEuT = (group.avgEuT ?? 0) + euT * usage;
-      }
-      if (steamLs !== undefined) {
-        group.steamLs = (group.steamLs ?? 0) + steamLs;
-        group.avgSteamLs = (group.avgSteamLs ?? 0) + steamLs * usage;
-      }
-
-      // The stacking rule: singleblocks of one tier are one build; a
-      // multiblock's hatch count splits it further. A steam multiblock splits
-      // on its pressure: a bronze build and a steel one are different things
-      // to construct.
-      // A crop harvester's build is its tier: an LV manager and an HV manager
-      // are different things to construct, exactly like powered machines.
-      const cropTier = crop
-        ? (cropsNhHarvesterTierName(crop.tierIndex) as VoltageTier)
-        : undefined;
-      const buildKey = report
-        ? `${report.tier}|${report.isMultiblock ? (report.hatchChip ?? report.hatches) : "single"}`
-        : steam
-          ? `steam|${steam.highPressure ? "high" : "bronze"}`
-          : cropTier
-            ? `crop|${cropTier}`
-            : "plain";
-      // Steam machines sort with ULV: they are the start of the game, not the
-      // end of the list a missing tier would banish them to.
-      const tierIndex = report
-        ? getVoltageTierIndex(report.tier)
-        : steam
-          ? 0
-          : cropTier
-            ? getVoltageTierIndex(cropTier)
-            : Number.POSITIVE_INFINITY;
-      group.minTierIndex = Math.min(group.minTierIndex, tierIndex);
-      const build =
-        group.buildsByKey.get(buildKey) ??
-        (() => {
-          const created: BuildLine = {
-            key: `${handler.label}|${buildKey}`,
-            count: 0,
-            hatches: report?.hatches ?? 1,
-            hatchChip: report?.hatchChip,
-            hatchTypeId: report?.isMultiblock
-              ? getEnergyHatchType(node.energyHatchType).id
-              : undefined,
-            amps: report?.amps,
-            isMultiblock:
-              report?.isMultiblock ??
-              steam?.isMultiblock ??
-              crop?.id === CROP_HARVESTER_INDUSTRIAL_FARM_ID,
-            tier: report?.tier ?? cropTier,
-            tierIndex,
-            euT: undefined,
-            steamLs: undefined,
-            avgEuT: undefined,
-            avgSteamLs: undefined,
-            pressure: steam ? (steam.highPressure ? "high-pressure" : "bronze") : undefined,
-            state: "ok",
-            nodeIds: [],
-          };
-          group.buildsByKey.set(buildKey, created);
-          group.builds.push(created);
-          return created;
-        })();
-      build.count += count;
-      build.nodeIds.push(node.id);
-      if (euT !== undefined) {
-        build.euT = (build.euT ?? 0) + euT;
-        build.avgEuT = (build.avgEuT ?? 0) + euT * usage;
-      }
-      if (steamLs !== undefined) {
-        build.steamLs = (build.steamLs ?? 0) + steamLs;
-        build.avgSteamLs = (build.avgSteamLs ?? 0) + steamLs * usage;
-      }
-      if (report && report.state !== "ok" && build.state === "ok") {
-        build.state = report.state;
-      }
+  // Preserve the machine-name tree; each child remains one individual card.
+  const groups = useMemo(() => {
+    const byName = new Map<string, MachineListEntry[]>();
+    for (const entry of entries) {
+      const group = byName.get(entry.label) ?? [];
+      group.push(entry);
+      byName.set(entry.label, group);
     }
-
-    const list = [...byMachine.values()];
-    // Ordered by PEAK in both modes, so flipping the switch changes numbers
-    // without reshuffling the list under the pointer.
-    for (const group of list) {
-      group.builds.sort(
-        (a, b) => a.tierIndex - b.tierIndex || (b.euT ?? 0) - (a.euT ?? 0),
-      );
-    }
-    list.sort(
-      (a, b) =>
-        a.minTierIndex - b.minTierIndex ||
-        (b.euT ?? 0) - (a.euT ?? 0) ||
-        a.label.localeCompare(b.label),
-    );
-    return list;
-  }, [lastResult, machineIcons, project]);
-
-  // Click-to-cycle state: which card of a line the last click landed on.
-  // A ref, not state — advancing it must not re-render the list.
+    return [...byName.entries()];
+  }, [entries]);
   const cycleRef = useRef(new Map<string, number>());
-  const focusNext = (key: string, nodeIds: string[]) => {
-    const next = ((cycleRef.current.get(key) ?? -1) + 1) % nodeIds.length;
-    cycleRef.current.set(key, next);
-    const nodeId = nodeIds[next];
-    if (nodeId) {
-      focusBoardNode(nodeId);
-    }
+  const focusGroup = (label: string, cards: MachineListEntry[]) => {
+    const next = ((cycleRef.current.get(label) ?? -1) + 1) % cards.length;
+    cycleRef.current.set(label, next);
+    focusBoardNode(cards[next]!.nodeId);
   };
 
-  const totalMachines = groups.reduce((sum, group) => sum + group.count, 0);
+  const totalMachines = entries.reduce((sum, group) => sum + group.count, 0);
   // Presence gates what shows, never the value: a figure whose machines
   // exist stays up and reads 0 rather than vanishing when everything idles.
-  const hasEu = groups.some((group) => group.euT !== undefined);
-  const hasSteam = groups.some((group) => group.steamLs !== undefined);
-  const totalEuT = groups.reduce(
-    (sum, group) => sum + ((average ? group.avgEuT : group.euT) ?? 0),
-    0,
-  );
-  const totalSteamLs = groups.reduce(
-    (sum, group) => sum + ((average ? group.avgSteamLs : group.steamLs) ?? 0),
-    0,
-  );
-  if (totalMachines === 0) {
+  const hasEu = entries.some((group) => group.euT !== undefined);
+  const hasSteam = entries.some((group) => group.steamLs !== undefined);
+  const sum = (pick: (group: MachineListEntry) => number | undefined) =>
+    entries.reduce((total, group) => total + (pick(group) ?? 0), 0);
+  const totals = {
+    euT: sum((group) => group.euT),
+    avgEuT: sum((group) => group.avgEuT),
+    steamLs: sum((group) => group.steamLs),
+    avgSteamLs: sum((group) => group.avgSteamLs),
+    madeEuT: sum((group) => group.madeEuT),
+    avgMadeEuT: sum((group) => group.avgMadeEuT),
+  };
+  const hasMade = entries.some((group) => group.madeEuT !== undefined);
+  if (entries.length === 0) {
     return null;
   }
 
-  const steamFigure = hasSteam ? (
-    <span className="whitespace-nowrap">
-      <SteamMark />
-      <MotionNumberText
-        values={[totalSteamLs]}
-        render={(shown) =>
-          shown[0] === totalSteamLs
-            ? formatCompact(totalSteamLs)
-            : formatCompactStable(shown[0] ?? totalSteamLs)
-        }
-      />
-      <span className="ml-0.5 text-[8px] font-normal text-[var(--mc-ink-muted)]">L/s</span>
-    </span>
-  ) : null;
-  const euFigure = hasEu ? (
-    <span className="whitespace-nowrap">
-      <EuMark />
-      <MotionNumberText
-        values={[totalEuT]}
-        render={(shown) =>
-          shown[0] === totalEuT
-            ? formatCompact(totalEuT)
-            : formatCompactStable(shown[0] ?? totalEuT)
-        }
-      />
-      <span className="ml-0.5 text-[8px] font-normal text-[var(--mc-ink-muted)]">EU/t</span>
-    </span>
-  ) : null;
-
   return (
-    <div className="flex min-h-0 shrink-0 basis-[40%] flex-col border-t-2 border-[var(--mc-47)]">
-      <div className="border-b border-[var(--mc-47)] bg-[var(--mc-71)] px-2 py-1">
-        <div className="flex w-full items-center gap-2">
-          <span className="text-sm font-bold uppercase tracking-wider">Machines</span>
-          {/* ONE energy rides the title line. Two do not fit the column
-              beside the title and the pill, so the pair moves to a line of
-              its own below — decided by what the board HAS, never by
-              measured width, so a figure animating near the edge cannot
-              bounce the header between one line and two. */}
-          <span className="ml-auto flex shrink-0 items-center gap-2">
-            {hasEu || hasSteam ? <DrawModePill average={average} /> : null}
-            {hasEu !== hasSteam ? (
-              <span className="shrink-0 text-[13px] font-bold tabular-nums">
-                {steamFigure ?? euFigure}
-              </span>
-            ) : null}
+    <div
+      data-help-anchor="machines"
+      data-power-column={powerColumn}
+      className="inspector-machines flex min-h-0 flex-1 flex-col border-t border-neutral-700"
+    >
+      <div className="inspector-machine-summary border-b border-neutral-700 px-3 pb-2">
+        {/* The sheet's head: the title on the left, the two column labels
+            over their columns on the right. */}
+        <div className="inspector-section-heading -mx-3">
+          <h2>Machines</h2>
+          <span className="inspector-count">{formatMachineListCount(totalMachines)}</span>
+          <span
+            className="inspector-rate-selector ml-auto flex justify-end gap-0.5"
+            role="group"
+            aria-label="Machine power display"
+          >
+            {(["peak", "average"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={powerColumn === value}
+                onClick={() => setPowerColumn(value)}
+                aria-label={value === "peak" ? "Show peak power" : "Show average power"}
+                className="px-1 py-0.5"
+              >
+                {value === "peak" ? "Peak" : "Average"}
+              </button>
+            ))}
           </span>
         </div>
-        {hasEu && hasSteam ? (
-          <span className="flex items-baseline justify-end gap-2 text-[13px] font-bold tabular-nums">
-            {steamFigure}
-            {euFigure}
-          </span>
+        {/* The totals, on top like a sheet: one row when the board only
+            draws, three (used, made, net) once a generator sits on it, and
+            a steam row whenever a steam machine does. */}
+        {hasSteam ? (
+          <TotalLine
+            label="Steam"
+            peak={{ steamLs: totals.steamLs }}
+            average={{ steamLs: totals.avgSteamLs }}
+          />
+        ) : null}
+        {hasEu || hasMade ? (
+          <TotalLine
+            label={hasMade ? "Used" : "Total"}
+            peak={{ euT: totals.euT }}
+            average={{ euT: totals.avgEuT }}
+          />
+        ) : null}
+        {hasMade ? (
+          <>
+            <TotalLine
+              label="Made"
+              peak={{ madeEuT: totals.madeEuT }}
+              average={{ madeEuT: totals.avgMadeEuT }}
+            />
+            <TotalLine
+              label="Net"
+              peak={{ netEuT: totals.madeEuT - totals.euT }}
+              average={{ netEuT: totals.avgMadeEuT - totals.avgEuT }}
+            />
+          </>
         ) : null}
       </div>
       {/* overflow-x hidden outright: Windows overlay scrollbars float over
@@ -366,104 +169,138 @@ export function MachineShoppingList() {
           horizontal bar across the list. Nothing here is allowed to scroll
           sideways; the name column truncates instead. */}
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-1">
-        {groups.map((group) => {
-          const uniform = group.builds.length === 1;
-          const build = group.builds[0];
-          return (
-            <div key={group.label} className="py-0.5">
+        {groups.map(([label, cards]) => (
+          <div key={label} className="py-0">
+            <ListLine
+              icon={
+                cards[0]!.powerSourceId
+                  ? powerMachineListIcon(cards[0]!.powerSourceId)
+                  : machineIcons.get(cards[0]!.handlerId)
+              }
+              label={label}
+              state="ok"
+              checklist={
+                checklistMode
+                  ? cards.every((card) => project.checklist?.cards.includes(card.nodeId))
+                  : undefined
+              }
+              onClick={() =>
+                checklistMode
+                  ? useFactoryStore.getState().toggleChecklist(
+                      "cards",
+                      cards.map((card) => card.nodeId),
+                    )
+                  : focusGroup(label, cards)
+              }
+            />
+            {cards.map((entry, index) => (
               <ListLine
-                icon={group.icon}
-                // A uniform group is one whole line: count, chip, draw,
-                // warning. A mixed one is a bare NAME — its counts and
-                // numbers all live on the build sub-lines below.
-                count={uniform ? group.count : undefined}
-                label={group.label}
-                chip={uniform ? build : undefined}
-                euT={uniform ? (average ? build?.avgEuT : build?.euT) : undefined}
-                peakEuT={uniform ? build?.euT : undefined}
-                averageEuT={uniform ? build?.avgEuT : undefined}
-                steamLs={uniform ? (average ? build?.avgSteamLs : build?.steamLs) : undefined}
-                state={uniform ? (build?.state ?? "ok") : "ok"}
-                wash={uniform ? build?.tier : undefined}
-                onClick={() => focusNext(group.label, group.nodeIds)}
+                key={entry.nodeId}
+                nodeId={entry.nodeId}
+                rowName={entry.label}
+                indent
+                isLast={index === cards.length - 1}
+                label={
+                  entry.pressure === "high-pressure"
+                    ? "High pressure"
+                    : entry.pressure === "bronze"
+                      ? "Bronze"
+                      : undefined
+                }
+                count={entry.count}
+                chip={entry}
+                peak={{ euT: entry.euT, madeEuT: entry.madeEuT, steamLs: entry.steamLs }}
+                average={{
+                  euT: entry.avgEuT,
+                  madeEuT: entry.avgMadeEuT,
+                  steamLs: entry.avgSteamLs,
+                }}
+                state={entry.state}
+                checklist={
+                  checklistMode
+                    ? project.checklist?.cards.includes(entry.nodeId) === true
+                    : undefined
+                }
+                onClick={() =>
+                  checklistMode
+                    ? useFactoryStore.getState().toggleChecklist("cards", [entry.nodeId])
+                    : focusBoardNode(entry.nodeId)
+                }
               />
-              {uniform
-                ? null
-                : group.builds.map((buildLine, index) => (
-                    <ListLine
-                      key={buildLine.key}
-                      indent
-                      isLast={index === group.builds.length - 1}
-                      count={buildLine.count}
-                      // A steam build has no tier chip; the pressure is the
-                      // build, so the sub-line says it in words.
-                      label={
-                        buildLine.pressure === "high-pressure"
-                          ? "High pressure"
-                          : buildLine.pressure === "bronze"
-                            ? "Bronze"
-                            : undefined
-                      }
-                      chip={buildLine}
-                      euT={average ? buildLine.avgEuT : buildLine.euT}
-                      peakEuT={buildLine.euT}
-                      averageEuT={buildLine.avgEuT}
-                      steamLs={average ? buildLine.avgSteamLs : buildLine.steamLs}
-                      state={buildLine.state}
-                      wash={buildLine.tier}
-                      onClick={() => focusNext(buildLine.key, buildLine.nodeIds)}
-                    />
-                  ))}
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
+/** One figure of a line: what it draws, makes, or burns. */
+interface Figure {
+  euT?: number;
+  madeEuT?: number;
+  steamLs?: number;
+  /** A totals row's difference: signed, green up, red down. */
+  netEuT?: number;
+}
+
+/** The two right-hand columns share one width so every row lines up. */
+const COLUMN_CLASS = "w-[80px] shrink-0 whitespace-nowrap text-right tabular-nums";
+
 /**
- * PEAK against AVG, both words always up, the same rule the RAW/NET switch
- * follows: a reader who has never met the distinction can see there is one
- * and read both answers before clicking anything. Panel arithmetic only; no
- * machine changes speed because of this switch. Anchored beside the title so
- * the right-hand figures can grow digits without moving it.
+ * A figure in its column: the energy's mark, the number, its unit. A
+ * generator's make is green, a net is signed. Empty when the line has no
+ * such figure, so the columns still line up.
  */
-function DrawModePill({ average }: { average: boolean }) {
+function FigureCell({ figure, className }: { figure?: Figure; className?: string }) {
+  const value = figure?.netEuT ?? figure?.madeEuT ?? figure?.euT ?? figure?.steamLs;
+  if (value === undefined) {
+    return <span className={[COLUMN_CLASS, className ?? ""].join(" ")} />;
+  }
+  const steam =
+    figure?.steamLs !== undefined &&
+    figure.euT === undefined &&
+    figure.madeEuT === undefined &&
+    figure.netEuT === undefined;
+  const made = figure?.madeEuT !== undefined;
+  const net = figure?.netEuT !== undefined;
+  const tone = net
+    ? value >= 0
+      ? "text-emerald-300"
+      : "text-red-300"
+    : made
+      ? "text-emerald-300"
+      : "";
+  const text = (shown: number, settled: boolean) => {
+    const shownValue = steam ? shown : powerDisplayFromEuT(shown);
+    const number = steam
+      ? settled ? formatCompact(shownValue) : formatCompactStable(shown)
+      : formatPowerValue(shownValue, !settled);
+    return net ? `${value >= 0 ? "+" : "-"}${number}` : made ? `+${number}` : number;
+  };
   return (
-    <div
-      role="group"
-      aria-label="Power figures"
-      className="flex h-5 shrink-0 overflow-hidden rounded border border-[var(--mc-47)]"
-    >
-      <button
-        type="button"
-        onClick={() => writeWorkspaceView({ averageMachineDraw: false })}
-        aria-label="Show peak draw"
-        aria-pressed={!average}
-        className={[
-          "px-1.5 text-[9px] font-black leading-none tracking-tight",
-          average
-            ? "text-[var(--mc-ink-muted)] hover:text-[var(--mc-ink)]"
-            : "bg-[var(--mc-56)] text-[var(--mc-ink)]",
-        ].join(" ")}
-      >
-        PEAK
-      </button>
-      <button
-        type="button"
-        onClick={() => writeWorkspaceView({ averageMachineDraw: true })}
-        aria-label="Show average draw"
-        aria-pressed={average}
-        className={[
-          "border-l border-[var(--mc-47)] px-1.5 text-[9px] font-black leading-none tracking-tight",
-          average
-            ? "bg-[var(--mc-56)] text-[var(--mc-ink)]"
-            : "text-[var(--mc-ink-muted)] hover:text-[var(--mc-ink)]",
-        ].join(" ")}
-      >
-        AVG
-      </button>
+    <span className={[COLUMN_CLASS, tone, className ?? ""].join(" ")}>
+      {steam ? <SteamMark /> : <EuMark />}
+      <MotionNumberText
+        values={[Math.abs(value)]}
+        render={(shown) => text(shown[0] ?? Math.abs(value), shown[0] === Math.abs(value))}
+      />
+      <span className="ml-0.5 text-[8px] font-normal text-[var(--mc-ink-muted)]">
+        {steam ? "L/s" : powerDisplaySuffix()}
+      </span>
+    </span>
+  );
+}
+
+/** A totals row of the sheet's head: a label, then both columns. */
+function TotalLine({ label, peak, average }: { label: string; peak: Figure; average: Figure }) {
+  return (
+    <div className="flex w-full items-center gap-1.5 text-[13px] font-bold leading-5">
+      <span className="min-w-0 flex-1 truncate text-[11px] uppercase tracking-wider text-[var(--mc-ink-muted)]">
+        {label}
+      </span>
+      <FigureCell figure={peak} />
+      <FigureCell figure={average} />
     </div>
   );
 }
@@ -491,20 +328,22 @@ function SteamMark() {
 
 function ListLine({
   icon,
+  nodeId,
+  rowName,
   indent = false,
   isLast = false,
   count,
   label,
   chip,
-  euT,
-  peakEuT,
-  averageEuT,
-  steamLs,
+  peak,
+  average,
   state,
-  wash,
   onClick,
+  checklist,
 }: {
   icon?: MachineHandlerIcon;
+  nodeId?: string;
+  rowName?: string;
   /** A build sub-line: the icon column carries the tree branch instead. */
   indent?: boolean;
   /** The last sub-line closes its branch with an L instead of a T. */
@@ -513,37 +352,43 @@ function ListLine({
   count?: number;
   label?: string;
   /** The fused hatch-and-tier chip, when this line is one build. */
-  chip?: Pick<BuildLine, "tier" | "hatches" | "hatchChip" | "hatchTypeId" | "amps" | "isMultiblock">;
-  euT?: number;
-  /** Both modes' figures at once, for the chip's tooltip. */
-  peakEuT?: number;
-  averageEuT?: number;
-  /** A steam machine's figure: what it burns, in L/s, instead of EU/t. */
-  steamLs?: number;
+  chip?: Pick<
+    MachineListEntry,
+    "tier" | "hatches" | "hatchChip" | "hatchTypeId" | "amps" | "isMultiblock" | "typedEuT"
+  >;
+  /** The line's two columns: full draw, and the solve-weighted draw. */
+  peak?: Figure;
+  average?: Figure;
   state: NodePowerState;
-  /** Tier whose colour faintly washes the whole line. */
-  wash?: VoltageTier;
   onClick: () => void;
+  checklist?: boolean;
 }) {
   const stalled = state !== "ok";
-  const chipColor = chip?.tier ? GT_TIER_COLORS[chip.tier] : undefined;
-  // The hatch item the build drinks through, for the chip's middle seat -
-  // the same art the card's own chip wears.
-  const datasetVersionId = useFactoryStore((store) => store.dataset?.datasetVersionId);
-  const hatchCatalog = useEnergyHatchCatalog(chip?.isMultiblock ? datasetVersionId : undefined);
-  const hatchEntry =
-    chip?.isMultiblock && chip.tier
-      ? hatchCatalog.get(energyHatchCatalogKey(chip.tier, chip.hatchTypeId ?? "standard"))
-      : undefined;
+  // A multiblock's supply is a number, not a tier, so its chip wears the
+  // neutral plate; a singleblock's chip is its tier's colour.
+  const chipColor = chip?.tier
+    ? chip.isMultiblock
+      ? NEUTRAL_CHIP
+      : GT_TIER_COLORS[chip.tier]
+    : undefined;
   // What the line's build means, in one breath: what supplies the power, its
   // amps, the EU/t they buy, and both draw figures. Singleblocks get the same
   // story with the machine itself in the hatch's place.
   const hatchType = chip?.isMultiblock ? getEnergyHatchType(chip.hatchTypeId) : undefined;
   const hatchAmps =
     chip?.amps ??
-    (hatchType ? (hatchType.exotic ? hatchType.amps : getHatchAmps(chip?.hatches ?? 1)) : undefined);
-  const hatchPoolEuT =
-    chip?.tier && hatchAmps !== undefined ? getVoltageTierMaxEuT(chip.tier) * hatchAmps : 0;
+    (hatchType
+      ? hatchType.exotic
+        ? hatchType.amps
+        : getHatchAmps(chip?.hatches ?? 1)
+      : undefined);
+  // A multiblock's supply is one number: the typed EU/t, or what its stored
+  // hatches add up to.
+  const supplyEuT =
+    chip?.typedEuT ??
+    (chip?.tier && hatchAmps !== undefined ? getVoltageTierMaxEuT(chip.tier) * hatchAmps : 0);
+  const peakEuT = peak?.euT;
+  const averageEuT = average?.euT;
   const tierBadge =
     chip?.tier && chipColor ? (
       <span
@@ -567,38 +412,29 @@ function ListLine({
           </div>
         ) : null}
         <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-white">
-          {hatchType ? (
-            hatchType.exotic ? (
-              <>
-                {tierBadge}
-                <span>{hatchType.label}</span>
-              </>
-            ) : (
-              <>
-                <span>{chip.hatches}×</span>
-                {tierBadge}
-                <span>Energy Hatch</span>
-              </>
-            )
+          {chip.isMultiblock ? (
+            <span>Supplied {formatCompact(supplyEuT)} EU/t per machine</span>
           ) : (
             <>
               {tierBadge}
-              <span>Machine</span>
+              <span>Per machine</span>
             </>
           )}
         </div>
-        <div className="mt-0.5 text-[11px] leading-4 text-slate-300">
-          {formatCompact(hatchAmps)} A:{" "}
-          <span className="font-bold text-white">{formatCompact(hatchPoolEuT)} EU/t</span>
-        </div>
+        {!chip.isMultiblock ? (
+          <div className="mt-0.5 text-[11px] leading-4 text-slate-300">
+            {formatCompact(hatchAmps)} A:{" "}
+            <span className="font-bold text-white">{formatCompact(supplyEuT)} EU/t</span>
+          </div>
+        ) : null}
         {peakEuT !== undefined ? (
           <>
             <div className="text-[11px] leading-4 text-slate-300">
-              PEAK <span className="font-bold text-white">{formatCompact(peakEuT)} EU/t</span>
+              PEAK <span className="font-bold text-white">{formatPowerValue(powerDisplayFromEuT(peakEuT))} {powerDisplaySuffix()}</span>
             </div>
             <div className="text-[11px] leading-4 text-slate-300">
               AVG{" "}
-              <span className="font-bold text-white">{formatCompact(averageEuT ?? 0)} EU/t</span>
+              <span className="font-bold text-white">{formatPowerValue(powerDisplayFromEuT(averageEuT ?? 0))} {powerDisplaySuffix()}</span>
             </div>
           </>
         ) : null}
@@ -609,152 +445,110 @@ function ListLine({
   // story is about the row, and a target the width of a chip made the panel
   // feel like a secret.
   return (
-    <MinecraftTooltip content={hatchStory}>
+    <MinecraftTooltip
+      content={
+        checklist === undefined
+          ? hatchStory
+          : checklist
+            ? "Completed — click to restore"
+            : "Click to mark these machines complete"
+      }
+    >
       <button
         type="button"
+        data-machine-node-id={nodeId}
+        aria-label={nodeId ? `${formatMachineListCount(count ?? 0)}× ${rowName}` : undefined}
         onClick={onClick}
-        // The wash sits at ~12% - present enough to read as the tier's
-        // colour without competing with the chips that name it.
-        style={wash ? { backgroundColor: `${GT_TIER_COLORS[wash].background}1f` } : undefined}
-        className="relative flex w-full items-center gap-1.5 py-0.5 pl-2 pr-2 text-left hover:bg-[var(--mc-71)]"
+        aria-pressed={checklist}
+        data-checklist-done={checklist}
+        data-checklist-row={checklist !== undefined ? "true" : undefined}
+        style={checklistCursorStyle as CSSProperties}
+        className={`${chip || indent ? "inspector-machine-build" : "inspector-machine-title"} inspector-machine-row relative flex w-full items-center gap-1 px-2 py-0.5 text-left hover:bg-white/5`}
       >
-        {indent ? (
-          /* The branch: a vertical line dropping from under the parent's
+        <span className="flex min-w-0 flex-1 items-center gap-1">
+          {indent ? (
+            /* The branch: a vertical line dropping from under the parent's
              icon, elbowing out to this build's count. Anchored to the
              BUTTON's box (inset-y-0), not the flex row - the row's box
              stops at the padding, and the 4px of it between rows is
              exactly the gap that used to chop the stem into dashes. The
              last build stops at its elbow, closing the stem in an L. */
-          <>
-            <span aria-hidden className="absolute bottom-0 left-2 top-0 w-[24px] opacity-60">
-              <span
-                className={[
-                  "absolute left-[11px] top-0 w-[2px] bg-[var(--mc-ink-muted)]",
-                  isLast ? "h-[calc(50%+1px)]" : "bottom-0",
-                ].join(" ")}
-              />
-              <span className="absolute left-[11px] right-0 top-1/2 h-[2px] -translate-y-[1px] bg-[var(--mc-ink-muted)]" />
-            </span>
-            <span className="w-[24px] shrink-0" />
-          </>
-        ) : (
-          <span className="flex h-[24px] w-[24px] shrink-0 items-center justify-center overflow-hidden">
-            {icon ? (
-              <ResourceIcon
-                resource={{ ...icon, amount: 1, consumed: true }}
-                size="sm"
-                showAmount={false}
-                bare
-                tooltip={false}
-                // Machine renders are 256px squares whose art fills barely
-                // half the frame; asked for raw, the row showed a 12px
-                // machine swimming in margin. machineArtPixels crops the
-                // transparent frame exactly, so the art fills the box.
-                iconPixelSize={machineArtPixels(24)}
-                className="!h-full !w-full"
-              />
-            ) : null}
-          </span>
-        )}
-        {count !== undefined ? (
-          <span className="shrink-0 text-[14px] font-bold tabular-nums">{count}×</span>
-        ) : null}
-        <span className="min-w-0 flex-1 truncate whitespace-nowrap text-[14px] leading-6">
-          {label ?? ""}
-        </span>
-        {chipColor && chip ? (
-          /* The card's own chip, verbatim: hatch count fused left of the
-             tier, one paint job, so the panel and the board read as one.
-             Always in the right-hand column, so every chip on the list sits
-             on one line however the rows around it are shaped. */
-          <span className="flex shrink-0 items-center">
-            {chip.isMultiblock ? (
-              <>
+            <>
+              <span aria-hidden className="absolute bottom-0 left-2 top-0 w-[24px] opacity-60">
                 <span
-                  className="flex h-5 items-center border-2 border-r-0 px-1 pb-[2px] text-[11px] font-bold leading-none"
-                  style={{
-                    backgroundColor: chipColor.background,
-                    borderColor: chipColor.border,
-                    color: chipColor.text,
-                    textShadow: `1px 1px 0 ${chipColor.shadow}`,
-                  }}
-                >
-                  {chip.hatchChip ?? `${chip.hatches}×`}
-                </span>
-                {hatchEntry ? (
-                  <span
-                    className="flex h-5 w-5 items-center justify-center border-2 border-r-0"
-                    style={{
-                      backgroundColor: chipColor.background,
-                      borderColor: chipColor.border,
-                    }}
-                  >
-                    <EnergyHatchArt entry={hatchEntry} boxClass="h-6 w-6" />
-                  </span>
-                ) : null}
-              </>
-            ) : null}
+                  className={[
+                    "absolute left-[11px] top-0 w-[2px] bg-[var(--mc-ink-muted)]",
+                    isLast ? "h-[calc(50%+1px)]" : "bottom-0",
+                  ].join(" ")}
+                />
+                <span className="absolute left-[11px] right-0 top-1/2 h-[2px] -translate-y-[1px] bg-[var(--mc-ink-muted)]" />
+              </span>
+              <span className="w-[24px] shrink-0" />
+            </>
+          ) : (
+            <span className="flex h-[24px] w-[24px] shrink-0 items-center justify-center overflow-hidden">
+              {icon ? (
+                <ResourceIcon
+                  resource={{ ...icon, amount: 1, consumed: true }}
+                  size="sm"
+                  showAmount={false}
+                  bare
+                  tooltip={false}
+                  // Machine renders are 256px squares whose art fills barely
+                  // half the frame; asked for raw, the row showed a 12px
+                  // machine swimming in margin. machineArtPixels crops the
+                  // transparent frame exactly, so the art fills the box.
+                  iconPixelSize={machineArtPixels(24)}
+                  className="!h-full !w-full"
+                />
+              ) : null}
+            </span>
+          )}
+          {count !== undefined ? (
+            <span className="shrink-0 text-[14px] font-bold tabular-nums">
+              {formatMachineListCount(count)}×
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1 truncate whitespace-nowrap text-[14px] leading-6">
+            {label ?? ""}
+          </span>
+          {chip?.tier && (
             <span
-              className="h-5 border-2 px-1.5 text-[11px] font-bold leading-4"
+              className="inspector-build-config flex shrink-0 items-center gap-1 rounded-sm px-1 font-bold leading-4"
               style={{
-                backgroundColor: chipColor.background,
-                borderColor: chipColor.border,
-                color: chipColor.text,
-                textShadow: `1px 1px 0 ${chipColor.shadow}`,
+                color: GT_TIER_COLORS[chip.tier].text,
+                backgroundColor: GT_TIER_COLORS[chip.tier].background,
               }}
             >
-              {chip.tier}
+              {chip.isMultiblock && (
+                <span className="text-[10px] tabular-nums">
+                  {chip.typedEuT !== undefined
+                    ? formatCompact(chip.typedEuT / getVoltageTierMaxEuT(chip.tier)) + "A"
+                    : hatchAmps !== undefined
+                      ? formatCompact(hatchAmps) + "A"
+                      : "—"}
+                </span>
+              )}
+              <span className="text-[10px] font-bold leading-4">{chip.tier}</span>
+            </span>
+          )}
+        </span>
+        {(peak || average || stalled) && (
+          <span className="inspector-machine-figures flex shrink-0 items-center gap-1.5">
+            <span className="flex items-baseline gap-1">
+              {stalled ? (
+                <span className={[COLUMN_CLASS, "font-bold text-red-400"].join(" ")}>
+                  {state === "under-powered" ? "LOW!" : "TIER!"}
+                </span>
+              ) : (
+                <FigureCell figure={peak} className="text-[13px]" />
+              )}
+            </span>
+            <span className="flex items-baseline gap-1">
+              <FigureCell figure={stalled ? undefined : average} className="text-[13px]" />
             </span>
           </span>
-        ) : null}
-      <span
-        className={[
-          // A FLOOR, not a fixed width: 70px keeps the tier chips on one
-          // column for ordinary figures, and a wider one ("999.9k" plus its
-          // mark) grows the cell while the name column yields. Fixed, the
-          // overflow had nowhere honest to go and figures left the row.
-          "min-w-[70px] shrink-0 whitespace-nowrap text-right text-[13px] tabular-nums",
-          stalled ? "font-bold text-red-400" : "",
-        ].join(" ")}
-      >
-        {stalled ? (
-          state === "under-powered" ? (
-            "LOW!"
-          ) : (
-            "TIER!"
-          )
-        ) : euT !== undefined ? (
-          <>
-            <EuMark />
-            <MotionNumberText
-              values={[euT]}
-              render={(shown) =>
-                shown[0] === euT
-                  ? formatCompact(euT)
-                  : formatCompactStable(shown[0] ?? euT)
-              }
-            />
-            {/* Same suffix treatment as the card's power cell: small, grey,
-                hugging the number. */}
-            <span className="ml-0.5 text-[8px] text-[var(--mc-ink-muted)]">EU/t</span>
-          </>
-        ) : steamLs !== undefined ? (
-          <>
-            <SteamMark />
-            <MotionNumberText
-              values={[steamLs]}
-              render={(shown) =>
-                shown[0] === steamLs
-                  ? formatCompact(steamLs)
-                  : formatCompactStable(shown[0] ?? steamLs)
-              }
-            />
-            <span className="ml-0.5 text-[8px] text-[var(--mc-ink-muted)]">L/s</span>
-          </>
-        ) : (
-          ""
         )}
-        </span>
       </button>
     </MinecraftTooltip>
   );

@@ -14,12 +14,14 @@ import type {
 import type {
   MachineTier,
   Recipe,
-  RecipeOutput,
   ResourceAlternative,
   ResourceAmount,
 } from "@/lib/model/types";
 import {
   AUTO_WORKBENCH_HANDLER_ID,
+  CROP_HARVESTER_INDUSTRIAL_FARM_ID,
+  CROP_HARVESTER_MANAGER_ID,
+  CROP_MANAGER_ITEM_NAMES,
   enrichPassiveProductionRecipe,
   getFilledCellFluidEquivalent,
   isFluidEquivalentToFilledCell,
@@ -30,6 +32,8 @@ import {
   isVirtualChoiceResource,
   resourceMatchesInput,
 } from "@/lib/model";
+import { machineTableControlResourceIds } from "@/lib/machines/machine-table";
+import { pickRecipeRefMatch, type RecipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import {
   MAX_RECIPE_QUERY_CLAUSES,
   recipeQueryClauseMode,
@@ -91,7 +95,9 @@ interface LoadedRecipeIndex {
   recipeMapIconCandidates?: RecipeMapIconCandidate[];
   recipeMapIconCache?: Map<string, DatasetResourceIndexEntry | undefined>;
   recipeMapIconEntriesByMap?: Map<string, RecipeMapIconEntry>;
-  recipesByRawRecipeId?: Map<string, Recipe[]>;
+  /** rawRecipeId -> recipe indexes; ids and numbers only, never recipe bodies. */
+  recipeIndexesByRawRecipeId?: Map<string, number[]>;
+  /** Bounded LRU of hydrated summaries; see setCachedHydratedSummary. */
   hydratedRecipeSummaries?: Map<number, RecipeSummary>;
   /** Resources a crop or a bee can produce; see getPassiveSourceResourceKeys. */
   passiveSourceKeys?: Partial<Record<ResourceSourceFilter, Set<string>>>;
@@ -99,14 +105,7 @@ interface LoadedRecipeIndex {
   plantSourceKeys?: string[];
 }
 
-export interface DatasetRecipeRef {
-  id: string;
-  name: string;
-  machineType: string;
-  recipeMap?: string;
-  rawRecipeId?: string;
-  outputs: Array<Pick<RecipeOutput, "kind" | "id">>;
-}
+export type DatasetRecipeRef = RecipeContentRef;
 
 interface RecipeLookupIndexFile {
   schemaVersion: 1;
@@ -207,11 +206,13 @@ const loadedRecipeLookupIndexes = new Map<string, LoadedRecipeLookupIndex>();
 const pendingRecipeLookupLoads = new Map<string, Promise<LoadedRecipeLookupIndex>>();
 const loadedShards = new Map<string, Recipe[]>();
 const pendingShardLoads = new Map<string, Promise<Recipe[]>>();
+const pendingRawRecipeIdIndexLoads = new Map<string, Promise<Map<string, number[]>>>();
 const pendingPrewarmLoads = new Map<string, Promise<void>>();
 let manifestCache: DatasetManifest | undefined;
 let manifestCacheStamp: string | undefined;
 const gunzipAsync = promisify(gunzip);
 const maxLoadedShardCount = positiveIntEnv("GTNH_MAX_LOADED_RECIPE_SHARDS", 8);
+const maxHydratedRecipeSummaryCount = positiveIntEnv("GTNH_MAX_HYDRATED_RECIPE_SUMMARIES", 8000);
 
 export async function getDatasetCatalog(versionId: string) {
   const catalog = await loadCatalog(versionId);
@@ -227,36 +228,143 @@ export async function getDatasetCatalog(versionId: string) {
     oreDictionary: {},
     recipeMaps: catalog.recipeMaps,
     recipeMapIcons: catalog.recipeMapIcons,
-    machineHandlerIcons: withAutoWorkbenchIcon(catalog),
+    machineHandlerIcons: withSynthesizedHandlerIcons(catalog),
     generatedAt: catalog.version.publishedAt,
   };
 }
 
 /**
- * The Auto Workbench handler is synthesized client-side for the crafting maps
- * (recipe-rules.ts), so no exported handler family ever minted its icon. The
- * machine is a real dataset item; hand its LV face to the synthesized family
- * here so crafting cards draw a machine chip like everything else.
+ * Handlers synthesized client-side (the Auto Workbench for the crafting maps
+ * in recipe-rules.ts, the two crop harvesters in passive-production.ts) never
+ * had an exported handler family mint their icon. Each machine is a real
+ * dataset item; hand its lowest-tier face to the synthesized family here so
+ * their cards draw a machine chip like everything else. Names are candidates
+ * in order because datasets disagree (2.8.4 says "Crop Manager (LV)" and has
+ * no Industrial Farm); a family with no match simply keeps its letter chip.
  */
-function withAutoWorkbenchIcon(catalog: LoadedRecipeIndex): MachineHandlerIconEntry[] | undefined {
-  const icons = catalog.machineHandlerIcons ?? [];
-  if (icons.some((entry) => entry.familyId === AUTO_WORKBENCH_HANDLER_ID)) {
-    return catalog.machineHandlerIcons;
+const SYNTHESIZED_HANDLER_FACES: Array<{
+  familyId: string;
+  displayNames: string[];
+  /** Tier -> the tier's own item name, for families whose card wears its tier's block. */
+  tierNames?: Record<string, string>;
+}> = [
+  { familyId: AUTO_WORKBENCH_HANDLER_ID, displayNames: ["Auto Workbench (LV)"] },
+  {
+    familyId: CROP_HARVESTER_MANAGER_ID,
+    displayNames: ["Basic Crop Manager", "Crop Manager (LV)"],
+    tierNames: CROP_MANAGER_ITEM_NAMES,
+  },
+  { familyId: CROP_HARVESTER_INDUSTRIAL_FARM_ID, displayNames: ["Industrial Farm"] },
+];
+
+/**
+ * The Tank map (the planner's free canner, synthesized by the pipeline) used
+ * to wear the plain empty cell as its face, and a card names itself after its
+ * map's machine, so every Tank card read "Empty Cell". Published datasets
+ * still carry that face; swap in the Low Voltage Fluid Tank, called simply
+ * "Fluid Tank" (Jack, 2026-09-07), at load so the card, its picture and the
+ * search chip all agree without a dataset rebuild.
+ */
+const TANK_RECIPE_MAP = "Tank";
+const TANK_MAP_FACE_ITEM_NAMES = ["Low Voltage Fluid Tank"];
+const TANK_MAP_FACE_DISPLAY_NAME = "Fluid Tank";
+
+export function withTankMapFace(
+  catalog: Pick<LoadedRecipeIndex, "resources" | "recipeMapIcons">,
+): RecipeMapIconEntry[] | undefined {
+  const icons = catalog.recipeMapIcons;
+  if (!icons?.some((entry) => entry.recipeMap === TANK_RECIPE_MAP)) {
+    return icons;
   }
-  const face = catalog.resources.find((resource) => resource.displayName === "Auto Workbench (LV)");
+  const byName = new Map(catalog.resources.map((resource) => [resource.displayName, resource] as const));
+  const face = TANK_MAP_FACE_ITEM_NAMES.map((name) => byName.get(name)).find(Boolean);
   if (!face) {
-    return catalog.machineHandlerIcons;
+    return icons;
   }
-  return [...icons, { familyId: AUTO_WORKBENCH_HANDLER_ID, resource: { ...face, amount: 1 } }];
+  return icons.map((entry) =>
+    entry.recipeMap === TANK_RECIPE_MAP
+      ? {
+          recipeMap: TANK_RECIPE_MAP,
+          resource: {
+            kind: face.kind,
+            id: face.id,
+            displayName: TANK_MAP_FACE_DISPLAY_NAME,
+            iconPath: face.iconPath,
+            iconAtlas: face.iconAtlas,
+            dominantColor: face.dominantColor,
+            modId: face.modId,
+            amount: 1,
+          },
+        }
+      : entry,
+  );
+}
+
+function withSynthesizedHandlerIcons(catalog: LoadedRecipeIndex): MachineHandlerIconEntry[] {
+  const icons = [...(catalog.machineHandlerIcons ?? [])];
+  const byName = new Map(catalog.resources.map((resource) => [resource.displayName, resource] as const));
+  for (const { familyId, displayNames, tierNames } of SYNTHESIZED_HANDLER_FACES) {
+    if (icons.some((entry) => entry.familyId === familyId)) {
+      continue;
+    }
+    const face = displayNames.map((name) => byName.get(name)).find(Boolean);
+    if (!face) {
+      continue;
+    }
+    const tiers = Object.entries(tierNames ?? {}).flatMap(([tier, name]) => {
+      const resource = byName.get(name);
+      return resource ? [{ tier, resource: { ...resource, amount: 1 } }] : [];
+    });
+    icons.push({
+      familyId,
+      resource: { ...face, amount: 1 },
+      ...(tiers.length > 1 ? { tiers } : {}),
+    });
+  }
+  return icons;
 }
 
 function getMachineConfigResources(catalog: LoadedRecipeIndex): DatasetResourceIndexEntry[] {
+  // The curated machine table names its control blocks by dataset id (field
+  // restriction coils); ship those faces too, or the client can only draw
+  // its labelled-slot fallback for them.
+  const tableIds = machineTableControlResourceIds();
   return catalog.resources
-    .filter((resource) => resource.tooltip?.some(isMachineConfigTooltipLine))
+    .filter(
+      (resource) =>
+        resource.tooltip?.some(isMachineConfigTooltipLine) ||
+        tableIds.has(resource.id) ||
+        isCropHarvesterComponent(resource.displayName),
+    )
     .map((resource) => ({
       ...resource,
       recipeCount: 0,
     }));
+}
+
+// The crop card's harvester knobs name their faces by dataset display name
+// (seed beds, farm upgrade units, the tiered Crop Managers); ship those
+// faces too, or the crop settings panel can only draw its labelled-slot
+// fallback for them.
+const CROP_HARVESTER_COMPONENT_PATTERN =
+  /^(Seed Bed|Growth Acceleration Unit|Fertilization Unit|Advanced Harvesting Unit|Environmental Enhancement Unit|Overclocked Growth Acceleration Unit) \(|Crop Manager/;
+
+// Faces for the crop card's own knobs (growth, gain, water, fertilizer, sky,
+// biome) - `cropsNhAnalyticControls` names these; extend both together.
+const CROP_KNOB_FACE_NAMES = new Set([
+  "Crop Sticks",
+  "Plant Lens",
+  "Water Bucket",
+  "Fertilizer",
+  "Daylight Detector",
+  "Grass Block",
+]);
+
+function isCropHarvesterComponent(displayName: string | undefined) {
+  return (
+    displayName !== undefined &&
+    (CROP_HARVESTER_COMPONENT_PATTERN.test(displayName) || CROP_KNOB_FACE_NAMES.has(displayName))
+  );
 }
 
 function isMachineConfigTooltipLine(line: string) {
@@ -282,40 +390,159 @@ export async function getDatasetRecipeIds(versionId: string): Promise<string[]> 
   return recipeCatalog.recipes?.map((recipe) => recipe.id) ?? [];
 }
 
+/**
+ * Finds the dataset's recipe behind each imported one whose id it no longer
+ * lists.
+ *
+ * Recipe ids are minted per dataset build (and until 2026-09 from a JVM
+ * identity hash, so every rebuild changed all of them), so a plan exported
+ * one week and imported the next finds none of its ids. What survives a
+ * rebuild is the recipe's content, so each ref carries its slots, ticks and
+ * EU, and the candidates - every recipe in the ref's map that makes its
+ * first output, read off the lookup index - are scored on that
+ * (`pickRecipeRefMatch`). Only a candidate with the same resources in and
+ * out is offered; a weaker likeness is not, and the importer keeps the
+ * plan's own embedded body instead. A rawRecipeId hit is still consulted
+ * for refs the content scan could not settle, since it can bridge dataset
+ * versions when the raw ids are stable.
+ */
 export async function resolveDatasetRecipeRefs(
   versionId: string,
   refs: DatasetRecipeRef[],
-): Promise<Array<{ importedId: string; recipeId: string }>> {
-  if (!refs.some((ref) => ref.rawRecipeId)) {
+): Promise<Array<{ importedId: string; recipeId: string; exact: boolean }>> {
+  if (refs.length === 0) {
     return [];
   }
 
   const catalog = await loadCatalog(versionId);
-  const recipesByRawRecipeId = await getRecipesByRawRecipeId(catalog);
+  const lookup = await loadRecipeLookupIndex(catalog.version);
+  const candidateIndexesByRef = new Map<DatasetRecipeRef, number[]>();
+  for (const ref of refs) {
+    candidateIndexesByRef.set(ref, lookupCandidateIndexes(lookup, ref));
+  }
 
-  return refs
-    .map((ref) => {
-      if (!ref.rawRecipeId) {
-        return undefined;
+  const candidatesByIndex = await loadRecipeBodies(
+    catalog,
+    [...candidateIndexesByRef.values()].flat(),
+  );
+  const matches = new Map<string, { recipeId: string; exact: boolean }>();
+  const unsettled: DatasetRecipeRef[] = [];
+  for (const ref of refs) {
+    const match = pickRecipeRefMatch(
+      ref,
+      (candidateIndexesByRef.get(ref) ?? [])
+        .map((recipeIndex) => candidatesByIndex.get(recipeIndex))
+        .filter((recipe): recipe is Recipe => recipe !== undefined),
+    );
+    if (match && match.score >= RECIPE_REF_MIGRATION_SCORE) {
+      matches.set(ref.id, { recipeId: match.candidate.id, exact: match.exact });
+    } else if (ref.rawRecipeId) {
+      unsettled.push(ref);
+    }
+  }
+
+  if (unsettled.length > 0) {
+    const indexesByRawRecipeId = await getRecipeIndexesByRawRecipeId(catalog);
+    const rawIndexes = unsettled.flatMap(
+      (ref) => indexesByRawRecipeId.get(ref.rawRecipeId ?? "") ?? [],
+    );
+    const rawCandidatesByIndex = await loadRecipeBodies(catalog, rawIndexes);
+    for (const ref of unsettled) {
+      const match = pickRecipeRefMatch(
+        ref,
+        (indexesByRawRecipeId.get(ref.rawRecipeId ?? "") ?? [])
+          .map((recipeIndex) => rawCandidatesByIndex.get(recipeIndex))
+          .filter((recipe): recipe is Recipe => recipe !== undefined),
+      );
+      if (match && match.score >= RECIPE_REF_MIGRATION_SCORE) {
+        matches.set(ref.id, { recipeId: match.candidate.id, exact: match.exact });
       }
+    }
+  }
 
-      const match = recipesByRawRecipeId
-        .get(ref.rawRecipeId)
-        ?.find(
-          (recipe) =>
-            recipe.id !== ref.id &&
-            recipe.name === ref.name &&
-            recipe.machineType === ref.machineType &&
-            (!ref.recipeMap || recipe.source?.recipeMap === ref.recipeMap) &&
-            outputsAreCompatible(ref.outputs, recipe.outputs),
-        );
-
-      return match ? { importedId: ref.id, recipeId: match.id } : undefined;
-    })
-    .filter((match): match is { importedId: string; recipeId: string } => Boolean(match));
+  return refs.flatMap((ref) => {
+    const match = matches.get(ref.id);
+    return match ? [{ importedId: ref.id, ...match }] : [];
+  });
 }
 
-export type ResourceQuerySort = "relevance" | "name" | "mod" | "recipes" | "made" | "uses";
+/** Below this the likeness is too loose to swap a plan's recipe for. */
+const RECIPE_REF_MIGRATION_SCORE = 300;
+
+/** How many bodies one ref may pull off the shards. */
+const RECIPE_REF_CANDIDATE_LIMIT = 600;
+
+/**
+ * Every recipe that makes the ref's first output, in the ref's own map when
+ * the dataset still has a map by that name and otherwise in any map.
+ */
+function lookupCandidateIndexes(lookup: LoadedRecipeLookupIndex, ref: DatasetRecipeRef): number[] {
+  const mapId = ref.recipeMap ? lookup.recipeMapIds.get(ref.recipeMap) : undefined;
+  const indexes: number[] = [];
+  for (const output of ref.outputs) {
+    const recipesByMap = lookup.entries.get(getResourceModeKey(output, "recipes"));
+    if (!recipesByMap) {
+      continue;
+    }
+    if (mapId !== undefined) {
+      indexes.push(...(recipesByMap.get(mapId) ?? []));
+    } else {
+      for (const recipeIndexes of recipesByMap.values()) {
+        indexes.push(...recipeIndexes);
+      }
+    }
+    if (indexes.length > 0) {
+      break;
+    }
+  }
+  return [...new Set(indexes)].sort((left, right) => left - right).slice(0, RECIPE_REF_CANDIDATE_LIMIT);
+}
+
+/**
+ * Reads the named recipes through the bounded shard cache, one shard at a
+ * time, so the bodies never stay resident.
+ */
+async function loadRecipeBodies(
+  catalog: LoadedRecipeIndex,
+  recipeIndexes: number[],
+): Promise<Map<number, Recipe>> {
+  const requestsByShard = new Map<RecipeIndexShard, number[]>();
+  for (const recipeIndex of new Set(recipeIndexes)) {
+    const shard = catalog.shards.find(
+      (entry) => recipeIndex >= entry.start && recipeIndex < entry.end,
+    );
+    if (!shard) {
+      continue;
+    }
+    const existing = requestsByShard.get(shard);
+    if (existing) {
+      existing.push(recipeIndex);
+    } else {
+      requestsByShard.set(shard, [recipeIndex]);
+    }
+  }
+
+  const bodies = new Map<number, Recipe>();
+  for (const [shard, indexes] of requestsByShard) {
+    const recipes = await loadShard(catalog.version, shard);
+    for (const recipeIndex of indexes) {
+      const recipe = recipes[recipeIndex - shard.start];
+      if (recipe) {
+        bodies.set(recipeIndex, recipe);
+      }
+    }
+  }
+  return bodies;
+}
+
+export type ResourceQuerySort =
+  | "relevance"
+  | "name"
+  | "mod"
+  | "recipes"
+  | "made"
+  | "uses"
+  | "popular";
 
 /**
  * How many recipes MAKE and how many USE each resource, read off the same
@@ -383,6 +610,8 @@ export async function queryDatasetResources(
     mod?: string;
     sort?: ResourceQuerySort;
     source?: ResourceSourceFilter;
+    /** Community popularity by `${kind}:${id}`, required only by sort "popular". */
+    popularity?: Map<string, number>;
   },
 ) {
   const catalog = await loadCatalog(versionId);
@@ -448,6 +677,7 @@ export async function queryDatasetResources(
     resolved.results,
     request.sort ?? "relevance",
     directionCounts,
+    request.popularity,
   );
 
   return {
@@ -491,6 +721,7 @@ function sortResourceMatches(
   matches: Array<{ resourceIndex: number; score: number }>,
   sort: ResourceQuerySort,
   directionCounts: Map<string, { madeBy: number; usedBy: number }>,
+  popularity?: Map<string, number>,
 ) {
   const nameOf = (match: { resourceIndex: number }) => {
     const resource = catalog.resourceIndex[match.resourceIndex];
@@ -538,6 +769,24 @@ function sortResourceMatches(
     );
   }
 
+  if (sort === "popular") {
+    // What the community actually builds, aggregated over shared setups. A
+    // typed query still wins first: "steel" must find steel, not the most
+    // popular thing named vaguely like it. Resources no plan has touched
+    // fall back to the best-match order behind everything with a score.
+    const popularityOf = (match: { resourceIndex: number }) => {
+      const resource = catalog.resourceIndex[match.resourceIndex];
+      return (resource && popularity?.get(`${resource.kind}:${resource.id}`)) ?? 0;
+    };
+    return [...matches].sort(
+      (left, right) =>
+        right.score - left.score ||
+        popularityOf(right) - popularityOf(left) ||
+        countsOf(right).madeBy - countsOf(left).madeBy ||
+        nameOf(left).localeCompare(nameOf(right)),
+    );
+  }
+
   // Best match. Equal scores - and with nothing typed every score is 0 - fall
   // to the thing with the most ways to MAKE it, which is the item a planner
   // most likely came to place.
@@ -572,6 +821,8 @@ export interface DatasetRecipeQueryRequest {
   maxTier: TierFilter;
   offset: number;
   limit: number;
+  /** Allow an explicitly requested paginated browse with no search clauses. */
+  browseAll?: boolean;
 }
 
 export interface RecipeMapSelection {
@@ -901,7 +1152,7 @@ async function queryDatasetRecipesFromLookup(
   const parsedQuery = parseSearchQuery(request.query);
   const clauses = normalizedRecipeQueryClauses(request);
 
-  if (clauses.length === 0 && parsedQuery.terms.length === 0) {
+  if (clauses.length === 0 && parsedQuery.terms.length === 0 && !request.browseAll) {
     return emptyRecipeQueryResult(request);
   }
 
@@ -935,9 +1186,16 @@ async function queryDatasetRecipesFromLookup(
   const searchScores = resolved.searchScores;
   // A pure text search has no resource to group by, so the maps come out of what
   // the words matched.
+  const browseIndexes = request.browseAll
+    ? Array.from({ length: lookup.recipeCount }, (_, index) => index)
+    : [];
   const tierCandidatesByMap =
     scopedByMap ??
-    tierFilteredByMap(lookup, groupRecipesByMap(lookup, searchScores?.keys() ?? []), request.maxTier);
+    tierFilteredByMap(
+      lookup,
+      groupRecipesByMap(lookup, searchScores?.keys() ?? browseIndexes),
+      request.maxTier,
+    );
   const countedRecipeMaps = [...tierCandidatesByMap.entries()]
     .map(([recipeMapId, recipeIndexes]) => {
       const recipeMap = lookup.recipeMaps[recipeMapId];
@@ -1442,6 +1700,7 @@ async function loadCatalog(versionId: string): Promise<LoadedRecipeIndex> {
     const loaded = {
       ...catalog,
       version,
+      recipeMapIcons: withTankMapFace(catalog),
     };
     loadedCatalogs.set(cacheKey, loaded);
     return loaded;
@@ -1608,31 +1867,61 @@ async function loadShard(version: DatasetVersion, shard: RecipeIndexShard): Prom
   return promise;
 }
 
-async function getRecipesByRawRecipeId(catalog: LoadedRecipeIndex): Promise<Map<string, Recipe[]>> {
-  if (catalog.recipesByRawRecipeId) {
-    return catalog.recipesByRawRecipeId;
+/**
+ * rawRecipeId -> recipe indexes, built once per loaded dataset.
+ *
+ * This map holds ids and numbers only. It used to hold every recipe BODY,
+ * which pinned the whole corpus (hundreds of MB) in the heap forever the
+ * first time anyone imported a plan carrying rawRecipeIds - the single
+ * biggest driver of the production server's heap-exhaustion crashes. The
+ * scan reads shards a few at a time and keeps none of them.
+ */
+async function getRecipeIndexesByRawRecipeId(
+  catalog: LoadedRecipeIndex,
+): Promise<Map<string, number[]>> {
+  if (catalog.recipeIndexesByRawRecipeId) {
+    return catalog.recipeIndexesByRawRecipeId;
   }
 
-  const recipesByRawRecipeId = new Map<string, Recipe[]>();
-  const shardRecipes = await Promise.all(
-    catalog.shards.map((shard) => loadShard(catalog.version, shard)),
-  );
-  for (const recipe of shardRecipes.flat()) {
-    const rawRecipeId = recipe.source?.rawRecipeId;
-    if (!rawRecipeId) {
-      continue;
-    }
-
-    const existing = recipesByRawRecipeId.get(rawRecipeId);
-    if (existing) {
-      existing.push(recipe);
-    } else {
-      recipesByRawRecipeId.set(rawRecipeId, [recipe]);
-    }
+  const cacheKey = datasetVersionCacheKey(catalog.version);
+  const pending = pendingRawRecipeIdIndexLoads.get(cacheKey);
+  if (pending) {
+    return pending;
   }
 
-  catalog.recipesByRawRecipeId = recipesByRawRecipeId;
-  return recipesByRawRecipeId;
+  const promise = (async () => {
+    const indexesByRawRecipeId = new Map<string, number[]>();
+    const concurrency = 4;
+    for (let index = 0; index < catalog.shards.length; index += concurrency) {
+      const batch = catalog.shards.slice(index, index + concurrency);
+      const payloads = await Promise.all(
+        batch.map((shard) => readGzipJson<RecipeShardPayload>(publicPathToFile(shard.path))),
+      );
+      // Recorded in shard order so candidate lists stay deterministic.
+      payloads.forEach((payload, batchIndex) => {
+        const shard = batch[batchIndex];
+        payload.recipes.forEach((recipe, offset) => {
+          const rawRecipeId = recipe.source?.rawRecipeId;
+          if (!rawRecipeId) {
+            return;
+          }
+          const existing = indexesByRawRecipeId.get(rawRecipeId);
+          if (existing) {
+            existing.push(shard.start + offset);
+          } else {
+            indexesByRawRecipeId.set(rawRecipeId, [shard.start + offset]);
+          }
+        });
+      });
+    }
+    catalog.recipeIndexesByRawRecipeId = indexesByRawRecipeId;
+    return indexesByRawRecipeId;
+  })().finally(() => {
+    pendingRawRecipeIdIndexLoads.delete(cacheKey);
+  });
+
+  pendingRawRecipeIdIndexLoads.set(cacheKey, promise);
+  return promise;
 }
 
 async function prewarmRecipeShards(catalog: LoadedRecipeIndex): Promise<void> {
@@ -1646,20 +1935,6 @@ async function prewarmRecipeShards(catalog: LoadedRecipeIndex): Promise<void> {
         .map((shard) => loadShard(catalog.version, shard)),
     );
   }
-}
-
-function outputsAreCompatible(
-  importedOutputs: Array<Pick<RecipeOutput, "kind" | "id">>,
-  candidateOutputs: RecipeOutput[],
-): boolean {
-  if (importedOutputs.length === 0) {
-    return true;
-  }
-
-  const candidateResources = new Set(
-    candidateOutputs.map((output) => `${output.kind}:${output.id}`),
-  );
-  return importedOutputs.every((output) => candidateResources.has(`${output.kind}:${output.id}`));
 }
 
 async function readGzipJson<T>(filePath: string): Promise<T> {
@@ -1887,8 +2162,7 @@ async function getRecipeSummariesByIndexMap(
             getCatalogResourcesByKey(catalog),
             getChoiceAlternativesByKey(catalog),
           );
-          catalog.hydratedRecipeSummaries ??= new Map();
-          catalog.hydratedRecipeSummaries.set(recipeIndex, summary);
+          setCachedHydratedSummary(catalog, recipeIndex, summary);
           summariesByIndex.set(recipeIndex, summary);
         }
       }
@@ -1902,7 +2176,7 @@ function getHydratedRecipeSummary(
   catalog: LoadedRecipeIndex,
   recipeIndex: number,
 ): RecipeSummary | undefined {
-  const cached = catalog.hydratedRecipeSummaries?.get(recipeIndex);
+  const cached = getCachedHydratedSummary(catalog, recipeIndex);
   if (cached) {
     return cached;
   }
@@ -1913,9 +2187,44 @@ function getHydratedRecipeSummary(
   }
 
   const summary = hydrateRecipeSummary(compactSummary, catalog);
-  catalog.hydratedRecipeSummaries ??= new Map();
-  catalog.hydratedRecipeSummaries.set(recipeIndex, summary);
+  setCachedHydratedSummary(catalog, recipeIndex, summary);
   return summary;
+}
+
+function getCachedHydratedSummary(
+  catalog: LoadedRecipeIndex,
+  recipeIndex: number,
+): RecipeSummary | undefined {
+  const cache = catalog.hydratedRecipeSummaries;
+  const cached = cache?.get(recipeIndex);
+  if (!cache || !cached) {
+    return undefined;
+  }
+
+  cache.delete(recipeIndex);
+  cache.set(recipeIndex, cached);
+  return cached;
+}
+
+/**
+ * Hydrated summaries are cheap to rebuild and were cached forever, which let
+ * hours of recipe-book browsing walk the heap into the limit. Same LRU shape
+ * as the shard cache: recently used stays, the tail falls off.
+ */
+function setCachedHydratedSummary(
+  catalog: LoadedRecipeIndex,
+  recipeIndex: number,
+  summary: RecipeSummary,
+) {
+  const cache = (catalog.hydratedRecipeSummaries ??= new Map());
+  cache.set(recipeIndex, summary);
+  while (cache.size > maxHydratedRecipeSummaryCount) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) {
+      return;
+    }
+    cache.delete(oldestKey);
+  }
 }
 
 function toRecipeSummary(
@@ -2667,7 +2976,7 @@ function hydrateRecipeMapIconResource(
   resource: RecipeMapIconEntry["resource"],
   resourcesByKey: Map<string, DatasetResource | DatasetResourceIndexEntry>,
 ): DatasetResourceIndexEntry | undefined {
-  if (!resource?.kind || !resource.id) {
+  if (!resource?.kind || !resource.id || resource.kind === "power") {
     return undefined;
   }
   const indexed = resourcesByKey.get(`${resource.kind}:${resource.id}`);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { solveLp } from "./simplex";
+import { solveLp, type LinearProgram } from "./simplex";
+import boilerBooksLp from "./__fixtures__/simplex-boiler-books.lp.json";
 
 /**
  * Unit pins for the LP engine itself, isolated from the board model. The
@@ -67,5 +68,65 @@ describe("simplex on a negative-rhs lock row", () => {
       upperBounds: [{ coefficients: new Map([[0, -1]]), rhs: 0 }],
     });
     expect(result.status).toBe("unbounded");
+  });
+});
+
+/**
+ * The biodiesel-boiler board's everything-runs stage, captured verbatim. The
+ * old walk took a run of ~1e-6 pivots in phase 1, the tableau's entries blew
+ * up, and one phase-2 pivot cancelled catastrophically: the engine reported
+ * "optimal" at objective 7.334 on a point violating ten conservation rows by
+ * up to 1.84 - which idled a boiler whose buffer held thousands of litres.
+ * The honest optimum runs the boiler and reaches 10.892.
+ */
+describe("simplex on the boiler books system", () => {
+  it("returns an optimum that satisfies every row", () => {
+    const raw = boilerBooksLp as {
+      maximize: number[];
+      equalities: Array<{ c: [number, number][]; rhs: number }>;
+      upperBounds: Array<{ c: [number, number][]; rhs: number }>;
+    };
+    const lp: LinearProgram = {
+      maximize: raw.maximize,
+      equalities: raw.equalities.map((row) => ({ coefficients: new Map(row.c), rhs: row.rhs })),
+      upperBounds: raw.upperBounds.map((row) => ({ coefficients: new Map(row.c), rhs: row.rhs })),
+    };
+    const result = solveLp(lp);
+    expect(result.status).toBe("optimal");
+    expect(result.objective).toBeCloseTo(10.892302156816369, 6);
+    for (const row of lp.equalities) {
+      let value = 0;
+      for (const [column, coefficient] of row.coefficients) {
+        value += coefficient * (result.x[column] ?? 0);
+      }
+      expect(Math.abs(value - row.rhs)).toBeLessThan(1e-6);
+    }
+    for (const row of lp.upperBounds) {
+      let value = 0;
+      for (const [column, coefficient] of row.coefficients) {
+        value += coefficient * (result.x[column] ?? 0);
+      }
+      expect(value).toBeLessThan(row.rhs + 1e-6);
+    }
+  });
+});
+
+describe("column scaling", () => {
+  it("moves a variable that is 1 in one row and 1e12 in another", () => {
+    // A port row (flow = rate x act) with act in [0, 1]: row scaling alone
+    // left the flow's entry under the pivot epsilon, and the walk handed back
+    // act = 0 as "optimal". A UIV supply on a 10-tick recipe zeroed a whole
+    // reactor that way. Every scale must reach act = 1.
+    for (const rate of [1e6, 1e9, 2.1e9, 1e12]) {
+      const lp: LinearProgram = {
+        maximize: [1, 0],
+        equalities: [{ coefficients: new Map([[1, 1], [0, -rate]]), rhs: 0 }],
+        upperBounds: [{ coefficients: new Map([[0, 1]]), rhs: 1 }],
+      };
+      const solved = solveLp(lp);
+      expect(solved.status).toBe("optimal");
+      expect(solved.x[0]).toBeCloseTo(1, 9);
+      expect(solved.x[1]! / rate).toBeCloseTo(1, 6);
+    }
   });
 });

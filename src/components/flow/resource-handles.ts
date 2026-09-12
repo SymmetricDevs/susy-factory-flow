@@ -6,6 +6,8 @@ import type { ResourceAmount, ResourceKind } from "@/lib/model/types";
  * board code keeps reaching for handles in one place.
  */
 export { canonicalizeResourceHandleId } from "@/lib/model/edge-identity";
+import { splitSectionHandleId } from "@/lib/model/shared-machine";
+export { sectionHandleId, splitSectionHandleId } from "@/lib/model/shared-machine";
 
 export type ResourceHandleSide = "input" | "output";
 
@@ -13,6 +15,8 @@ export interface ResourceHandlePayload {
   side: ResourceHandleSide;
   kind: ResourceKind;
   resourceId: string;
+  /** Which recipe of a shared machine the port belongs to; 0 for the card's own. */
+  section: number;
 }
 
 export function makeResourceHandleId(
@@ -28,10 +32,11 @@ export function parseResourceHandleId(handleId?: string | null): ResourceHandleP
     return undefined;
   }
 
-  const [side, kind, encodedResourceId] = handleId.split(":");
+  const { section, handleId: bare } = splitSectionHandleId(handleId);
+  const [side, kind, encodedResourceId] = (bare ?? "").split(":");
   if (
     (side !== "input" && side !== "output") ||
-    (kind !== "item" && kind !== "fluid") ||
+    (kind !== "item" && kind !== "fluid" && kind !== "aspect" && kind !== "power") ||
     !encodedResourceId
   ) {
     return undefined;
@@ -41,5 +46,6 @@ export function parseResourceHandleId(handleId?: string | null): ResourceHandleP
     side,
     kind,
     resourceId: decodeURIComponent(encodedResourceId),
+    section,
   };
 }

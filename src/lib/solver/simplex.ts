@@ -26,6 +26,52 @@ export interface LpSolution {
 const EPS = 1e-9;
 
 export function solveLp(lp: LinearProgram): LpSolution {
+  // A tableau walk through tiny pivots can leave float wreckage large enough
+  // to hand back an "optimal" point that violates the model's own equalities
+  // (a real board lost 1.84 units of biodiesel to one such walk). Every
+  // answer is therefore verified against the ORIGINAL rows; a corrupt one is
+  // retried once with Bland's rule from the first pivot (a different walk,
+  // same optimum), and if that also comes back corrupt the solve reports
+  // infeasible - callers already degrade gracefully on that answer, which
+  // beats standing books on flows that break conservation.
+  const first = solveLpOnce(lp, false);
+  if (first.status !== "optimal" || solutionHolds(lp, first.x)) {
+    return first;
+  }
+  const second = solveLpOnce(lp, true);
+  if (second.status === "optimal" && solutionHolds(lp, second.x)) {
+    return second;
+  }
+  return { status: "infeasible", x: [], objective: Number.NaN };
+}
+
+/** True when x satisfies every original row to a scale-relative tolerance. */
+function solutionHolds(lp: LinearProgram, x: number[]): boolean {
+  const rowHolds = (row: { coefficients: Map<number, number>; rhs: number }, eq: boolean) => {
+    let value = 0;
+    let scale = 1 + Math.abs(row.rhs);
+    for (const [c, coefficient] of row.coefficients) {
+      const term = coefficient * (x[c] ?? 0);
+      value += term;
+      scale += Math.abs(term);
+    }
+    const violation = eq ? Math.abs(value - row.rhs) : value - row.rhs;
+    return violation <= 1e-6 * scale;
+  };
+  for (const row of lp.equalities) {
+    if (!rowHolds(row, true)) {
+      return false;
+    }
+  }
+  for (const row of lp.upperBounds) {
+    if (!rowHolds(row, false)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function solveLpOnce(lp: LinearProgram, blandFromStart: boolean): LpSolution {
   const n = lp.maximize.length;
 
   // Normalize every row to rhs >= 0 so phase 1 can seed artificials.
@@ -55,6 +101,31 @@ export function solveLp(lp: LinearProgram): LpSolution {
   for (const row of lp.upperBounds) {
     const scaled = equilibrate(row.coefficients, row.rhs);
     rows.push({ coefficients: scaled.coefficients, rhs: scaled.rhs, eq: false });
+  }
+
+  // Equilibrate COLUMNS too, then the rows once more. Row scaling alone
+  // cannot fix a variable that is 1 in one row and 1e9 in another (a flow
+  // in litres per second against an act in [0, 1]): dividing the port row
+  // by 1e9 leaves the flow's entry at 1e-9, under the pivot epsilon, and
+  // the walk then "cannot move" that column and hands back a clean zero as
+  // the optimum - which is how a UIV supply once zeroed a running reactor.
+  // A column scale is a change of units on the variable: the objective is
+  // divided by it and the answer multiplied back.
+  const columnScale = new Array<number>(n).fill(1);
+  for (let c = 0; c < n; c += 1) {
+    let scale = 0;
+    for (const row of rows) {
+      scale = Math.max(scale, Math.abs(row.coefficients.get(c) ?? 0));
+    }
+    columnScale[c] = scale <= 0 || (scale > 0.5 && scale < 2) ? 1 : scale;
+  }
+  for (let r = 0; r < rows.length; r += 1) {
+    const scaled = new Map<number, number>();
+    for (const [c, v] of rows[r]!.coefficients) {
+      scaled.set(c, c < n ? v / columnScale[c]! : v);
+    }
+    const again = equilibrate(scaled, rows[r]!.rhs);
+    rows[r] = { coefficients: again.coefficients, rhs: again.rhs, eq: rows[r]!.eq };
   }
 
   const m = rows.length;
@@ -122,7 +193,7 @@ export function solveLp(lp: LinearProgram): LpSolution {
         phase1[a] = -1;
       }
     }
-    const feasible = runSimplex(tableau, basis, phase1, columns);
+    const feasible = runSimplex(tableau, basis, phase1, columns, undefined, blandFromStart);
     if (!feasible) {
       return { status: "unbounded", x: [], objective: Number.NaN };
     }
@@ -145,11 +216,17 @@ export function solveLp(lp: LinearProgram): LpSolution {
       if (basis[r]! < artificialStart) {
         continue;
       }
+      let bestCol = -1;
+      let bestMag = EPS;
       for (let c = 0; c < artificialStart; c += 1) {
-        if (Math.abs(tableau[r]![c]!) > EPS) {
-          pivot(tableau, basis, r, c, columns);
-          break;
+        const mag = Math.abs(tableau[r]![c]!);
+        if (mag > bestMag) {
+          bestMag = mag;
+          bestCol = c;
         }
+      }
+      if (bestCol >= 0) {
+        pivot(tableau, basis, r, bestCol, columns);
       }
     }
   }
@@ -157,10 +234,10 @@ export function solveLp(lp: LinearProgram): LpSolution {
   // Phase 2: the real objective, artificials pinned to zero by exclusion.
   const objective = new Array<number>(columns).fill(0);
   for (let c = 0; c < n; c += 1) {
-    objective[c] = lp.maximize[c]!;
+    objective[c] = lp.maximize[c]! / columnScale[c]!;
   }
   const banned = new Set(artificialOf.filter((a) => a >= 0));
-  const bounded = runSimplex(tableau, basis, objective, columns, banned);
+  const bounded = runSimplex(tableau, basis, objective, columns, banned, blandFromStart);
   if (!bounded) {
     return { status: "unbounded", x: [], objective: Number.NaN };
   }
@@ -168,7 +245,7 @@ export function solveLp(lp: LinearProgram): LpSolution {
   const x = new Array<number>(n).fill(0);
   for (let r = 0; r < m; r += 1) {
     if (basis[r]! < n) {
-      x[basis[r]!] = tableau[r]![columns]!;
+      x[basis[r]!] = tableau[r]![columns]! / columnScale[basis[r]!]!;
     }
   }
   let value = 0;
@@ -203,9 +280,10 @@ function runSimplex(
   objective: number[],
   columns: number,
   banned?: Set<number>,
+  blandFromStart = false,
 ): boolean {
   const m = tableau.length;
-  let blandMode = false;
+  let blandMode = blandFromStart;
   let stalled = 0;
   let previousValue = Number.NEGATIVE_INFINITY;
   // Reduced costs live in their own row, rebuilt from the basis each pivot -
@@ -250,14 +328,42 @@ function runSimplex(
     if (entering < 0) {
       return true;
     }
-    let leaving = -1;
+    // Ratio test, two passes. Pass 1 finds the minimum ratio; pass 2 picks
+    // the winner among near-ties by the LARGEST pivot element (Bland mode:
+    // the lowest basis index, which its anti-cycling proof needs). Taking the
+    // first past-EPS pivot regardless of size once let a chain of 1e-6-scale
+    // pivots inflate the tableau until a later subtraction cancelled
+    // catastrophically - the walk ended "optimal" on a point that broke the
+    // conservation rows it was solving.
     let best = Number.POSITIVE_INFINITY;
     for (let r = 0; r < m; r += 1) {
       const a = tableau[r]![entering]!;
       if (a > EPS) {
         const ratio = tableau[r]![columns]! / a;
-        if (ratio < best - EPS || (Math.abs(ratio - best) <= EPS && basis[r]! < (leaving >= 0 ? basis[leaving]! : Number.MAX_SAFE_INTEGER))) {
+        if (ratio < best) {
           best = ratio;
+        }
+      }
+    }
+    let leaving = -1;
+    if (best < Number.POSITIVE_INFINITY) {
+      const tieBand = EPS * (1 + Math.abs(best));
+      let bestPivot = 0;
+      for (let r = 0; r < m; r += 1) {
+        const a = tableau[r]![entering]!;
+        if (a <= EPS) {
+          continue;
+        }
+        const ratio = tableau[r]![columns]! / a;
+        if (ratio > best + tieBand) {
+          continue;
+        }
+        if (blandMode) {
+          if (leaving < 0 || basis[r]! < basis[leaving]!) {
+            leaving = r;
+          }
+        } else if (a > bestPivot) {
+          bestPivot = a;
           leaving = r;
         }
       }

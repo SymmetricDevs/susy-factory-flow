@@ -26,7 +26,6 @@ import {
 import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
 import { expandPocketSelection } from "@/lib/model/pocket-connections";
 import { getStorageRoles } from "@/lib/model/storage-role";
-import { getSetupRules } from "@/lib/model/setup-rules";
 import { getCustomRateDial, isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { isTrashRecipe } from "@/lib/model/trash";
 import { getMachineParallelMultiplier } from "@/lib/solver/machine-effects";
@@ -108,15 +107,11 @@ export function buildBoardDump({ project, result, selectedIds }: BoardDumpOption
   };
   dropEmpty(dump);
 
-  const rules = getSetupRules(project);
-  if (rules.freeInputs || rules.freeOutputs) {
-    dump.setupRules = [
-      rules.freeInputs ? "free inputs: any input short of stock is topped up" : undefined,
-      rules.freeOutputs ? "free outputs: any surplus leaves the setup instead of clogging" : undefined,
-    ]
-      .filter(Boolean)
-      .join("; ");
-  }
+  dump.mode = project.poolMode
+    ? "pool: no wires, every resource shared, imports worked out"
+    : project.solveMode
+      ? "solve: typed amounts, machine counts solved"
+      : "build: machine counts and wires are the player's";
   if (result) {
     dump.power = dropEmpty({
       euPerTickWhenEverythingRuns: round(scopeEuT(result, nodes, false)),

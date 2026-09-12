@@ -65,6 +65,7 @@ const RATE_UNITS: Array<{ id: RateUnit; label: string }> = [
   { id: "second", label: "/s" },
   { id: "minute", label: "/min" },
   { id: "hour", label: "/hr" },
+  { id: "eu", label: "EU/Item" },
 ];
 
 /** The checkerboard every image editor uses for "nothing here". */
@@ -401,7 +402,7 @@ export function ExportImageDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center bg-neutral-950/50 p-4">
-      <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-y-auto rounded border border-line-strong bg-surface p-4 shadow-xl">
+      <div className="flex max-h-[calc(94*var(--ui-vh))] w-full max-w-5xl flex-col overflow-y-auto rounded border border-line-strong bg-surface p-4 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <ImageDown className="h-4 w-4" /> Export an image
@@ -421,7 +422,7 @@ export function ExportImageDialog({ onClose }: { onClose: () => void }) {
             player and what their export looks like. */}
         <div
           ref={previewShellRef}
-          className="relative grid h-[52vh] place-items-center overflow-hidden rounded border border-line bg-surface-sunken"
+          className="relative grid h-[calc(52*var(--ui-vh))] place-items-center overflow-hidden rounded border border-line bg-surface-sunken"
         >
           <div>
             {previewUrl && capture && previewScale > 0 ? (

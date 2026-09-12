@@ -59,8 +59,8 @@ Next.js App Router + Tailwind + Zustand. The two big surfaces:
 - **Recipe finder** (`RecipeBrowser.tsx`) — NEI-style search, category rail,
   machine strips, paginated API-backed browsing.
 - **Flow board** (`components/flow/`) — React Flow canvas with custom node
-  types (recipe, storage, annotation), the machine picker (tab strip + glance
-  bar + compare table in `MachinePicker.tsx`), deterministic orthogonal edge
+  types (recipe, storage, annotation), the machine picker (the chevron menu
+  under the name bar, `MachineMenu` in `MachinePicker.tsx`), deterministic orthogonal edge
   routing with obstacle avoidance, edge labels, and the paint/annotation tools.
 
 State: `store/factory-store.ts` owns the project graph, solver results, and
@@ -151,8 +151,8 @@ is no snap toggle any more.
 2. **Card sizes are whole cells.** Recipe cards are a fixed 360 wide. Drawers
    and tanks are 140×160, trash cans 120×140.
 3. **Port rows are the vertical unit.** A port row is 40px (two cells) with no
-   gaps between rows, and the head above the rails is a whole number of 40s
-   (one title row, plus one per wrapped row of the machine tab strip). Port
+   gaps between rows, and the head above the rails is one 40px title row
+   (the machine tab strip that used to add rows above it is gone). Port
    centres therefore land on grid lines at `head + 20 + 40i`, which is what
    makes slot endpoints grid-aligned.
 4. **The recipe card's frame is an inset shadow, not a border.** A real border
@@ -185,6 +185,33 @@ obstacle), boards past `LIVE_DRAG_ROUTE_EDGE_LIMIT` freeze outright, and
 each solve is timed through to paint — one over `LIVE_DRAG_BUDGET_MS`
 freezes later drags until the board shrinks well below the size that
 lagged. Frozen means what it always did: cached routes until the drop.
+
+The solve itself has three things keeping it cheap on a big board, all in
+`grid-edge-router.ts`: lane occupancy is keyed by packed integers, not
+strings (a string per cell per ask was most of the cost of a 150-wire
+board); every RUN between two neighbouring window vertices is priced once
+per attempt (blocked, or distance x lane factor x frame penalty) and every
+leg, direction and revisit reads it back; and the A* pop cap scales with
+the window (`MIN_ASTAR_POPS` or two pops per state, whichever is larger).
+The old flat 40k cap was smaller than a busy board's window, so long wires
+between boards failed on size alone, grew the window, failed again, and
+were drawn as L's through cards after a quarter second each. A wire whose
+end is walled in (a drawer packed against its neighbours) is found by a
+cost-free flood before the A* spends anything, and `SEALED` skips the
+window growth, because growth adds lines only outside the current window.
+
+Past `ASYNC_ROUTE_EDGE_LIMIT` wires the solve leaves the main thread
+(`grid-route-solve.ts`, `grid-route.worker.ts`), the same shape as the LP
+worker in `solve-books.ts`: the render keeps serving the routes already
+installed (`gridSolveSignature` does not move until the answer lands),
+`installSolvedRoutes` parks the result and re-issues the edges, and the
+route morph glides them over. One job in flight, only the newest waiting
+job kept, and a sequence number per request so a late answer never lands
+over a fresher one. Endpoints ride as one Float64Array because a request
+carries a card's whole perimeter as candidate docks. Small boards still
+solve synchronously in render so their wires never lag a frame behind the
+held card; the routing invariant is untouched because the worker runs the
+same pure function on the same flow-space inputs.
 
 ### Rules of thumb for new board code
 
@@ -226,6 +253,10 @@ found every issue so far:
   systemd unit `gtnh-flow.service`, releases under `/opt/releases/` with a
   `/opt/gtnh-flow` symlink; `/opt/deploy.sh` clones `main`, builds beside the
   live app, swaps the symlink (≈5s restart + ~60s prewarm).
+- Shutdown is bounded by `TimeoutStopSec=10s` in
+  `/etc/systemd/system/gtnh-flow.service.d/shutdown.conf`. The old 90-second
+  default let a stuck Next.js shutdown cause Cloudflare host errors during
+  the September 11 release. Dataset prewarming still runs after startup.
 - Datasets are runtime files in `/opt/shared/gtnh-datasets`, symlinked into
   each release after build; they are uploaded separately from code deploys.
 - Community hub (accounts, shared plans, votes) uses Supabase via

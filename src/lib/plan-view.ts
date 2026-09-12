@@ -33,11 +33,8 @@ export function capturePlanView(): PlanViewState {
     canvasTheme: board.canvasTheme,
     // No `lineHeatMode` any more: line colour rides the status glance mode,
     // which the snapshot already carries.
-    lineThicknessMode: board.lineThicknessMode,
-    freeDockMode: board.freeDockMode,
-    lineLabelsMode: board.lineLabelsMode,
+    fixedEdgeWidth: board.fixedEdgeWidth,
     linePulseMode: board.linePulseMode,
-    calmMode: board.calmMode,
     // The smart view (bottom-right tray) is deliberately NOT captured: it is
     // a personal reading of the board, not part of its dress, and a saved
     // setup always opens on the default identity view.
@@ -116,6 +113,7 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   const flag = (value: boolean | undefined) => (typeof value === "boolean" ? { value } : undefined);
   const boardPatch: Parameters<typeof writeBoardView>[0] = {};
 
+  if (typeof view.fixedEdgeWidth === "boolean") boardPatch.fixedEdgeWidth = view.fixedEdgeWidth;
   if (view.canvasPattern && CANVAS_PATTERNS.includes(view.canvasPattern as CanvasPattern)) {
     boardPatch.canvasPattern = view.canvasPattern as CanvasPattern;
   }
@@ -125,19 +123,14 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   // `glanceMode` from an older plan is skipped for the same reason the reset
   // above exists; `lineHeatMode` is deliberately NOT applied either: line
   // colour rides the status glance mode now, and the old flag would arrive
-  // with no control that turns it off.
-  for (const key of [
-    "lineThicknessMode",
-    "freeDockMode",
-    "lineLabelsMode",
-    "linePulseMode",
-    "calmMode",
-  ] as const) {
-    const set = flag(view[key]);
-    if (set) {
-      boardPatch[key] = set.value;
-    }
-  }
+  // with no control that turns it off. `linePulseMode` is skipped since the
+  // dashes were retired (board-view.ts): a plan saved with them on must not
+  // switch on a layer that no longer exists.
+  // `lineLabelsMode` is not applied either: the rate pills on wires are
+  // gone (2026-09-08), so a plan saved with them on changes nothing. Nor is
+  // `calmMode`: the board's switch for it went the same day (it is the
+  // export dialog's "presentation" tick now), so a plan saved with it on
+  // would leave a viewer in softened colours with nothing to turn them off.
   if (Object.keys(boardPatch).length > 0) {
     writeBoardView(boardPatch);
   }

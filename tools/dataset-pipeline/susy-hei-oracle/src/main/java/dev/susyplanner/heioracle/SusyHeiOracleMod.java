@@ -39,7 +39,18 @@ public final class SusyHeiOracleMod {
             Class<?> handlerClass = Class.forName("dev.susyplanner.heioracle.ClientAutorunHandler");
             Object handler = handlerClass.getConstructor().newInstance();
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(handler);
-            LOG.info("SUSY HEI oracle client autorun handler registered.");
+            LOG.info(
+                "SUSY HEI oracle run {} client autorun handler registered.",
+                System.getProperty("susy.oracle.runId", "unknown")
+            );
+            LOG.info(
+                "SUSY HEI oracle autorun settings: registryTimeout={}s, clientReadyTimeout={}s, worldTimeout={}s, skipWorld={}, skipIcons={}",
+                System.getProperty("susy.oracle.registryTimeoutSeconds", "45"),
+                System.getProperty("susy.oracle.clientReadyTimeoutSeconds", "180"),
+                System.getProperty("susy.oracle.worldTimeoutSeconds", "120"),
+                System.getProperty("susy.oracle.skipWorld", "false"),
+                System.getProperty("susy.oracle.skipIcons", "false")
+            );
         } catch (Throwable t) {
             LOG.error("Could not register SUSY HEI oracle client autorun handler.", t);
             FMLCommonHandler.instance().exitJava(2, false);

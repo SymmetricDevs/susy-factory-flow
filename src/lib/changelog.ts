@@ -5,12 +5,10 @@
  * THEIR board, never how it was built. Newest first. ONE entry per release,
  * where a release is a deploy to the live site, not a commit (see version.ts).
  *
- * BE BRIEF. Every note is ONE short sentence naming what changed, and four
- * notes is the ceiling. No second sentence explaining what it used to do, no
- * reasoning, no reassurance: the reader either clicked the chip out of mild
- * curiosity or had the popup put in front of them uninvited, and neither of
- * them asked for an essay. If a change cannot be said in a line, it is
- * probably two changes or one nobody needs told about.
+ * Default to a short headline and at most four one-sentence notes. Release
+ * 3.1.4 uses eight short bullets to cover the machine audit; its full
+ * engineering explanation lives behind a link after Jack found it too verbose
+ * in the dialog. Keep the in-app notes scannable.
  *
  * The LIST, though, runs all the way back, and that is deliberate. The dialog
  * opens on the releases a given reader has not seen - usually one to four - and
@@ -19,17 +17,12 @@
  * prune it back to a handful again; that only moved the wall from the archive
  * into the popup for anyone returning after a long break.
  *
- * An entry can also carry ACTIONS. A release that adds something you have to
- * DO to understand - a tour, a demo board - should offer it as a button rather
- * than describing it and hoping, because the reader is already right here with
- * the app open.
+ * An entry can also carry ACTIONS: links for anything that lives outside the
+ * app, offered as a button because the reader is already right here.
  */
 export interface ChangelogAction {
   label: string;
-  /** Starts this tour lesson and closes the dialog. */
-  lessonId?: string;
-  /** Or opens a link, for anything that lives outside the app. */
-  href?: string;
+  href: string;
 }
 
 export interface ChangelogEntry {
@@ -48,30 +41,576 @@ export interface ChangelogEntry {
    * are one block instead of a sentence and a button that got separated.
    */
   warning?: string;
-  /**
-   * Show this release to EVERY browser once, whatever it has seen before.
-   *
-   * The ordinary rule needs a version stamp to compare against, and a browser
-   * with no stamp is treated as a first visit and told nothing. That is right
-   * for somebody genuinely new, and it was wrong for the release that
-   * introduced the stamp: nobody had one yet, so a player who had used the
-   * planner for months looked exactly like a stranger and the one release the
-   * whole feature exists for was the one release nobody was shown.
-   *
-   * So this flag is not "important" - `warning` already says that. It is
-   * specifically "do not trust the stamp for this one". Spend it on a release
-   * that changes what the board MEANS, and expect to spend it roughly never;
-   * once a browser holds a stamp the ordinary path is enough.
-   *
-   * Tracked separately from the stamp, so it fires exactly once per browser
-   * and cannot repeat.
-   */
-  showToEveryone?: boolean;
   /** Offered as buttons under the notes. */
   actions?: ChangelogAction[];
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.1.7",
+    date: "2026-09-11",
+    headline: "Whole item icons and consistent resource shadows",
+    notes: [
+      "Item icons keep their zoom while fitting the whole item inside its slot, with matching shadows in the item panel and input/output rows.",
+      "Fluid icons share the same shadow and have subtly rounded corners, including textured fluids and plain colour swatches.",
+      "Verified icon sizing and shadows across Chrome and Firefox, including interface scaling and board zoom.",
+      "Dangote Distillus now has adjustable power: Distillery mode scales parallels with voltage assuming 12 layers, while Tower mode keeps 12 parallels and 3× speed.",
+    ],
+  },
+  {
+    version: "3.1.6",
+    date: "2026-09-11",
+    headline: "Hatch supplies, fusion reactors and power display units",
+    notes: [
+      "Show power as *EU/t or amps at any voltage tier* using the selector beside the rate unit; your choice is remembered, resource rows update immediately, and readings below 0.01 show *<0.01* while zero stays zero.",
+      "Corrected energy-machine unlock labels: *Compact Fusion Reactor LuV, Eye of Harmony UMV, Dyson Swarm UIV, Large Naquadah Reactor ZPM, and Antimatter Forge UIV*.",
+      "*Fusion reactors keep their correct controllers, overclocks, and compact parallels.* Reactor mark fixes operating power; recipe startup requirements determine which controllers are available.",
+      "The board toolbar shrinks in stages: *mode labels, mode icons, then folded tools*, accounting for Firefox text size without squeezing buttons together.",
+      "*Water and air hatch toggles* on eligible multiblock input rows fully supply the fluid when on; switch off to restore normal supply. Hatch counts and flow limits are assumed sufficient.",
+    ],
+  },
+  {
+    version: "3.1.4",
+    date: "2026-09-11",
+    headline: "Machine accuracy, wiring, and clearer totals",
+    notes: [
+      "*Wiring and buffers preserve recipe amounts.* Fixes EBF input ratios and duplicate Auto Workbench ingredients; affected wired choices repair on load.",
+      "*Neutron Activator:* type any pipe height from four upward, with corrected whole-tick and sub-tick throughput.",
+      "*Utupu-Tanuri:* Vacuum Furnace mode now gets the correct coils, heat requirements, speed, energy discounts and parallels.",
+      "*HILE:* one real laser-source selector controls parallel capacity and voltage limits; operating power remains separate.",
+      "*PrAss:* both modes gain amps and machine-casing controls, with correct normal-mode parallels and precise-mode recipe requirements.",
+      "*LFTR Fuel 3 now produces 1A UV.* Brick Coke Ovens no longer receive free overclocks from old voltage settings.",
+      "*Machine list:* one row per card, accurate fractional Solve/Pool counts, and corrected peak/average power for shared recipes.",
+      "*Visual corrections:* fixed machine structure pictures and consistent input/output colors across drawers, targets and totals.",
+    ],
+    actions: [{
+      label: "Full engineering notes",
+      href: "https://github.com/jackwrichards/gtnh-factory-flow/blob/main/docs/releases/3.1.4.md",
+    }],
+  },
+  {
+    version: "3.1.2",
+    date: "2026-09-11",
+    headline: "Clearer machine controls",
+    notes: [
+      "Machine cards gain *touch power controls*, clearer recipe spacing and circuit icons, and consistent icon sizes in Firefox and Chrome.",
+      "Older setups keep their *original operating voltage and amps* when first converted to the new power controls.",
+      "Net resources return to *the correct side*: deficits under Inputs and surpluses under Outputs.",
+      "Private designs retry account saves after interruptions and show *whether the account has a copy*.",
+    ],
+  },
+  {
+    version: "3.1.1",
+    date: "2026-09-11",
+    headline: "A more compact workspace",
+    notes: [
+      "Public setups open as *view-only tabs*, with private copies, display settings and checklists available.",
+      "A shared header holds *compressible tabs*, with plan details above the canvas and quicker tab closing.",
+      "The compact inspector adds *Raw/Net and Peak/Average switches*, multiblock supply details and editable product targets.",
+      "Power popups *open below machines* when space above is limited, and selection uses clear blue outlines.",
+    ],
+  },
+  {
+    version: "3.1.0",
+    date: "2026-09-09",
+    headline: "Power by amps and hatch voltage",
+    notes: [
+      "Set multiblock *amps and voltage* or raw EU/t, with Shift-scroll snapping amps through 1, 4, 16, 64…",
+      "Power tooltips show *output improvements, actual draw and average consumption*, with controls alongside.",
+      "Industrial Farms offer *Full farms* planting, with manual seed counts still available.",
+      "View options include *Fixed edge width* to keep wires the same thickness at every rate.",
+    ],
+  },
+  {
+    version: "3.0.3",
+    date: "2026-09-09",
+    headline: "Narrower machine cards",
+    notes: [
+      "Machine cards are *another grid space narrower*, three in all, so more of a plan fits on the screen.",
+      "Item names, rates and bars are a *little smaller*, and more long names fit on their two lines.",
+      "Four machines were wearing *the wrong picture*: both coke ovens, the electrolyzers and the thorium reactor.",
+      "The board's *help sheet* spreads across the screen again instead of reading as one long list.",
+    ],
+  },
+  {
+    version: "3.0.2",
+    date: "2026-09-09",
+    headline: "Boards stuck in presentation colours are fixed",
+    notes: [
+      "A board left in *softened presentation colours* comes back to its normal status colours on its next load.",
+      "Exporting an image can no longer leave your board in those colours.",
+    ],
+  },
+  {
+    version: "3.0.1",
+    date: "2026-09-09",
+    headline: "Narrower cards, and What's new is back",
+    notes: [
+      "Machine cards are *two grid spaces narrower*, so more of a plan fits on the screen.",
+      "A long item name now *wraps onto two lines* instead of ending in three dots.",
+      "The machine picture sits on a *square window* between the two rails.",
+      "The *version chip* opens these notes again, with the full history behind it.",
+    ],
+  },
+  {
+    version: "3.0.0",
+    date: "2026-09-05",
+    headline: "Three modes: Build, Solve, Pool",
+    notes: [
+      "Build, Solve and Pool share one switch, and several recipes can share one machine card.",
+      "Checklist mode dims completed machines, drawers and wires, with saved progress and matching checks in the Machines list.",
+      "Right click anywhere: add a product drawer, clone or delete a card, or cut a drawer into a wire.",
+      "Larger text, smoother panning, cleaner arrangements and manual recalculation make a large plan easier to read and work on.",
+    ],
+  },
+  {
+    version: "2.57.0",
+    date: "2026-09-05",
+    headline: "Free inputs stay off the wires",
+    notes: [
+      "The Rock Breaker's \"IT'S FREE! Place Lava on Side\" slot is drawn greyed on the card and needs no wire, drawer or rate.",
+    ],
+  },
+  {
+    version: "2.56.3",
+    date: "2026-09-05",
+    headline: "Switching units no longer freezes a big board",
+    notes: [
+      "The rate unit and the power unit keys switch instantly on any board size.",
+      "A machine held back by one of its outputs now reads clogged and names the machine that cannot take more.",
+    ],
+  },
+  {
+    version: "2.56.2",
+    date: "2026-09-05",
+    headline: "Large Naquadah Reactor fuel amounts match the game",
+    notes: [
+      "An LNR card now asks for the real litres of fuel and depleted fuel per second, including every booster.",
+    ],
+  },
+  {
+    version: "2.56.1",
+    date: "2026-09-04",
+    headline: "The library on a phone",
+    notes: [
+      "The library's sections are one dropdown on a phone, and the filters sit behind one key.",
+      "A finger scrolls the library; a held press on a tile opens its menu.",
+      "The focus page stacks on a phone, with Back above the picture and Open across the width.",
+    ],
+  },
+  {
+    version: "2.56.0",
+    date: "2026-09-04",
+    headline: "The library: every design and every shared setup in one place",
+    notes: [
+      "The square at the head of the tab strip opens the library: your designs in collections and Favorites, searched, filtered and sorted, and kept in step across your devices when you sign in.",
+      "A posted design is its post: every save updates it, and opening someone else's setup makes a copy of your own.",
+      "Public setups have comments, a Saved shelf, sorts by activity, and filters by EU/t and by what a setup makes or takes.",
+      "Imported plans find each card's exact recipe again, big plans no longer freeze on every edit, and one broken design no longer hides the rest.",
+    ],
+  },
+  {
+    version: "2.55.0",
+    date: "2026-09-03",
+    headline: "The recipe search is grouped by machine",
+    notes: [
+      "Results sit under one title per machine; click a title to fold that machine away and click again to bring it back.",
+      "Cards are darker with plain item rows, no hover tooltips, and the machine name only in the title above.",
+      "Drag any item row from a result down into Takes or Makes to add it to the search.",
+      "The power picker's close button stays on screen on a phone.",
+    ],
+  },
+  {
+    version: "2.54.1",
+    date: "2026-09-02",
+    headline: "An unfinished machine no longer sets off clog lock and dead loop alarms",
+    notes: [
+      "A card stopped by an unwired slot or missing power is the only card that says so; its neighbours point at it instead of raising their own alarm.",
+      "A machine whose only taker has stopped now reads that it is waiting on that machine, not that it needs more machines or a drawer.",
+      "A machine fed by a stopped machine reads starved and names it.",
+    ],
+  },
+  {
+    version: "2.54.0",
+    date: "2026-09-02",
+    headline: "The recipe search has back and forward",
+    notes: [
+      "Back and forward buttons step through the items you clicked: Backspace or Alt+Left goes back, Alt+Right forward.",
+      "Click a result's machine tile to hide that machine, or right click the card for hide, only and add.",
+      "The tier filter now hides generators above the chosen tier too.",
+      "The search has quiet sounds of its own, and names on a phone wrap instead of being cut short.",
+    ],
+  },
+  {
+    version: "2.53.2",
+    date: "2026-09-02",
+    headline: "Crop Managers count real layers",
+    notes: [
+      "A Crop Manager holds three layers of crop sticks in its reach, not five: an LV one works 362 sticks, an MV one 674.",
+      "A crop that needs a block under its soil fits two layers, so its cards build more managers.",
+      "The machine's own block is no longer counted as a crop stick.",
+    ],
+  },
+  {
+    version: "2.53.1",
+    date: "2026-09-02",
+    headline: "One vote per person",
+    notes: [
+      "A setup can no longer be upvoted again after your connection changes address.",
+      "Signed in, your vote follows your account between browsers.",
+      "The Welcome tab's design and setup tiles show bigger, bare icons.",
+    ],
+  },
+  {
+    version: "2.53.0",
+    date: "2026-09-02",
+    headline: "A new Welcome tab, and help that covers the whole board",
+    notes: [
+      "The Welcome tab is rebuilt: your designs, the community's newest setups and what changed.",
+      "The ? corner's help now covers cards, drawers, board windows, the search and every key.",
+      "The guided tours are gone. A new tutorial is on the way.",
+      "The compass in the header brings the Welcome tab back once you close it.",
+    ],
+  },
+  {
+    version: "2.52.0",
+    date: "2026-09-02",
+    headline: "The Vacuum Reactor takes any fuel rod and any coolant cell",
+    notes: [
+      "Pick from every fuel rod in every size, The Core included, and every coolant cell.",
+      "MOX-type rods scale with a core temperature setting, each by its own bonus.",
+      "Hot coolant cells leave the reactor as a port: wire a Vacuum Freezer to send them back cold.",
+      "A coolant cell too small for the heat is called out before it bursts.",
+    ],
+  },
+  {
+    version: "2.51.0",
+    date: "2026-09-02",
+    headline: "See what each item costs in EU, and big boards stop freezing",
+    notes: [
+      "The rate key and the recipe search have a gold EU setting: every output reads the EU it cost to make, per item or per litre.",
+      "In that setting the Outputs list reads what the whole board spent per unit of each product.",
+      "Wires on a large board reroute many times faster and in the background, so dragging never waits for them.",
+      "Hold Shift or the Windows key to pause the moving wires for a screenshot.",
+    ],
+  },
+  {
+    version: "2.50.1",
+    date: "2026-09-01",
+    headline: "The board toolbars stop crossing on narrow boards",
+    notes: [
+      "When the board is too narrow for both toolbar rows, the paint tools fold into one brush button.",
+      "Narrower still, the build tools fold into a hammer button too.",
+      "On the narrowest boards the brush button holds the whole right side.",
+      "Each set unfolds on the line below, so nothing sits on top of anything else.",
+    ],
+  },
+  {
+    version: "2.50.0",
+    date: "2026-09-01",
+    headline: "Farm numbers, checked against the community calculator",
+    notes: [
+      "A sprout button on the toolbar drops a crop farm card.",
+      "A Formulas strip on crop cards derives every number down to the output per second.",
+      "A farm bills its full power even when its last seed bed is not full.",
+      "The biome option knows partial humidity, and a Fertilizer knob says whether the farm is fed.",
+    ],
+  },
+  {
+    version: "2.49.0",
+    date: "2026-09-01",
+    headline: "The Industrial Farm learns its real rules",
+    notes: [
+      "A farm only fits as many upgrade units as its seed bed tier allows, and the card will not let you add more.",
+      "Crop cards show their harvester's tier top right, its power draw at the bottom, and the farm's own structure in a picture window.",
+      "The crop picker is an icon grid sorted by tier, and farm-only crops gray out where a Crop Manager would get nothing.",
+      "The By Hand option is gone: every crop card runs on a Crop Manager or an Industrial Farm.",
+    ],
+  },
+  {
+    version: "2.48.0",
+    date: "2026-09-01",
+    headline: "Eight more ways to make power",
+    notes: [
+      "The Vacuum Reactor joins the reactors, with the wiki's eight tested rod designs.",
+      "Every small boiler makes steam now: coal, lava, solar and the GT++ Advanced Boilers.",
+      "The RTG turns radioisotope pellets into steady EU for days at a time.",
+      "The Dyson Swarm beams down 10M EU/t per module at the endgame.",
+    ],
+  },
+  {
+    version: "2.47.0",
+    date: "2026-08-31",
+    headline: "The item list learns what players build",
+    notes: [
+      "Most popular is the new default sort, ranked from the community's shared setups.",
+      "Results are one dense grid of named tiles with bigger icons, in place of the list and grid views.",
+      "Tiles lift on hover like a hand of cards.",
+      "The recent shelf, filters and pager slim down so more items fit on screen.",
+    ],
+  },
+  {
+    version: "2.46.1",
+    date: "2026-08-31",
+    headline: "Every card follows the power unit",
+    notes: [
+      "The power figures on machine cards convert with the amps dial, like the ledger and the wires.",
+    ],
+  },
+  {
+    version: "2.46.0",
+    date: "2026-08-31",
+    headline: "Tier chips click, type and sing",
+    notes: [
+      "The hatch chip edits on click: type any hatch count, and the wheel walks every count then the exotic hatches.",
+      "The tier chip cycles on click and wheel, with no dropdown to open.",
+      "Every voltage tier has its own note: picking a tier sounds the same climb anywhere on the board.",
+      "Generator tier chips stop at the ends instead of looping around.",
+    ],
+  },
+  {
+    version: "2.45.0",
+    date: "2026-08-31",
+    headline: "Power is a resource now",
+    notes: [
+      "Generators have a real EU port: wire it to a drawer on a gold lightning line, with its own connect and cut sounds.",
+      "An EU product drawer takes an amount in solve mode, and the generators and their fuel solve to meet it.",
+      "A new key by the rate unit shows all power as amps of a tier you pick, in the game's tier colors.",
+      "EU left the inputs and outputs lists: the machines panel is its ledger.",
+    ],
+  },
+  {
+    version: "2.44.0",
+    date: "2026-08-31",
+    headline: "Solve mode settles in",
+    notes: [
+      "The mode switch has its own sound, and the board wears a cyan glow while solve mode is on.",
+      "With nothing asked, nothing runs: a notice counts the products missing numbers, with a Show me button.",
+      "Machines the amounts do not need read zero but keep their ports and wires.",
+      "No more dead loop or clog warnings in solve mode: a zero machine there is just not needed.",
+    ],
+  },
+  {
+    version: "2.43.0",
+    date: "2026-08-31",
+    headline: "Pin a machine count in solve mode",
+    notes: [
+      "Click the Machines figure on a card to pin it: exactly that many run, and the rest of the line solves around them.",
+      "A pin works with no product amounts at all, and the pinned count shows in gold.",
+      "Pins that cannot run together raise a notice, and an amount a pin cannot cover marks itself in red.",
+    ],
+  },
+  {
+    version: "2.42.1",
+    date: "2026-08-31",
+    headline: "Typing a product amount feels right",
+    notes: [
+      "The amount rests as a plain rate line on the drawer; the pencil marks it, click to edit.",
+      "Shorthand like 2.5k or 1m works and reads back the way you typed it.",
+      "The amount shows in the board's rate unit and converts when you switch it.",
+    ],
+  },
+  {
+    version: "2.42.0",
+    date: "2026-08-31",
+    headline: "Solve mode: type what you want, get machine counts",
+    notes: [
+      "A new switch by the setup rules turns the question around: type an amount on a product drawer and every card shows how many machines that takes.",
+      "Amounts are minimums, so recipes that make two things at once still solve.",
+      "An amount nothing on the board can make is marked in red on its drawer.",
+      "The mode travels with the plan, so a shared setup opens the way it was saved.",
+    ],
+  },
+  {
+    version: "2.41.4",
+    date: "2026-08-31",
+    headline: "Neutralization Engine fixes",
+    notes: [
+      "The acid rate is set in L per tick, as in the game, and the EU output is corrected.",
+      "The card shows average residue per tick and the margin at a full tank.",
+      "The Neutralization Engine has its structure picture.",
+    ],
+  },
+  {
+    version: "2.41.3",
+    date: "2026-08-31",
+    headline: "Copied generators keep their own settings",
+    notes: [
+      "Changing a setting on a copied generator no longer changes the original too.",
+    ],
+  },
+  {
+    version: "2.41.2",
+    date: "2026-08-31",
+    headline: "A solver fix",
+    notes: [
+      "A rare bug could leave a machine idle beside a full buffer. Fixed.",
+      "A generator card's EU figure now follows the peak and average switch.",
+    ],
+  },
+  {
+    version: "2.41.1",
+    date: "2026-08-31",
+    headline: "More generators, and a little polish",
+    notes: [
+      "New machines: Acid Generator, Geothermal Engine, Magic Energy Converter, Large Neutralization Engine.",
+      "The XL Turbo HP and SC Steam Turbines are their own machines now.",
+      "Large boiler tiers corrected to MV, HV, EV and IV.",
+      "The board edges shade gently, and the toolbars cast the cards' shadow.",
+    ],
+  },
+  {
+    version: "2.41.0",
+    date: "2026-08-30",
+    headline: "Power generation",
+    notes: [
+      "The POWER button places generators: turbines, boilers, engines, reactors, fusion.",
+      "Generators use fuel from your wires and follow their in-game settings.",
+      "The machine list totals power used, made and net.",
+      "Searching an item shows the generators that use it.",
+    ],
+  },
+  {
+    version: "2.40.0",
+    date: "2026-08-29",
+    headline: "Auto-arrange leaves your boards alone",
+    notes: [
+      "Boards you made keep their contents: auto-arrange only moves the board itself.",
+      "Loose cards are still grouped into new boards.",
+      "The arrange button now opens a small sheet with one setting: let it rearrange inside your boards too.",
+    ],
+  },
+  {
+    version: "2.39.1",
+    date: "2026-08-29",
+    headline: "The Naquadah Fuel Refinery gets its real coils",
+    notes: [
+      "Naquadah Fuel Refinery cards now offer field restriction coils instead of heating coils.",
+      "Each recipe starts at its own minimum coil tier.",
+      "Every coil tier adds 4 parallels, and each tier above the recipe's minimum is a perfect overclock.",
+    ],
+  },
+  {
+    version: "2.39.0",
+    date: "2026-08-29",
+    headline: "Watch your factory build itself",
+    notes: [
+      "A new clapperboard button by the view options replays your board being built, machine by machine, wires drawing themselves in.",
+      "Two shows to pick from: one slow shot from afar, or a camera that follows each machine up close.",
+      "Press Esc or click the board to stop it.",
+    ],
+  },
+  {
+    version: "2.38.1",
+    date: "2026-08-28",
+    headline: "Quiet loading",
+    notes: ["Opening the planner, switching tabs or loading a setup no longer makes a sound."],
+  },
+  {
+    version: "2.38.0",
+    date: "2026-08-28",
+    headline: "The board makes sound",
+    notes: [
+      "Quiet sounds mark placing, wiring, deleting and knob turns, with a volume slider in Settings and a mute button by the view options.",
+      "While you drag a wire, the line shows what letting go will do: green to connect, a ghost drawer for the void, red when nothing can happen.",
+      "Drawing a wire that already exists flashes it red first: letting go deletes it.",
+      "New cards no longer flash white when they land.",
+    ],
+  },
+  {
+    version: "2.37.0",
+    date: "2026-08-27",
+    headline: "A tidier board toolbar",
+    notes: [
+      "The view switches now live in one menu, each with its name and what it does.",
+      "The draw tools share one button that remembers your last pick.",
+      "The rate unit is one key that opens a list.",
+      "Setup rules and auto-arrange moved to the top right, and every button got a little smaller.",
+    ],
+  },
+  {
+    version: "2.36.0",
+    date: "2026-08-27",
+    headline: "Tabs you can rearrange",
+    notes: [
+      "Drag a tab left or right to reorder your designs, and the order sticks.",
+      "A plan with a saved icon shows it on its tab.",
+      "The mouse wheel scrolls the tab strip, with a little bounce at the ends.",
+      "Long tab strips fade out at the edges instead of showing arrow buttons.",
+    ],
+  },
+  {
+    version: "2.35.3",
+    date: "2026-08-26",
+    headline: "The thinking spinner moves out of the way",
+    notes: [
+      "The loading message sits at the top of the board instead of over your cards.",
+      "The tab shows a small spinner while its numbers are still computing.",
+    ],
+  },
+  {
+    version: "2.35.2",
+    date: "2026-08-26",
+    headline: "The numbers come back in about a second",
+    notes: [
+      "Boards with loops and returned byproducts calculate up to 24 times faster.",
+      "The long spinner on big plans is mostly gone: most boards finish in about a second.",
+    ],
+  },
+  {
+    version: "2.35.1",
+    date: "2026-08-26",
+    headline: "Slow boards go to the background too",
+    notes: [
+      "A board whose numbers are hard to work out no longer delays editing, whatever its size.",
+      "Plans with cell-to-fluid wires load without the long pause.",
+    ],
+  },
+  {
+    version: "2.35.0",
+    date: "2026-08-26",
+    headline: "Big boards stop freezing the browser",
+    notes: [
+      "Big plans work out their numbers in the background, with a spinner while they think.",
+      "Switching between tabs is instant, even with huge plans open.",
+    ],
+  },
+  {
+    version: "2.34.1",
+    date: "2026-08-26",
+    headline: "The site stops slowing down over the day",
+    notes: [
+      "Fixed a server memory problem that made pages take up to 30 seconds and the board feel sluggish.",
+      "Opening a shared plan no longer triggers the slowdown.",
+    ],
+  },
+  {
+    version: "2.34.0",
+    date: "2026-08-25",
+    headline: "The Welcome tab stays out of your way",
+    notes: [
+      "The resource column goes blank while the Welcome tab is up and comes back when you leave.",
+      "Adding a recipe from the Welcome tab opens a fresh design tab and places it there.",
+      "When every machine chip is unselected, the recipe search says so and offers to select them all.",
+    ],
+  },
+  {
+    version: "2.33.0",
+    date: "2026-08-25",
+    headline: "Crop machines get their faces back",
+    notes: [
+      "The Crop Manager and Industrial Farm tabs on crop cards show the machine's icon instead of a letter.",
+    ],
+  },
+  {
+    version: "2.32.0",
+    date: "2026-08-25",
+    headline: "Bee cards learn the speed gene",
+    notes: [
+      "Every bee housing has a Speed Gene setting, from Slowest to Blinding.",
+      "Output scales the way the game scales it, so Blinding bees make about 29% more than Normal.",
+    ],
+  },
   {
     version: "2.31.0",
     date: "2026-08-23",
@@ -245,7 +784,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Board help fits small windows, opens on a click, and names today's buttons.",
       "On a phone the help teaches touch moves instead of mouse clicks.",
     ],
-    actions: [{ label: "Take the tour", lessonId: "read-the-board" }],
   },
   {
     version: "2.20.2",
@@ -516,7 +1054,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "The Read the board tour now explains what a full input bar means on a slowed machine.",
       "The first tour now covers the calm colours button and uses the panel's real headings.",
     ],
-    actions: [{ label: "Walk the board tour", lessonId: "read-the-board" }],
   },
   {
     version: "2.9.0",
@@ -591,7 +1128,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "New drawer shapes: *products are squares, byproducts shields, buffers hexagons*, so the product and byproduct swap keeps its buttons still. A catching buffer wears a *dashed ring*; a strict one is solid.",
       "Every grey browser tooltip is now the planner's own: same words, proper panel, no delay.",
     ],
-    actions: [{ label: "Take the tour", lessonId: "read-the-board" }],
   },
   {
     version: "2.3.0",
@@ -664,8 +1200,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "*Your saved setups will act different.* Some machines will have stopped until you say where things go.",
     // The release that introduced the version stamp, so no browser alive has
     // one to compare against. Without this, nobody sees these notes at all.
-    showToEveryone: true,
-    actions: [{ label: "Take the tour", lessonId: "read-the-board" }],
   },
   {
     version: "1.42.1",

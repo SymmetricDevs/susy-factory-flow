@@ -1,23 +1,21 @@
 "use client";
 
-import { Bug, Compass, Heart, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
-import { openWelcomeTab } from "@/lib/tour/welcome-tab";
-import {
-  markVersionSeenAndNotify,
-  subscribeToVersionSeen,
-  unseenEntries,
-} from "@/lib/whats-new";
+import { useRef, useState } from "react";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
+import { Bug, ChevronDown, Compass, Heart, Library } from "lucide-react";
+import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
+import { openWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { APP_VERSION } from "@/lib/version";
+import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
 
 const GITHUB_URL = "https://github.com/jackwrichards/gtnh-factory-flow";
 
 /**
- * The planner's thread in the Greg Tech: New Horizons Discord. This is a
- * thread inside the pack's own server, not a server invite, so it only opens
- * for people who are already in there.
+ * The Supersymmetry community Discord. A server INVITE (the pack's own), so it
+ * works for anyone who opens it, whether or not they are already a member.
  */
-const DISCORD_THREAD_URL = "https://discord.com/channels/181078474394566657/1531402304530682036";
+const DISCORD_INVITE_URL = "https://discord.gg/BNbbK98rh6";
 
 /**
  * The tip jar. Clicks are counted through Umami's `data-umami-event`
@@ -37,29 +35,28 @@ const BUG_REPORT_URL = `${GITHUB_URL}/issues/new?template=bug_report.yml&version
 )}`;
 
 /**
- * Source and chat, sitting in the header beside the board actions.
- *
- * The bug report used to be a third icon here and read as one more thing to
- * ignore. It carries its own label now and sits further right, on its own.
+ * Source and chat, sitting in the header beside the board actions. The bug
+ * report is not one of these squares: it sits at the far right in its own
+ * red so it is still the one thing on the bar that stands out.
  */
 export function HeaderLinks() {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useDropdownDismiss(open, { refs: [root], onClose: () => setOpen(false) });
   return (
-    <div className="flex shrink-0 items-center gap-1">
-      {/* The way back to the Welcome tab once it has been closed, which is the
-          only way back to the guided tours. */}
-      <button
-        type="button"
-        onClick={openWelcomeTab}
-        title="Welcome"
-        aria-label="Open the Welcome tab"
-        className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
-      >
-        <Compass className="h-3.5 w-3.5" />
+    <div ref={root} className="relative shrink-0">
+      <button type="button" aria-expanded={open} aria-label="Help and links"
+        onClick={() => setOpen(!open)}
+        className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-raised hover:text-fg">
+        Help <ChevronDown className="h-3 w-3" />
       </button>
+      {open ? <div className="absolute right-0 top-full z-[100] mt-1 w-52 rounded border border-line-strong bg-surface p-1 text-sm shadow-xl">
+        <MenuLinks auxiliary onAction={() => setOpen(false)} />
+      </div> : null}
       <HeaderLink href={GITHUB_URL} label="Source on GitHub">
         <GithubMark />
       </HeaderLink>
-      <HeaderLink href={DISCORD_THREAD_URL} label="Discord thread">
+      <HeaderLink href={DISCORD_INVITE_URL} label="Supersymmetry Discord">
         <DiscordMark />
       </HeaderLink>
     </div>
@@ -67,71 +64,9 @@ export function HeaderLinks() {
 }
 
 /**
- * What's new, as a WORD rather than an icon, sitting immediately left of the
- * bug report.
- *
- * It was a glyph beside the compass for about an hour and that was the wrong
- * call: an unlabelled star in a row of unlabelled squares is one more thing to
- * ignore, and this is the control that tells somebody the rules of the board
- * changed under them. The two labelled buttons now read as a pair - here is
- * what we changed, here is where to complain about it.
- */
-export function WhatsNewButton({
-  onClick,
-  onDevPreview,
-}: {
-  /** Handed what was unread at the moment of the click, for the divider. */
-  onClick: (unseenVersions: Set<string>) => void;
-  /** Shift-click: the hidden update-popup preview. See WhatsNewPreview. */
-  onDevPreview: () => void;
-}) {
-  const [unread, setUnread] = useState(false);
-
-  // After mount: it reads localStorage, which a server render does not have.
-  useEffect(() => {
-    setUnread(unseenEntries().length > 0);
-    return subscribeToVersionSeen(() => setUnread(false));
-  }, []);
-
-  return (
-    <button
-      type="button"
-      onClick={(event) => {
-        if (event.shiftKey) {
-          onDevPreview();
-          return;
-        }
-        // Read what is unseen BEFORE stamping, or the dialog opens with
-        // nothing above its divider - the click would have erased the very
-        // thing the line is drawn around.
-        const unseenNow = new Set(unseenEntries().map((entry) => entry.version));
-        // Opening it IS reading it, so the dot goes now rather than when the
-        // dialog is closed - otherwise anyone who reads and then presses
-        // Escape gets the dot back and learns to distrust it.
-        markVersionSeenAndNotify();
-        onClick(unseenNow);
-      }}
-      title="What's new"
-      aria-label="What's new in the planner"
-      className="relative inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-cyan-700 bg-cyan-950 px-2 text-xs font-semibold text-cyan-300 hover:border-cyan-500 hover:bg-cyan-900 hover:text-cyan-200 snug:w-7 snug:justify-center snug:px-0"
-    >
-      <Sparkles className="h-3.5 w-3.5" aria-hidden />
-      <span className="snug:hidden">What&apos;s new</span>
-      {/* The quiet half of the system: a release that does not warrant a
-          dialog still gets noticed, without anything being put in the way. */}
-      {unread ? (
-        <span
-          aria-label="Unread release notes"
-          className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-surface bg-cyan-400"
-        />
-      ) : null}
-    </button>
-  );
-}
-
-/**
- * Reporting a bug is the one thing here worth interrupting someone for, so it
- * is the only header control that carries a colour and a word.
+ * Reporting a bug keeps its red so it is still the one control that stands
+ * out, but it lost its word (Jack, 2026-09-06): the bar was too wide, and the
+ * tooltip says the rest.
  */
 export function ReportBugButton() {
   return (
@@ -141,10 +76,9 @@ export function ReportBugButton() {
       rel="noreferrer noopener"
       title="Report a bug"
       aria-label="Report a bug"
-      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-red-800 bg-red-950 px-2 text-xs font-semibold text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200 snug:w-7 snug:justify-center snug:px-0"
+      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-red-800 bg-red-950 text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200"
     >
       <Bug className="h-3.5 w-3.5" aria-hidden />
-      <span className="snug:hidden">Report Bug</span>
     </a>
   );
 }
@@ -156,6 +90,10 @@ export function ReportBugButton() {
  * snug squeeze down to its heart.
  */
 export function SupportButton() {
+  // Temporarily disabled for this fork (see feature-toggles.ts).
+  if (!DONATIONS_ENABLED) {
+    return null;
+  }
   return (
     <a
       href={KOFI_URL}
@@ -165,10 +103,10 @@ export function SupportButton() {
       aria-label="Support SuSy Planner on Ko-fi"
       data-umami-event="support-kofi"
       data-umami-event-source="header"
-      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-pink-800 bg-pink-950 px-2 text-xs font-semibold text-pink-300 hover:border-pink-600 hover:bg-pink-900 hover:text-pink-200 snug:w-7 snug:justify-center snug:px-0"
+      className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-pink-800 bg-pink-950 px-2 text-xs font-semibold text-pink-300 hover:border-pink-600 hover:bg-pink-900 hover:text-pink-200 snug:w-5 snug:justify-center snug:px-0"
     >
       <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
-      <span className="snug:hidden">Support</span>
+      <span className="sr-only">Support</span>
     </a>
   );
 }
@@ -178,12 +116,13 @@ export function SupportButton() {
  * a phone can read at a glance are still two brand marks nobody can hover for a
  * tooltip, so up here they carry their names.
  */
-export function MenuLinks({ onAction }: { onAction?: () => void }) {
+export function MenuLinks({ onAction, auxiliary = false }: { onAction?: () => void; auxiliary?: boolean }) {
   return (
     <div className="flex flex-col">
       <button
         type="button"
         onClick={() => {
+          leaveLibrary();
           openWelcomeTab();
           onAction?.();
         }}
@@ -192,22 +131,37 @@ export function MenuLinks({ onAction }: { onAction?: () => void }) {
         <span className="flex h-4 w-4 shrink-0 items-center justify-center">
           <Compass className="h-3.5 w-3.5" aria-hidden />
         </span>
-        <span className="truncate">Welcome and tours</span>
+        <span className="truncate">Welcome</span>
       </button>
+      {!auxiliary ? <button
+        type="button"
+        onClick={() => {
+          openLibrary();
+          onAction?.();
+        }}
+        className="flex h-10 items-center gap-2.5 rounded px-2 text-left text-sm text-fg-subtle hover:bg-surface-sunken"
+      >
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+          <Library className="h-3.5 w-3.5" aria-hidden />
+        </span>
+        <span className="truncate">Library</span>
+      </button> : null}
       <MenuLink href={GITHUB_URL} label="Source on GitHub">
         <GithubMark />
       </MenuLink>
-      <MenuLink href={DISCORD_THREAD_URL} label="Discord thread">
+      <MenuLink href={DISCORD_INVITE_URL} label="Supersymmetry Discord">
         <DiscordMark />
       </MenuLink>
-      <MenuLink
-        href={KOFI_URL}
-        label="Support SuSy Planner"
-        tone="support"
-        umamiEvent="support-kofi"
-      >
-        <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
-      </MenuLink>
+      {DONATIONS_ENABLED ? (
+        <MenuLink
+          href={KOFI_URL}
+          label="Support SuSy Planner"
+          tone="support"
+          umamiEvent="support-kofi"
+        >
+          <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
+        </MenuLink>
+      ) : null}
       <MenuLink href={BUG_REPORT_URL} label="Report a bug" tone="danger">
         <Bug className="h-3.5 w-3.5" aria-hidden />
       </MenuLink>
@@ -263,7 +217,7 @@ function HeaderLink({
       rel="noreferrer noopener"
       title={label}
       aria-label={label}
-      className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
+      className="inline-flex h-5 w-5 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
     >
       {children}
     </a>

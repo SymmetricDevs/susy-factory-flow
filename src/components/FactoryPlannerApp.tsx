@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveProjectRecipes } from "@/lib/datasets/refresh-project-recipes";
 import { useCallback, useEffect, useRef } from "react";
 import {
   DEFAULT_DATASET_MANIFEST_URL,
@@ -7,30 +8,32 @@ import {
   pickDefaultDatasetVersion,
 } from "@/lib/datasets";
 import {
-  getRecipeDatasetRecipe,
   initRecipeDatasetVersion,
 } from "@/lib/datasets/browser-loader";
 import { loadResourceHistory, useFactoryStore } from "@/store/factory-store";
+import { useCommunityAuthStore } from "@/store/community-auth-store";
 import { useDesignStore } from "@/store/design-store";
 import { recordResourceTrend, resetResourceTrends } from "@/lib/resource-trends";
-import { applyPlanView } from "@/lib/plan-view";
 import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
-import { downloadCommunityPlan, tagPlanWithCommunityId } from "@/lib/community/client";
-import { forgetSharedPlanId, readSharedPlanId } from "@/lib/community/shared-link";
-import { parseFactoryProjectJson } from "@/lib/import-export";
+import { openCommunityPost } from "@/lib/community/open-post";
+import { retryPendingPostFollows } from "@/lib/community/post-follow";
+import { forgetSharedPlanId, readSharedPlanId, syncSharedPlanAddress } from "@/lib/community/shared-link";
 import { useIsCompactViewport } from "@/lib/compact-view";
-import { useWelcomeTab } from "@/lib/tour/welcome-tab";
+import { startLibrarySync } from "@/lib/library/library-sync";
+import { useLibraryTab } from "@/lib/library/library-tab";
+import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { AppHeader } from "./AppHeader";
-import { TourOverlay } from "./tour/TourOverlay";
-import { WelcomePage } from "./tour/WelcomePage";
+import { LibraryPage } from "./library/LibraryPage";
+import { WelcomePage } from "./welcome/WelcomePage";
 import { PlanIdentityDrawer } from "./PlanIdentityDrawer";
 import { SharedAddressSync } from "./SharedAddressSync";
-import { planContentFingerprint } from "@/lib/community/plan-fingerprint";
+import { PublicViewBar } from "./community/PublicViewBar";
 import { BlueprintSaveDialog } from "./BlueprintSaveDialog";
-import { DesignTabs } from "./DesignTabs";
+import { PowerSourceOverlay } from "./PowerSourceOverlay";
 import { FactoryFlow } from "./flow/FactoryFlow";
+import { useBoardSoundEffects } from "./flow/use-board-sound-effects";
 import { InspectorPanel } from "./InspectorPanel";
-import { ChevronIcon, PanelDrawer } from "./PanelDrawer";
+import { PanelDrawer } from "./PanelDrawer";
 import { RecipeBrowser } from "./RecipeBrowser";
 
 export function FactoryPlannerApp() {
@@ -48,6 +51,45 @@ export function FactoryPlannerApp() {
   const setDatasetLoading = useFactoryStore((state) => state.setDatasetLoading);
   const setDatasetError = useFactoryStore((state) => state.setDatasetError);
   const hydratedRef = useRef(false);
+  // Which stored recipes have been checked against which dataset version,
+  // so a design opened AFTER the dataset landed (a tab switch, a hydrated
+  // plan) gets the same refresh the boot load gives, exactly once each.
+  const checkedRecipesRef = useRef<Set<string>>(new Set());
+  const datasetVersionId = useFactoryStore((state) => state.dataset?.datasetVersionId);
+  const datasetManifest = useFactoryStore((state) => state.datasetManifest);
+  const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
+  useEffect(() => {
+    if (!datasetVersionId) {
+      return;
+    }
+    const version = datasetManifest?.versions.find((entry) => entry.id === datasetVersionId);
+    if (!version) {
+      return;
+    }
+    const pending = project.recipes.filter(
+      (recipe) => !checkedRecipesRef.current.has(`${version.id}|${recipe.id}`),
+    );
+    if (pending.length === 0) {
+      return;
+    }
+    for (const recipe of pending) {
+      checkedRecipesRef.current.add(`${version.id}|${recipe.id}`);
+    }
+    let cancelled = false;
+    void resolveProjectRecipes(
+      datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+      version,
+      pending,
+    ).then(({ refreshed, migration }) => {
+      if (!cancelled && refreshed.length > 0) {
+        refreshProjectRecipes(refreshed, migration);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [datasetManifest, datasetManifestUrl, datasetVersionId, project.recipes, refreshProjectRecipes]);
+  useBoardSoundEffects();
   const skipInitialSaveRef = useRef(true);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
 
@@ -69,18 +111,11 @@ export function FactoryPlannerApp() {
         setDataset(dataset);
         const projectRecipes = useFactoryStore.getState().project.recipes;
         if (projectRecipes.length > 0) {
-          const refreshedRecipes = (
-            await Promise.allSettled(
-              projectRecipes.map((recipe) =>
-                getRecipeDatasetRecipe(manifestUrl, version, recipe.id),
-              ),
-            )
-          )
-            .filter((result): result is PromiseFulfilledResult<(typeof projectRecipes)[number]> => {
-              return result.status === "fulfilled";
-            })
-            .map((result) => result.value);
-          refreshProjectRecipes(refreshedRecipes);
+          const { refreshed, migration } = await resolveProjectRecipes(manifestUrl, version, projectRecipes);
+          checkedRecipesRef.current = new Set(
+            projectRecipes.map((recipe) => `${version.id}|${recipe.id}`),
+          );
+          refreshProjectRecipes(refreshed, migration);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Dataset load failed.";
@@ -96,48 +131,18 @@ export function FactoryPlannerApp() {
 
       void hydrateDesigns()
         .then(async () => {
-          // A setup opened from a shared link becomes its own design tab, so
-          // it never overwrites whatever the user was working on.
-          const importAsDesign = async (raw: unknown, postName: string) => {
-            const project = parseFactoryProjectJson(JSON.stringify(raw));
-            // Named after the POST, which is the only name the person who
-            // followed the link has ever seen. A plan carries whatever its
-            // author happened to have that tab called, and "Untitled design"
-            // is common enough that a setup sent to you would land looking
-            // like a blank one.
-            await useDesignStore
-              .getState()
-              .importProjectAsDesign(project, postName || project.name || "Shared setup");
-            // A shared link opens the setup the way its author arranged it,
-            // same as opening one from the shelf.
-            applyPlanView(project.view);
-          };
-
           try {
-            // Shared "open to edit" links: /?plan=<community id>.
+            // Own posts open for editing; everyone else's opens for viewing.
             const sharedPlanId = readSharedPlanId();
-            // The address carries the id while an open board still matches
-            // its post (see SharedAddressSync), so a reload arrives with the
-            // id of the very setup it is standing on. That is a reload, not
-            // an arrival: importing would open one duplicate tab per F5. A
-            // drifted or unproven copy still imports fresh - a pasted link
-            // means "show me the posted version".
-            const restingProject = useFactoryStore.getState().project;
-            const alreadyStandingOnIt =
-              sharedPlanId !== undefined &&
-              restingProject.metadata?.communityPlanId === sharedPlanId &&
-              Boolean(restingProject.metadata.communityFingerprint) &&
-              planContentFingerprint(restingProject) ===
-                restingProject.metadata.communityFingerprint;
-            if (sharedPlanId && !alreadyStandingOnIt) {
+            if (sharedPlanId) {
               try {
-                const { plan, name } = await downloadCommunityPlan(sharedPlanId);
-                await importAsDesign(tagPlanWithCommunityId(plan, sharedPlanId), name);
+                await openCommunityPost({ id: sharedPlanId });
               } finally {
-                // The sync re-advertises the imported copy on its own; this
-                // is for the failure path, so a dead link is not retried on
-                // every reload.
+                // Release the arrival guard, then set the address explicitly:
+                // React may already have run the viewer's address effect.
                 forgetSharedPlanId();
+                syncSharedPlanAddress(useDesignStore.getState().publicView?.id
+                  ?? useFactoryStore.getState().project.metadata?.communityPlanId);
               }
             }
           } catch (error) {
@@ -156,6 +161,10 @@ export function FactoryPlannerApp() {
 
     return cancelHydration;
   }, [hydrateDesigns, hydrateResourceHistory]);
+
+  // The library follows the account: sign-in starts the sync, sign-out stops
+  // it, and every change here reaches the other devices a few seconds later.
+  useEffect(() => startLibrarySync(), []);
 
   // Recorded here rather than in the resource panel: the charts must not lose
   // their history because the right column happened to be closed, and every
@@ -236,8 +245,18 @@ export function FactoryPlannerApp() {
     };
   }, [activeDesignId, project, saveActiveProject]);
 
+  // Posts edited while signed out catch up the moment an account is back.
+  const communityUser = useCommunityAuthStore((state) => state.user);
+  useEffect(() => {
+    if (communityUser) {
+      retryPendingPostFollows();
+    }
+  }, [communityUser]);
+
   return (
-    // h-dvh, not h-screen: a phone browser's address bar comes and goes, and
+    // Height in --ui-dvh (dvh over the interface size, see ui-scale.ts: the
+    // shell is CSS-zoomed and viewport units are not divided by zoom), and
+    // dvh, not vh: a phone browser's address bar comes and goes, and
     // `vh` measures the window as if it never did, so the bottom row of the
     // board spent its life under the chrome.
     //
@@ -247,7 +266,7 @@ export function FactoryPlannerApp() {
     // fold, and a classic scrollbar appeared and threw off every measurement made
     // against `window.innerWidth`. The board and the panels carry their own
     // floors, which is where the guarantee belongs.
-    <div className="flex h-dvh flex-col bg-canvas text-fg">
+    <div className="ui-scale-shell flex h-[calc(100*var(--ui-dvh))] flex-col bg-canvas text-fg">
       <RecipeBookOpener />
       <PlacementRevealer />
       <SharedAddressSync />
@@ -257,12 +276,12 @@ export function FactoryPlannerApp() {
       ) : (
         <ColumnWorkspace workspace={workspace} onLoadDatasetVersion={loadDatasetVersion} />
       )}
+      {/* The power source picker portals to the body, so it works from either
+          layout and outranks the drawers on compact. */}
+      <PowerSourceOverlay />
       {/* Every pocket-to-shelf path (card save, share-a-pocket,
           overwrite) confirms through this one dialog. */}
       <BlueprintSaveDialog />
-      {/* A running tour points at the toolbars and columns above, so it hangs
-          off the app root and portals to the body from there. */}
-      <TourOverlay />
     </div>
   );
 }
@@ -327,56 +346,83 @@ function PlacementRevealer() {
   return null;
 }
 
-/** The board with the tab strip over it: the same on any window. */
+/** The board and its plan details, below the shared application bar. */
 function BoardColumn() {
-  const welcome = useWelcomeTab();
+  const covering = useCoveringPage();
+  const publicView = useDesignStore((state) => state.publicView);
 
   return (
-    /*
-      The tab strip belongs to the canvas, not the window: designs switch
-      what is on the board, while the browser and inspector are fixed
-      furniture. Rows rather than flex so the board keeps its `h-full`.
-    */
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <DesignTabs />
+    <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
+      <div className="min-w-0">
+        {covering ? null : publicView ? <PublicViewBar key={publicView.id} /> : <PlanIdentityDrawer />}
+      </div>
       {/*
         Welcome COVERS the board rather than replacing it. Unmounting the board
         would throw away the camera, the routed wires and the solve, and put
         them all back a moment later for a page that is only ever a click from
-        being stepped off - and a tour started from that page has to point at
-        the board underneath it.
+        being stepped off.
       */}
       <div className="relative min-h-0">
         <FactoryFlow />
-        {welcome.active ? (
+        {covering === "welcome" ? (
           <div className="absolute inset-0 z-40">
             <WelcomePage />
           </div>
+        ) : covering === "shelf" ? (
+          <div className="absolute inset-0 z-40">
+            <LibraryPage />
+          </div>
         ) : null}
       </div>
-      {/* The plan card describes the board it sits under; while Welcome
-          covers that board, the card goes with it. */}
-      {welcome.active ? null : <PlanIdentityDrawer />}
     </div>
   );
 }
 
+/**
+ * Which page, if any, is covering the board. Welcome and the shelf never
+ * show together (opening one steps the other down), and with NO design open
+ * at all the shelf is shown whatever its own flag says: an empty strip has
+ * nothing else to stand on, and a board with no design behind it could not
+ * save an edit anywhere.
+ */
+function useCoveringPage(): "welcome" | "shelf" | undefined {
+  const welcome = useWelcomeTab();
+  const shelf = useLibraryTab();
+  const isHydrated = useDesignStore((state) => state.isHydrated);
+  const hasActiveDesign = useDesignStore((state) => state.activeDesignId !== undefined || state.publicView !== undefined);
+  if (welcome.active) {
+    return "welcome";
+  }
+  if (shelf.active || (isHydrated && !hasActiveDesign)) {
+    return "shelf";
+  }
+  return undefined;
+}
+
 function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
+  // The resource column reads the board's solve, and while Welcome covers the
+  // board those figures belong to whichever tab is hidden underneath — numbers
+  // about a plan you are not looking at. It folds to a blank strip for the
+  // duration, WITHOUT writing the workspace view, so stepping off Welcome
+  // brings it back exactly as it was left.
+  const covering = useCoveringPage();
+  const rightPanelShown = workspace.rightPanelOpen && !covering;
+
   return (
     <>
-      {/* 344/332: the browser column carries three iconed tabs and the setup
-          shelf, so it gets a touch more than the old 312; the resource column
-          went from 277 to fit a rate, a name and the mark buttons on one line
-          without the name truncating to nothing. A closed column drops to a
+      {/* The four-column item browser is 256px wide; the resource column
+          keeps 234px for names, rates and controls. A closed column drops to a
           rail wide enough for one button, so the way back is always on screen
           and the board never has to give the width back to a hover target. */}
       <main
         className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden"
         style={{
           gridTemplateColumns: [
-            workspace.leftPanelOpen ? "344px" : `${RAIL_WIDTH}px`,
+            workspace.leftPanelOpen ? "256px" : `${RAIL_WIDTH}px`,
             "minmax(0,1fr)",
-            workspace.rightPanelOpen ? "332px" : `${RAIL_WIDTH}px`,
+            // With a page over the board the resource column is not folded, it is
+            // GONE: nothing to open, no rail to hint that there is.
+            rightPanelShown ? "234px" : covering ? "0px" : `${RAIL_WIDTH}px`,
           ].join(" "),
         }}
       >
@@ -385,14 +431,14 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
         {/* The browser owns its own header row, so no wrapper here — it stays a
             direct grid item at exactly the column width, as it was before. */}
         {workspace.leftPanelOpen ? (
-          <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
+          <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
         ) : (
-          <PanelRail side="left" label="Items, pockets and setups" />
+          <PanelRail side="left" label="Items" />
         )}
         <BoardColumn />
-        {workspace.rightPanelOpen ? (
+        {rightPanelShown ? (
           <InspectorPanel />
-        ) : (
+        ) : covering ? null : (
           <PanelRail side="right" label="Resources" />
         )}
       </main>
@@ -407,6 +453,9 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
  * panels with no board left to point at — so opening either closes the other.
  */
 function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
+  // The resource drawer reads the board's books; under a covering page it
+  // is not there at all, handle included.
+  const covering = useCoveringPage();
   const openLeft = () => writeWorkspaceView({ leftPanelOpen: true, rightPanelOpen: false });
   const openRight = () => writeWorkspaceView({ leftPanelOpen: false, rightPanelOpen: true });
 
@@ -415,22 +464,24 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
       <BoardColumn />
       <PanelDrawer
         side="left"
-        label="items, pockets and setups"
+        label="items"
         open={workspace.leftPanelOpen}
         onOpen={openLeft}
         onClose={() => writeWorkspaceView({ leftPanelOpen: false })}
       >
-        <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
+        <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
       </PanelDrawer>
-      <PanelDrawer
-        side="right"
-        label="resources"
-        open={workspace.rightPanelOpen}
-        onOpen={openRight}
-        onClose={() => writeWorkspaceView({ rightPanelOpen: false })}
-      >
-        <InspectorPanel />
-      </PanelDrawer>
+      {covering ? null : (
+        <PanelDrawer
+          side="right"
+          label="resources"
+          open={workspace.rightPanelOpen}
+          onOpen={openRight}
+          onClose={() => writeWorkspaceView({ rightPanelOpen: false })}
+        >
+          <InspectorPanel />
+        </PanelDrawer>
+      )}
     </main>
   );
 }
@@ -451,33 +502,41 @@ function PanelRail({ side, label }: { side: "left" | "right"; label: string }) {
   const open = () =>
     writeWorkspaceView(side === "left" ? { leftPanelOpen: true } : { rightPanelOpen: true });
 
+  // One button, the whole rail: a bare chevron at the top and the name
+  // running down it. No box, no tooltip; the rail is the thing you click.
   return (
-    <div
+    <button
+      type="button"
+      onClick={open}
+      aria-label={`Show ${label}`}
       className={[
-        "flex h-full flex-col items-center gap-2 bg-surface py-2",
+        "flex h-full w-full flex-col items-center gap-2 bg-surface pt-1.5 text-fg-muted transition-colors hover:bg-[#2a2d33]",
         side === "left" ? "border-r border-line" : "border-l border-line",
       ].join(" ")}
     >
-      <button
-        type="button"
-        onClick={open}
-        title={`Show ${label}`}
-        aria-label={`Show ${label}`}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-line-strong text-fg-muted hover:border-cyan-600 hover:text-cyan-400"
-      >
-        <ChevronIcon direction={side === "left" ? "right" : "left"} />
-      </button>
-      <button
-        type="button"
-        onClick={open}
-        tabIndex={-1}
+      {/* One drawing for both sides, mirrored, so they cannot differ. */}
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center">
+        <svg
+          viewBox="0 0 16 16"
+          className={["h-4 w-4", side === "left" ? "" : "rotate-180"].join(" ")}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M6 3l5 5-5 5" />
+        </svg>
+      </span>
+      <span
         aria-hidden
-        className="min-h-0 flex-1 cursor-pointer text-[10px] font-semibold uppercase tracking-widest text-fg-muted hover:text-fg"
+        className="min-h-0 flex-1 text-[12px] font-semibold uppercase tracking-widest"
         style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
       >
         <span className={side === "right" ? "rotate-180" : undefined}>{label}</span>
-      </button>
-    </div>
+      </span>
+    </button>
   );
 }
 
@@ -495,4 +554,18 @@ function scheduleIdleWork(callback: () => void, timeout: number) {
 
   const timeoutId = globalThis.setTimeout(callback, 0);
   return () => globalThis.clearTimeout(timeoutId);
+}
+
+function ViewerAwareBrowser({ onLoadDatasetVersion }: Pick<WorkspaceProps, "onLoadDatasetVersion">) {
+  const readOnly = useFactoryStore(state => state.isReadOnly);
+  if (!readOnly) return <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />;
+  return <div className="relative h-full min-h-0 overflow-hidden">
+    <div inert className="h-full opacity-30 grayscale"><RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} /></div>
+    <div className="absolute inset-x-2 top-2 border border-line bg-surface p-3 text-sm shadow-lg">
+      <div className="flex items-center justify-between gap-2"><strong>View only</strong>
+        <button type="button" aria-label="Hide the items column" onClick={() => writeWorkspaceView({ leftPanelOpen: false })} className="px-2">‹</button>
+      </div>
+      <p className="mt-1 text-xs text-fg-muted">Open a copy to add items and edit this setup.</p>
+    </div>
+  </div>;
 }

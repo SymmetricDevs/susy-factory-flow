@@ -11,6 +11,7 @@ import type {
 import { collectTrashNodeIds } from "../model/trash";
 import { getStorageRoles } from "../model/storage-role";
 import { clampUtilization } from "./equilibrium";
+import { isHatchSupplyId } from "./hatch-supply";
 
 const EPSILON = 0.000001;
 
@@ -187,6 +188,12 @@ export function calculateEffectiveBalances(
     }
 
     for (const output of Object.values(node.outputs)) {
+      // POWER stays out of the resource books entirely: EU is not an item,
+      // and the INPUTS/OUTPUTS lists are the plan's material boundary. The
+      // MACHINES panel's MADE column is where EU is accounted.
+      if (output.kind === "power") {
+        continue;
+      }
       addBalanceProduction(
         balances,
         {
@@ -255,6 +262,10 @@ function applyBoundaryDrawerBalances(
   const bufferNetById = new Map<string, number>();
 
   for (const edge of project.edges) {
+    // POWER never reaches the resource books; see the node-flow skip above.
+    if (edge.resourceKind === "power") {
+      continue;
+    }
     const transferredPerSecond = edgeResults[edge.id]?.transferredPerSecond ?? 0;
     if (transferredPerSecond <= EPSILON) {
       continue;
@@ -263,8 +274,11 @@ function applyBoundaryDrawerBalances(
     // Leaving a SOURCE drawer: the plan declared this an import.
     const from = storagesById.get(edge.source);
     if (from && roles.get(from.id) === "source") {
-      ensureBalance(balances, boundaryResource(from, edge.label)).importedPerSecond +=
-        transferredPerSecond;
+      if (isHatchSupplyId(from.id)) {
+        addBalanceProduction(balances, boundaryResource(from, edge.label), transferredPerSecond);
+      } else {
+        ensureBalance(balances, boundaryResource(from, edge.label)).importedPerSecond += transferredPerSecond;
+      }
     }
     if (from && roles.get(from.id) === "buffer") {
       bufferNetById.set(from.id, (bufferNetById.get(from.id) ?? 0) - transferredPerSecond);

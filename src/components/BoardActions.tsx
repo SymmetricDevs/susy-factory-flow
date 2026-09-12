@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import {
   Check,
   ChevronDown,
@@ -32,17 +34,24 @@ import type {
   FactoryEdge,
   FactoryProject,
   Recipe,
-  RecipeOutput,
   ResourceKind,
 } from "@/lib/model/types";
 import { formatBoardDump } from "./flow/board-dump";
-import { makeResourceHandleId, parseResourceHandleId } from "./flow/resource-handles";
+import {
+  makeResourceHandleId,
+  parseResourceHandleId,
+  sectionHandleId,
+  splitSectionHandleId,
+} from "./flow/resource-handles";
+import { sectionNodeView } from "@/lib/model/shared-machine";
 import { isEditableKeyboardTarget } from "./flow/keyboard";
 import {
   extractProjectJsonFromPng,
   extractProjectJsonFromSvg,
 } from "@/lib/import-export/plan-image";
-import { useWelcomeTab } from "@/lib/tour/welcome-tab";
+import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
+import { isPowerRecipe } from "@/lib/power/power-recipe";
+import { pickRecipeRefMatch, recipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import { useFactoryStore } from "@/store/factory-store";
 
 interface BoardActionsProps {
@@ -78,6 +87,7 @@ export function BoardActions({
   onShare,
   onExportImage,
 }: BoardActionsProps = {}) {
+  const isReadOnly = useFactoryStore((state) => state.isReadOnly);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [isExportMenuOpen, setExportMenuOpen] = useState(false);
@@ -205,18 +215,11 @@ export function BoardActions({
     }
   };
 
-  useEffect(() => {
-    const closeMenus = (event: PointerEvent) => {
-      if (!exportMenuRef.current?.contains(event.target as Node)) {
-        setExportMenuOpen(false);
-      }
-    };
-
-    // Capture phase: the board's pan handler stops a press on the canvas before
-    // it reaches a bubble-phase listener, which left this menu open over it.
-    window.addEventListener("pointerdown", closeMenus, true);
-    return () => window.removeEventListener("pointerdown", closeMenus, true);
-  }, []);
+  useDropdownDismiss(isExportMenuOpen, {
+    refs: [exportMenuRef],
+    onClose: () => setExportMenuOpen(false),
+    fade: true,
+  });
 
   useEffect(() => {
     const handleProjectHistoryShortcut = (event: KeyboardEvent) => {
@@ -277,6 +280,8 @@ export function BoardActions({
       }}
     />
   );
+
+  if (isReadOnly) return null;
 
   if (variant === "list") {
     return (
@@ -348,37 +353,21 @@ export function BoardActions({
             and having them in two places at once only made the header look
             like the authoritative pair. Clean board is a whole-plan action that
             was one slip away from the import button; it lives in the menu. */}
-        {/* Share wears its word, alone on the bar in doing so: it was buried
-            in the Setups tab and people could not find it. Same dialog as the
-            shelf's own button. */}
-        {onShare ? (
-          <button
-            type="button"
-            onClick={onShare}
-            disabled={!canShare}
-            title={shareTitle}
-            className="inline-flex h-7 items-center gap-1 rounded border border-line-strong bg-surface px-1.5 text-xs font-medium text-fg-subtle hover:border-emerald-600 hover:text-emerald-500 disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            Share
-          </button>
-        ) : null}
-        <ToolbarButton
-          icon={Upload}
-          label="Import plan"
-          disabled={isProjectImporting}
-          onClick={() => projectInputRef.current?.click()}
-        />
+        {/* ONE plan menu since 2026-09-06: share, import and the exports
+            all live behind the one key. Share and import used to be their
+            own buttons on the bar; the bar was too wide and this is the
+            corner where a menu is expected. Share is also on the plan's own
+            identity drawer, so it is never more than a click away. */}
         <div ref={exportMenuRef} className="relative">
           <button
             type="button"
             onClick={() => setExportMenuOpen((isOpen) => !isOpen)}
-            title="Export plan"
-            aria-label="Export plan"
+            title="Plan: share, import, export"
+            aria-label="Plan menu: share, import, export"
             aria-expanded={isExportMenuOpen}
             aria-busy={pendingExport ? true : undefined}
             disabled={Boolean(pendingExport)}
-            className="inline-flex h-7 items-center justify-center gap-0.5 rounded border border-line-strong bg-surface px-1.5 text-fg-subtle hover:bg-surface-raised disabled:cursor-wait disabled:bg-surface-sunken disabled:text-fg-muted"
+            className="inline-flex h-5 items-center justify-center gap-0.5 rounded border border-line-strong bg-surface px-1.5 text-fg-subtle hover:bg-surface-raised disabled:cursor-wait disabled:bg-surface-sunken disabled:text-fg-muted"
           >
             {pendingExport ? (
               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -388,7 +377,29 @@ export function BoardActions({
             <ChevronDown className="h-3 w-3" />
           </button>
           {isExportMenuOpen ? (
-            <div className="absolute right-0 top-8 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+            <div className="absolute right-0 top-full mt-1 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+              {onShare ? (
+                <ExportMenuItem
+                  icon={Share2}
+                  label="Share this setup"
+                  title={shareTitle}
+                  disabled={!canShare}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    onShare();
+                  }}
+                />
+              ) : null}
+              <ExportMenuItem
+                icon={Upload}
+                label="Import a plan..."
+                disabled={isProjectImporting}
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  projectInputRef.current?.click();
+                }}
+              />
+              <div className="my-1 border-t border-line-strong" />
               <ExportMenuItem
                 icon={diagnosticsState === "copied" ? Check : ClipboardList}
                 label={diagnosticsLabel}
@@ -517,13 +528,16 @@ async function hydrateImportedProjectRecipes(
     fromId: string;
     toId: string;
     name: string;
+    exact: boolean;
   }>;
 }> {
   const availableRecipeIds = new Set(
     await getRecipeDatasetRecipeIds(DEFAULT_DATASET_MANIFEST_URL, version),
   );
   const importRecipesToResolve = project.recipes.filter(
-    (recipe) => !availableRecipeIds.has(recipe.id),
+    // Power cards own locally synthesized recipes (src/lib/power) that the
+    // dataset can never answer for - and must never replace by name-match.
+    (recipe) => !availableRecipeIds.has(recipe.id) && !isPowerRecipe(recipe),
   );
   const resolvedRecipeIds = new Map(
     importRecipesToResolve.length
@@ -531,42 +545,41 @@ async function hydrateImportedProjectRecipes(
           await resolveRecipeDatasetRecipes(
             DEFAULT_DATASET_MANIFEST_URL,
             version,
-            importRecipesToResolve.map((recipe) => ({
-              id: recipe.id,
-              name: recipe.name,
-              machineType: recipe.machineType,
-              recipeMap: recipe.source?.recipeMap,
-              rawRecipeId: recipe.source?.rawRecipeId,
-              outputs: recipe.outputs.map((output) => ({
-                kind: output.kind,
-                id: output.id,
-              })),
-            })),
+            importRecipesToResolve.map(recipeContentRef),
           )
-        ).matches.map((match) => [match.importedId, match.recipeId] as const)
+        ).matches.map((match) => [match.importedId, match] as const)
       : [],
   );
   const missingRecipes: Array<Pick<FactoryProject["recipes"][number], "id" | "name">> = [];
-  const migratedRecipes: Array<{ fromId: string; toId: string; name: string }> = [];
+  const migratedRecipes: Array<{ fromId: string; toId: string; name: string; exact: boolean }> =
+    [];
   const recipeIdMigration = new Map<string, string>();
 
   const hydratedRecipes = await Promise.all(
     project.recipes.map(async (recipe) => {
+      if (isPowerRecipe(recipe)) {
+        // Survives verbatim; normalizeLoadedProject resynthesizes it from
+        // the node's settings on the way in.
+        return recipe;
+      }
       if (!availableRecipeIds.has(recipe.id)) {
-        const rawRecipeIdMatch = resolvedRecipeIds.get(recipe.id);
-        const migratedRecipe = rawRecipeIdMatch
-          ? await getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, rawRecipeIdMatch)
+        const contentMatch = resolvedRecipeIds.get(recipe.id);
+        const migratedRecipe = contentMatch
+          ? await getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, contentMatch.recipeId)
           : await resolveImportedRecipe(version, recipe);
         if (migratedRecipe) {
           migratedRecipes.push({
             fromId: recipe.id,
             toId: migratedRecipe.id,
             name: recipe.name,
+            exact: contentMatch?.exact ?? false,
           });
           recipeIdMigration.set(recipe.id, migratedRecipe.id);
           return migratedRecipe;
         }
 
+        // Nothing in the dataset is close enough to stand in for it: the
+        // plan's own embedded body keeps working, so it stays.
         missingRecipes.push({ id: recipe.id, name: recipe.name });
         return recipe;
       }
@@ -594,10 +607,19 @@ function remapMigratedRecipeReferences(
     return project;
   }
 
-  const nodes = project.nodes.map((node) => ({
-    ...node,
-    recipeId: recipeIdMigration.get(node.recipeId) ?? node.recipeId,
-  }));
+  const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
+  const nodes = project.nodes.map((node) => {
+    const migratedId = recipeIdMigration.get(node.recipeId);
+    const carried = migratedId
+      ? carryNodeOntoMigratedRecipe(node, recipesById.get(migratedId))
+      : node;
+    // A shared machine's extra recipes migrate by id like the first.
+    const extras = carried.extraRecipes?.map((extra) => {
+      const extraId = recipeIdMigration.get(extra.recipeId);
+      return extraId ? { ...extra, recipeId: extraId } : extra;
+    });
+    return extras ? { ...carried, extraRecipes: extras } : carried;
+  });
   const nodesById = new Map(nodes.map((node) => [node.id, node] as const));
   const originalNodesById = new Map(project.nodes.map((node) => [node.id, node] as const));
 
@@ -641,8 +663,8 @@ function refreshImportedProjectEdgeHandles(
 ): FactoryEdge {
   const sourceNode = nodesById.get(edge.source);
   const targetNode = nodesById.get(edge.target);
-  const sourceRecipe = sourceNode ? recipesById.get(sourceNode.recipeId) : undefined;
-  const targetRecipe = targetNode ? recipesById.get(targetNode.recipeId) : undefined;
+  const sourceRecipe = sectionRecipeAt(sourceNode, edge.sourceHandle, recipesById);
+  const targetRecipe = sectionRecipeAt(targetNode, edge.targetHandle, recipesById);
   const sourceStorage = storagesById.get(edge.source);
   const targetStorage = storagesById.get(edge.target);
 
@@ -701,8 +723,9 @@ function remapMigratedRecipeEdgeHandles(
     return edge;
   }
 
-  const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
-  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
+  const migratedRecipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
+  const sourceRecipe = sectionRecipeAt(sourceNode, edge.sourceHandle, migratedRecipesById);
+  const targetRecipe = sectionRecipeAt(targetNode, edge.targetHandle, migratedRecipesById);
 
   return {
     ...edge,
@@ -729,7 +752,37 @@ function remapMigratedRecipeEdgeHandles(
   };
 }
 
+/**
+ * A shared machine's section prefix (`r2:`) rides through the remap untouched:
+ * the handle behind it is repaired against that section's recipe and the
+ * prefix put back.
+ */
 function remapRecipeHandle(
+  recipe: Recipe,
+  prefixedHandleId: string | undefined,
+  expectedSide: "input" | "output",
+  resourceKind: ResourceKind,
+  resourceId: string,
+): string | undefined {
+  const { section, handleId } = splitSectionHandleId(prefixedHandleId);
+  const bare = remapBareRecipeHandle(recipe, handleId, expectedSide, resourceKind, resourceId);
+  return bare === undefined ? undefined : sectionHandleId(section, bare);
+}
+
+/** The recipe a wire's end reads at a card: the section its handle names. */
+function sectionRecipeAt(
+  node: FactoryProject["nodes"][number] | undefined,
+  handleId: string | undefined,
+  recipesById: Map<string, Recipe>,
+): Recipe | undefined {
+  if (!node) {
+    return undefined;
+  }
+  const view = sectionNodeView(node, splitSectionHandleId(handleId).section);
+  return recipesById.get(view.recipeId);
+}
+
+function remapBareRecipeHandle(
   recipe: Recipe,
   handleId: string | undefined,
   expectedSide: "input" | "output",
@@ -797,79 +850,100 @@ async function resolveImportedRecipe(
     offset: 0,
     limit: 40,
   });
-  const sourceRecipeMap = importedRecipe.source?.recipeMap;
-  const match = candidates.recipes.find(
-    (candidate) =>
-      candidate.id !== importedRecipe.id &&
-      candidate.name === importedRecipe.name &&
-      candidate.machineType === importedRecipe.machineType &&
-      (!sourceRecipeMap ||
-        candidate.recipeMap === sourceRecipeMap ||
-        candidate.source?.recipeMap === sourceRecipeMap) &&
-      outputsAreCompatible(importedRecipe.outputs, candidate.outputs),
+  // A name search is the last resort, and it only ever hands back a recipe
+  // that takes and makes the same things: a same-named recipe with other
+  // inputs (the second Steel Ingot blast furnace recipe) is not this one.
+  const match = pickRecipeRefMatch(
+    recipeContentRef(importedRecipe),
+    candidates.recipes.map((candidate) => ({
+      ...candidate,
+      source: candidate.source ?? { recipeMap: candidate.recipeMap },
+    })),
   );
 
-  return match
-    ? getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, match.id)
+  return match && match.score >= RECIPE_MIGRATION_SCORE
+    ? getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, match.candidate.id)
     : undefined;
 }
 
-function outputsAreCompatible(
-  importedOutputs: RecipeOutput[],
-  candidateOutputs: RecipeOutput[],
-): boolean {
-  if (importedOutputs.length === 0) {
-    return true;
-  }
+/** Below this the likeness is too loose to swap a plan's recipe for. */
+const RECIPE_MIGRATION_SCORE = 300;
 
-  const candidateResources = new Set(
-    candidateOutputs.map((output) => `${output.kind}:${output.id}`),
-  );
-  return importedOutputs.every((output) => candidateResources.has(`${output.kind}:${output.id}`));
+/**
+ * A node whose recipe was migrated keeps only the choices the new recipe
+ * can honour: a handler id the new recipe does not list is dropped (the
+ * card falls back to its first handler, as a dataset load would leave it),
+ * and slot overrides move from the old recipe's slot numbers to the slot
+ * holding the same resource on the new one, since the exporter's slot
+ * order is not part of what makes two recipes the same.
+ */
+function carryNodeOntoMigratedRecipe(
+  node: FactoryProject["nodes"][number],
+  recipe: Recipe | undefined,
+): FactoryProject["nodes"][number] {
+  if (!recipe) {
+    return node;
+  }
+  const carried: FactoryProject["nodes"][number] = { ...node, recipeId: recipe.id };
+  if (
+    node.machineHandlerId &&
+    !(recipe.machineHandlers ?? []).some((handler) => handler.id === node.machineHandlerId)
+  ) {
+    delete carried.machineHandlerId;
+  }
+  const overrides = node.recipeInputOverrides;
+  if (overrides) {
+    const claimed = new Set<number>();
+    const rekeyed: NonNullable<typeof overrides> = {};
+    for (const override of Object.values(overrides)) {
+      if (!override) {
+        continue;
+      }
+      const index = recipe.inputs.findIndex(
+        (input, inputIndex) =>
+          !claimed.has(inputIndex) &&
+          input.kind === override.kind &&
+          (input.id === override.id ||
+            input.alternatives?.some((alternative) => alternative.id === override.id)),
+      );
+      if (index === -1) {
+        continue;
+      }
+      claimed.add(index);
+      rekeyed[String(index)] = override;
+    }
+    if (Object.keys(rekeyed).length > 0) {
+      carried.recipeInputOverrides = rekeyed;
+    } else {
+      delete carried.recipeInputOverrides;
+    }
+  }
+  return carried;
 }
 
 function ExportMenuItem({
   icon: Icon,
   label,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-fg-subtle hover:bg-surface-sunken"
-    >
-      <Icon className="h-4 w-4" />
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function ToolbarButton({
-  icon: Icon,
-  label,
+  title,
   disabled = false,
   onClick,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  title?: string;
   disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
+      disabled={disabled}
+      title={title}
+      className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-fg-subtle hover:bg-surface-sunken disabled:cursor-not-allowed disabled:text-fg-muted"
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
     </button>
   );
 }

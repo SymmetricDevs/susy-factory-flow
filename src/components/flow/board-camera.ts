@@ -27,6 +27,7 @@ import {
   TRASH_NODE_WIDTH,
   cells,
 } from "@/lib/board-grid";
+import { boardZoomScale } from "@/lib/ui-scale";
 
 /**
  * How far the board may zoom out, and in. The board itself is held to these,
@@ -43,6 +44,15 @@ import {
 export const BOARD_MIN_ZOOM = 0.05;
 export const BOARD_MAX_ZOOM = 1.8;
 
+/**
+ * The ceiling as the board actually applies it: the 1:1 number times the
+ * interface size (ui-scale.ts). The floor is left alone; the point of the
+ * floor is reaching a whole factory, which is the same size at any setting.
+ */
+export function boardMaxZoom(): number {
+  return BOARD_MAX_ZOOM * boardZoomScale();
+}
+
 /** Long enough to read as travel rather than a cut, short enough not to wait. */
 export const BOARD_CAMERA_DURATION = 420;
 
@@ -54,6 +64,11 @@ export const BOARD_CAMERA_PADDING = 0.2;
  * worse landing than arriving at it small.
  */
 export const BOARD_CAMERA_MAX_ZOOM = 1;
+
+/** The framing cap at the interface size: 1:1 at the setting's 100%. */
+export function boardCameraMaxZoom(): number {
+  return BOARD_CAMERA_MAX_ZOOM * boardZoomScale();
+}
 
 /** A rectangle in board space. */
 export interface BoardRect {

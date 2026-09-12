@@ -5,7 +5,12 @@ export type ItemId = string;
 export type FluidId = string;
 export type AspectId = string;
 export type ResourceId = ItemId | FluidId | AspectId;
-export type ResourceKind = "item" | "fluid" | "aspect";
+/**
+ * `power` is EU as a resource: one canonical id (`eu`), produced by
+ * generator cards' synthesized recipes and consumed by nothing - drawers
+ * only. Its flows are per-second like every flow; display is always EU/t.
+ */
+export type ResourceKind = "item" | "fluid" | "aspect" | "power";
 export type ResourceKey = `${ResourceKind}:${string}`;
 
 export interface ResourceIconAtlasRef {
@@ -156,6 +161,13 @@ export interface RuntimeCalculation {
 export interface MachineProfile {
   machineType: string;
   minimumTier: MachineTier | string;
+  /**
+   * The highest real machine in a singleblock family (a ZPM Elite Canning
+   * Machine II is the last Canning Machine there is). A tier above it is
+   * not a block, so the tier chip stops here and the run tier clamps to it.
+   * Absent on multiblocks, whose tier is their hatches.
+   */
+  maximumTier?: MachineTier | string;
   durationTicks?: number;
   eut?: number;
   maxParallel?: number;
@@ -198,6 +210,17 @@ export interface MachineConfigControl {
   label: string;
   minimumKey: string;
   defaultKey?: string;
+  /** Whole-number entry; an omitted maximum means there is no machine limit. */
+  numeric?: { min: number; max?: number };
+  /**
+   * The recipe's own special value is a 1-based minimum tier on this ladder
+   * (the Naquadah Fuel Refinery's field restriction coils), so `minimumKey`
+   * is overridden per recipe to `tiers[specialValue - 1]`. Declared by
+   * curated machine-table controls only; the dataset never emits it.
+   */
+  minimumFromSpecialValue?: boolean;
+  /** Special value is required heat in K; offer only coils that meet it. */
+  minimumHeatFromSpecialValue?: boolean;
   tiers: MachineConfigTierOption[];
 }
 
@@ -217,6 +240,8 @@ export interface Recipe {
   category?: string;
   machineType: string;
   minimumTier: MachineTier | string;
+  /** The family's highest real machine, carried from the selected handler; see MachineProfile. */
+  maximumTier?: MachineTier | string;
   durationTicks: number;
   eut: number;
   inputs: RecipeInput[];
@@ -227,6 +252,17 @@ export interface Recipe {
   machineProfile?: MachineProfile;
   machineHandlers?: MachineHandler[];
   machineConfigControls?: MachineConfigControl[];
+  /**
+   * Power cards only (src/lib/power): the generator this synthesized recipe
+   * was built from and its net EU/t at the baked settings. Presence of this
+   * field is what marks a recipe as a power card.
+   */
+  power?: {
+    sourceId: string;
+    euPerTick: number;
+    stats: Array<{ label: string; value: string }>;
+    warnings?: string[];
+  };
   runtimeCalculation?: RuntimeCalculation;
   isDemo?: boolean;
   source?: {
@@ -285,6 +321,12 @@ export interface TargetRate {
 /** Which way a custom rate card faces: it makes the resource, or it drinks it. */
 export type CustomRateMode = "supply" | "request";
 
+/** One more recipe on a card's machine; see `FactoryNode.extraRecipes`. */
+export interface FactoryNodeRecipeSection {
+  recipeId: string;
+  recipeInputOverrides?: Record<string, RecipeInput>;
+}
+
 export interface FactoryNode {
   id: string;
   recipeId: string;
@@ -296,6 +338,8 @@ export interface FactoryNode {
    * survives that, so a card you unwire and rewire comes back on your number.
    */
   customRate?: { perSecond: number; mode: CustomRateMode };
+  /** When set, Industrial Farm planting follows this many full seed beds. */
+  cropFullFarmCount?: number;
   machineCount: number;
   parallel: number;
   overclockTier: MachineTier | string;
@@ -313,12 +357,37 @@ export interface FactoryNode {
    * `energyHatches` is clamped to 1 while one of them is selected.
    */
   energyHatchType?: string;
+  /** Derived hatchVoltageTier voltage × hatchAmps, persisted for old readers. */
+  powerEuT?: number;
+  /** Average input voltage, independent of the total power pool. */
+  hatchVoltageTier?: Exclude<MachineTier, "DEMO">;
+  /** Working input amps. One regular hatch supplies one amp. */
+  hatchAmps?: number;
+  /** Raw EU/t assumes a suitable voltage; explicit amps use the selected hatch tier. */
+  powerInputMode?: "amps" | "eut";
   machineHandlerId?: string;
   coilTier?: string;
   machineConfigTiers?: Record<string, string>;
   /** Settings panel folded shut. A view choice, kept so it survives a reload. */
   settingsCollapsed?: boolean;
+  /** Fluids fully supplied by an installed hatch; shared by all recipes on this card. */
+  hatchSupplies?: Array<"water" | "air">;
   recipeInputOverrides?: Record<string, RecipeInput>;
+  /**
+   * More recipes the SAME machine runs (`shared-machine.ts`): a Large
+   * Chemical Reactor fed for two reactions is one card with two sections.
+   * Each section keeps its own slots, wires and oredict picks; the machine
+   * count, tier and every config knob are the card's and shared. Section 0
+   * is `recipeId` above; these are sections 1..n, and their port handles
+   * wear an `r<n>:` prefix. Absent or empty means an ordinary one-recipe card.
+   */
+  extraRecipes?: FactoryNodeRecipeSection[];
+  /**
+   * Solve mode's pin: run EXACTLY this many machines, and solve the rest of
+   * the line around it ("I want 20 LGTs; what feeds them"). Absent means the
+   * count is the solver's to choose. Ignored in plan mode.
+   */
+  solvePin?: number;
   targetOutput?: TargetRate;
   enabled: boolean;
   /** The pocket dimension this card lives in; absent = the root board. */
@@ -363,8 +432,22 @@ export interface FactoryStorage {
   resourceId: ResourceId;
   /** Drains only; absent means `product`. See StorageDrainMode. */
   drainMode?: StorageDrainMode;
+  /**
+   * Solve mode's question, typed on a PRODUCT drawer: make at least this much
+   * per second. Ignored in plan mode and on other drawer roles; a product with
+   * no number is unconstrained (byproduct-shaped) so flipping the mode never
+   * errors a board.
+   */
+  targetPerSecond?: number;
   /** Buffers only; absent means `overflow`. See StorageBufferMode. */
   bufferMode?: StorageBufferMode;
+  /**
+   * Which side of the POOL this drawer sits on when it has no wires of its
+   * own (`FactoryProject.poolMode`): a `source` feeds the pool, a `drain`
+   * takes from it (its `drainMode` still says product, byproduct or trash).
+   * Ignored while the drawer has wires, and outside pool mode.
+   */
+  poolSide?: "source" | "drain";
   colorTag?: FactoryNodeColorTag;
   displayName?: string;
   iconPath?: string;
@@ -541,10 +624,6 @@ export interface FactoryEdge {
   crossForm?: {
     litresPerCell: number;
   };
-  labelOffset?: {
-    x: number;
-    y: number;
-  };
   /**
    * User-pinned stops, in order: the wire must pass through each on its way
    * from source to target. Placed by double-clicking the wire, dragged to
@@ -589,15 +668,15 @@ export interface PlanViewState {
   /** Historical: older plans carry it, nothing reads it. Line colour rides
    * the status glance mode now. */
   lineHeatMode?: boolean;
-  lineThicknessMode?: boolean;
-  freeDockMode?: boolean;
+  /** Historical: the rate pills on wires were dropped (2026-09-08); nothing reads it. */
   lineLabelsMode?: boolean;
+  fixedEdgeWidth?: boolean;
   linePulseMode?: boolean;
   calmMode?: boolean;
   /** Historical: older plans carry it, nothing applies it. The smart view is
    * personal, and opening a setup always starts on the identity view. */
   glanceMode?: string;
-  rateUnit?: "tick" | "second" | "minute" | "hour";
+  rateUnit?: "tick" | "second" | "minute" | "hour" | "eu";
   leftPanelOpen?: boolean;
   rightPanelOpen?: boolean;
   showHiddenResources?: boolean;
@@ -637,6 +716,8 @@ export interface SetupRules {
 }
 
 export interface FactoryProject {
+  /** Construction progress; never changes production. */
+  checklist?: { cards: string[]; edges: string[] };
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   id: string;
   name: string;
@@ -652,6 +733,32 @@ export interface FactoryProject {
   targetRate?: TargetRate;
   /** How the board treats what it cannot feed or shift. See SetupRules. */
   setupRules?: SetupRules;
+  /**
+   * SOLVE MODE: machine counts become the answer instead of the question.
+   * Product drawers' typed amounts (`FactoryStorage.targetPerSecond`) are the
+   * constraints, and every card reports the fractional machine count the
+   * targets require (`theoreticalMachinesRequired`) in place of usage and
+   * verdicts. Part of the plan JSON so a shared setup opens in the mode it
+   * was authored in.
+   */
+  solveMode?: boolean;
+  /**
+   * POOL MODE: no wires needed. Every resource is one shared pool: whatever
+   * any machine makes goes in, whatever any machine needs comes out, the
+   * surplus banks. Imports are SOURCE drawers placed on the board with
+   * `poolSide: "source"`, products are DRAIN drawers with `poolSide: "drain"`;
+   * a resource nobody makes and no source declares stays short. Wires drawn
+   * anyway still count. Combines with solve mode. Part of the plan JSON.
+   */
+  poolMode?: boolean;
+  /**
+   * Pool mode's cell-to-fluid bridges: litres one filled cell holds, keyed
+   * by the cell item id, read from the Canner's own recipes (never
+   * guessed) and fetched for every cell/fluid pair the plan's slots name.
+   * A pair with no ratio here is not bridged. Stored so a shared plan
+   * solves the same everywhere without a lookup.
+   */
+  poolCellRatios?: Record<string, number>;
   /**
    * LEGACY sketch mode, read on load and rewritten as both board rules.
    * Plans saved before the rules existed still carry it; nothing writes it.
@@ -671,15 +778,12 @@ export interface FactoryProject {
     source?: string;
     createdAt?: string;
     updatedAt?: string;
-    /** The community post this design was shared as / imported from. */
-    communityPlanId?: string;
     /**
-     * Fingerprint of the board content as last synced with that post, stamped
-     * on download and on share. While the board still matches it, "reset to
-     * the posted version" has nothing to restore and greys out. Covers what
-     * the board IS, not what it is called; see plan-fingerprint.ts.
+     * The community post this design IS. Only the owner's design carries it;
+     * the post follows every save (post-follow.ts). A copy of someone else's
+     * post has none.
      */
-    communityFingerprint?: string;
+    communityPlanId?: string;
   };
 }
 
@@ -796,6 +900,10 @@ export interface StorageThroughputResult {
   consumedPerSecond: number;
   netPerSecond: number;
   status: "filling" | "draining" | "balanced" | "empty";
+  /** Solve mode: the typed requirement this drawer carried into the solve. */
+  targetPerSecond?: number;
+  /** Solve mode: no chain can reach the typed amount at any machine scale. */
+  targetUnreachable?: boolean;
 }
 
 export interface ResourceBalance {
@@ -861,4 +969,62 @@ export interface ThroughputResult {
   externalInputs: ResourceBalance[];
   unconsumedOutputs: ResourceBalance[];
   generatedAt: string;
+  /**
+   * These books do not describe the current plan yet: a big board's solve
+   * runs off the main thread and the real result replaces them when it
+   * lands. See `src/store/solve-books.ts`.
+   */
+  stale?: boolean;
+  /**
+   * Stale because automatic recalculation is OFF and the plan changed since
+   * the last solve: the books are held until the player asks. Never set by a
+   * worker solve, so the "thinking" spinner can tell the two apart.
+   */
+  held?: boolean;
+  /**
+   * The clog-lock diagnosis, when the solve that made these books also ran
+   * it. Its vent solve is a second, harder LP: a board with many stopped
+   * machines pays 20-60 s for it on the main thread, so the solve worker
+   * computes it beside the books and `findClogLocks` serves it from here.
+   */
+  clogLocks?: ClogLockIndex;
+}
+
+export interface ClogLockVent {
+  nodeId: string;
+  /** The culprit machine's display name, so a victim's card can say where
+   * to act without the player hunting the board. */
+  machineName: string;
+  resourceKey: ResourceKey;
+  resourceName: string;
+  /** What must leave through this port per second for the group to run. */
+  perSecond: number;
+}
+
+export interface ClogLock {
+  /** Stable id: the smallest member node id. Survives re-solves. */
+  id: string;
+  /** Every frozen card the jam holds, machines and pass-through drawers. */
+  nodeIds: string[];
+  /** Machine members only - what the copy counts. */
+  machineIds: string[];
+  /**
+   * The machines whose surplus needs the drawer - the only cards that flash,
+   * ordered WORST FIRST so the notice's "Show me" walks them by severity.
+   * A jam can hold half a board; marking every member painted whole plans
+   * blue and pointed nowhere. The victims keep the verdict and its story,
+   * the vent sites carry the ring, exactly as the fix copy promises.
+   */
+  ventNodeIds: string[];
+  /** The wires carrying a vented surplus out of a vent site - the ones the
+   * drawer tees into. Only these breathe, never the whole web. */
+  edgeIds: string[];
+  /** The surpluses that need a home, largest first. */
+  vents: ClogLockVent[];
+}
+
+export interface ClogLockIndex {
+  byNode: Map<string, ClogLock>;
+  byEdge: Map<string, ClogLock>;
+  locks: ClogLock[];
 }

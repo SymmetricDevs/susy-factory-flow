@@ -59,6 +59,11 @@ export interface CommunityPlanSummary extends CommunityPlanStats {
   createdAt: string;
   /** Last touch of any kind: content overwrite or relabel. */
   updatedAt?: string;
+  /** Live comments on it, and when the latest landed. */
+  commentCount: number;
+  lastCommentAt?: string;
+  /** The later of the last edit and the last comment. */
+  lastActivityAt?: string;
   authorName?: string;
   /** True when the signed-in user owns this post. */
   isMine?: boolean;
@@ -73,7 +78,12 @@ export type CommunityPlanSort =
   | "views"
   | "machines"
   | "nodes"
-  | "power";
+  | "power"
+  | "lowPower" // least EU/t first
+  | "tier" // highest voltage tier first
+  | "comments" // most comments
+  | "commented" // latest comment first
+  | "active"; // latest edit or comment first
 
 export interface CommunityPlanListRequest {
   sort?: CommunityPlanSort;
@@ -83,6 +93,11 @@ export interface CommunityPlanListRequest {
   mine?: boolean;
   /** Exact game version, e.g. "2.8.0". */
   gameVersion?: string;
+  /** Posts drawing more than this many EU/t are left out. */
+  maxEuT?: number;
+  /** "kind:resourceId" keys the post must make / take, all of them. */
+  makes?: string[];
+  takes?: string[];
   page?: number;
   pageSize?: number;
   deviceId?: string;
@@ -136,3 +151,18 @@ export const BOARD_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 export const COMMUNITY_NAME_MAX_LENGTH = 80;
 export const COMMUNITY_DESCRIPTION_MAX_LENGTH = 2000;
 export const COMMUNITY_RESOURCE_STAT_LIMIT = 40;
+
+/** One comment on a shared setup, as the browser sees it. */
+export interface CommunityComment {
+  id: string;
+  planId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  /** Written by the signed-in user. */
+  isMine: boolean;
+  /** The signed-in user may delete it: their own, or on their own post. */
+  canDelete: boolean;
+}
+
+export const COMMUNITY_COMMENT_MAX_LENGTH = 2000;

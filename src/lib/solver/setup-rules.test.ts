@@ -127,9 +127,6 @@ describe("board rules", () => {
   });
 
   it("free inputs alone still leaves the bare plate slot to pin the chain", () => {
-    // The presser's plate has nowhere to go, so conservation pins it, and the
-    // smelter feeding it goes down too. Free inputs answers where things come
-    // FROM and nothing else.
     const result = solve(board({ freeInputs: true }));
     expect(result.nodes["presser"].utilization).toBeCloseTo(0);
     expect(result.nodes["smelter"].utilization).toBeCloseTo(0);
@@ -142,23 +139,17 @@ describe("board rules", () => {
   });
 
   it("free outputs unclogs a WIRED port, which sketch mode never did", () => {
-    // Two smelters make 2 ingots/s into one presser that eats 1. The wire is
-    // drawn, so the bare-slot rule sketch mode used would not have touched it.
     expect(solve(closedChain(undefined, 2, 1)).nodes["smelter"].utilization).toBeCloseTo(0.5);
     const freed = solve(closedChain({ freeOutputs: true }, 2, 1));
     expect(freed.nodes["smelter"].utilization).toBeCloseTo(1);
     expect(freed.nodes["presser"].utilization).toBeCloseTo(1);
-    // The presser is still fed off the wire, not off a free source.
     expect(freed.edges["mid"].transferredPerSecond).toBeCloseTo(1);
   });
 
   it("free inputs tops up a WIRED port that cannot keep up", () => {
-    // One smelter makes 1 ingot/s into two pressers that want 2 between them.
     expect(solve(closedChain(undefined, 1, 2)).nodes["presser"].utilization).toBeCloseTo(0.5);
     const fed = solve(closedChain({ freeInputs: true }, 1, 2));
     expect(fed.nodes["presser"].utilization).toBeCloseTo(1);
-    // Everything the smelter makes still goes down the wire; only the
-    // shortfall is imported.
     expect(fed.edges["mid"].transferredPerSecond).toBeCloseTo(1);
   });
 });

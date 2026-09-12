@@ -1,10 +1,8 @@
 "use client";
 
-import { planContentFingerprint } from "@/lib/community/plan-fingerprint";
-import { factoryProjectSchema } from "@/lib/model/schemas";
-import { normalizeLoadedProject } from "@/lib/model/project-normalize";
 import { randomUUID } from "@/lib/random-id";
 import type {
+  CommunityComment,
   CommunityPlanListRequest,
   CommunityPlanListResponse,
   CommunityPlanSummary,
@@ -37,7 +35,11 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
     | (T & { error?: string })
     | undefined;
   if (!response.ok || !body) {
-    throw new Error(body?.error ?? `Request failed (${response.status})`);
+    // The status rides the error so callers can tell "not yours" (403) and
+    // "gone" (404) from a hiccup without matching message text.
+    throw Object.assign(new Error(body?.error ?? `Request failed (${response.status})`), {
+      status: response.status,
+    });
   }
 
   return body;
@@ -52,6 +54,9 @@ export async function listCommunityPlans(
   if (params.maxTier) search.set("maxTierIndex", params.maxTier);
   if (params.mine) search.set("mine", "1");
   if (params.gameVersion) search.set("gameVersion", params.gameVersion);
+  if (params.maxEuT !== undefined) search.set("maxEuT", String(params.maxEuT));
+  if (params.makes?.length) search.set("makes", params.makes.join(","));
+  if (params.takes?.length) search.set("takes", params.takes.join(","));
   if (params.page) search.set("page", String(params.page));
   if (params.pageSize) search.set("pageSize", String(params.pageSize));
   search.set("deviceId", getDeviceId());
@@ -207,10 +212,9 @@ export async function logoutCommunityUser(): Promise<void> {
 }
 
 /**
- * Stamps a downloaded plan with the community post it came from, so the
- * editor's Share and link actions can target that exact post later — plus a
- * fingerprint of the content as it arrived, so the plan card can tell an
- * untouched copy from one that has drifted.
+ * Stamps a downloaded plan with the community post it IS: only for the
+ * owner's own post coming back into their library. The link is what makes
+ * the post follow the design from then on (see post-follow.ts).
  */
 export function tagPlanWithCommunityId(plan: unknown, planId: string): unknown {
   if (typeof plan !== "object" || plan === null) {
@@ -220,22 +224,51 @@ export function tagPlanWithCommunityId(plan: unknown, planId: string): unknown {
   const record = plan as { metadata?: Record<string, unknown> };
   return {
     ...record,
-    metadata: {
-      ...record.metadata,
-      communityPlanId: planId,
-      communityFingerprint: downloadedPlanFingerprint(plan),
-    },
+    metadata: { ...record.metadata, communityPlanId: planId },
   };
 }
 
 /**
- * The fingerprint is compared against the LIVE project, which has been
- * through schema parsing and normalization (default arrays filled in, legacy
- * wires dropped). Fingerprinting the raw JSON would brand an old post's
- * untouched copy as "changed" the moment the loader tidied it, so the stamp
- * goes through the same pipeline the board does.
+ * A copy of someone else's setup is a plain design of your own: no link, so
+ * nothing you do to it can touch their post, and posting it later makes an
+ * ordinary post of yours.
  */
-function downloadedPlanFingerprint(plan: unknown): string {
-  const parsed = factoryProjectSchema.safeParse(plan);
-  return planContentFingerprint(parsed.success ? normalizeLoadedProject(parsed.data) : plan);
+export function untagCommunityPlan(plan: unknown): unknown {
+  if (typeof plan !== "object" || plan === null) {
+    return plan;
+  }
+  const record = plan as { metadata?: Record<string, unknown> };
+  if (!record.metadata) {
+    return plan;
+  }
+  const { communityPlanId, communityFingerprint, ...metadata } = record.metadata;
+  void communityPlanId;
+  void communityFingerprint;
+  return { ...record, metadata };
+}
+
+export async function listPlanComments(planId: string): Promise<CommunityComment[]> {
+  const response = await fetch(`/api/community/plans/${encodeURIComponent(planId)}/comments`, {
+    cache: "no-store",
+  });
+  const body = await parseJsonOrThrow<{ comments: CommunityComment[] }>(response);
+  return body.comments;
+}
+
+export async function postPlanComment(planId: string, text: string): Promise<CommunityComment> {
+  const response = await fetch(`/api/community/plans/${encodeURIComponent(planId)}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body: text }),
+  });
+  const body = await parseJsonOrThrow<{ comment: CommunityComment }>(response);
+  return body.comment;
+}
+
+export async function deletePlanComment(planId: string, commentId: string): Promise<void> {
+  const response = await fetch(
+    `/api/community/plans/${encodeURIComponent(planId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: "DELETE" },
+  );
+  await parseJsonOrThrow<{ ok: true }>(response);
 }

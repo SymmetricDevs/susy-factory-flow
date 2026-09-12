@@ -49,10 +49,15 @@ export interface RecipeMapIconEntry {
     Partial<Pick<ResourceAmount, "amount">>;
 }
 
-/** The item that represents a machine handler family (its lowest-tier variant). */
+/**
+ * The item that represents a machine handler family (its lowest-tier
+ * variant), and, for a tiered singleblock family, every tier's own item so
+ * a card can wear the machine of the tier it is set to. Tier order.
+ */
 export interface MachineHandlerIconEntry {
   familyId: string;
   resource: RecipeMapIconEntry["resource"];
+  tiers?: Array<{ tier: string; resource: RecipeMapIconEntry["resource"] }>;
 }
 
 export interface DatasetVersion {

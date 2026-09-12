@@ -6,8 +6,9 @@ import type {
   ResourceKey,
   ResourceKind,
 } from "./types";
-import { rateUnitMultiplier, rateUnitSuffix } from "./rate-unit";
+import { rateMultiplierForKind, rateSuffixForKind } from "./rate-unit";
 import { getCropsNhStats } from "./passive-production";
+import { isFreeRecipeInput } from "./free-input";
 
 export function makeResourceKey(kind: ResourceKind, resourceId: string): ResourceKey {
   return `${kind}:${resourceId}` as ResourceKey;
@@ -161,6 +162,15 @@ export function formatCompactStable(value: number): string {
   return `${sign}${abs.toFixed(abs >= 100 ? 1 : 2)}${COMPACT_SUFFIXES[tier]}`;
 }
 
+/** Power in the selected display unit: keep a real trickle distinct from zero. */
+export function formatPowerValue(value: number, stable = false): string {
+  if (value !== 0 && Math.abs(value) < 0.01) {
+    return value < 0 ? ">-0.01" : "<0.01";
+  }
+  // Fractional amps must not round to zero during a number animation either.
+  return stable && Math.abs(value) >= 1 ? formatCompactStable(value) : formatCompact(value);
+}
+
 export function formatNumberWithThousands(value: number | string): string {
   // American separators: comma thousands, dot decimal ("1,234.56").
   const text = String(value);
@@ -182,8 +192,8 @@ export function formatResourceRate(flow: ResourceFlow | undefined): string {
   }
 
   return `${resourceLabel({ id: flow.resourceId, displayName: flow.displayName })} ${formatRate(
-    flow.amountPerSecond * rateUnitMultiplier(),
-  )}${rateUnitSuffix(flow.kind === "fluid").trimStart()}`;
+    flow.amountPerSecond * rateMultiplierForKind(flow.kind),
+  )}${rateSuffixForKind(flow.kind).trimStart()}`;
 }
 
 export function primaryOutput(recipe: Recipe): RecipeOutput | undefined {
@@ -205,8 +215,13 @@ export function getChanceMultiplier(
 }
 
 export function isRecipeInputConsumed(
-  input: Pick<ResourceAmount, "id"> & { consumed?: boolean },
+  input: Pick<ResourceAmount, "id"> & { kind?: string; consumed?: boolean },
 ): boolean {
+  // A free-in-the-game placeholder (see free-input.ts) is nothing anyone
+  // supplies, so every rule that skips a circuit skips it too.
+  if (isFreeRecipeInput(input)) {
+    return false;
+  }
   return input.consumed !== false;
 }
 

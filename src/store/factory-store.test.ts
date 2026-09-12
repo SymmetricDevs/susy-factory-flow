@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { getStorageRole } from "@/lib/model/storage-role";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { makeResourceHandleId } from "@/components/flow/resource-handles";
 import { captureBoardSelection, useFactoryStore } from "./factory-store";
@@ -41,7 +42,7 @@ describe("factory resource links", () => {
         source: "stick-source",
         target: "stick-oredict-target",
         sourceHandle: "output:item:minecraft%3Astick%400:0",
-        targetHandle: "input:item:oredict%3AstickWood:0",
+        targetHandle: "input:item:minecraft%3Astick%400",
         resourceKind: "item",
         resourceId: "minecraft:stick@0",
       }),
@@ -276,7 +277,7 @@ describe("factory resource links", () => {
         source: "screwdriver-source",
         target: "screwdriver-oredict-target",
         sourceHandle: "output:item:gregtech%3Ascrewdriver.lv%400:0",
-        targetHandle: "input:item:oredict%3AcraftingToolScrewdriver:0",
+        targetHandle: "input:item:gregtech%3Ascrewdriver.lv%400",
         resourceKind: "item",
         resourceId: "gregtech:screwdriver.lv@0",
       }),
@@ -410,6 +411,87 @@ describe("factory resource links", () => {
       targetHandle: makeResourceHandleId("input", { kind: "item", id: "dust" }),
     });
     expect(useFactoryStore.getState().project.edges).toHaveLength(0);
+  });
+
+  it("wires the neighbours straight together when a pass-through drawer is deleted", () => {
+    // The undo of the board menu's "Add a drawer here": scrub the drawer
+    // away and the wire it stood in the middle of is back.
+    const base = useFactoryStore.getState().project;
+    const out = makeResourceHandleId("output", { kind: "item", id: "dust" });
+    const into = makeResourceHandleId("input", { kind: "item", id: "dust" });
+    const drawer = (id: string, x: number) => ({
+      id,
+      kind: "item" as const,
+      resourceId: "dust",
+      displayName: "Dust",
+      position: { x, y: 0 },
+    });
+    const wire = (id: string, source: string, target: string) => ({
+      id,
+      source,
+      target,
+      sourceHandle: out,
+      targetHandle: into,
+      resourceKind: "item" as const,
+      resourceId: "dust",
+    });
+    useFactoryStore.getState().setProject({
+      ...base,
+      storages: [drawer("dust-a", 0), drawer("dust-b", 200), drawer("dust-c", 400)],
+      edges: [wire("a-b", "dust-a", "dust-b"), wire("b-c", "dust-b", "dust-c")],
+    });
+
+    useFactoryStore.getState().deleteStorage("dust-b");
+
+    const project = useFactoryStore.getState().project;
+    expect((project.storages ?? []).map((entry) => entry.id)).toEqual(["dust-a", "dust-c"]);
+    expect(project.edges).toEqual([
+      expect.objectContaining({ source: "dust-a", target: "dust-c", resourceId: "dust" }),
+    ]);
+  });
+
+  it("heals nothing when the deleted drawer was a junction", () => {
+    // Two feeders AND two takers: there is no one wire that says what the
+    // drawer meant, so its neighbours are left unwired rather than guessed.
+    const base = useFactoryStore.getState().project;
+    const out = makeResourceHandleId("output", { kind: "item", id: "dust" });
+    const into = makeResourceHandleId("input", { kind: "item", id: "dust" });
+    const drawer = (id: string, x: number) => ({
+      id,
+      kind: "item" as const,
+      resourceId: "dust",
+      displayName: "Dust",
+      position: { x, y: 0 },
+    });
+    const wire = (id: string, source: string, target: string) => ({
+      id,
+      source,
+      target,
+      sourceHandle: out,
+      targetHandle: into,
+      resourceKind: "item" as const,
+      resourceId: "dust",
+    });
+    useFactoryStore.getState().setProject({
+      ...base,
+      storages: [
+        drawer("in-1", 0),
+        drawer("in-2", 0),
+        drawer("hub", 200),
+        drawer("out-1", 400),
+        drawer("out-2", 400),
+      ],
+      edges: [
+        wire("i1", "in-1", "hub"),
+        wire("i2", "in-2", "hub"),
+        wire("o1", "hub", "out-1"),
+        wire("o2", "hub", "out-2"),
+      ],
+    });
+
+    useFactoryStore.getState().deleteStorage("hub");
+
+    expect(useFactoryStore.getState().project.edges).toEqual([]);
   });
 
   it("refuses a drawer wired to a drawer of a different resource, or to itself", () => {
@@ -990,6 +1072,49 @@ describe("factory resource links", () => {
     expect(useFactoryStore.getState().project.storages).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "water-tank" })]),
     );
+  });
+
+  it("keeps a pool-made product drawer through other edits and the trip back to build", () => {
+    useFactoryStore.getState().setBoardMode("pool");
+    useFactoryStore.getState().addStorageForConnection(
+      { kind: "item", id: "dust", displayName: "Dust" },
+      "item-source",
+      "output",
+      { x: 600, y: 300 },
+      makeResourceHandleId("output", { kind: "item", id: "dust" }, 0),
+    );
+    const drawer = useFactoryStore
+      .getState()
+      .project.storages?.find((storage) => storage.poolSide === "drain");
+    expect(drawer).toBeDefined();
+    expect(useFactoryStore.getState().project.edges).toHaveLength(0);
+
+    // Any edit on any card used to sweep it as an orphan: it has no wires,
+    // because in pool mode the declared side is the whole link.
+    useFactoryStore.getState().updateNode("item-target", { overclockTier: "HV" });
+    expect(useFactoryStore.getState().project.storages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: drawer!.id, poolSide: "drain" })]),
+    );
+
+    // Back in build or solve it lingers as the product it was made as.
+    useFactoryStore.getState().setBoardMode("solve");
+    expect(useFactoryStore.getState().project.storages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: drawer!.id })]),
+    );
+    expect(getStorageRole(useFactoryStore.getState().project, drawer!.id)).toBe("product");
+  });
+
+  it("migrates a stored recipe to its content match and moves the node onto the new id", () => {
+    const before = useFactoryStore.getState().project;
+    const stored = before.recipes.find((recipe) => recipe.id === "item-recipe") ?? before.recipes[0]!;
+    const node = before.nodes.find((entry) => entry.recipeId === stored.id)!;
+    const rekeyed = { ...stored, id: stored.id + "-content", machineHandlers: [{ id: "fam", label: "Fam", machineType: "Fam", minimumTier: "LV", maximumTier: "HV" }] };
+    useFactoryStore.getState().refreshProjectRecipes([rekeyed], { [stored.id]: rekeyed.id });
+    const after = useFactoryStore.getState().project;
+    expect(after.recipes.some((recipe) => recipe.id === rekeyed.id)).toBe(true);
+    expect(after.recipes.some((recipe) => recipe.id === stored.id)).toBe(false);
+    expect(after.nodes.find((entry) => entry.id === node.id)?.recipeId).toBe(rekeyed.id);
+    expect(after.recipes.find((recipe) => recipe.id === rekeyed.id)?.machineHandlers?.[0]?.maximumTier).toBe("HV");
   });
 
   it("undoes and redoes structural project edits", () => {
@@ -1651,6 +1776,60 @@ describe("recipe search wiring and refactor", () => {
     useFactoryStore.getState().browseResource({ kind: "item", id: "ore" }, "recipes");
     expect(useFactoryStore.getState().recipeBrowserRefactorNodeId).toBeUndefined();
     expect(useFactoryStore.getState().recipeBrowserSeed).toBeUndefined();
+  });
+
+  it("walks back and forward through the pages the search has shown", () => {
+    const store = useFactoryStore.getState();
+    store.clearResourceBrowser();
+    store.browseResource({ kind: "item", id: "ingot" }, "recipes");
+    store.browseResource({ kind: "item", id: "dust" }, "uses");
+    store.browseResource({ kind: "item", id: "ore" }, "recipes");
+    // The page already open is not filed again.
+    store.browseResource({ kind: "item", id: "ore" }, "recipes");
+    expect(useFactoryStore.getState().recipeBrowserBack).toHaveLength(2);
+    expect(useFactoryStore.getState().recipeBrowserForward).toHaveLength(0);
+
+    store.browseBack();
+    expect(useFactoryStore.getState().recipeBrowserResource?.id).toBe("dust");
+    expect(useFactoryStore.getState().recipeBrowserMode).toBe("uses");
+    expect(useFactoryStore.getState().recipeBrowserForward).toHaveLength(1);
+
+    store.browseBack();
+    expect(useFactoryStore.getState().recipeBrowserResource?.id).toBe("ingot");
+    expect(useFactoryStore.getState().recipeBrowserBack).toHaveLength(0);
+    // Nothing further back: a no-op, not a crash.
+    store.browseBack();
+    expect(useFactoryStore.getState().recipeBrowserResource?.id).toBe("ingot");
+
+    store.browseForward();
+    expect(useFactoryStore.getState().recipeBrowserResource?.id).toBe("dust");
+    expect(useFactoryStore.getState().recipeBrowserMode).toBe("uses");
+
+    // A fresh browse from the middle drops the forward branch, like a browser.
+    store.browseResource({ kind: "fluid", id: "steam" }, "recipes");
+    expect(useFactoryStore.getState().recipeBrowserForward).toHaveLength(0);
+    expect(useFactoryStore.getState().recipeBrowserBack.map((page) => page.resource.id)).toEqual([
+      "ingot",
+      "dust",
+    ]);
+
+    // Closing the search forgets both stacks.
+    store.clearResourceBrowser();
+    expect(useFactoryStore.getState().recipeBrowserBack).toHaveLength(0);
+    expect(useFactoryStore.getState().recipeBrowserForward).toHaveLength(0);
+  });
+
+  it("files the search a refactor press replaces, and back restores the refactor", () => {
+    const store = useFactoryStore.getState();
+    store.clearResourceBrowser();
+    store.setProject(REFACTOR_PROJECT());
+    store.beginRecipeRefactor("mid");
+    expect(useFactoryStore.getState().recipeBrowserRefactorNodeId).toBe("mid");
+    store.browseResource({ kind: "item", id: "ore" }, "recipes");
+    expect(useFactoryStore.getState().recipeBrowserRefactorNodeId).toBeUndefined();
+    store.browseBack();
+    expect(useFactoryStore.getState().recipeBrowserRefactorNodeId).toBe("mid");
+    expect(useFactoryStore.getState().recipeBrowserSeed?.length).toBeGreaterThan(0);
   });
 });
 

@@ -10,10 +10,15 @@ import {
 } from "./machine-table";
 import referenceCoefficients from "./__fixtures__/reference-coefficients.json";
 import {
+  buildMachineContext,
   getMachineDurationMultiplier,
   getMachineEutMultiplier,
   getMachineParallelMultiplier,
 } from "@/lib/solver/machine-effects";
+import {
+  getRecipeCoilTierControl,
+  getRecipeMachineConfigTierControls,
+} from "@/lib/model/recipe-rules";
 import type { MachineConfigControl, Recipe } from "@/lib/model/types";
 
 interface ReferenceSample {
@@ -177,6 +182,15 @@ describe("curated machine table", () => {
     // several exist because GTNH rewrote the machine after the reference was
     // written, so the reference tracks a class that is no longer craftable.
     const DIVERGES_FROM_REFERENCE = new Set([
+      // Two recipe-map modes; Java charges 15% EU in distillery mode, not
+      // the reference's 85%. Source boundaries covered in dangote-distillus.test.ts.
+      "Dangote Distillus",
+      // Java's 0.9f, ceil ticks and the custom supplier's floored parallels.
+      // Covered at recipe-rate boundaries in neutron-activator.test.ts.
+      "Neutron Activator",
+      // Real hatch combinations and the independent source-voltage OC cap;
+      // the reference only asks for raw amps. See hile.test.ts.
+      "Hyper-Intensity Laser Engraver",
       "Utupu-Tanuri",
       "Zyngen",
       "Exothermic Hearth",
@@ -313,6 +327,8 @@ describe("curated machine table", () => {
         // gtPlusPlus.xmod.gregtech.common.tileentities.automation; not a
         // recipe-map machine, so the reference never covered it.
         "Auto Workbench",
+        // MTEPreciseAssembler's dedicated precise mode has no speed/parallels bonus.
+        "Precise Assembler",
       ].map(normalizeMachineName),
     );
     // Every entry must trace back to a reference definition or a direct source
@@ -361,6 +377,48 @@ describe("curated machine table", () => {
     const hearth = { ...grinder, machineType: "Steam Hearth" } as Recipe;
     expect(200 * getMachineDurationMultiplier(hearth, bronze)).toBeCloseTo(204.8, 10);
     expect(200 * getMachineDurationMultiplier(hearth, highPressure)).toBeCloseTo(102.4, 10);
+  });
+
+  it("gives the Naquadah Fuel Refinery field restriction coils, not heating coils", () => {
+    // MTENaquadahFuelRefinery: 4 parallels per coil tier, one perfect
+    // overclock per coil tier above the recipe's minimum (its special value),
+    // no voltage overclocking. The dataset scraped the tooltip's "Coil Tier"
+    // as the heating coil ladder; that knob must be replaced, not shown.
+    const nfr = {
+      machineType: "Naquadah Fuel Refinery",
+      minimumTier: "UHV",
+      eut: 0,
+      nei: { additionalInfo: ["Special value: 2"] },
+      machineConfigControls: [coilControl()],
+    } as unknown as Recipe;
+
+    // The scraped heating coil is hidden and the real coils take its place,
+    // offered from the recipe's own minimum tier upward.
+    const controls = getRecipeMachineConfigTierControls(nfr, { machineConfigTiers: {} });
+    expect(controls.map((control) => control.id)).toEqual(["fieldRestrictionCoil"]);
+    expect(getRecipeCoilTierControl(nfr, {})).toBeUndefined();
+    expect(controls[0].tiers.map((tier) => tier.key)).toEqual(["t2", "t3", "t4"]);
+    expect(controls[0].current.key).toBe("t2");
+
+    // Parallels count the coil's position on the FULL ladder even though the
+    // recipe's minimum hides the rungs below it: T2 default is 8, T4 is 16.
+    expect(getMachineParallelMultiplier(nfr, { machineConfigTiers: {} })).toBe(8);
+    expect(
+      getMachineParallelMultiplier(nfr, { machineConfigTiers: { fieldRestrictionCoil: "t4" } }),
+    ).toBe(16);
+
+    // T4 coils on a T2-minimum recipe are two perfect overclocks; at the
+    // minimum there are none, and extra voltage alone buys nothing.
+    const behaviour = getMachineBehaviour("Naquadah Fuel Refinery");
+    expect(
+      resolveOverclockSpec(
+        behaviour,
+        buildMachineContext(nfr, { machineConfigTiers: { fieldRestrictionCoil: "t4" } }),
+      ),
+    ).toEqual(OVERCLOCK.perfect(2));
+    expect(
+      resolveOverclockSpec(behaviour, buildMachineContext(nfr, { machineConfigTiers: {} })),
+    ).toEqual(OVERCLOCK.perfect(0));
   });
 
   it("leaves machines it does not cover on the dataset's own values", () => {

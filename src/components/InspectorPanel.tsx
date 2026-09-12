@@ -12,20 +12,30 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { getUiScale } from "@/lib/ui-scale";
+import "./inspector/panel.css";
+import { ProductTargetRow } from "./inspector/ProductTargetRow";
 import { MachineShoppingList } from "./MachineShoppingList";
 import { formatCompact } from "@/lib/model";
-import { makeResourceKey } from "@/lib/model/resources";
+import { makeResourceKey, formatPowerValue } from "@/lib/model/resources";
 import { getStorageRoles } from "@/lib/model/storage-role";
-import { rateUnitMultiplier, rateUnitSuffix } from "@/lib/model/rate-unit";
+import {
+  energyPerUnit,
+  isEnergyRateUnit,
+  rateMultiplierForKind,
+  rateSuffixForKind,
+} from "@/lib/model/rate-unit";
+import { ENERGY_READING_TEXT, formatEnergyPerUnitParts } from "./flow/flow-explainers";
 import type {
   FactoryProject,
+  FactoryStorage,
   ResourceAmount,
   ResourceBalance,
   ResourceKey,
 } from "@/lib/model/types";
 import { calculateSelectionFlow, selectInternalBalances } from "@/lib/solver";
 import { selectTrendSeries, useResourceTrends } from "@/lib/resource-trends";
-import { useFactoryStore } from "@/store/factory-store";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   toggleResourceFavourite,
@@ -55,29 +65,31 @@ import { ResourceIcon } from "./nei/ResourceIcon";
 const FLOW_FILTER_DEBOUNCE_MS = 120;
 const SELECTION_DEBOUNCE_MS = 100;
 
-// A row cannot be shorter than its icon, so row height and icon size are one
-// decision, not two: the icon fills the row edge to edge with no padding, which is
-// what makes consecutive rows butt up with no band between them. Both the icon
-// column and the icon box are derived from ROW_HEIGHTS.item rather than restated
-// as a utility class, so the two can never drift apart. This is the single lever
-// for how many resources fit on screen.
-const ROW_HEIGHTS = { header: 24, item: 30, empty: 24, chart: 60 };
-const ICON_COLUMN = `${ROW_HEIGHTS.item}px`;
+// One ledger row: icon, resource, Raw and Net. Keep the virtual list
+// height in sync with inspector/panel.css.
+const ROW_HEIGHTS = { header: 22, item: 24, empty: 22, chart: 60, product: 28 };
+const ICON_COLUMN = "20px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
 /**
  * Rates here obey the board's /s /min /hr switch like every other surface.
- * The unit is a module singleton and the store re-solves when it changes, so
- * these read the live setting at render with nothing to thread through.
+ * Formatters read the unit singleton; rows subscribe to the display dials
+ * and repaint without solving again.
  */
-function formatRateValue(perSecond: number): string {
-  return formatCompact(perSecond * rateUnitMultiplier());
+function formatRateValue(perSecond: number, kind: string = "item"): string {
+  const value = perSecond * rateMultiplierForKind(kind);
+  return kind === "power" ? formatPowerValue(value) : formatCompact(value);
+}
+
+function formatSignedRate(perSecond: number, kind: string, sign: number): string {
+  const text = formatRateValue(Math.abs(perSecond), kind);
+  return text === "0" ? text : (sign < 0 ? "−" : sign > 0 ? "+" : "") + text;
 }
 
 function rateUnitFor(kind: ResourceBalance["kind"]): string {
-  return rateUnitSuffix(kind === "fluid").trim();
+  return rateSuffixForKind(kind).trim();
 }
 
 /** How long a row takes to grow into the list or fold out of it. */
@@ -286,27 +298,30 @@ export function InspectorPanel() {
   return (
     <aside
       data-help-anchor="inspector"
-      className="flex h-full min-h-[360px] compact:min-h-0 flex-col bg-surface"
+      className="inspector-panel flex h-full min-h-[360px] compact:min-h-0 flex-col bg-[#25272c]"
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
-        <FlowIOPanel />
-      </div>
+      <FlowIOPanel />
       {/* The build list rides the panel's floor: what to build, at which
-          tier, and what one of each draws. */}
+          tier, what one of each draws - and, when generators stand on the
+          board, what they make and the plan's net power. */}
       <MachineShoppingList />
     </aside>
   );
 }
 
 function FlowIOPanel() {
+  const readOnly = useFactoryStore(state => state.isReadOnly);
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
+  // Every row prints a rate: follow the rate and power dials.
+  useRateDisplayUnits();
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const setHoveredFlowResourceKey = useFactoryStore((state) => state.setHoveredFlowResourceKey);
   const selectedBoardIds = useFactoryStore((state) => state.selectedBoardIds);
   const focusBoardNode = useFactoryStore((state) => state.focusBoardNode);
 
   const [filter, setFilter] = useState("");
+  const [rateColumn, setRateColumn] = useState<"raw" | "net">("raw");
   // Internal starts folded: it is the long tail, and the group that means
   // "nothing to see". One click opens it, and the state is per visit like the
   // other folds.
@@ -350,12 +365,13 @@ function FlowIOPanel() {
   const workspace = useWorkspaceView();
   const marks = useMemo<ResourceMarks>(
     () => ({
-      hidden: new Set(workspace.hiddenResourceKeys),
-      favourites: new Set(workspace.favouriteResourceKeys),
-      showHidden: workspace.showHiddenResources,
-      favouritesOnly: workspace.favouritesOnly,
+      hidden: new Set(readOnly ? [] : workspace.hiddenResourceKeys),
+      favourites: new Set(readOnly ? [] : workspace.favouriteResourceKeys),
+      showHidden: !readOnly && workspace.showHiddenResources,
+      favouritesOnly: !readOnly && workspace.favouritesOnly,
     }),
     [
+      readOnly,
       workspace.favouriteResourceKeys,
       workspace.favouritesOnly,
       workspace.hiddenResourceKeys,
@@ -426,23 +442,14 @@ function FlowIOPanel() {
     // reads once and then knows; the glosses were permanent lines of text
     // earning nothing after the first day.
     //
-    // NET collapses any item sitting on both sides of the boundary into one
-    // signed figure before the marks and the filter see it, so the count
-    // badges and the star float always describe the list actually drawn.
-    let boundary = workspace.netFlowRates
-      ? applyNetFlow(scope.externalInputs, scope.unconsumedOutputs)
-      : { needs: scope.externalInputs, outputs: scope.unconsumedOutputs };
+    // Raw lists preserve both boundary sides; Net files each resource by sign.
+    let boundary = { needs: scope.externalInputs, outputs: scope.unconsumedOutputs };
     // The declared boundary (see boundaryStorageKeys): rows the drawers vouch
     // for join at 0/s when the books dropped them. Board scope only — the
-    // selection view is a transient analysis, not the plan's ledger. In NET
-    // mode a resource already listed on EITHER side stays where the sign put
-    // it rather than gaining a zero twin.
+    // selection view is a transient analysis, not the plan's ledger.
     if (!selection) {
-      const listedEitherSide = workspace.netFlowRates
-        ? new Set([...boundary.needs, ...boundary.outputs].map((balance) => balance.key))
-        : undefined;
       const augment = (list: ResourceBalance[], keys: ReadonlySet<ResourceKey>) => {
-        const present = listedEitherSide ?? new Set(list.map((balance) => balance.key));
+        const present = new Set(list.map((balance) => balance.key));
         const extras: ResourceBalance[] = [];
         for (const key of keys) {
           const balance = scope.resources[key];
@@ -463,6 +470,7 @@ function FlowIOPanel() {
         outputs: augment(boundary.outputs, boundaryStorageKeys.drains),
       };
     }
+    if (rateColumn === "net") boundary = applyNetFlow(boundary.needs, boundary.outputs);
     return [
       // One line each: the row is a single fixed-height line, so wrapping
       // would clip.
@@ -475,11 +483,11 @@ function FlowIOPanel() {
     boundaryStorageKeys,
     debouncedFilter,
     marks,
+    rateColumn,
     scope.externalInputs,
     scope.resources,
     scope.unconsumedOutputs,
     selection,
-    workspace.netFlowRates,
   ]);
 
   const toggleSection = useCallback((id: FlowSectionId) => {
@@ -517,16 +525,36 @@ function FlowIOPanel() {
     [marks.hidden, scope.resources],
   );
 
+  const canEditProducts = useFactoryStore((state) => !state.isReadOnly && (state.project.solveMode === true || state.project.poolMode === true));
+  const products = useMemo(() => {
+    const roles = getStorageRoles(project);
+    const selected = selection ? new Set(debouncedSelectionKey.split("\0")) : undefined;
+    const result = new Map<string, FactoryStorage[]>();
+    for (const storage of project.storages ?? []) {
+      if (roles.get(storage.id) !== "product" || (selected && !selected.has(storage.id))) continue;
+      const key = makeResourceKey(storage.kind, storage.resourceId);
+      result.set(key, [...(result.get(key) ?? []), storage]);
+    }
+    return result;
+  }, [project, selection, debouncedSelectionKey]);
+  const visibleProducts = useMemo(() => canEditProducts ? new Set(products.keys()) : EMPTY_KEYS, [canEditProducts, products]);
+
+  const contentHeight = 78 + (selection ? 28 : 0) + measureFlowRows(
+    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS, products, visibleProducts),
+    ROW_HEIGHTS,
+  ).totalHeight;
+
   return (
     <section
+      style={{ flex: "0 1 auto", height: contentHeight, maxHeight: "var(--inspector-resource-max, 100%)", minHeight: "min(190px, 45%)" }}
       className={[
         // The ring wraps the WHOLE panel, not just the strip: the point is
         // that everything below is about the selection, so the mode has to be
         // readable from anywhere in the list rather than only at the top.
-        "flex min-h-0 flex-1 flex-col rounded border bg-surface-raised",
-        selection
-          ? "border-[var(--selection)] ring-1 ring-[var(--selection-soft)]"
-          : "border-line",
+        // Like the items column: only the controls sit on a card; the list
+        // sits on the column itself.
+        "relative isolate flex min-h-0 flex-1 flex-col",
+        selection ? "inspector-selection-scope" : "",
       ].join(" ")}
     >
       {selection ? (
@@ -536,14 +564,15 @@ function FlowIOPanel() {
         />
       ) : null}
 
-      <div className="shrink-0 border-b border-line p-1">
-        <div className="mb-1 flex items-center gap-1">
+      <div className="inspector-section-heading">
+        <h2>Resources</h2>
+        <div hidden={readOnly} className={readOnly ? "ml-auto hidden" : "inspector-header-actions ml-auto flex items-center gap-1"}>
           <ToolbarToggle
             on={workspace.showHiddenResources}
             onClick={() =>
               writeWorkspaceView({ showHiddenResources: !workspace.showHiddenResources })
             }
-            title="Hidden resources"
+            title={`Hidden resources (${hiddenCount})`}
             label={
               workspace.showHiddenResources
                 ? "Stop showing hidden resources"
@@ -585,56 +614,7 @@ function FlowIOPanel() {
             <span className="text-[13px] leading-none">★</span>
           </ToolbarToggle>
 
-          {/* RAW against NET, both words always up: a reader who has never met
-              the distinction can see there is one and read both answers before
-              clicking anything - the same rule the drawer mode swap follows.
-              Panel arithmetic, not wiring: an item never moves on the board
-              because of this switch. */}
-          <div
-            role="group"
-            aria-label="Rate display"
-            className="flex h-6 shrink-0 overflow-hidden rounded border border-line-strong"
-          >
-            <button
-              type="button"
-              onClick={() => writeWorkspaceView({ netFlowRates: false })}
-              title="Raw"
-              aria-label="Show raw rates"
-              aria-pressed={!workspace.netFlowRates}
-              className={[
-                "px-1.5 text-[9px] font-black leading-none tracking-tight",
-                workspace.netFlowRates
-                  ? "text-fg-muted hover:text-fg"
-                  : "bg-cyan-500/20 text-cyan-200",
-              ].join(" ")}
-            >
-              RAW
-            </button>
-            <button
-              type="button"
-              onClick={() => writeWorkspaceView({ netFlowRates: true })}
-              title="Net"
-              aria-label="Show net rates"
-              aria-pressed={workspace.netFlowRates}
-              className={[
-                "border-l border-line-strong px-1.5 text-[9px] font-black leading-none tracking-tight",
-                workspace.netFlowRates
-                  ? "bg-emerald-500/20 text-emerald-200"
-                  : "text-fg-muted hover:text-fg",
-              ].join(" ")}
-            >
-              NET
-            </button>
-          </div>
-
-          {hiddenCount > 0 ? (
-            <span
-              className="ml-auto shrink-0 text-[11px] tabular-nums text-fg-muted"
-              title={`${hiddenCount} resource${hiddenCount === 1 ? "" : "s"} hidden`}
-            >
-              {hiddenCount} hidden
-            </span>
-          ) : null}
+        </div>
 
           <button
             type="button"
@@ -642,8 +622,8 @@ function FlowIOPanel() {
             title="Hide"
             aria-label="Hide the resources column"
             className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-line-strong text-fg-muted hover:border-cyan-600 hover:text-cyan-400",
-              hiddenCount > 0 ? "" : "ml-auto",
+              "ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100",
+
             ].join(" ")}
           >
             <svg
@@ -658,22 +638,22 @@ function FlowIOPanel() {
               <path d="M6 3l5 5-5 5" />
             </svg>
           </button>
-        </div>
-
+      </div>
+      <div className="inspector-controls mx-2 shrink-0 border-b border-neutral-700 pb-1">
         <div className="relative">
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             placeholder="Filter resources…"
             aria-label="Filter flow resources"
-            className="h-9 w-full rounded border border-line-strong bg-surface pl-2 pr-14 text-base text-fg outline-none placeholder:text-fg-muted focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
+            className="h-7 w-full rounded-[4px] border border-neutral-700 bg-[#17191d] pl-2 pr-14 text-base shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
           />
           {filter ? (
             <button
               type="button"
               onClick={() => setFilter("")}
               aria-label="Clear filter"
-              className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-fg-muted hover:bg-surface-sunken hover:text-fg"
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 hover:bg-[#1b1d21] hover:text-neutral-100"
             >
               {matchCount} ✕
             </button>
@@ -682,6 +662,10 @@ function FlowIOPanel() {
       </div>
 
       <FlowVirtualList
+        rateColumn={rateColumn}
+        onRateColumnChange={setRateColumn}
+        products={products}
+        expandedProducts={visibleProducts}
         sections={sections}
         collapsed={collapsed}
         isFiltered={isFiltered}
@@ -690,8 +674,10 @@ function FlowIOPanel() {
         hidden={marks.hidden}
         favourites={marks.favourites}
         // Charts are a whole-plan record, so a scoped panel has none to show.
-        showCharts={workspace.trendsOpen && !selection}
-        manageMode={workspace.showHiddenResources}
+        showCharts={!readOnly && workspace.trendsOpen && !selection}
+        manageMode={!readOnly && workspace.showHiddenResources}
+        // Read at render: flipping the unit re-solves, which re-renders here.
+        energyEuT={isEnergyRateUnit() ? scope.totalEuT : undefined}
         onToggleSection={toggleSection}
         onHover={setHoveredFlowResourceKey}
         onFocusBoard={focusBoardOnResource}
@@ -730,7 +716,7 @@ function ToolbarToggle({
       aria-pressed={on}
       className={[
         "flex h-6 w-7 shrink-0 items-center justify-center rounded border",
-        on ? onStyle : "border-line-strong text-fg-muted hover:border-line-strong hover:text-fg",
+        on ? onStyle : "border-neutral-700 text-neutral-400 hover:border-neutral-700 hover:text-neutral-100",
       ].join(" ")}
     >
       {children}
@@ -804,6 +790,10 @@ function ScopeStrip({
  * section headers use real CSS stickiness instead of hand-positioned overlays.
  */
 function FlowVirtualList({
+  rateColumn,
+  onRateColumnChange,
+  products,
+  expandedProducts,
   sections,
   collapsed,
   isFiltered,
@@ -813,10 +803,15 @@ function FlowVirtualList({
   favourites,
   showCharts,
   manageMode,
+  energyEuT,
   onToggleSection,
   onHover,
   onFocusBoard,
 }: {
+  rateColumn: "raw" | "net";
+  onRateColumnChange: (value: "raw" | "net") => void;
+  products: ReadonlyMap<string, FactoryStorage[]>;
+  expandedProducts: ReadonlySet<string>;
   sections: FlowSection[];
   collapsed: Record<FlowSectionId, boolean>;
   isFiltered: boolean;
@@ -826,6 +821,8 @@ function FlowVirtualList({
   favourites: ReadonlySet<string>;
   showCharts: boolean;
   manageMode: boolean;
+  /** The scope's power draw while the EU unit is on; undefined otherwise. */
+  energyEuT?: number;
   onToggleSection: (id: FlowSectionId) => void;
   onHover: (resourceKey?: string) => void;
   onFocusBoard: (resourceKey: string) => void;
@@ -837,8 +834,8 @@ function FlowVirtualList({
   // No chart rows at all when charts are off, so the list closes up rather
   // than leaving gaps where they were.
   const targetRows = useMemo(
-    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS),
-    [collapsed, favourites, sections, showCharts],
+    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS, products, expandedProducts),
+    [collapsed, favourites, sections, showCharts, products, expandedProducts],
   );
   // Membership rides the value-motion clock: rows grow in and fold out, and
   // `rows` below may briefly hold departed rows mid-fold.
@@ -943,7 +940,10 @@ function FlowVirtualList({
       return;
     }
     overlay.style.visibility = "";
-    overlay.style.top = `${box.top}px`;
+    // The copy is a body portal wearing .ui-zoom: its top/right are shell
+    // pixels, the row's rect and the document width real pixels.
+    const scale = getUiScale();
+    overlay.style.top = `${box.top / scale}px`;
     // clientWidth, not innerWidth: innerWidth counts the width of a classic
     // scrollbar and the `right` of a fixed element is measured from the initial
     // containing block, which does not. That difference is what let the row
@@ -951,7 +951,7 @@ function FlowVirtualList({
     // purpose: an inset "for the scrollbar" left the row's lit edge showing
     // beside its own copy, which read as a second row. The scrollbar problem
     // is solved by the copy being a pointer GHOST instead — see the wrapper.
-    overlay.style.right = `${document.documentElement.clientWidth - box.right}px`;
+    overlay.style.right = `${(document.documentElement.clientWidth - box.right) / scale}px`;
   }, [expandedKey, findExpandedRow]);
 
   /**
@@ -982,9 +982,13 @@ function FlowVirtualList({
     // Fractional measurement plus slack, never offsetWidth: that rounds to
     // whole pixels, and a round-down of a fractional max-content re-trims
     // the name to "…" — the whole point of the copy is that it never does.
-    const natural = Math.ceil(overlay.getBoundingClientRect().width) + 2;
+    // Rects are real pixels and the copy's width is a shell-pixel style
+    // (it is a body portal wearing .ui-zoom): everything is brought across.
+    const scale = getUiScale();
+    const natural = Math.ceil(overlay.getBoundingClientRect().width / scale) + 2;
+    const rowWidth = box.width / scale;
     overlay.style.width = `${Math.round(
-      Math.min(Math.max(natural, box.width), Math.max(box.right - 12, box.width)),
+      Math.min(Math.max(natural, rowWidth), Math.max(box.right / scale - 12, rowWidth)),
     )}px`;
     overlay.classList.remove("resource-row-measuring");
   }, [findExpandedRow]);
@@ -1093,6 +1097,8 @@ function FlowVirtualList({
     >
       {stickyHeader?.type === "header" ? (
         <FlowSectionHeader
+          rateColumn={rateColumn}
+          onRateColumnChange={onRateColumnChange}
           section={stickyHeader.section}
           collapsed={stickyHeader.collapsed}
           isFiltered={isFiltered}
@@ -1108,6 +1114,8 @@ function FlowVirtualList({
         if (row.type === "header") {
           return (
             <FlowSectionHeader
+          rateColumn={rateColumn}
+          onRateColumnChange={onRateColumnChange}
               key={row.key}
               section={row.section}
               collapsed={row.collapsed}
@@ -1143,7 +1151,7 @@ function FlowVirtualList({
             <p
               style={{ height: ROW_HEIGHTS.empty }}
               className={[
-                "flex items-center px-3 text-xs text-fg-muted",
+                "flex items-center px-3 text-xs text-neutral-400",
                 TONE_STYLES[row.section.tone].tint,
               ].join(" ")}
             >
@@ -1153,6 +1161,10 @@ function FlowVirtualList({
               </span>
             </p>,
           );
+        }
+
+        if (row.type === "product") {
+          return shell(<ProductTargetRow storage={row.storage} isLast={row.index === (products.get(makeResourceKey(row.storage.kind, row.storage.resourceId))?.length ?? 0) - 1} />);
         }
 
         if (row.type === "chart") {
@@ -1173,6 +1185,8 @@ function FlowVirtualList({
 
         return shell(
           <FlowResourceRow
+            rateColumn={rateColumn}
+            productMarker={row.section.id === "output" && products.has(row.balance.key) && !expandedProducts.has(row.balance.key)}
             balance={row.balance}
             sectionId={row.section.id}
             tone={row.section.tone}
@@ -1182,6 +1196,7 @@ function FlowVirtualList({
             isHidden={hidden.has(row.balance.key)}
             isFavourite={favourites.has(row.balance.key)}
             manageMode={manageMode}
+            energyEuT={row.section.id !== "internal" ? energyEuT : undefined}
             onHover={onHover}
             onExpand={setExpanded}
             onFocusBoard={onFocusBoard}
@@ -1216,9 +1231,11 @@ function FlowVirtualList({
               // Where the row was when the pointer reached it, so the first
               // frame is drawn in the right place. From then on the layout
               // effect above owns these two, measured off the row itself.
-              top: expandedRow.top,
-              right: expandedRow.right,
-              "--row-start-width": `${expandedRow.startWidth}px`,
+              // Reported in real pixels by the row; this portal positions in
+              // shell pixels (see positionExpanded).
+              top: expandedRow.top / getUiScale(),
+              right: expandedRow.right / getUiScale(),
+              "--row-start-width": `${expandedRow.startWidth / getUiScale()}px`,
             } as React.CSSProperties
           }
           // One ring around the pair, so the row and its chart read as a
@@ -1230,9 +1247,11 @@ function FlowVirtualList({
           // mark buttons opt back into the pointer (pointer-events-auto on
           // themselves). Hover and dismissal are the underlying rows' and the
           // document watcher's job now, not this element's.
-          className="resource-row-expand pointer-events-none fixed z-[60] overflow-hidden rounded bg-surface-raised shadow-xl ring-1 ring-cyan-500/60"
+          className="resource-row-expand ui-zoom pointer-events-none fixed z-[60] overflow-hidden rounded bg-[#2a2d33] shadow-xl ring-1 ring-cyan-500/60"
         >
           <FlowResourceRow
+            rateColumn={rateColumn}
+            productMarker={expandedRow.section.id === "output" && products.has(expandedRow.balance.key) && !expandedProducts.has(expandedRow.balance.key)}
             balance={expandedRow.balance}
             sectionId={expandedRow.section.id}
             tone={expandedRow.section.tone}
@@ -1242,6 +1261,7 @@ function FlowVirtualList({
             isHidden={hidden.has(expandedRow.balance.key)}
             isFavourite={favourites.has(expandedRow.balance.key)}
             manageMode={manageMode}
+            energyEuT={expandedRow.section.id !== "internal" ? energyEuT : undefined}
             expanded
             onHover={onHover}
             onExpand={setExpanded}
@@ -1293,6 +1313,7 @@ const FlowChartRow = memo(function FlowChartRow({
   onExpand: (resourceKey: string, top: number, right: number, startWidth: number) => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
+  useRateDisplayUnits();
   return (
     <div
       data-resource-chart={balance.key}
@@ -1323,14 +1344,14 @@ const FlowChartRow = memo(function FlowChartRow({
       <div
         className={[
           "h-full rounded px-1",
-          expanded ? "" : "border border-line bg-surface-sunken/40",
+          expanded ? "" : "border border-neutral-800 bg-[#1b1d21]/40",
         ].join(" ")}
       >
         <TrendSparkline
           series={series}
           height={ROW_HEIGHTS.chart - 10}
           unit={rateUnitFor(balance.kind)}
-          multiplier={rateUnitMultiplier()}
+          multiplier={rateMultiplierForKind(balance.kind)}
         />
       </div>
     </div>
@@ -1338,11 +1359,15 @@ const FlowChartRow = memo(function FlowChartRow({
 });
 
 function FlowSectionHeader({
+  rateColumn,
+  onRateColumnChange,
   section,
   collapsed,
   isFiltered,
   onToggle,
 }: {
+  rateColumn: "raw" | "net";
+  onRateColumnChange: (value: "raw" | "net") => void;
   section: FlowSection;
   collapsed: boolean;
   isFiltered: boolean;
@@ -1352,26 +1377,33 @@ function FlowSectionHeader({
   const showRatio = isFiltered && section.items.length !== section.totalCount;
 
   return (
-    <button
-      type="button"
-      onClick={() => onToggle(section.id)}
-      aria-expanded={!collapsed}
+    <div
       style={{ height: ROW_HEIGHTS.header }}
       className={[
-        "sticky top-0 z-10 flex w-full items-center gap-2 border-y px-2 text-left backdrop-blur-sm",
+        "inspector-flow-section sticky top-0 z-10 flex w-full items-center gap-2 px-2 text-left backdrop-blur-sm",
         tone.header,
       ].join(" ")}
     >
+      <button type="button" onClick={() => onToggle(section.id)} aria-expanded={!collapsed} className="flex min-w-0 flex-1 items-center gap-1 text-left">
       <span className={["text-[11px] leading-none", collapsed ? "" : "rotate-90"].join(" ")}>▶</span>
       <span className="text-sm font-bold uppercase tracking-wider">{section.label}</span>
       <span className={["rounded px-1.5 py-0.5 text-xs font-bold tabular-nums", tone.badge].join(" ")}>
         {showRatio ? `${section.items.length} / ${section.totalCount}` : section.totalCount}
       </span>
-    </button>
+      </button>
+      {section.id === "need" && <span className="inspector-rate-selector ml-auto flex shrink-0 justify-end gap-0.5" role="group" aria-label="Resource rate display">
+        {(["raw", "net"] as const).map(value => <button key={value} type="button" aria-pressed={rateColumn === value}
+          onClick={() => onRateColumnChange(value)} className="px-2 py-0.5" aria-label={value === "raw" ? "Show raw rates" : "Show net rates"}>
+          {value === "raw" ? "Raw" : "Net"}
+        </button>)}
+      </span>}
+    </div>
   );
 }
 
 const FlowResourceRow = memo(function FlowResourceRow({
+  rateColumn,
+  productMarker,
   balance,
   sectionId,
   tone,
@@ -1381,12 +1413,15 @@ const FlowResourceRow = memo(function FlowResourceRow({
   isHidden,
   isFavourite,
   manageMode,
+  energyEuT,
   expanded = false,
   onHover,
   onExpand,
   onMarkChanged,
   onFocusBoard,
 }: {
+  rateColumn: "raw" | "net";
+  productMarker?: boolean;
   balance: ResourceBalance;
   sectionId: FlowSectionId;
   tone: FlowSectionTone;
@@ -1396,6 +1431,12 @@ const FlowResourceRow = memo(function FlowResourceRow({
   isHidden: boolean;
   isFavourite: boolean;
   manageMode: boolean;
+  /**
+   * The scope's whole power draw while the EU unit is on, Inputs and Outputs rows:
+   * the row then reads the EU the entire chain spent per unit of this resource
+   * (made, or brought in) instead of its rate. Undefined otherwise and for Internal.
+   */
+  energyEuT?: number;
   /** The wide copy floating over the board: no truncation, opaque, raised. */
   expanded?: boolean;
   onHover: (resourceKey?: string) => void;
@@ -1404,10 +1445,21 @@ const FlowResourceRow = memo(function FlowResourceRow({
   onMarkChanged?: () => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
+  // Memoized rows keep the same balance when only a display dial changes.
+  useRateDisplayUnits();
+  const readOnly = useFactoryStore(state => state.isReadOnly);
   const toneStyle = TONE_STYLES[tone];
   const value = getFlowRowValue(sectionId, balance);
+  // The energy reading: what the whole scope spends per unit of this product.
+  // EU itself never reads as EU per EU.
+  const euEach =
+    energyEuT !== undefined && balance.kind !== "power"
+      ? energyPerUnit(energyEuT, Math.abs(value))
+      : undefined;
+  const netValue = balance.surplusPerSecond - balance.deficitPerSecond;
+  const netEnergy = energyEuT !== undefined && balance.kind !== "power"
+    ? energyPerUnit(energyEuT, Math.abs(netValue)) : undefined;
   const unit = rateUnitFor(balance.kind);
-  const prefix = sign === -1 ? "−" : sign === 1 ? "+" : "";
   const name = balance.displayName ?? balance.resourceId;
 
   return (
@@ -1417,6 +1469,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
       // Only the real rows are findable by key: the wide copy is what gets
       // positioned FROM one, so it must not be able to answer that query itself.
       data-resource-row={expanded ? undefined : balance.key}
+      data-viewer-resource={readOnly || undefined}
       data-resource-hidden={isHidden ? "true" : undefined}
       style={{ height: ROW_HEIGHTS.item }}
       className={[
@@ -1461,7 +1514,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // crossed, which on a list this dense meant a yellow box trailing the
         // cursor the whole way down. The row already widens on hover to show
         // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) auto auto` }}
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 89px auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon
@@ -1471,7 +1524,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
           // the rate and the collapsed columns after it, so every ordinary row
           // paid for two gaps it could not use and the rates sat well short of
           // the panel edge.
-          "grid h-full w-full items-center rounded pr-1 text-left",
+          "inspector-resource-button grid h-full w-full items-center rounded pr-1 text-left",
           // The wide copy carries no highlight of its own: its wrapper rings
           // the row and the chart together as one block.
           expanded
@@ -1481,15 +1534,10 @@ const FlowResourceRow = memo(function FlowResourceRow({
               : "hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/60",
         ].join(" ")}
       >
-        {/*
-          Sized from ROW_HEIGHTS.item directly. The icon used to carry its own
-          height utility, which left it free to end up shorter than the row and
-          centred there — the band above and below it is what read as space
-          between rows. Filling an explicitly row-height box removes that.
-        */}
+        {/* The icon spans the name and rate lines without growing with the row. */}
         <span
-          style={{ height: ROW_HEIGHTS.item, width: ROW_HEIGHTS.item }}
-          className="flex shrink-0 items-center justify-center overflow-hidden"
+          style={{ height: 20, width: 20 }}
+          className="relative flex shrink-0 items-center justify-center"
         >
           <ResourceIcon
             resource={{
@@ -1508,27 +1556,45 @@ const FlowResourceRow = memo(function FlowResourceRow({
             tooltip={false}
             className="!h-full !w-full"
           />
+          {productMarker ? <span className="inspector-product-marker" role="img" aria-label="Product">◆</span> : null}
         </span>
 
         {/* Truncates in the wide copy too. The extra width fits most names in
             full, which is the point, but a name longer than even that has to
             end in an ellipsis rather than run under the rate. */}
-        <span className="ml-2 flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-base font-medium text-fg">{name}</span>
+        <span className="inspector-resource-name ml-2 flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate text-base font-medium text-neutral-100">{name}</span>
         </span>
 
-        <span
-          className={["ml-2 flex shrink-0 items-baseline", toneStyle.value].join(" ")}
+        {rateColumn === "raw" && <span
+          className={[
+            "inspector-resource-rate ml-2 flex shrink-0 items-baseline",
+            euEach !== undefined ? ENERGY_READING_TEXT : toneStyle.value,
+          ].join(" ")}
         >
           <span className="text-base font-bold tabular-nums">
-            {prefix}
-            {/* Eases to a new solve on the board's value-motion clock; the
-                sign and tone flip immediately, only the digits travel. */}
-            <MotionNumberText
-              values={[Math.abs(value)]}
-              render={(shown) => formatRateValue(shown[0] ?? Math.abs(value))}
-            />
-            <span className="ml-0.5 text-[11px] font-semibold opacity-70">{unit}</span>
+            {euEach !== undefined ? (
+              // The chain's cost per unit, in the gold every energy reading
+              // wears, the unit a small grey tail. Not eased: it is a
+              // quotient of two moving figures and tweening it read as the
+              // cost drifting on its own.
+              <>
+                {formatEnergyPerUnitParts(euEach, balance.kind).value}
+                <span className="inspector-unit">
+                  {formatEnergyPerUnitParts(euEach, balance.kind).unit}
+                </span>
+              </>
+            ) : (
+              <>
+                {/* Eases to a new solve on the board's value-motion clock; the
+                    sign and tone flip immediately, only the digits travel. */}
+                <MotionNumberText
+                  values={[Math.abs(value)]}
+                  render={(shown) => formatSignedRate(shown[0] ?? Math.abs(value), balance.kind, sign)}
+                />
+                <span className="inspector-unit">{unit}</span>
+              </>
+            )}
           </span>
 
           {/*
@@ -1554,8 +1620,21 @@ const FlowResourceRow = memo(function FlowResourceRow({
               ★
             </span>
           ) : null}
-        </span>
+        </span>}
 
+
+        {rateColumn === "net" && <span className={`inspector-resource-net ${euEach !== undefined ? ENERGY_READING_TEXT : toneStyle.value}`}>
+          {euEach !== undefined ? (netEnergy === undefined ? "—" : <>
+            {formatEnergyPerUnitParts(netEnergy, balance.kind).value}
+            <span className="inspector-unit">{formatEnergyPerUnitParts(netEnergy, balance.kind).unit}</span>
+          </>) : <>
+          <MotionNumberText
+            values={[netValue]}
+            render={([net = 0]) => formatSignedRate(net, balance.kind, net)}
+          />
+          <span className="inspector-unit">{unit}</span>
+          </>}
+        </span>}
         {/*
           The room the mark buttons slide into, on the right where they belong.
           A real grid column rather than a layer on top of the rate: as an
@@ -1594,6 +1673,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
         controls should not have to be hunted for one row at a time.
       */}
       <div
+        hidden={readOnly}
         className={[
           "resource-row-marks pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5",
           manageMode || expanded
@@ -1658,8 +1738,8 @@ function RowMarkButton({
       // The bar around these is pointer-events-none so it can never swallow a
       // click meant for the rate behind it; the buttons opt back in.
       className={[
-        "pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-[13px] leading-none hover:bg-surface-sunken",
-        on ? onClass : "text-fg-muted hover:text-fg",
+        "pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-[13px] leading-none hover:bg-[#1b1d21]",
+        on ? onClass : "text-neutral-400 hover:text-neutral-100",
       ].join(" ")}
     >
       {children}
@@ -1679,26 +1759,26 @@ const TONE_STYLES: Record<
 > = {
   need: {
     header:
-      "border-red-500/40 bg-red-950/85 text-red-100 hover:bg-red-900/60",
-    badge: "bg-red-500/30 text-red-50",
-    value: "text-red-300",
-    tint: "bg-red-500/5",
+      "border-[var(--flow-input)]/40 bg-red-950/85 text-[var(--flow-input)] hover:bg-red-900/60",
+    badge: "bg-[var(--flow-input)]/30 text-[var(--flow-input)]",
+    value: "text-[var(--flow-input)]",
+    tint: "bg-[var(--flow-input)]/5",
   },
   /*
    * One Outputs section, one colour: green, the Output colour this panel has
    * had since before the one-day product/byproduct split. Red in, green out.
    */
   output: {
-    header: "border-emerald-500/40 bg-emerald-950/85 text-emerald-100 hover:bg-emerald-900/60",
-    badge: "bg-emerald-500/30 text-emerald-50",
-    value: "text-emerald-300",
-    tint: "bg-emerald-500/5",
+    header: "border-[var(--flow-output)]/40 bg-emerald-950/85 text-[var(--flow-output)] hover:bg-emerald-900/60",
+    badge: "bg-[var(--flow-output)]/30 text-[var(--flow-output)]",
+    value: "text-[var(--flow-output)]",
+    tint: "bg-[var(--flow-output)]/5",
   },
   internal: {
     header:
-      "border-line bg-surface-sunken/90 text-fg-subtle hover:bg-surface",
-    badge: "bg-fg-muted/20 text-fg-subtle",
-    value: "text-fg-subtle",
+      "border-neutral-800 bg-[#1b1d21]/90 text-neutral-300 hover:bg-[#25272c]",
+    badge: "bg-fg-muted/20 text-neutral-300",
+    value: "text-neutral-300",
     // No tint. Internal is the long tail and the one group that means "nothing
     // to see"; painting it too would make the panel a stack of colours with no
     // quiet ground to read the others against.

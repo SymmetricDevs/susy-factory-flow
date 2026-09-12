@@ -5,6 +5,7 @@ import {
   getCommunityDb,
   isCommunityConfigured,
   makeActorKey,
+  makeVoterKey,
 } from "@/lib/server/community";
 import {
   blueprintStorageErrorMessage,
@@ -40,6 +41,7 @@ export async function POST(
     if (!(await checkRateLimit(actorKey, "blueprint-vote", 60, 60 * 10))) {
       return NextResponse.json({ error: "Voting too fast. Slow down." }, { status: 429 });
     }
+    const voterKey = await makeVoterKey(request, deviceId);
 
     const db = getCommunityDb();
     const { data: target, error: targetError } = await db
@@ -61,7 +63,7 @@ export async function POST(
       .from("blueprint_votes")
       .select("value")
       .eq("blueprint_id", blueprintId)
-      .eq("voter_key", actorKey)
+      .eq("voter_key", voterKey)
       .maybeSingle();
 
     let myVote: 1 | -1 | undefined;
@@ -70,12 +72,12 @@ export async function POST(
         .from("blueprint_votes")
         .delete()
         .eq("blueprint_id", blueprintId)
-        .eq("voter_key", actorKey);
+        .eq("voter_key", voterKey);
       myVote = undefined;
     } else {
       const { error } = await db
         .from("blueprint_votes")
-        .upsert({ blueprint_id: blueprintId, voter_key: actorKey, value });
+        .upsert({ blueprint_id: blueprintId, voter_key: voterKey, value });
       if (error) {
         throw new Error(error.message);
       }

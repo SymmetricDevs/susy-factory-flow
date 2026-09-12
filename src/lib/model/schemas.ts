@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PROJECT_SCHEMA_VERSION } from "./types";
 
-export const resourceKindSchema = z.enum(["item", "fluid", "aspect"]);
+export const resourceKindSchema = z.enum(["item", "fluid", "aspect", "power"]);
 export const resourceIconAtlasRefSchema = z.object({
   imagePath: z.string().min(1),
   atlasWidth: z.number().int().positive(),
@@ -147,6 +147,7 @@ export const runtimeCalculationSchema = z.object({
 export const machineProfileSchema = z.object({
   machineType: z.string().min(1),
   minimumTier: z.string().min(1),
+  maximumTier: z.string().min(1).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick").optional(),
   eut: z.number().min(0, "EU/t must be zero or positive").optional(),
   maxParallel: z.number().positive().optional(),
@@ -160,6 +161,8 @@ export const machineConfigControlSchema = z.object({
   label: z.string().min(1),
   minimumKey: z.string().min(1),
   defaultKey: z.string().min(1).optional(),
+  numeric: z.object({ min: z.number().int(), max: z.number().int().optional() }).optional(),
+  minimumHeatFromSpecialValue: z.boolean().optional(),
   tiers: z
     .array(
       z.object({
@@ -204,6 +207,7 @@ export const recipeSchema = z.object({
   category: z.string().min(1).optional(),
   machineType: z.string().min(1, "Machine type is required"),
   minimumTier: z.string().min(1, "Minimum tier is required"),
+  maximumTier: z.string().min(1).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick"),
   eut: z.number().min(0, "EU/t must be zero or positive"),
   inputs: z.array(recipeInputSchema),
@@ -218,6 +222,15 @@ export const recipeSchema = z.object({
   machineProfile: machineProfileSchema.optional(),
   machineHandlers: z.array(machineHandlerSchema).optional(),
   machineConfigControls: z.array(machineConfigControlSchema).optional(),
+  // Power cards (src/lib/power): the generator behind a synthesized recipe.
+  power: z
+    .object({
+      sourceId: z.string().min(1),
+      euPerTick: z.number(),
+      stats: z.array(z.object({ label: z.string(), value: z.string() })),
+      warnings: z.array(z.string()).optional(),
+    })
+    .optional(),
   runtimeCalculation: runtimeCalculationSchema.optional(),
   isDemo: z.boolean().optional(),
   source: z
@@ -297,6 +310,7 @@ export const factoryNodeSchema = z.object({
       mode: z.enum(["supply", "request"]),
     })
     .optional(),
+  cropFullFarmCount: z.number().int().min(1).optional(),
   machineCount: z.number().min(0),
   parallel: z
     .number()
@@ -310,11 +324,45 @@ export const factoryNodeSchema = z.object({
     .max(64)
     .optional(),
   energyHatchType: z.string().min(1).optional(),
+  powerEuT: z.number().nonnegative().finite().optional(),
+  hatchVoltageTier: z
+    .enum([
+      "ULV",
+      "LV",
+      "MV",
+      "HV",
+      "EV",
+      "IV",
+      "LuV",
+      "ZPM",
+      "UV",
+      "UHV",
+      "UEV",
+      "UIV",
+      "UMV",
+      "UXV",
+      "MAX",
+    ])
+    .optional(),
+  hatchAmps: z.number().nonnegative().finite().optional(),
+  powerInputMode: z.enum(["amps", "eut"]).optional(),
   machineHandlerId: z.string().min(1).optional(),
   coilTier: z.string().min(1).optional(),
   machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),
   settingsCollapsed: z.boolean().optional(),
+  hatchSupplies: z.array(z.enum(["water", "air"])).optional(),
   recipeInputOverrides: z.record(z.string().min(1), recipeInputSchema).optional(),
+  // More recipes the same machine runs (shared-machine.ts), sections 1..n.
+  extraRecipes: z
+    .array(
+      z.object({
+        recipeId: z.string().min(1),
+        recipeInputOverrides: z.record(z.string().min(1), recipeInputSchema).optional(),
+      }),
+    )
+    .optional(),
+  // Solve mode's pin: run exactly this many machines; absent = solver's choice.
+  solvePin: z.number().nonnegative().optional(),
   targetOutput: targetRateSchema.optional(),
   enabled: z.boolean(),
   pocketId: z.string().min(1).optional(),
@@ -340,6 +388,10 @@ export const factoryStorageSchema = z.object({
   // Absent means `overflow`: every buffer catches surplus unless the player
   // deliberately sets it strict.
   bufferMode: z.enum(["overflow", "strict"]).optional(),
+  // Pool mode: which side of the shared pool an unwired drawer sits on.
+  poolSide: z.enum(["source", "drain"]).optional(),
+  // Solve mode's requirement on a product drawer; absent = unconstrained.
+  targetPerSecond: z.number().nonnegative().optional(),
   pocketId: z.string().min(1).optional(),
   position: z.object({
     x: z.number(),
@@ -422,7 +474,6 @@ export const factoryEdgeSchema = z.object({
   resourceId: z.string().min(1),
   label: z.string().optional(),
   ratePerSecond: z.number().positive().optional(),
-  labelOffset: z.object({ x: z.number(), y: z.number() }).optional(),
   waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
   // A loose cell wire's Canner ratio; see FactoryEdge.crossForm.
   crossForm: z.object({ litresPerCell: z.number().positive() }).optional(),
@@ -457,13 +508,11 @@ export const planViewStateSchema = z.object({
   canvasPattern: z.string().optional(),
   canvasTheme: z.string().optional(),
   lineHeatMode: z.boolean().optional(),
-  lineThicknessMode: z.boolean().optional(),
-  freeDockMode: z.boolean().optional(),
-  lineLabelsMode: z.boolean().optional(),
+  fixedEdgeWidth: z.boolean().optional(),
   linePulseMode: z.boolean().optional(),
   calmMode: z.boolean().optional(),
   glanceMode: z.string().optional(),
-  rateUnit: z.enum(["tick", "second", "minute", "hour"]).optional(),
+  rateUnit: z.enum(["tick", "second", "minute", "hour", "eu"]).optional(),
   leftPanelOpen: z.boolean().optional(),
   rightPanelOpen: z.boolean().optional(),
   showHiddenResources: z.boolean().optional(),
@@ -474,6 +523,7 @@ export const planViewStateSchema = z.object({
 });
 
 export const factoryProjectSchema = z.object({
+  checklist: z.object({ cards: z.array(z.string()), edges: z.array(z.string()) }).optional(),
   schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
   id: z.string().min(1),
   name: z.string().min(1),
@@ -493,6 +543,12 @@ export const factoryProjectSchema = z.object({
     .optional(),
   // Legacy sketch mode, rewritten as both rules on load.
   assumeBoundaries: z.boolean().optional(),
+  // Solve mode: product amounts are the question, machine counts the answer.
+  solveMode: z.boolean().optional(),
+  // Pool mode: every resource is shared, no wires needed.
+  poolMode: z.boolean().optional(),
+  // Pool mode's cell-to-fluid ratios, litres per filled cell by cell id.
+  poolCellRatios: z.record(z.string(), z.number().positive()).optional(),
   recipes: z.array(recipeSchema),
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema).optional().default([]),
@@ -509,7 +565,6 @@ export const factoryProjectSchema = z.object({
       createdAt: z.string().optional(),
       updatedAt: z.string().optional(),
       communityPlanId: z.string().optional(),
-      communityFingerprint: z.string().optional(),
     })
     .optional(),
 });

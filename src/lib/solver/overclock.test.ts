@@ -441,4 +441,57 @@ describe("GT overclocking", () => {
     expect(stats.durationTicks).toBe(62);
     expect(stats.eut).toBeCloseTo(120 * 0.95 ** 6 * 16, 6);
   });
+  it("rounds a sub-tick multiblock duration down to a natural fraction, like ParallelHelper", () => {
+    // Oil Berry -> Heavy Oil: 10 ticks, 30 EU/t, in a Large Chemical Reactor
+    // (perfect overclocks). In game, ParallelHelper multiplies the parallels by
+    // ceil(1 / duration): 0.625 ticks runs two a tick, 0.15625 runs seven.
+    const recipe = {
+      minimumTier: "LV" as const,
+      durationTicks: 10,
+      eut: 30,
+      machineType: "Large Chemical Reactor",
+      machineProfile: {
+        kind: "multiblock" as const,
+        machineType: "Large Chemical Reactor",
+        minimumTier: "LV" as const,
+      },
+    };
+    const perTick = (tier: "LV" | "MV" | "HV" | "EV" | "IV") =>
+      1 / getOverclockedRecipeStats(recipe, { overclockTier: tier }).durationTicks;
+
+    expect(perTick("LV")).toBeCloseTo(0.1, 9);
+    // 2.5 ticks truncates to 2.
+    expect(perTick("MV")).toBeCloseTo(0.5, 9);
+    // 0.625 ticks: two recipes a tick, not 1.6.
+    expect(perTick("HV")).toBeCloseTo(2, 9);
+    // 0.15625 ticks: seven a tick, not 6.4.
+    expect(perTick("EV")).toBeCloseTo(7, 9);
+    // 0.0390625 ticks: 26 a tick, not 25.6.
+    expect(perTick("IV")).toBeCloseTo(26, 9);
+  });
+
+  it("floors a sub-tick singleblock at one tick", () => {
+    const recipe = {
+      minimumTier: "LV" as const,
+      durationTicks: 10,
+      eut: 30,
+      machineType: "Chemical Reactor",
+      machineProfile: { kind: "single" as const, machineType: "Chemical Reactor", minimumTier: "LV" as const },
+      machineHandlers: [
+        {
+          id: "chemical-reactor",
+          label: "Chemical Reactor",
+          machineType: "Chemical Reactor",
+          minimumTier: "LV" as const,
+          kind: "single" as const,
+        },
+      ],
+    };
+    const ticks = (tier: "HV" | "EV" | "IV") =>
+      getOverclockedRecipeStats(recipe, { overclockTier: tier, machineHandlerId: "chemical-reactor" })
+        .durationTicks;
+    expect(ticks("HV")).toBe(2);
+    expect(ticks("EV")).toBe(1);
+    expect(ticks("IV")).toBe(1);
+  });
 });

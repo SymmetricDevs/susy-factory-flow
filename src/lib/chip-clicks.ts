@@ -1,15 +1,10 @@
 /**
- * Whether the power chips' click gestures are swapped.
+ * Whether power-chip click gestures are swapped.
  *
- * Default: click opens the dropdown, shift-click steps. Inverted: click
- * steps, shift-click opens the dropdown. Right click steps down in BOTH
- * modes, shift or not - it conflicts with nothing.
- *
- * Read at EVENT time by the handlers rather than subscribed to: clicks are
- * rare, cards are many, and the setting applying instantly with zero render
- * cost beats a hook.
+ * The setting is read at event time by chip handlers, so changing it applies
+ * immediately without subscribing every recipe card to another store value.
  */
-const KEY = "gtnh-factory-flow.chip-clicks-inverted.v1";
+const KEY = "susy-factory-flow.chip-clicks-inverted.v1";
 
 export function areChipClicksInverted(): boolean {
   try {
@@ -27,6 +22,6 @@ export function setChipClicksInverted(inverted: boolean): void {
       window.localStorage.removeItem(KEY);
     }
   } catch {
-    // A blocked quota must never break the app.
+    // A blocked storage quota must never break the planner.
   }
 }

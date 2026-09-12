@@ -1,8 +1,11 @@
 "use client";
 
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
 import { ChevronDown, Factory, LogOut, ShieldCheck, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { openSetupsTab } from "@/lib/setups-tab";
+import { LOGIN_ENABLED } from "@/lib/feature-toggles";
+import { openLibrary } from "@/lib/library/library-tab";
 import { AuthForm, useCommunityUser } from "./auth";
 
 /**
@@ -32,8 +35,15 @@ export function AccountMenu() {
     return () => window.removeEventListener("pointerdown", close, true);
   }, [isMenuOpen]);
 
+  // Temporarily disabled for this fork (see feature-toggles.ts): no sign-in
+  // control and no auth modal while the community backend is off. Checked
+  // AFTER the hooks so the component's hook order never depends on the flag.
+  if (!LOGIN_ENABLED) {
+    return null;
+  }
+
   if (isLoading) {
-    return <div className="h-7 w-20 animate-pulse rounded bg-surface-sunken" aria-hidden />;
+    return <div className="h-5 w-20 animate-pulse rounded bg-surface-sunken" aria-hidden />;
   }
 
   if (!user) {
@@ -42,7 +52,7 @@ export function AccountMenu() {
         <button
           type="button"
           onClick={() => setAuthOpen(true)}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-line-strong bg-surface px-2.5 font-medium text-fg hover:bg-surface-raised"
+          className="inline-flex h-5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-line-strong bg-surface px-2.5 font-medium text-fg hover:bg-surface-raised"
         >
           <User className="h-3.5 w-3.5" /> Sign in
         </button>
@@ -78,7 +88,7 @@ export function AccountMenu() {
         type="button"
         onClick={() => setMenuOpen((open) => !open)}
         aria-expanded={isMenuOpen}
-        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-line-strong bg-surface px-2.5 font-medium text-fg hover:bg-surface-raised"
+        className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-line-strong bg-surface px-2.5 font-medium text-fg hover:bg-surface-raised"
       >
         {user.isAdmin ? (
           <ShieldCheck className="h-3.5 w-3.5 text-cyan-500" />
@@ -89,12 +99,12 @@ export function AccountMenu() {
         <ChevronDown className="h-3 w-3 text-fg-muted" />
       </button>
       {isMenuOpen ? (
-        <div className="absolute right-0 top-9 z-[110] min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+        <div className="absolute right-0 top-full mt-1 z-[110] min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
           <button
             type="button"
             onClick={() => {
               setMenuOpen(false);
-              openSetupsTab("mine");
+              openLibrary({ kind: "all" });
             }}
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised"
           >

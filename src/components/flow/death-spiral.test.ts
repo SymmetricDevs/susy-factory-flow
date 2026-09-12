@@ -189,6 +189,26 @@ describe("findDeathSpirals", () => {
     expect(findDeathSpirals(proj, result).spirals).toHaveLength(0);
   });
 
+
+  it("leaves a ring alone when one member still has a bare slot", () => {
+    // Same ring, but B also needs a catalyst nobody has wired yet. Every
+    // card reads 0%, and B's own card says unwired; calling the ring dead
+    // on top of that sent players priming a loop whose only problem was a
+    // wire they had not drawn. The unwired card is the whole story.
+    const proj = ring(9);
+    proj.recipes = proj.recipes.map((entry) =>
+      entry.id === "r-b"
+        ? { ...entry, inputs: [...entry.inputs, { kind: "item", id: "item:catalyst", amount: 1 }] }
+        : entry,
+    );
+    const result = calculateThroughput(proj);
+
+    expect(result.nodes.A!.utilization).toBeLessThan(1e-4);
+    expect(findDeathSpirals(proj, result).spirals).toHaveLength(0);
+    expect(deriveNodeVerdict(proj, result, "B").kind).toBe("unwired");
+    expect(deriveNodeVerdict(proj, result, "C").kind).not.toBe("dead-loop");
+  });
+
   it("blames a stopped supplier instead of the ring it starves", () => {
     // The titanium-line shape: a healthy ring fed from outside by a machine
     // that is itself stopped (an unwired second output, here `waste`). The

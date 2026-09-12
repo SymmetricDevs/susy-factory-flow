@@ -14,7 +14,13 @@ export type ResolvedSetupRules = Required<SetupRules>;
 export function getSetupRules(project: {
   setupRules?: SetupRules;
   assumeBoundaries?: boolean;
+  poolMode?: boolean;
 }): ResolvedSetupRules {
+  // Pool mode imports and banks by itself, and bridges cells and fluids by
+  // itself. The stored rules remain untouched and return when pool mode ends.
+  if (project.poolMode) {
+    return { freeInputs: false, freeOutputs: false, looseCellWires: true };
+  }
   const rules = project.setupRules;
   if (!rules) {
     const legacy = project.assumeBoundaries === true;

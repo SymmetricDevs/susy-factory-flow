@@ -19,6 +19,7 @@
  * Usage:
  *   node resolve-susy-instance.mjs [--instance <dir>] [--json]
  *        [--bootstrap-if-missing] [--no-bootstrap] [--ref <tag|branch>]
+ *        [--bootstrap-dir <dir>]
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -31,6 +32,7 @@ import {
   findOracleJar,
   inspectInstanceDir,
 } from "./susy-instance-lib.mjs";
+import { resolveJava8 } from "./java8-runtime.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..", "..", "..", "..");
@@ -48,8 +50,20 @@ const explicitInstance = flag("--instance") ?? process.env.SUSY_INSTANCE_DIR;
 const bootstrapRef = flag("--ref") ?? process.env.SUSY_BOOTSTRAP_REF;
 const jsonOutput = args.includes("--json");
 const bootstrapIfMissing = args.includes("--bootstrap-if-missing");
+const forceBootstrap = args.includes("--force-bootstrap") || process.env.SUSY_FORCE_BOOTSTRAP === "1";
 const noBootstrap = args.includes("--no-bootstrap");
-const bootstrapDir = path.join(repoRoot, "temp", ".minecraft");
+const bootstrapDir = path.resolve(
+  flag("--bootstrap-dir") ?? process.env.SUSY_BOOTSTRAP_DIR ?? path.join(repoRoot, "temp", ".minecraft"),
+);
+
+// Java 8 is a prerequisite for the 1.12.2 client and Forge installer. Resolve
+// it before any instance scan so a missing runtime is downloaded immediately,
+// rather than allowing a later client launch to sit in its long watchdog.
+const java8 = await resolveJava8({
+  runtimeDir: `${bootstrapDir}-runtime`,
+  logger: (message) => console.error(`resolve-susy-instance: ${message}`),
+});
+process.env.SUSY_JAVA_8 = java8;
 
 function resolveResult(result) {
   if (jsonOutput) {
@@ -191,12 +205,18 @@ function resultFor(info, source) {
     prismInstanceId: launcher?.instanceId,
     prismFlatpakAppId: launcher?.flatpakAppId,
     oracleJar: findOracleJar(repoRoot),
+    java8,
   };
 }
 
 // --- Explicit instance wins ------------------------------------------------
 
-if (explicitInstance) {
+if (forceBootstrap) {
+  if (noBootstrap) {
+    fail("--force-bootstrap cannot be combined with --no-bootstrap.");
+  }
+  console.error(`resolve-susy-instance: forcing a fresh standalone instance in ${bootstrapDir}...`);
+} else if (explicitInstance) {
   const dir = path.resolve(explicitInstance);
   const info = inspectInstanceDir(dir);
   if (info.kind === "instance") {
@@ -214,13 +234,13 @@ if (explicitInstance) {
 
 // --- Detection --------------------------------------------------------------
 
-const detected = bestCandidate();
+const detected = forceBootstrap ? undefined : bestCandidate();
 if (detected) {
   resolveResult(resultFor(detected, detected.source));
   process.exit(0);
 }
 
-if (noBootstrap || !bootstrapIfMissing) {
+if (!forceBootstrap && (noBootstrap || !bootstrapIfMissing)) {
   resolveResult({ found: false, bootstrapDir });
   console.error(
     "resolve-susy-instance: no Supersymmetry instance found " +
@@ -232,7 +252,9 @@ if (noBootstrap || !bootstrapIfMissing) {
 // --- Bootstrap fallback -------------------------------------------------------
 
 console.error(
-  `resolve-susy-instance: no instance found; downloading a barebone one into ${bootstrapDir}...`,
+  forceBootstrap
+    ? `resolve-susy-instance: downloading a fresh barebone one into ${bootstrapDir}...`
+    : `resolve-susy-instance: no instance found; downloading a barebone one into ${bootstrapDir}...`,
 );
 const bootstrap = path.join(scriptDir, "bootstrap-susy-instance.mjs");
 const bootstrapArgs = [bootstrap, bootstrapDir];

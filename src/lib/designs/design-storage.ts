@@ -1,7 +1,12 @@
 "use client";
 
 import type { FactoryProject } from "@/lib/model/types";
-import { toDesignSummary, type DesignRecord, type DesignSummary } from "./design-library";
+import {
+  toDesignSummary,
+  type DesignFolder,
+  type DesignRecord,
+  type DesignSummary,
+} from "./design-library";
 
 /*
  * Deliberately a different database from the dataset cache in
@@ -10,7 +15,10 @@ import { toDesignSummary, type DesignRecord, type DesignSummary } from "./design
  * the two would race on startup, when both are opened at once.
  */
 const DB_NAME = "susy-factory-flow-designs";
-const DB_VERSION = 1;
+// 2: the library's folders store. 3: repeat the migration for databases that
+// were opened at version 2 before the folder store was present. The guarded
+// creation makes this safe for databases that already have every store.
+const DB_VERSION = 3;
 
 /*
  * Metadata and plans live in separate stores so the tab strip costs almost
@@ -20,6 +28,8 @@ const DB_VERSION = 1;
  */
 const META_STORE = "design-meta";
 const PLAN_STORE = "design-plans";
+/** The shelf's folders: a handful of named ids, read once at startup. */
+const FOLDER_STORE = "design-folders";
 
 /** Small enough, and read early enough, to be worth keeping synchronous. */
 export const ACTIVE_DESIGN_STORAGE_KEY = "susy-factory-flow.active-design.v1";
@@ -126,6 +136,51 @@ export async function deleteDesign(id: string): Promise<void> {
   }
 }
 
+export async function listDesignFolders(): Promise<DesignFolder[]> {
+  if (!isDesignStorageAvailable()) {
+    return [];
+  }
+
+  const db = await openDesignDb();
+  try {
+    return await requestToPromise<DesignFolder[]>(
+      db.transaction(FOLDER_STORE, "readonly").objectStore(FOLDER_STORE).getAll(),
+    );
+  } finally {
+    db.close();
+  }
+}
+
+export async function writeDesignFolder(folder: DesignFolder): Promise<void> {
+  if (!isDesignStorageAvailable()) {
+    return;
+  }
+
+  const db = await openDesignDb();
+  try {
+    const transaction = db.transaction(FOLDER_STORE, "readwrite");
+    transaction.objectStore(FOLDER_STORE).put(folder);
+    await transactionToPromise(transaction);
+  } finally {
+    db.close();
+  }
+}
+
+export async function deleteDesignFolder(id: string): Promise<void> {
+  if (!isDesignStorageAvailable()) {
+    return;
+  }
+
+  const db = await openDesignDb();
+  try {
+    const transaction = db.transaction(FOLDER_STORE, "readwrite");
+    transaction.objectStore(FOLDER_STORE).delete(id);
+    await transactionToPromise(transaction);
+  } finally {
+    db.close();
+  }
+}
+
 export function readActiveDesignId(): string | undefined {
   if (typeof window === "undefined") {
     return undefined;
@@ -171,8 +226,38 @@ function openDesignDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(PLAN_STORE)) {
         db.createObjectStore(PLAN_STORE, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(FOLDER_STORE)) {
+        db.createObjectStore(FOLDER_STORE, { keyPath: "id" });
+      }
     };
-    request.onsuccess = () => resolve(request.result);
+    let gaveUp = false;
+    request.onsuccess = () => {
+      const db = request.result;
+      if (gaveUp) {
+        // The blocked open settled after all; nobody is waiting for it.
+        db.close();
+        return;
+      }
+      // Another tab of the app wanting a NEWER schema asks this connection
+      // to step aside. Every operation here closes its own connection
+      // anyway, but a long transaction should not be the thing that blocks
+      // the other tab's upgrade forever.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    // The mirror case: THIS open wants a newer schema than a connection some
+    // other tab is holding. Without this the open just never settles, the
+    // library never hydrates, and the strip sits empty with a dead plus. A
+    // clear failure is better than a silent hang; a reload once the other
+    // tab has let go clears it.
+    request.onblocked = () => {
+      gaveUp = true;
+      reject(
+        new Error(
+          "The design library is open in another tab. Close or reload that tab, then reload this one.",
+        ),
+      );
+    };
     request.onerror = () => reject(request.error ?? new Error("Could not open IndexedDB."));
   });
 }

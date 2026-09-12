@@ -59,7 +59,14 @@ fi
 : "${SUSY_INSTANCE_DIR:=$INSTANCEDIR}"
 : "${SUSY_DATASET_VERSION_ID:=$VERSION}"
 : "${SUSY_DATASET_VERSION_LABEL:=SUSY $VERSION}"
-: "${SUSY_HEI_ORACLE_JAR:=$ORACLEJAR}"
+: "${SUSY_HEI_ORACLE_JAR:=${ORACLEJAR:-}}"
+: "${SUSY_JAVA_8:=${JAVA8:-}}"
+if [[ -z "$SUSY_JAVA_8" || ! -f "$SUSY_JAVA_8" ]]; then
+  echo "Java 8 was not resolved before the client launch. Set SUSY_JAVA_8 or rerun the download step." >&2
+  exit 1
+fi
+export JAVA_HOME="$(dirname "$(dirname "$SUSY_JAVA_8")")"
+export PATH="$(dirname "$SUSY_JAVA_8"):$PATH"
 : "${SUSY_DATASET_OUT_DIR:=$repo_root/public/datasets/susy/$SUSY_DATASET_VERSION_ID}"
 : "${SUSY_RAW_EXPORT_DIR:=$repo_root/temp/raw-export}"
 if [[ -z "${SUSY_LAUNCH_COMMAND:-}" && -n "${LAUNCHSCRIPT:-}" ]]; then
@@ -116,20 +123,48 @@ if [[ -f "$SUSY_INSTANCE_DIR/options.txt" ]]; then
   sed -i 's/^pauseWhenEmpty:.*/pauseWhenEmpty:false/' "$SUSY_INSTANCE_DIR/options.txt" || true
 fi
 
-# Command-line -D properties beat JAVA_TOOL_OPTIONS, so stale susy.oracle
-# flags left over in a launcher's per-instance JvmArgs would silently redirect
-# the dump and icons away from the paths this script watches.
+# Prism only applies JvmArgs when OverrideJavaArgs=true. Without that flag the
+# oracle jar is visible in the mod list, but `susy.oracle.autorun` is absent and
+# the client simply opens the selected world — exactly the symptom this runner
+# is meant to prevent. Back up the launcher config and restore it on exit so the
+# export is non-destructive.
+prism_instance_cfg=""
+prism_instance_cfg_backup=""
+restore_prism_instance_cfg() {
+  if [[ -n "$prism_instance_cfg" && -n "$prism_instance_cfg_backup" && -f "$prism_instance_cfg_backup" ]]; then
+    cp "$prism_instance_cfg_backup" "$prism_instance_cfg" 2>/dev/null || true
+    rm -f "$prism_instance_cfg_backup"
+  fi
+}
+# The runtime cleanup trap below also restores this file. Keep this early
+# restore trap until the runtime process exists so failures during setup do not
+# leave Prism configured with oracle arguments.
+trap restore_prism_instance_cfg EXIT
+
+run_id="$(date +%s)-$$"
 if [[ -n "${PRISMINSTANCEID:-}" ]]; then
-  instance_cfg="$(dirname "$SUSY_INSTANCE_DIR")/instance.cfg"
-  if [[ -f "$instance_cfg" ]]; then
-    sed -i -E -e 's/(^|[[:space:]]|=)-Dsusy\.oracle\.[^[:space:]]*/\1/g' \
-      -e '/^JvmArgs=/s/[[:space:]]+$//' "$instance_cfg"
+  prism_instance_cfg="$(dirname "$SUSY_INSTANCE_DIR")/instance.cfg"
+  if [[ -f "$prism_instance_cfg" ]]; then
+    prism_instance_cfg_backup="$(mktemp "${TMPDIR:-/tmp}/susy-instance.cfg.XXXXXX")"
+    cp "$prism_instance_cfg" "$prism_instance_cfg_backup"
+    # Use the shared Node patcher: instance.cfg is a QSettings INI file and
+    # JvmArgs must be in [General]. Shell text insertion previously put it in
+    # [UI] and mangled Windows backslashes.
+    node "$repo_root/tools/dataset-pipeline/scripts/susy/patch-prism-instance.mjs" \
+      --config "$prism_instance_cfg" \
+      --run-id "$run_id" \
+      --recipedump-path "$recipedump_path" \
+      --icon-dir "$rendered_icon_dir"
+    echo "Configured and verified Prism [General] oracle JVM arguments in $prism_instance_cfg."
+  else
+    echo "WARNING: Prism instance.cfg not found at $prism_instance_cfg; relying on JAVA_TOOL_OPTIONS."
   fi
 fi
 
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} \
 -Dsusy.oracle.autorun=true \
 -Dsusy.oracle.dumpRecipes=true \
+-Dsusy.oracle.runId=$run_id \
 -Dsusy.oracle.recipedumpPath=$recipedump_path \
 -Dsusy.oracle.iconDir=$rendered_icon_dir"
 
@@ -157,7 +192,7 @@ if [[ -z "${SUSY_LAUNCH_COMMAND:-}" ]]; then
     chmod +x "$start_script"
     SUSY_LAUNCH_COMMAND="bash '$(realpath "$start_script")'"
   else
-    SUSY_LAUNCH_COMMAND="xvfb-run -a bash -lc 'cd \"$SUSY_INSTANCE_DIR\" && java -jar binClient-modified.jar nogui'"
+    SUSY_LAUNCH_COMMAND="xvfb-run -a bash -lc 'cd \"$SUSY_INSTANCE_DIR\" && \"$SUSY_JAVA_8\" -jar binClient-modified.jar nogui'"
     echo "No start script found; falling back to: $SUSY_LAUNCH_COMMAND"
   fi
 fi
@@ -168,14 +203,18 @@ tail -n 0 -f "$runtime_log" &
 tail_pid=$!
 
 stop_runtime() {
-  kill "$tail_pid" 2>/dev/null || true
+  kill "${tail_pid:-}" 2>/dev/null || true
   if [[ -n "${runtime_pid:-}" ]]; then
     kill -TERM "-$runtime_pid" 2>/dev/null || true
     sleep 5
     kill -KILL "-$runtime_pid" 2>/dev/null || true
   fi
 }
-trap stop_runtime EXIT
+cleanup_runtime() {
+  stop_runtime
+  restore_prism_instance_cfg
+}
+trap cleanup_runtime EXIT
 
 deadline=$((SECONDS + SUSY_EXPORT_TIMEOUT_SECONDS))
 dump_ready=0
@@ -221,7 +260,7 @@ while (( SECONDS < deadline )); do
   sleep 5
 done
 
-stop_runtime
+cleanup_runtime
 trap - EXIT
 
 if (( dump_ready != 1 )); then
@@ -239,9 +278,24 @@ if [[ "$jvm_export_root" != "$SUSY_RAW_EXPORT_DIR" ]]; then
   rendered_icon_dir="$SUSY_RAW_EXPORT_DIR/rendered-icons"
 fi
 
+# The local orchestrator uses this runner for the client-only extraction phase.
+# Leave the raw dump and rendered icons in temp so later stages can be resumed
+# independently without booting Minecraft again.
+if [[ "${SUSY_EXPORT_PHASE:-full}" == "extract" ]]; then
+  echo "SUSY extraction completed; raw artifacts are in $SUSY_RAW_EXPORT_DIR."
+  exit 0
+fi
+
 echo "Normalizing SusyCore recipedump into the planner dataset."
-node "$repo_root/tools/dataset-pipeline/scripts/susy/normalize-susy-recipedump.mjs" \
+SUSY_DATASET_VERSION_ID="$SUSY_DATASET_VERSION_ID" \
+SUSY_DATASET_VERSION_LABEL="$SUSY_DATASET_VERSION_LABEL" \
+SUSY_RENDERED_ICON_DIR="$rendered_icon_dir" \
+  node "$repo_root/tools/dataset-pipeline/scripts/susy/normalize-susy-recipedump.mjs" \
   "$recipedump_path" "$SUSY_DATASET_OUT_DIR/recipes.json"
+
+echo "Applying rendered HEI icons to the normalized dataset."
+node "$repo_root/tools/dataset-pipeline/scripts/susy/apply-susy-icons.mjs" \
+  "$SUSY_DATASET_OUT_DIR/recipes.json" "$rendered_icon_dir" "$SUSY_DATASET_OUT_DIR" "/datasets/susy"
 
 echo "Building resource and recipe indexes."
 node "$repo_root/tools/dataset-pipeline/scripts/build-resource-index.mjs" \

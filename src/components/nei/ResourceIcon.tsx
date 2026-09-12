@@ -409,6 +409,20 @@ function PowerIconGlyph({ iconPixelSize }: { iconPixelSize?: number }) {
  * never seen at all, which is the whole point: the flash it replaces was the
  * complaint, so it must not become a flash of its own.
  */
+/**
+ * Global icon-texture scale. Every sprite this component draws renders at 75%
+ * of its computed size, so the per-surface multipliers upstream (crop zooms,
+ * art-pixel helpers, slot constants) keep their relative relationships while
+ * everything reads a quarter smaller.
+ */
+const TEXTURE_SCALE = 0.5;
+
+function textureSize(iconPixelSize?: number): number | undefined {
+  return iconPixelSize === undefined
+    ? undefined
+    : Math.max(1, Math.round(iconPixelSize * TEXTURE_SCALE));
+}
+
 function SpriteImage({
   resource,
   iconPath,
@@ -447,26 +461,15 @@ function SpriteImage({
           // and only `visibility` takes it with the picture.
           status === "loaded" ? "" : "invisible",
         ].join(" ")}
-        style={{
-          ...(iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined),
-          ...spriteFitStyle(fitScale, iconPixelSize),
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          ref={imageRef}
-          src={iconPath}
-          alt={resourceLabel(resource)}
-          draggable={false}
-          onLoad={(event) => {
-            setFitScale(resource.kind === "item" ? getSpriteFitScale(event.currentTarget) : undefined);
-            setStatus("loaded");
-          }}
-          onError={() => setStatus("failed")}
-          className="block h-full w-full max-w-none object-contain"
-          style={resource.kind === "fluid" ? { clipPath: FLUID_SPRITE_CLIP } : undefined}
-        />
-      </span>
+        style={
+          textureSize(iconPixelSize)
+            ? {
+                width: textureSize(iconPixelSize),
+                height: textureSize(iconPixelSize),
+              }
+            : { transform: `scale(${TEXTURE_SCALE})` }
+        }
+      />
     </>
   );
 }
@@ -499,7 +502,9 @@ function AspectIconImage({
   iconPixelSize?: number;
 }) {
   const color = resource.dominantColor ?? getFallbackAspectColor(resource.id);
-  const sizeStyle = iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined;
+  const sizeStyle = textureSize(iconPixelSize)
+    ? { width: textureSize(iconPixelSize), height: textureSize(iconPixelSize) }
+    : ({ transform: `scale(${TEXTURE_SCALE})` } as React.CSSProperties);
 
   return (
     <span
@@ -558,6 +563,7 @@ function FluidIconImage({
   iconPixelSize?: number;
 }) {
   const color = resource.dominantColor ?? getFallbackFluidColor(resource.id);
+  const sized = textureSize(iconPixelSize);
 
   return (
     <span
@@ -565,9 +571,13 @@ function FluidIconImage({
       aria-label={resourceLabel(resource)}
       className={`minecraft-pixel-art relative block shrink-0 overflow-hidden rounded-[1px] ${RESOURCE_ART_SHADOW}`}
       style={
-        iconPixelSize
-          ? { width: iconPixelSize * FLUID_ICON_SCALE, height: iconPixelSize * FLUID_ICON_SCALE }
-          : { width: `${FLUID_ICON_SCALE * 100}%`, height: `${FLUID_ICON_SCALE * 100}%` }
+        sized
+          ? { width: sized * FLUID_ICON_SCALE, height: sized * FLUID_ICON_SCALE }
+          : {
+              width: `${FLUID_ICON_SCALE * 100}%`,
+              height: `${FLUID_ICON_SCALE * 100}%`,
+              transform: `scale(${TEXTURE_SCALE})`,
+            }
       }
     >
       <span className="absolute inset-0" style={{ backgroundColor: color }} />
@@ -775,8 +785,14 @@ function AtlasIconImage({
         RESOURCE_ART_SHADOW,
       ].join(" ")}
       style={{
-        ...(iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined),
-        ...spriteFitStyle(fitScale, iconPixelSize),
+        ...(textureSize(iconPixelSize)
+          ? { width: textureSize(iconPixelSize), height: textureSize(iconPixelSize) }
+          : { transform: `scale(${TEXTURE_SCALE})` }),
+        backgroundImage: `url('${atlas.imagePath}')`,
+        backgroundSize: `${(atlas.atlasWidth / atlas.width) * 100}% ${
+          (atlas.atlasHeight / atlas.height) * 100
+        }%`,
+        backgroundPosition: `${positionX} ${positionY}`,
       }}
     >
       <span

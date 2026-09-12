@@ -67,6 +67,7 @@ import {
   Blocks,
   Check,
   Sigma,
+  SlidersHorizontal,
   Upload,
   Waves,
   X,
@@ -751,7 +752,7 @@ const EDGE_ROUTE_SNAP_GRID = 4;
 const EXPORT_IMAGE_PADDING = 80;
 const EXPORT_PNG_PIXEL_RATIO = 2;
 const EXPORT_PNG_MAX_PIXEL_SIDE = 8192;
-const FLOW_EDGE_LABEL_SELECT_EVENT = "gtnh-flow.edge-label-select";
+const FLOW_EDGE_LABEL_SELECT_EVENT = "susy-flow.edge-label-select";
 type ResourceEdgeData = {
   resource: Pick<
     ResourceAmount,
@@ -7848,6 +7849,123 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
           backgroundColor: MODE_KEYS[shown]!.glass,
         }}
       />
+    </div>
+  );
+});
+
+/**
+ * Restored setup-rules control. These rules are intentionally separate from
+ * Build/Solve/Pool mode: they describe what happens at the boundary of a
+ * setup, while the mode controls how the board is calculated.
+ */
+const SetupRulesButton = memo(function SetupRulesButton() {
+  const [open, setOpen] = useState(false);
+  const rules = useFactoryStore((state) => state.project.setupRules);
+  const legacy = useFactoryStore((state) => state.project.assumeBoundaries);
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const setSetupRules = useFactoryStore((state) => state.setSetupRules);
+  const { freeInputs, freeOutputs, looseCellWires } = getSetupRules({
+    setupRules: rules,
+    assumeBoundaries: legacy,
+    poolMode,
+  });
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useFoldoutDismiss(open, rootRef, close);
+
+  const choices: Array<{
+    id: "freeInputs" | "freeOutputs" | "looseCellWires";
+    on: boolean;
+    label: string;
+    description: string;
+    locked?: boolean;
+  }> = [
+    {
+      id: "freeInputs",
+      on: freeInputs,
+      label: "Free inputs",
+      description: poolMode
+        ? "Pool mode imports whatever nobody makes by itself."
+        : "An input short of stock takes the rest from off the setup.",
+      locked: poolMode,
+    },
+    {
+      id: "freeOutputs",
+      on: freeOutputs,
+      label: "Free outputs",
+      description: poolMode
+        ? "Pool mode banks every surplus by itself."
+        : "Output with nowhere to go leaves the setup instead of backing up.",
+      locked: poolMode,
+    },
+    {
+      id: "looseCellWires",
+      on: looseCellWires,
+      label: "Loose cell wires",
+      description: poolMode
+        ? "Pool mode converts cells and fluids for free by itself."
+        : "A filled cell and its fluid wire straight together, converted for free.",
+      locked: poolMode,
+    },
+  ];
+
+  return (
+    <div ref={rootRef} className="pointer-events-auto relative flex">
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-label="Setup rules"
+        title="Setup rules"
+        className={[
+          "relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
+          open || freeInputs || freeOutputs || looseCellWires ? TOOL_FACE_ON : TOOL_FACE_OFF,
+        ].join(" ")}
+      >
+        <SlidersHorizontal className="h-4 w-4" />
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-[calc(100%+6px)] z-30 flex max-h-[70vh] w-[320px] max-w-[calc(100vw-24px)] flex-col gap-1 overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+          <p className="px-1 pt-1 font-mono text-[11px] leading-snug text-[var(--mc-ink)] opacity-70">
+            What the setup does when a slot cannot be supplied or emptied.
+            <br />
+            Simulates more of an AE2 experience.
+          </p>
+          {choices.map((choice) => (
+            <button
+              key={choice.id}
+              type="button"
+              disabled={choice.locked}
+              onClick={() => setSetupRules({ [choice.id]: !choice.on })}
+              aria-pressed={choice.on}
+              className={[
+                "flex items-start gap-2 border-2 p-2 text-left",
+                choice.on ? `border-[var(--mc-good)] ${TOOL_FACE_ON}` : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
+                choice.locked ? "opacity-50" : "",
+              ].join(" ")}
+            >
+              <span
+                aria-hidden
+                className={[
+                  "mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
+                  choice.on ? "bg-[var(--mc-good)]" : "bg-[var(--mc-24)]",
+                ].join(" ")}
+              >
+                {choice.on ? <Check className="h-3 w-3 text-[var(--mc-15)]" strokeWidth={4} /> : null}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-[12px] font-black uppercase">{choice.label}</span>
+                  <span className={choice.on ? "font-mono text-[10px] font-black tracking-[1px] text-[var(--mc-good)]" : "font-mono text-[10px] font-black tracking-[1px] text-[var(--mc-ink-muted)]"}>
+                    {choice.on ? "ON" : "OFF"}
+                  </span>
+                </span>
+                <span className="font-mono text-[11px] leading-snug opacity-80">{choice.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 });

@@ -28,36 +28,27 @@ import {
   setBoardSoundsEnabled,
   setBoardSoundVolume,
 } from "@/lib/board-sounds";
+import {
+  areChipClicksInverted,
+  setChipClicksInverted,
+} from "@/lib/chip-clicks";
 
-/**
- * The planner's settings, in one small sheet.
- *
- * One row per setting, its name and its control and nothing else (Jack,
- * 2026-09-07). Every change applies immediately, to the page behind the
- * dialog included, so choosing is looking rather than committing.
- *
- * Owned by AppHeader the same way the share dialog is, so the compact menu can
- * close behind it without unmounting it.
- */
+/** The planner settings sheet. Changes apply immediately and persist locally. */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [font, setFont] = useState<AppFontId>(() => getStoredAppFont());
   const [sounds, setSounds] = useState<boolean>(() => areBoardSoundsEnabled());
   const [volume, setVolume] = useState<number>(() => getBoardSoundVolume());
+  const [chipClicksInverted, setChipClicksInvertedState] = useState<boolean>(() => areChipClicksInverted());
+  const uiScalePercent = useUiScalePercent();
   const canPlayTimelapse = useFactoryStore(
     (state) => state.project.nodes.length + (state.project.storages?.length ?? 0) >= 2,
   );
-  // The preview thump fires when the drag SETTLES, not per input event: a
-  // slider emits dozens of changes a second, and previewing each one had
-  // the notes stealing each other into fragments while the repeat duck
-  // faded the pile down.
   const previewTimerRef = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(previewTimerRef.current), []);
 
+  useEffect(() => () => window.clearTimeout(previewTimerRef.current), []);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
+      if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -67,17 +58,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     setAppFont(id);
     setFont(id);
   };
-
-  // The interface size applies as it changes, like the font: the sheet itself
-  // grows and shrinks under the finger, which is the whole preview.
-  const uiScalePercent = useUiScalePercent();
   const stepUiScale = (direction: -1 | 1) => {
     setUiScalePercent(uiScalePercent + direction * UI_SCALE_STEP_PERCENT);
   };
 
   return (
     <div
-      // Same no-backdrop-filter-on-a-phone rule as every other overlay.
       className="fixed inset-0 z-[120] grid place-items-center bg-neutral-950/75 p-4 backdrop-blur-sm compact:bg-neutral-950/92 compact:[backdrop-filter:none]"
       onClick={onClose}
     >
@@ -85,8 +71,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label="Planner settings"
-        // The view sheet's frame (FactoryFlow): the same plate, border and
-        // drop shadow every board sheet wears.
         className="flex max-h-[calc(88*var(--ui-vh))] w-full max-w-sm flex-col overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),4px_4px_0_rgba(0,0,0,0.45)] compact:max-h-[calc(92*var(--ui-vh))]"
         onClick={(event) => event.stopPropagation()}
       >
@@ -102,8 +86,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* One plate per setting: its name on the left, its control on the
-            right, nothing else (Jack, 2026-09-07: no subtext anywhere). */}
         <div className="flex min-h-0 flex-1 flex-col divide-y divide-[var(--mc-36)] overflow-y-auto px-4">
           <Row label="Font">
             <select
@@ -165,9 +147,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 setBoardSoundVolume(next);
                 setVolume(next);
                 window.clearTimeout(previewTimerRef.current);
-                previewTimerRef.current = window.setTimeout(() => {
-                  playBoardSound("place");
-                }, 180);
+                previewTimerRef.current = window.setTimeout(() => playBoardSound("place"), 180);
               }}
               className="w-28 accent-[var(--mc-good)]"
             />
@@ -176,10 +156,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </span>
           </Row>
 
-          {/* The build timelapse's door, here since 2026-09-06 (it was a key
-              beside the view options). Each preset applies its whole look for
-              the run and hands your settings back when it ends. The dialog
-              closes first so the board has the screen. */}
           <Row label="Animation" dim={!canPlayTimelapse}>
             {BOARD_TIMELAPSE_PRESETS.map((preset) => (
               <button
@@ -196,47 +172,43 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </Row>
+
+          <section className="py-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !chipClicksInverted;
+                setChipClicksInverted(next);
+                setChipClicksInvertedState(next);
+              }}
+              aria-pressed={chipClicksInverted}
+              className="flex min-h-10 w-full items-center gap-2 text-left text-sm"
+            >
+              <span className="min-w-0 flex-1">Swap chip clicks</span>
+              <span className={chipClicksInverted ? "text-[var(--mc-good)]" : "text-[var(--mc-ink-muted)]"}>
+                {chipClicksInverted ? "ON" : "OFF"}
+              </span>
+            </button>
+          </section>
         </div>
       </div>
     </div>
   );
 }
 
-/* The board toolbar's key faces (FactoryFlow's TOOL_FACE_ON/OFF), so the
-   sheet's controls are the same objects as the keys over the board. */
 const FACE_OFF =
   "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110";
 
-function Row({
-  label,
-  dim = false,
-  children,
-}: {
-  label: string;
-  dim?: boolean;
-  children: ReactNode;
-}) {
+function Row({ label, dim = false, children }: { label: string; dim?: boolean; children: ReactNode }) {
   return (
-    <div
-      className={["flex min-h-12 items-center gap-2 py-2", dim ? "opacity-40" : ""].join(" ")}
-    >
+    <div className={["flex min-h-12 items-center gap-2 py-2", dim ? "opacity-40" : ""].join(" ")}>
       <span className="min-w-0 flex-1 text-sm">{label}</span>
       <div className="flex shrink-0 items-center gap-1">{children}</div>
     </div>
   );
 }
 
-/* A flat row with a pill switch: the arrange sheet's ON/OFF plates read as
-   too much here (Jack, 2026-09-07). */
-function ToggleRow({
-  label,
-  on,
-  onChange,
-}: {
-  label: string;
-  on: boolean;
-  onChange: (next: boolean) => void;
-}) {
+function ToggleRow({ label, on, onChange }: { label: string; on: boolean; onChange: (next: boolean) => void }) {
   return (
     <div className="flex min-h-12 items-center gap-2 py-2">
       <span className="min-w-0 flex-1 text-sm">{label}</span>
@@ -251,28 +223,13 @@ function ToggleRow({
           on ? "border-[var(--mc-good)] bg-[var(--mc-good)]/70" : "border-[var(--mc-15)] bg-[var(--mc-36)]",
         ].join(" ")}
       >
-        <span
-          className={[
-            "absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-[left]",
-            on ? "left-[18px]" : "left-0.5",
-          ].join(" ")}
-        />
+        <span className={["absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-[left]", on ? "left-[18px]" : "left-0.5"].join(" ")} />
       </button>
     </div>
   );
 }
 
-function Key({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+function Key({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"

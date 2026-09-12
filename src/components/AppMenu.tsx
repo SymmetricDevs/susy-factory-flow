@@ -3,7 +3,7 @@
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
 import { Menu, Settings, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { AccountMenu } from "./community/AccountMenu";
 import { SHOW_PACK_PICKER } from "./AppHeader";
 import { AppIdentity } from "./AppIdentity";
@@ -12,26 +12,12 @@ import { MenuLinks } from "./HeaderLinks";
 
 interface AppMenuProps {
   onLoadDatasetVersion: (versionId: string) => void;
-  /** Opens the share dialog, which the header owns; see AppHeader. */
   onShare: () => void;
-  /** Opens the export-image dialog, also owned by the header. */
   onExportImage: () => void;
-  /** Opens the settings dialog, also owned by the header. */
   onOpenSettings: () => void;
 }
 
-/**
- * The whole top bar, folded into one button.
- *
- * On a narrow window the bar's contents — a pack picker, five plan actions, two
- * brand links, a bug report and an account — ran a good 600px past the edge of
- * the screen, which in a mobile browser widens the layout viewport and shrinks
- * everything on the page to fit. So below the compact threshold the bar keeps
- * only the app's name and its version chip, and everything else moves in here.
- *
- * A sheet under the header rather than a full-screen overlay: it is a handful of
- * rows, the board stays visible behind it, and a tap anywhere else puts it away.
- */
+/** The compact version of the planner's top bar. */
 export function AppMenu({
   onLoadDatasetVersion,
   onShare,
@@ -59,21 +45,15 @@ export function AppMenu({
       {isOpen ? (
         <div
           ref={sheetRef}
-          // Anchored to the header, which is the app's one `relative` bar, so
-          // the sheet hangs off the button that opened it at any width.
-          // `text-sm` up here because buttons inherit their font (the global
-          // reset outranks text-* on the control): without it the sheet's
-          // button rows render a size up from its link rows.
           className="absolute right-2 top-full z-[90] mt-1 flex w-[min(320px,calc(100*var(--ui-vw)-16px))] flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
         >
-          {/* Pinned with the header's pack picker: see SHOW_PACK_PICKER. */}
-          {SHOW_PACK_PICKER ? (
+          {SHOW_PACK_PICKER && (
             <MenuSection label="Pack">
               <div className="px-2 py-1">
                 <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
               </div>
             </MenuSection>
-          ) : null}
+          )}
           <MenuSection label="This plan">
             <BoardActions
               variant="list"
@@ -107,7 +87,7 @@ export function AppMenu({
   );
 }
 
-function MenuSection({ label, children }: { label: string; children: React.ReactNode }) {
+function MenuSection({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="border-t border-line pt-1 first:border-t-0 first:pt-0">
       <h2 className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-fg-muted">

@@ -10,7 +10,7 @@
  * `openSetupsTab` stays where it is. It carries a shelf SCOPE as well as a tab,
  * and the Setups panel listens for that separately.
  */
-export const OPEN_SIDEBAR_TAB_EVENT = "gtnh:open-sidebar-tab";
+export const OPEN_SIDEBAR_TAB_EVENT = "susy:open-sidebar-tab";
 
 /** Only Items is left in the column; Boards and Setups moved to the library. */
 export type SidebarTab = "items";

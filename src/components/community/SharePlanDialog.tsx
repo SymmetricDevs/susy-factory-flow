@@ -14,6 +14,7 @@ import { capturePlanPreviewPng } from "@/lib/community/plan-preview-capture";
 import { sharedPlanLink } from "@/lib/community/shared-link";
 import type { CommunityPlanSummary, EntryIcon } from "@/lib/community/types";
 import { serializeFactoryProject } from "@/lib/import-export";
+import { LOGIN_ENABLED } from "@/lib/feature-toggles";
 import { capturePlanView } from "@/lib/plan-view";
 import { openLibrary } from "@/lib/library/library-tab";
 import { notifySetupsChanged } from "@/lib/setups-tab";
@@ -278,7 +279,14 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
                 See it in your library
               </button>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-fg-subtle">
+                Sharing needs an account so your posts stay yours: just a username and password.
+              </p>
+              <AuthForm onSignedIn={setUser} />
+            </div>
+          )
         ) : (
           <div className="space-y-3">
             {/* A board that never met the auto-arrange goes out exactly as
@@ -313,7 +321,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
                   Game version:{" "}
                   <span className="text-fg-subtle">
                     {datasetVersion?.gtnhVersion
-                      ? `GTNH ${datasetVersion.gtnhVersion}`
+                      ? `SUSY ${datasetVersion.gtnhVersion}`
                       : "unknown"}
                   </span>
                 </span>

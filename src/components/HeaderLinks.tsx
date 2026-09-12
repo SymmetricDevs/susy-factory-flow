@@ -7,15 +7,15 @@ import { Bug, ChevronDown, Compass, Heart, Library } from "lucide-react";
 import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
 import { openWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { APP_VERSION } from "@/lib/version";
+import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
 
 const GITHUB_URL = "https://github.com/jackwrichards/gtnh-factory-flow";
 
 /**
- * The planner's thread in the Greg Tech: New Horizons Discord. This is a
- * thread inside the pack's own server, not a server invite, so it only opens
- * for people who are already in there.
+ * The Supersymmetry community Discord. A server INVITE (the pack's own), so it
+ * works for anyone who opens it, whether or not they are already a member.
  */
-const DISCORD_THREAD_URL = "https://discord.com/channels/181078474394566657/1531402304530682036";
+const DISCORD_INVITE_URL = "https://discord.gg/BNbbK98rh6";
 
 /**
  * The tip jar. Clicks are counted through Umami's `data-umami-event`
@@ -53,6 +53,12 @@ export function HeaderLinks() {
       {open ? <div className="absolute right-0 top-full z-[100] mt-1 w-52 rounded border border-line-strong bg-surface p-1 text-sm shadow-xl">
         <MenuLinks auxiliary onAction={() => setOpen(false)} />
       </div> : null}
+      <HeaderLink href={GITHUB_URL} label="Source on GitHub">
+        <GithubMark />
+      </HeaderLink>
+      <HeaderLink href={DISCORD_INVITE_URL} label="Supersymmetry Discord">
+        <DiscordMark />
+      </HeaderLink>
     </div>
   );
 }
@@ -84,13 +90,17 @@ export function ReportBugButton() {
  * snug squeeze down to its heart.
  */
 export function SupportButton() {
+  // Temporarily disabled for this fork (see feature-toggles.ts).
+  if (!DONATIONS_ENABLED) {
+    return null;
+  }
   return (
     <a
       href={KOFI_URL}
       target="_blank"
       rel="noreferrer noopener"
       title="Support on Ko-fi"
-      aria-label="Support GTNH Planner on Ko-fi"
+      aria-label="Support SuSy Planner on Ko-fi"
       data-umami-event="support-kofi"
       data-umami-event-source="header"
       className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-pink-800 bg-pink-950 px-2 text-xs font-semibold text-pink-300 hover:border-pink-600 hover:bg-pink-900 hover:text-pink-200 snug:w-5 snug:justify-center snug:px-0"
@@ -139,18 +149,20 @@ export function MenuLinks({ onAction, auxiliary = false }: { onAction?: () => vo
       <MenuLink href={GITHUB_URL} label="Source on GitHub">
         <GithubMark />
       </MenuLink>
-      <MenuLink href={DISCORD_THREAD_URL} label="Discord thread">
+      <MenuLink href={DISCORD_INVITE_URL} label="Supersymmetry Discord">
         <DiscordMark />
       </MenuLink>
-      {!auxiliary ? <MenuLink
-        href={KOFI_URL}
-        label="Support GTNH Planner"
-        tone="support"
-        umamiEvent="support-kofi"
-      >
-        <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
-      </MenuLink> : null}
-      <MenuLink href={BUG_REPORT_URL} label="Report a bug">
+      {DONATIONS_ENABLED ? (
+        <MenuLink
+          href={KOFI_URL}
+          label="Support SuSy Planner"
+          tone="support"
+          umamiEvent="support-kofi"
+        >
+          <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
+        </MenuLink>
+      ) : null}
+      <MenuLink href={BUG_REPORT_URL} label="Report a bug" tone="danger">
         <Bug className="h-3.5 w-3.5" aria-hidden />
       </MenuLink>
     </div>

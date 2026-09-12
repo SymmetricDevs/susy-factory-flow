@@ -82,6 +82,7 @@ import {
   resourceLabel,
 } from "@/lib/model/resources";
 import type {
+  SetupRules,
   EntryIcon,
   FactoryAnnotation,
   FactoryEdge,
@@ -103,10 +104,11 @@ import { nearestFreeSpot, type PlacementRect } from "@/components/flow/board-pla
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { collectPocketMembers, expandPocketSelection } from "@/lib/model/pocket-connections";
 import { paperForBoardId, pickBoardPaper } from "@/lib/model/board-paper";
+import { getSetupRules, packSetupRules } from "@/lib/model/setup-rules";
 import type { BoardCamera } from "@/lib/designs/design-camera";
 
-export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
-export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.v1";
+export const LOCAL_STORAGE_KEY = "susy-factory-flow.project.v2";
+export const RESOURCE_HISTORY_STORAGE_KEY = "susy-factory-flow.resource-history.v1";
 const RESOURCE_HISTORY_LIMIT = 30;
 const PROJECT_HISTORY_LIMIT = 100;
 
@@ -446,6 +448,8 @@ interface FactoryStore {
   setStorageDrainMode: (storageId: string, drainMode: StorageDrainMode) => void;
   /** Solve mode's requirement on a product drawer; undefined clears it. */
   setStorageTarget: (storageId: string, targetPerSecond: number | undefined) => void;
+  /** Free inputs and free outputs: what the board does off its own edges. */
+  setSetupRules: (rules: Partial<SetupRules>) => void;
   /**
    * The board's three modes on one switch: build (both flags off), solve
    * (solveMode), pool (solveMode plus poolMode). One undo step.
@@ -4415,6 +4419,19 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       const project = touchProject({
         ...state.project,
         targetRate,
+      });
+      return withProjectHistory(state, {
+        project,
+        lastResult: solveBooks(project),
+      });
+    });
+  },
+  setSetupRules: (rules) => {
+    set((state) => {
+      const { assumeBoundaries: _legacy, ...rest } = state.project;
+      const project = touchProject({
+        ...rest,
+        setupRules: packSetupRules({ ...getSetupRules(state.project), ...rules }),
       });
       return withProjectHistory(state, {
         project,

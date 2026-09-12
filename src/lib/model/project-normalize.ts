@@ -164,14 +164,16 @@ function dropImpossibleEnergyHatchTypes(project: FactoryProject): FactoryProject
  * thing the solve reads and two fields saying the same thing drift.
  */
 function adoptSetupRules(project: FactoryProject): FactoryProject {
-  // THE RULES ARE GONE (2026-09-06): the board's modes do their job and
-  // loose cell wires is always on. Both stored forms are dropped on the way
-  // in so nothing carries them forward; `getSetupRules` ignores them anyway.
-  if (project.assumeBoundaries === undefined && project.setupRules === undefined) {
+  if (project.assumeBoundaries === undefined) {
     return project;
   }
-  const { assumeBoundaries: _legacy, setupRules: _rules, ...rest } = project;
-  return rest;
+  const { assumeBoundaries, ...rest } = project;
+  return {
+    ...rest,
+    setupRules: assumeBoundaries
+      ? { freeInputs: true, freeOutputs: true }
+      : (project.setupRules ?? undefined),
+  };
 }
 
 /**

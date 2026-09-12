@@ -97,7 +97,7 @@ export const APP_FONTS: readonly AppFontOption[] = [
 export const DEFAULT_APP_FONT: AppFontId = "inter";
 
 /** Shared with the inline boot script in layout.tsx. */
-export const APP_FONT_STORAGE_KEY = "gtnh-app-font";
+export const APP_FONT_STORAGE_KEY = "susy-factory-flow.app-font.v1";
 
 export function isAppFontId(value: unknown): value is AppFontId {
   return APP_FONTS.some((option) => option.id === value);

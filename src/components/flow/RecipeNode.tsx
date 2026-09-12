@@ -4014,11 +4014,10 @@ function HatchSupplyButton({ nodeId, port }: { nodeId: string; port: RailPort })
     <button
       type="button"
       aria-pressed={port.hatchSupplied === true}
-      aria-label={`${port.hatchSupplied ? "Stop satisfying" : "Satisfy"} ${port.displayName} with hatch`}
-      title={`${port.supplyHatch}: fully supplies this fluid to every recipe on this machine. Assumes enough hatches; no flow limit. ${port.hatchSupplied ? "Click to restore normal supply." : "Click to satisfy."}`}
+      aria-label={`${port.supplyHatch} for ${port.displayName}`}
       disabled={locked}
       data-viewer-disabled="true"
-      style={{ fontSize: 8, lineHeight: "10px", fontWeight: 700 }}
+      style={{ fontSize: 7, lineHeight: "10px", fontWeight: 700 }}
       className={`nodrag nopan relative z-40 mt-0.5 w-fit rounded-sm border px-1 text-[8px] font-bold leading-[10px] disabled:opacity-40 ${port.hatchSupplied ? "border-emerald-400/40 text-emerald-300" : "border-[var(--mc-47)] text-[var(--mc-ink-muted)] hover:border-cyan-300 hover:text-cyan-200"}`}
       onPointerDown={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
@@ -4037,7 +4036,7 @@ function HatchSupplyButton({ nodeId, port }: { nodeId: string; port: RailPort })
         playBoardSound("tick");
       }}
     >
-      {port.hatchSupplied ? "Satisfied" : "Satisfy"}
+      {port.supplyHatch}
     </button>
   );
 }

@@ -55,7 +55,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Corrected energy-machine unlock labels: *Compact Fusion Reactor LuV, Eye of Harmony UMV, Dyson Swarm UIV, Large Naquadah Reactor ZPM, and Antimatter Forge UIV*.",
       "*Fusion reactors keep their correct controllers, overclocks, and compact parallels.* Reactor mark fixes operating power; recipe startup requirements determine which controllers are available.",
       "The board toolbar shrinks in stages: *mode labels, mode icons, then folded tools*, accounting for Firefox text size without squeezing buttons together.",
-      "*Satisfy water and air with hatches* from eligible multiblock input rows; click again to restore normal supply. Hatch counts and flow limits are assumed sufficient.",
+      "*Water and air hatch toggles* on eligible multiblock input rows fully supply the fluid when on; switch off to restore normal supply. Hatch counts and flow limits are assumed sufficient.",
     ],
   },
   {

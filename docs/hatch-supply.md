@@ -1,9 +1,10 @@
 # Hatch supply
 
-The input row's **Satisfy** toggle supplies ordinary fluid water or air to a
+The input row's **Reservoir Hatch** or **Air Intake Hatch** toggle supplies ordinary fluid water or air to a
 compatible machine. Jack explicitly requested an abstraction on 2026-09-11:
 assume enough hatches to fully satisfy the input, without counts or rate limits.
-It does not supply cells, distilled/purified water, liquid air, oxygen, nitrogen,
+The label stays the same in both states, with a green pressed state when on and
+no hover tooltip. It does not supply cells, distilled/purified water, liquid air, oxygen, nitrogen,
 or other fluids. Air assumes a dimension producing ordinary air and clear hatch
 fronts. Those construction conditions are not simulated.
 

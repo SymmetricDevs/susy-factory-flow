@@ -430,17 +430,10 @@ const RESOURCE_GRID_GAP = 4;
 /**
  * How the art sits in a grid cell.
  *
- * A rendered sprite carries a wide transparent margin: measured across the
- * dataset's textures, the art itself covers a median of 44% of its PNG and as
- * little as 19% on the small piles. Drawn honestly that reads as a stamp
- * floating in a box. So the icon fills the cell, draws well past its own edges,
- * and the cell crops the margin away - big art, same cell.
- *
- * 1.4 puts the median sprite slightly over the cell edge, which is the point of
- * it. The handful of sprites that fill 59% of their PNG do lose their corners
- * here; that is the trade, and much past this even ordinary items start to clip.
+ * Magnify the art inside its fixed cell. ResourceIcon caps that zoom against
+ * each item's opaque bounds, so wide items keep their corners.
  */
-const RESOURCE_GRID_ART = "!h-full !w-full scale-[1.4]";
+const RESOURCE_GRID_ART = "!h-full !w-full";
 // The pager measures 28px (24 + 4 margin); the extra is slack so a fractional
 // device pixel can never clip the last row of tiles.
 const RESOURCE_PAGER_HEIGHT = 31;
@@ -876,6 +869,8 @@ function RecentResourceStrip({
                 aria-selected={active}
               >
                 <ResourceIcon
+
+                  itemZoom={1.4}
                   resource={{ ...resource, amount: 1 }}
                   size="md"
                   bare
@@ -1162,21 +1157,21 @@ function ResourceResultPage({
               role="option"
               aria-selected={active}
             >
-              <span className="minecraft-pixel-art flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)]">
+              <span className="minecraft-pixel-art flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden">
                 {resource.id === POWER_EU_CLAUSE_ID ? (
                   <span className="flex h-full w-full items-center justify-center bg-amber-400/10">
                     <Zap className="h-5 w-5 fill-current text-amber-400" aria-hidden />
                   </span>
                 ) : (
                   <ResourceIcon
+
+                    itemZoom={1.5}
                     resource={{ ...resource, amount: 1 }}
                     size="sm"
                     bare
                     showAmount={false}
                     tooltip={false}
-                    // Items zoom-crop (the sprite ships transparent padding);
-                    // fluids are measured to the same visual size as their
-                    // item neighbours instead of the usual 78% inset.
+                    // Items use the shared fit; fluids match their visual size.
                     iconPixelSize={
                       resource.kind === "fluid"
                         ? isSwatchFluid(resource)
@@ -1184,9 +1179,7 @@ function ResourceResultPage({
                           : spriteArtPixels(40)
                         : undefined
                     }
-                    className={
-                      resource.kind === "fluid" ? "!h-11 !w-11" : "!h-11 !w-11 scale-[1.5]"
-                    }
+                    className="!h-11 !w-11"
                   />
                 )}
               </span>

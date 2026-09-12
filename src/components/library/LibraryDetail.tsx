@@ -550,6 +550,8 @@ function StatColumns({ label, stats }: { label: string; stats: PlanResourceStat[
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden">
                 <ResourceIcon
+
+                  itemZoom={1.5}
                   resource={{ ...stat, id: stat.resourceId, amount: 1 }}
                   bare
                   tooltip={false}
@@ -561,9 +563,7 @@ function StatColumns({ label, stats }: { label: string; stats: PlanResourceStat[
                         : fluidArtPixels(16)
                       : undefined
                   }
-                  className={
-                    stat.kind === "fluid" ? "!h-4 !w-4" : "!h-4 !w-4 origin-center scale-150"
-                  }
+                  className="!h-4 !w-4"
                 />
               </span>
               <span className="min-w-0 flex-1 truncate text-[11px] text-neutral-300">

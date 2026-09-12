@@ -47,6 +47,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.1.7",
+    date: "2026-09-11",
+    headline: "Whole item icons and consistent resource shadows",
+    notes: [
+      "Item icons keep their zoom while fitting the whole item inside its slot, with matching shadows in the item panel and input/output rows.",
+      "Fluid icons share the same shadow and have subtly rounded corners, including textured fluids and plain colour swatches.",
+      "Verified icon sizing and shadows across Chrome and Firefox, including interface scaling and board zoom.",
+    ],
+  },
+  {
     version: "3.1.6",
     date: "2026-09-11",
     headline: "Hatch supplies, fusion reactors and power display units",

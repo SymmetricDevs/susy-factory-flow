@@ -2258,19 +2258,18 @@ function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCirc
               "border-[var(--mc-47)] bg-[var(--mc-47)] shadow-[inset_1px_1px_0_var(--mc-33),inset_-1px_-1px_0_var(--mc-56)]",
         ].join(" ")}
       >
-        {/* The item alone, zoomed past the box and clipped by it — the same
-            trick the port rows use. Item sprites ship with transparent padding
-            baked in, so drawn at its true size the chip floats in the middle of
-            a square instead of filling it. The number is one hover away;
-            printed here it only fought the art for the same pixels. */}
+        {/* The whole item uses the same fit as the ports. Its number stays
+            in the hover so it does not compete with the small artwork. */}
         {resource ? (
           <ResourceIcon
+
+            itemZoom={1.5}
             resource={{ ...resource, amount: 1, chance: undefined }}
             bare
             tooltip={false}
             showAmount={false}
             showConsumedState={false}
-            className={small ? "!h-[22px] !w-[22px] origin-center scale-150" : "!h-9 !w-9 origin-center scale-150"}
+            className={small ? "!h-[22px] !w-[22px]" : "!h-9 !w-9"}
           />
         ) : (
           // Not an item, a silhouette: the same drawn circuit the recipe book
@@ -2483,12 +2482,12 @@ function EnergyReading({
 function GlanceIoRow({ port }: { port: RailPort }) {
   return (
     <span className="flex items-center gap-1.5 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1 py-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
-      {/* Same crop treatment as a port chip: items ship transparent padding
-          in the sprite, so they zoom 1.5× inside an overflow-hidden box;
-          fluids are a solid square with nothing to crop. */}
+      {/* Same whole-item fit and shadow as the port rows. */}
       <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
         {port.resource ? (
           <ResourceIcon
+
+            itemZoom={1.5}
             resource={{ ...port.resource, amount: 1, chance: undefined }}
             size="sm"
             bare
@@ -2501,7 +2500,7 @@ function GlanceIoRow({ port }: { port: RailPort }) {
                   : fluidArtPixels(36)
                 : undefined
             }
-            className={port.kind === "fluid" ? "!h-9 !w-9" : "!h-9 !w-9 origin-center scale-150"}
+            className="!h-9 !w-9"
           />
         ) : null}
       </span>
@@ -2991,12 +2990,14 @@ function FreePortRow({ port }: { port: RailPort }) {
       <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden grayscale">
         {port.resource ? (
           <ResourceIcon
+
+            itemZoom={1.5}
             resource={{ ...port.resource, amount: 1, chance: undefined }}
             bare
             tooltip={false}
             showAmount={false}
             showConsumedState={false}
-            className="!h-7 !w-7 origin-center scale-150"
+            className="!h-7 !w-7"
           />
         ) : null}
       </span>
@@ -3879,23 +3880,18 @@ export function PortChip({
           the book, which made a 28px square the target for a question the whole
           row can now answer. Nothing here claims the pointer, so the handle
           above it gets the drag and the row gets the click. */}
-      <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
+      <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center">
         {port.resource ? (
           <ResourceIcon
+
+            itemZoom={1.5}
             resource={{ ...port.resource, amount: 1, chance: undefined }}
             bare
             tooltip={false}
             showAmount={false}
             showConsumedState={false}
-            // Item art ships with transparent padding baked into the sprite,
-            // and that padding is a FRACTION of the cell — growing the box
-            // grows the empty border with it. ResourceIcon's default already
-            // zooms to 200%-8px inside an overflow-hidden box; items take
-            // another 1.5x on top and get clipped by the box above, which is
-            // what finally puts the art edge to edge. A fluid sprite's art is
-            // exactly the middle half of its canvas, so it takes the precise
-            // spriteArtPixels size instead; only the artless swatch keeps its
-            // exact requested size.
+            // Item sizing and shadows are shared with the left resource panel.
+            // Fluid sprites and artless swatches keep their own sizing rules.
             iconPixelSize={
               port.kind === "fluid"
                 ? isSwatchFluid(port.resource)
@@ -3903,7 +3899,7 @@ export function PortChip({
                   : fluidArtPixels(28)
                 : undefined
             }
-            className={port.kind === "fluid" ? "" : "!h-7 !w-7 origin-center scale-150"}
+            className={port.kind === "fluid" ? "" : "!h-7 !w-7"}
           />
         ) : (
           <span className="block h-7 w-7 border border-[var(--mc-47)] bg-[var(--mc-55)]" />

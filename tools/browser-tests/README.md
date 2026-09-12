@@ -46,13 +46,18 @@ npm run test:icons:browsers
 The script starts and closes its own isolated Vite server. It imports the real
 icon components and compiles their actual Tailwind utilities; no dev app,
 dataset, account, browser profile, or temporary application route is needed.
-The synthetic sprite has the same 50% transparent border as exported artwork.
+Fixtures include the usual centered sprite, wider artwork, and actual Oil Berry,
+Alumina Dust, Sand and Water captures from the dataset.
 
 The check asserts expected slot sizes, artwork width AND height, and agreement
 between engines to within 0.16 screen CSS pixels (fractional layout rounding).
-It covers 558 cases per engine: standalone and atlas sprites, fluid sprites,
-fluid swatches, aspect masks, hatch art, three slot sizes, automatic and explicit
-pixel sizing, three interface scales, three camera zooms, and DPR 1 and 2.
+It covers 4,356 cases per engine: standalone and atlas sprites, fluid sprites,
+fluid swatches, aspect masks, hatch art, five slot sizes (including the left
+panel and input/output rows), automatic and explicit pixel sizing, original and
+magnified item artwork, three interface scales, three camera zooms, and DPR 1
+and 2. Item bounds must stay inside a 2px margin. Items and fluids share the same
+drop shadow; fluid corners are rounded by 1px. Pixel checks confirm the shadow
+actually paints below standalone and atlas fluid textures and colour swatches.
 It also verifies that the application's `!h-*` / `!w-*` overrides actually size
 the slot, independently of the artwork fix.
 
@@ -60,3 +65,12 @@ Measurements and screenshots go to `.icon-sizing-results.local/` (ignored),
 or `ICON_TEST_OUTPUT`. `PLAYWRIGHT_BROWSERS_PATH` can select a local engine cache.
 The CI icon job runs this separately from typecheck and Vitest, since jsdom
 does not implement layout and cannot detect this regression.
+
+## Whole-item zoom
+
+`itemZoom` replaces transforms on the outer icon slot. It magnifies artwork
+without enlarging the clipping box. `sprite-fit.ts` reads and caches each image's
+opaque extent (or its atlas tile), then caps the requested size only when art
+would cross the slot margin. Small piles retain their preferred zoom; wide or
+off-center items shrink just enough to remain whole. Both renderers retain
+`shrink-0`, with the same CSS width, height and shadow rules in both engines.

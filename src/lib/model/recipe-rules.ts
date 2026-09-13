@@ -1,4 +1,9 @@
-import { getFusionMachine, getFusionRecipeMark, isFusionRecipe, normalizeFusionHandler } from "@/lib/machines/fusion";
+import {
+  getFusionMachine,
+  getFusionRecipeMark,
+  isFusionRecipe,
+  normalizeFusionHandler,
+} from "@/lib/machines/fusion";
 import type {
   FactoryNode,
   MachineConfigControl,
@@ -35,7 +40,8 @@ export function expandMachineRecipeVariants(recipes: Recipe[]): Recipe[] {
 }
 
 export function getRecipeMachineHandlers(
-  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> & Partial<Recipe>,
+  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> &
+    Partial<Recipe>,
 ): MachineHandler[] {
   // Dataset handler lists are authoritative and always start with the map's
   // primary machine. Synthesizing an extra entry from the recipe map name
@@ -157,7 +163,8 @@ function steamSingleblockDurationTicks(
 }
 
 export function getSelectedMachineHandler(
-  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> & Partial<Recipe>,
+  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> &
+    Partial<Recipe>,
   node: Pick<FactoryNode, "machineHandlerId">,
 ): MachineHandler {
   const handlers = getRecipeMachineHandlers(recipe);
@@ -204,7 +211,8 @@ export function applyMachineHandlerToRecipe(
   // the base recipe instead.
   const seedsFromBase = machineTableSeedsFromBase(handler.machineType);
   const minimumTier = getMachineBehaviour(handler.machineType)?.recipeTierFromBase
-    ? recipe.minimumTier : handler.minimumTier;
+    ? recipe.minimumTier
+    : handler.minimumTier;
   const handlerDurationTicks = seedsFromBase
     ? steamSingleblockDurationTicks(recipe, handler)
     : (handler.durationTicks ?? steamSingleblockDurationTicks(recipe, handler));
@@ -260,15 +268,18 @@ export function getRecipeCoilTierControl(
   const control =
     getMachineTableControls(recipe.machineType).find((entry) => entry.id === "heatingCoil") ??
     findMachineConfigControl(recipe, "heatingCoil");
-  return control ? resolveMachineConfigTierControl(applyControlRecipeMinimum(control, recipe), node.coilTier) : undefined;
+  return control
+    ? resolveMachineConfigTierControl(applyControlRecipeMinimum(control, recipe), node.coilTier)
+    : undefined;
 }
 
 export function getRecipeMachineConfigTierControls(
   recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
   node: Pick<FactoryNode, "machineConfigTiers">,
 ): MachineConfigTierControl[] {
-  const settings = getMachineBehaviour(recipe.machineType)?.normalizeConfig?.(node.machineConfigTiers ?? {})
-    ?? node.machineConfigTiers;
+  const settings =
+    getMachineBehaviour(recipe.machineType)?.normalizeConfig?.(node.machineConfigTiers ?? {}) ??
+    node.machineConfigTiers;
   const controls = dropHiddenControls(
     mergeMachineConfigControls(
       recipe.machineConfigControls ?? [],
@@ -320,8 +331,12 @@ export function getAdjacentMachineConfigTier(
   direction: -1 | 1,
 ): string {
   if (control.numeric) {
-    return String(Math.min(control.numeric.max ?? Number.MAX_SAFE_INTEGER,
-      Math.max(control.numeric.min, Number(control.current.key) + direction)));
+    return String(
+      Math.min(
+        control.numeric.max ?? Number.MAX_SAFE_INTEGER,
+        Math.max(control.numeric.min, Number(control.current.key) + direction),
+      ),
+    );
   }
   const currentIndex = control.tiers.findIndex((entry) => entry.key === control.current.key);
   const minimumIndex = control.tiers.findIndex((entry) => entry.key === control.minimum.key);
@@ -407,8 +422,16 @@ function resolveMachineConfigTierControl(
       label: String(value),
       resource: { ...minimum.resource, displayName: `${control.label}: ${value}` },
     };
-    return { id: control.id, label: control.label, numeric: control.numeric,
-      minimum, current, tiers: [current], minimumIndex: 0, resource: current.resource };
+    return {
+      id: control.id,
+      label: control.label,
+      numeric: control.numeric,
+      minimum,
+      current,
+      tiers: [current],
+      minimumIndex: 0,
+      resource: current.resource,
+    };
   }
 
   const minimumIndex = Math.max(
@@ -443,11 +466,14 @@ function normalizeMachineHandler(handler: MachineHandler): MachineHandler {
   return {
     ...handler,
     label: familyLabel,
-    machineType: machineHandlerFamilyLabel(handler.machineType),
+    // Some dataset handlers carry no machineType (single-block exports);
+    // the label is the recipe map name, so it is the right fallback.
+    machineType: machineHandlerFamilyLabel(handler.machineType ?? handler.label),
   };
 }
 
-function machineHandlerFamilyLabel(label: string): string {
+function machineHandlerFamilyLabel(label: string | undefined): string {
+  if (!label) return "";
   if (getFusionMachine(label)) return label;
   const tierlessLabel = label
     .replace(/\s+\((?:ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\)$/i, "")

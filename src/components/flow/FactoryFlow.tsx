@@ -100,11 +100,7 @@ import {
   type FlowExportRequest,
 } from "@/lib/import-export/plan-image";
 import { resolveExportFontCss } from "@/lib/import-export/export-fonts";
-import {
-  isRecipeInputConsumed,
-  makeResourceKey,
-  resourceMatchesInput,
-} from "@/lib/model";
+import { isRecipeInputConsumed, makeResourceKey, resourceMatchesInput } from "@/lib/model";
 import { getCrossFormCellMatch } from "@/lib/model/resources";
 import { fetchLitresPerCell } from "@/lib/datasets/cell-ratio";
 import { queryRecipeDatasetResources } from "@/lib/datasets/browser-loader";
@@ -116,10 +112,7 @@ import { listPoolCellPairs } from "@/lib/solver/pool-mode";
 import "./pool-mode.css";
 import "./scroll-camera.css";
 import { ScrollCamera } from "./scroll-camera";
-import {
-  getEffectiveNodeRecipe,
-  isPocketId,
-} from "@/lib/model/pocket-connections";
+import { getEffectiveNodeRecipe, isPocketId } from "@/lib/model/pocket-connections";
 import type {
   EdgeThroughput,
   FactoryAnnotationKind,
@@ -146,11 +139,7 @@ import { getAutoSolve, setAutoSolve, subscribeAutoSolve } from "@/store/solve-bo
 import { hasAnySolveNumbers } from "@/lib/solver/throughput";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { useBlueprintStore } from "@/store/blueprint-store";
-import {
-  areBoardSoundsEnabled,
-  playBoardSound,
-  setBoardSoundsEnabled,
-} from "@/lib/board-sounds";
+import { areBoardSoundsEnabled, playBoardSound, setBoardSoundsEnabled } from "@/lib/board-sounds";
 import { projectSoundFingerprint } from "./use-board-sound-effects";
 import { useDesignStore } from "@/store/design-store";
 import { useSolvingBooks } from "./use-solving-books";
@@ -257,12 +246,15 @@ import {
   type ResourceHandleSide,
   sectionHandleId,
 } from "./resource-handles";
-import { getSharedMachineHandlers, listNodeSections, sectionNodeView, splitSectionHandleId } from "@/lib/model/shared-machine";
+import {
+  getSharedMachineHandlers,
+  listNodeSections,
+  sectionNodeView,
+  splitSectionHandleId,
+} from "@/lib/model/shared-machine";
 import { isPowerRecipe } from "@/lib/power/power-recipe";
 import { isCropFarmRecipe } from "@/lib/model/passive-production";
-import {
-  isEdgeStarved,
-} from "./edge-labels";
+import { isEdgeStarved } from "./edge-labels";
 import { RecipeAddChips } from "@/components/RecipeAddChip";
 import {
   LANE_CAPACITY,
@@ -306,7 +298,12 @@ import {
 import { isTrashRecipe, TRASH_ANY_RESOURCE_ID } from "@/lib/model/trash";
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import { GT_TIER_COLORS } from "./tier-colors";
-import { isPowerDisplayUnit, rateSuffixForKind, rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
+import {
+  isPowerDisplayUnit,
+  rateSuffixForKind,
+  rateUnitSuffix,
+  type RateUnit,
+} from "@/lib/model/rate-unit";
 import { useIsCompactViewport, useIsSnugViewport } from "@/lib/compact-view";
 import { getUiScale, useUiScale } from "@/lib/ui-scale";
 import { useToolbarFold } from "./toolbar-fold";
@@ -391,11 +388,7 @@ import {
   boardBodyRect,
   pickBoardOwnerFor,
 } from "@/lib/model/board-windows";
-import {
-  computePocketSummaries,
-  countPocketCrossings,
-  pocketCardHeight,
-} from "./pocket-summary";
+import { computePocketSummaries, countPocketCrossings, pocketCardHeight } from "./pocket-summary";
 import {
   ANNOTATION_DRAG_HANDLE_CLASS,
   AnnotationNode,
@@ -446,7 +439,6 @@ const ResourceEdge = memo(ResourceEdgeComponent);
 const edgeTypes = {
   resourceEdge: ResourceEdge,
 } satisfies EdgeTypes;
-
 
 const connectionLineStyle = {
   stroke: "#00d9ff",
@@ -569,7 +561,13 @@ function withTouchDragRule(nodes: BoardFlowNode[], compact: boolean): BoardFlowN
     // selectable, so the select-first rule would strand it; its title bar is
     // a deliberate enough target to keep the drag on a finger.
     const draggable =
-      node.type === "boardNode" ? (compact ? true : undefined) : compact && node.selected ? true : undefined;
+      node.type === "boardNode"
+        ? compact
+          ? true
+          : undefined
+        : compact && node.selected
+          ? true
+          : undefined;
     if (node.draggable === draggable) {
       return node;
     }
@@ -674,12 +672,7 @@ function distinctRankIndex(sortedValues: number[]): Map<number, number> {
  * A line's weight, 0 (quietest on the board) to 1 (busiest), blending its
  * logarithmic share of the range with its rank among the other lines.
  */
-function flowHeatFor(
-  value: number,
-  min: number,
-  max: number,
-  ranks: Map<number, number>,
-): number {
+function flowHeatFor(value: number, min: number, max: number, ranks: Map<number, number>): number {
   if (value <= RATE_DISPLAY_EPSILON || !Number.isFinite(min)) {
     return 0;
   }
@@ -692,10 +685,7 @@ function flowHeatFor(
   const logSpan = Math.log1p(max) - Math.log1p(min);
   const logShare = logSpan > 1e-9 ? (Math.log1p(value) - Math.log1p(min)) / logSpan : 1;
   const rankShare = ranks.get(value) ?? logShare;
-  return Math.min(
-    Math.max(rankShare * FLOW_RANK_WEIGHT + logShare * (1 - FLOW_RANK_WEIGHT), 0),
-    1,
-  );
+  return Math.min(Math.max(rankShare * FLOW_RANK_WEIGHT + logShare * (1 - FLOW_RANK_WEIGHT), 0), 1);
 }
 /**
  * Which scale a line is measured on. Fluids move in litres and everything else
@@ -1424,13 +1414,27 @@ function ensureGridSolve() {
     // problem offline.
     registerBoardGeometryReader(() => {
       const project = useFactoryStore.getState().project;
-      const cards: Array<{ id: string; x: number; y: number; width: number; height: number; role: "machine" | "storage" | "board" }> = [];
+      const cards: Array<{
+        id: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        role: "machine" | "storage" | "board";
+      }> = [];
       const seen = new Set<string>();
       const take = (id: string, role: "machine" | "storage" | "board") => {
         const rect = getMeasuredNodeBoundsById(id);
         if (!rect || seen.has(id)) return;
         seen.add(id);
-        cards.push({ id, x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top, role });
+        cards.push({
+          id,
+          x: rect.left,
+          y: rect.top,
+          width: rect.right - rect.left,
+          height: rect.bottom - rect.top,
+          role,
+        });
       };
       for (const node of project.nodes) take(node.id, "machine");
       for (const storage of project.storages ?? []) take(storage.id, "storage");
@@ -1442,24 +1446,35 @@ function ensureGridSolve() {
           source: input.sourceNodeId,
           target: input.targetNodeId,
           sourcePortY: input.sourceSlotEndpoint
-            ? measuredPortOffsetY(input.sourceNodeId, input.sourceHandleId ?? undefined, Position.Right)
+            ? measuredPortOffsetY(
+                input.sourceNodeId,
+                input.sourceHandleId ?? undefined,
+                Position.Right,
+              )
             : undefined,
           targetPortY: input.targetSlotEndpoint
-            ? measuredPortOffsetY(input.targetNodeId, input.targetHandleId ?? undefined, Position.Left)
+            ? measuredPortOffsetY(
+                input.targetNodeId,
+                input.targetHandleId ?? undefined,
+                Position.Left,
+              )
             : undefined,
           width: Math.min(input.routingWidth, LANE_CAPACITY),
         }));
       return { cards, wires };
     });
-    (window as unknown as { __gtnhReadDisplayedRoutes?: unknown }).__gtnhReadDisplayedRoutes = () => ({
-      signature: gridSolveSignature,
-      wantedSignature: gridSolveWantedSignature,
-      project: useFactoryStore.getState().project,
-      routes: publishedGridRouteEdges.flatMap((input) => {
-        const entry = directRouteCache.get(input.edgeId);
-        return entry ? [{ edgeId: input.edgeId, signature: entry.signature, points: entry.route.points }] : [];
-      }),
-    });
+    (window as unknown as { __gtnhReadDisplayedRoutes?: unknown }).__gtnhReadDisplayedRoutes =
+      () => ({
+        signature: gridSolveSignature,
+        wantedSignature: gridSolveWantedSignature,
+        project: useFactoryStore.getState().project,
+        routes: publishedGridRouteEdges.flatMap((input) => {
+          const entry = directRouteCache.get(input.edgeId);
+          return entry
+            ? [{ edgeId: input.edgeId, signature: entry.signature, points: entry.route.points }]
+            : [];
+        }),
+      });
   }
   // A big board routes in the worker (`grid-route-solve.ts`): this render
   // keeps serving the routes already installed - `gridSolveSignature` does
@@ -1542,7 +1557,11 @@ function buildArrangeJudgeInput(cardIds: readonly string[]): ArrangeJudgeInput |
   if (inputs.length === 0) {
     return undefined;
   }
-  const base: Array<{ input: GridRouteEdgeInput; sources: GridEndpoint[]; targets: GridEndpoint[] }> = [];
+  const base: Array<{
+    input: GridRouteEdgeInput;
+    sources: GridEndpoint[];
+    targets: GridEndpoint[];
+  }> = [];
   for (const input of inputs) {
     const sources = resolveGridRouteEndpoints(input, "source");
     const targets = resolveGridRouteEndpoints(input, "target");
@@ -2209,100 +2228,103 @@ export function FactoryFlow() {
       ...project.nodes
         .filter((node) => pocketView.isLevelShown(node.pocketId))
         .map((node): BoardFlowNode => {
-        const recipe = recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
-        // Trash cans get their own compact card; a distinct node TYPE (not a
-        // branch inside RecipeNode) so the hook order of the big machine card
-        // never depends on what recipe a node holds.
-        if (isTrashRecipe(recipe)) {
+          const recipe =
+            recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
+          // Trash cans get their own compact card; a distinct node TYPE (not a
+          // branch inside RecipeNode) so the hook order of the big machine card
+          // never depends on what recipe a node holds.
+          if (isTrashRecipe(recipe)) {
+            return {
+              id: node.id,
+              type: "trashNode",
+              position: node.position,
+              ...childOf(node.pocketId),
+              zIndex: CARD_Z_INDEX,
+              data: reuseObjectIdentity(trashNodeDataCache, node.id, {
+                projectNode: node,
+              }),
+            } satisfies TrashFlowNode;
+          }
           return {
             id: node.id,
-            type: "trashNode",
+            type: "recipeNode",
             position: node.position,
             ...childOf(node.pocketId),
-            zIndex: CARD_Z_INDEX,
-            data: reuseObjectIdentity(trashNodeDataCache, node.id, {
-              projectNode: node,
-            }),
-          } satisfies TrashFlowNode;
-        }
-        return {
-          id: node.id,
-          type: "recipeNode",
-          position: node.position,
-          ...childOf(node.pocketId),
-          zIndex:
-            hoveredUsageNodeId === node.id
-              ? 1500
-              : activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
+            zIndex:
+              hoveredUsageNodeId === node.id
                 ? 1500
-                : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+                : activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
                   ? 1500
-                  : CARD_Z_INDEX,
-          // Reusing the previous `data` object when nothing in it moved is what
-          // lets RecipeNode's memo actually hold. Rebuilding it — which this memo
-          // does whenever a resource is hovered or the solver re-runs — otherwise
-          // re-renders every node on the board for a change affecting one.
-          data: reuseObjectIdentity(recipeNodeDataCache, node.id, {
-            projectNode: node,
-            recipe,
-            result: result.nodes[node.id],
-          }),
-        } satisfies RecipeFlowNode;
-      }),
+                  : activeFlowResourceKey &&
+                      recipeContainsResourceKey(recipe, activeFlowResourceKey)
+                    ? 1500
+                    : CARD_Z_INDEX,
+            // Reusing the previous `data` object when nothing in it moved is what
+            // lets RecipeNode's memo actually hold. Rebuilding it — which this memo
+            // does whenever a resource is hovered or the solver re-runs — otherwise
+            // re-renders every node on the board for a change affecting one.
+            data: reuseObjectIdentity(recipeNodeDataCache, node.id, {
+              projectNode: node,
+              recipe,
+              result: result.nodes[node.id],
+            }),
+          } satisfies RecipeFlowNode;
+        }),
       ...(project.storages ?? [])
         .filter((storage) => pocketView.isLevelShown(storage.pocketId))
         .map(
-        (storage) =>
-          ({
-            id: storage.id,
-            type: "storageNode",
-            position: storage.position,
-            ...childOf(storage.pocketId),
-            zIndex:
-              activeFlowResourceKey === makeResourceKey(storage.kind, storage.resourceId)
-                ? 1500
-                : CARD_Z_INDEX,
-            data: reuseObjectIdentity(storageNodeDataCache, storage.id, {
-              storage,
-              result: result.storages[storage.id],
-            }),
-          }) satisfies StorageFlowNode,
-      ),
+          (storage) =>
+            ({
+              id: storage.id,
+              type: "storageNode",
+              position: storage.position,
+              ...childOf(storage.pocketId),
+              zIndex:
+                activeFlowResourceKey === makeResourceKey(storage.kind, storage.resourceId)
+                  ? 1500
+                  : CARD_Z_INDEX,
+              data: reuseObjectIdentity(storageNodeDataCache, storage.id, {
+                storage,
+                result: result.storages[storage.id],
+              }),
+            }) satisfies StorageFlowNode,
+        ),
       ...(project.annotations ?? [])
         .filter((annotation) => pocketView.isLevelShown(annotation.pocketId))
         .map(
-        (annotation) =>
-          ({
-            id: annotation.id,
-            type: "annotationNode",
-            position: annotation.position,
-            ...childOf(annotation.pocketId),
-            width: annotation.size.width,
-            height: annotation.size.height,
-            // Boxes, zones and images sit under everything so they read as
-            // grouping frames and backdrops; arrows and text notes float
-            // above the nodes they point at. The class is how the CSS knows
-            // a backdrop from a card: the global "selected nodes rise"
-            // rule must never lift a box's wash over the machines it frames.
-            zIndex:
-              annotation.kind === "box" ||
-              annotation.kind === "zone" ||
-              annotation.kind === "image"
-                ? -5
-                : 1000,
-            className:
-              annotation.kind === "box" ||
-              annotation.kind === "zone" ||
-              annotation.kind === "image"
-                ? "board-backdrop"
-                : undefined,
-            // Box/arrow interiors must stay click-through; only their
-            // drag-handle elements take pointer events (see AnnotationNode).
-            dragHandle: annotation.kind === "text" ? undefined : `.${ANNOTATION_DRAG_HANDLE_CLASS}`,
-            style: annotation.kind === "text" ? undefined : { pointerEvents: "none" as const },
-            data: reuseObjectIdentity(annotationNodeDataCache, annotation.id, { annotation }),
-          }) satisfies AnnotationFlowNode,
-      ),
+          (annotation) =>
+            ({
+              id: annotation.id,
+              type: "annotationNode",
+              position: annotation.position,
+              ...childOf(annotation.pocketId),
+              width: annotation.size.width,
+              height: annotation.size.height,
+              // Boxes, zones and images sit under everything so they read as
+              // grouping frames and backdrops; arrows and text notes float
+              // above the nodes they point at. The class is how the CSS knows
+              // a backdrop from a card: the global "selected nodes rise"
+              // rule must never lift a box's wash over the machines it frames.
+              zIndex:
+                annotation.kind === "box" ||
+                annotation.kind === "zone" ||
+                annotation.kind === "image"
+                  ? -5
+                  : 1000,
+              className:
+                annotation.kind === "box" ||
+                annotation.kind === "zone" ||
+                annotation.kind === "image"
+                  ? "board-backdrop"
+                  : undefined,
+              // Box/arrow interiors must stay click-through; only their
+              // drag-handle elements take pointer events (see AnnotationNode).
+              dragHandle:
+                annotation.kind === "text" ? undefined : `.${ANNOTATION_DRAG_HANDLE_CLASS}`,
+              style: annotation.kind === "text" ? undefined : { pointerEvents: "none" as const },
+              data: reuseObjectIdentity(annotationNodeDataCache, annotation.id, { annotation }),
+            }) satisfies AnnotationFlowNode,
+        ),
       ...pocketView.visiblePockets.map(
         (pocket) =>
           ({
@@ -2346,7 +2368,10 @@ export function FactoryFlow() {
   const [isDeleteMode, setDeleteMode] = useState(false);
   const checklistMode = useFactoryStore((state) => state.checklistMode);
   useEffect(() => {
-    if (checklistMode) { setDeleteMode(false); setAnnotationTool(undefined); }
+    if (checklistMode) {
+      setDeleteMode(false);
+      setAnnotationTool(undefined);
+    }
   }, [checklistMode]);
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft | undefined>(undefined);
   const annotationDraftRef = useRef<AnnotationDraft | undefined>(undefined);
@@ -2580,8 +2605,10 @@ export function FactoryFlow() {
         hashA = (hashA * 31 + code) | 0;
         hashB = (hashB * 37 + code) | 0;
       }
-      hashA = (((((((hashA * 31 + quantX) | 0) * 31 + quantY) | 0) * 31 + width) | 0) * 31 + height) | 0;
-      hashB = (((((((hashB * 37 + quantX) | 0) * 37 + quantY) | 0) * 37 + width) | 0) * 37 + height) | 0;
+      hashA =
+        (((((((hashA * 31 + quantX) | 0) * 31 + quantY) | 0) * 31 + width) | 0) * 31 + height) | 0;
+      hashB =
+        (((((((hashB * 37 + quantX) | 0) * 37 + quantY) | 0) * 37 + width) | 0) * 37 + height) | 0;
       if (node.type !== "annotationNode") {
         obstacleA = (obstacleA * 31 + hashA) | 0;
         obstacleB = (obstacleB * 37 + hashB) | 0;
@@ -3025,8 +3052,7 @@ export function FactoryFlow() {
       const shielded = marqueeShieldRef.current;
       if (shielded.size > 0) {
         changes = changes.filter(
-          (change) =>
-            !(change.type === "select" && change.selected && shielded.has(change.id)),
+          (change) => !(change.type === "select" && change.selected && shielded.has(change.id)),
         );
       }
       // The placement magnet, live: a held card is never ALLOWED onto a spot
@@ -3162,7 +3188,8 @@ export function FactoryFlow() {
       const sourceStorage = storagesById.get(edge.source);
       const sourceResult = result.nodes[edge.source];
       const resourceKey = makeResourceKey(edge.resourceKind, edge.resourceId);
-      let value = edgeResult?.transferredPerSecond ?? edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
+      let value =
+        edgeResult?.transferredPerSecond ?? edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
       if (targetStorage && !sourceStorage && sourceResult) {
         const speed = Number.isFinite(sourceResult.utilization)
           ? Math.min(Math.max(sourceResult.utilization, 0), 1)
@@ -3338,8 +3365,7 @@ export function FactoryFlow() {
       }
       const channelTotal = channelTotals.get(edge.id);
       const edgeResult = result.edges[edge.id];
-      const demand =
-        channelTotal?.demand ?? edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
+      const demand = channelTotal?.demand ?? edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
       const sourceStorage = storagesById.get(edge.source);
       const targetStorage = storagesById.get(edge.target);
       // Pre-computed above, storage adjustment and all; a channel
@@ -3419,8 +3445,7 @@ export function FactoryFlow() {
         sourceSlotEndpoint: !sourceIsPocket && !sourceStorage,
         targetSlotEndpoint: !targetIsPocket && !targetStorage && !targetIsTrashCan,
         sourceStorageEndpoint: sourceIsPocket || Boolean(sourceStorage),
-        targetStorageEndpoint:
-          targetIsPocket || Boolean(targetStorage || targetIsTrashCan),
+        targetStorageEndpoint: targetIsPocket || Boolean(targetStorage || targetIsTrashCan),
         // The published stroke width IS the routing width: it never carries
         // hover/highlight bumps, so a hover can never trigger a re-solve.
         routingWidth: publishedEdgeStrokeWidths.get(edge.id) ?? DEFAULT_EDGE_STROKE_WIDTH,
@@ -3430,87 +3455,91 @@ export function FactoryFlow() {
       // Structural reuse: hover and solver rebuilds leave most edges equal,
       // and returning the previous identity lets React Flow skip re-rendering
       // (and re-routing) them entirely.
-      return [reuseDeepObjectIdentity(edgeObjectCache, edge.id, {
-        id: edge.id,
-        // Thick lines dive UNDER the cards. At 3px a wire crossing a node
-        // edge-on was a detail; at 34px it buries the very ports it docks
-        // into, so in thickness mode the pipe passes behind the card and only
-        // its approach is visible. -1 keeps it above annotation boxes (-5),
-        // which must stay the backmost thing on the board.
-        // No drag-time bump any more: wires hold still during a drag and the
-        // dragged card itself is elevated (see handleNodeDragStart), so a
-        // card in hand always passes OVER the board's wiring.
-        zIndex: -1,
-        source: sourceRep,
-        target: targetRep,
-        sourceHandle: canonicalSourceHandle,
-        targetHandle: canonicalTargetHandle,
-        type: "resourceEdge",
-        data: {
-          resource,
-          color: edgeColor,
-          demand,
-          // Always the real flow. demand can sit at the full-speed rate on
-          // lines the solver never converges (storage sinks), and a label
-          // must never show more than actually moves.
-          transferred,
-          nameplateDemand: targetStorage ? undefined : edgeResult?.nameplateDemandPerSecond,
-          sourceCapacity:
-            outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
-            edgeResult?.sourceCapacityPerSecond !== undefined
-              ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
+      return [
+        reuseDeepObjectIdentity(edgeObjectCache, edge.id, {
+          id: edge.id,
+          // Thick lines dive UNDER the cards. At 3px a wire crossing a node
+          // edge-on was a detail; at 34px it buries the very ports it docks
+          // into, so in thickness mode the pipe passes behind the card and only
+          // its approach is visible. -1 keeps it above annotation boxes (-5),
+          // which must stay the backmost thing on the board.
+          // No drag-time bump any more: wires hold still during a drag and the
+          // dragged card itself is elevated (see handleNodeDragStart), so a
+          // card in hand always passes OVER the board's wiring.
+          zIndex: -1,
+          source: sourceRep,
+          target: targetRep,
+          sourceHandle: canonicalSourceHandle,
+          targetHandle: canonicalTargetHandle,
+          type: "resourceEdge",
+          data: {
+            resource,
+            color: edgeColor,
+            demand,
+            // Always the real flow. demand can sit at the full-speed rate on
+            // lines the solver never converges (storage sinks), and a label
+            // must never show more than actually moves.
+            transferred,
+            nameplateDemand: targetStorage ? undefined : edgeResult?.nameplateDemandPerSecond,
+            sourceCapacity:
+              outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
+              edgeResult?.sourceCapacityPerSecond !== undefined
+                ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
+                : undefined,
+            resourceKind: edge.resourceKind,
+            isLimited: edgeResult?.isLimited === true && !targetStorage,
+            isSupplyCapped,
+            isStorageTarget: Boolean(targetStorage),
+            isStorageEdge,
+            waypoints: edge.waypoints,
+            sourceHandleId: canonicalSourceHandle,
+            targetHandleId: canonicalTargetHandle,
+            sourceSlotEndpoint: Boolean(sourceHandle && !sourceStorage),
+            targetSlotEndpoint: Boolean(targetHandle && !targetStorage && !targetIsTrashCan),
+            sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
+            targetStorageEndpoint: Boolean(targetHandle && (targetStorage || targetIsTrashCan)),
+            sourceEndpointOffset: endpointOffsets.get(`${edge.id}:source`),
+            targetEndpointOffset: endpointOffsets.get(`${edge.id}:target`),
+            mergedEdgeIds: channelEdgeIdsByRepresentative.get(edge.id),
+            routeIndex: edgeIndex,
+            bundle: edgeBundles.get(edge.id),
+            isFlowHighlighted,
+            // O(1) off the per-solve index. The ring's own wires carry the mark
+            // so the circle reads as one shape rather than as N red cards that
+            // happen to sit near each other.
+            isDeadLoop: deathSpiralEdges.has(edge.id),
+            isClogLock: clogLockEdges.has(edge.id),
+            // Flow mode: how big this line is on its own kind's scale, 0 (the
+            // quietest line on the board) to 1 (the busiest). The edge draws
+            // marching dashes over itself when this is set.
+            flowRate: anyLineMode
+              ? {
+                  heat: flowHeat,
+                  idle: (transferredById.get(edge.id) ?? 0) <= RATE_DISPLAY_EPSILON,
+                  kind: flowBucketFor(edge.resourceKind),
+                  color: speedColorMode,
+                  thickness: true,
+                  // The marching dashes were retired (2026-09-07): their canvas
+                  // dirtied the whole board every frame and read the camera a
+                  // frame late, so they cost most of the frame rate and still
+                  // slid against the wires. Nothing publishes a pulse now.
+                  pulse: false,
+                }
               : undefined,
-          resourceKind: edge.resourceKind,
-          isLimited: edgeResult?.isLimited === true && !targetStorage,
-          isSupplyCapped,
-          isStorageTarget: Boolean(targetStorage),
-          isStorageEdge,
-          waypoints: edge.waypoints,
-          sourceHandleId: canonicalSourceHandle,
-          targetHandleId: canonicalTargetHandle,
-          sourceSlotEndpoint: Boolean(sourceHandle && !sourceStorage),
-          targetSlotEndpoint: Boolean(targetHandle && !targetStorage && !targetIsTrashCan),
-          sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
-          targetStorageEndpoint: Boolean(targetHandle && (targetStorage || targetIsTrashCan)),
-          sourceEndpointOffset: endpointOffsets.get(`${edge.id}:source`),
-          targetEndpointOffset: endpointOffsets.get(`${edge.id}:target`),
-          mergedEdgeIds: channelEdgeIdsByRepresentative.get(edge.id),
-          routeIndex: edgeIndex,
-          bundle: edgeBundles.get(edge.id),
-          isFlowHighlighted,
-          // O(1) off the per-solve index. The ring's own wires carry the mark
-          // so the circle reads as one shape rather than as N red cards that
-          // happen to sit near each other.
-          isDeadLoop: deathSpiralEdges.has(edge.id),
-          isClogLock: clogLockEdges.has(edge.id),
-          // Flow mode: how big this line is on its own kind's scale, 0 (the
-          // quietest line on the board) to 1 (the busiest). The edge draws
-          // marching dashes over itself when this is set.
-          flowRate: anyLineMode
-            ? {
-                heat: flowHeat,
-                idle: (transferredById.get(edge.id) ?? 0) <= RATE_DISPLAY_EPSILON,
-                kind: flowBucketFor(edge.resourceKind),
-                color: speedColorMode,
-                thickness: true,
-                // The marching dashes were retired (2026-09-07): their canvas
-                // dirtied the whole board every frame and read the camera a
-                // frame late, so they cost most of the frame rate and still
-                // slid against the wires. Nothing publishes a pulse now.
-                pulse: false,
-              }
-            : undefined,
-          layoutEpoch: layoutVersion,
-        },
-        style: {
-          // Always the resource colour: the edge component derives its own
-          // speed-view stroke at the point of use (it knows the LOD step).
-          stroke: edgeColor,
-          // Volume is the whole message, so no starved dashes chop up a pipe.
-          strokeOpacity: 0.95,
-          strokeWidth: boardView.fixedEdgeWidth ? FLOW_MODE_MIN_WIDTH : laneWidthForHeat(flowHeat),
-        },
-      })];
+            layoutEpoch: layoutVersion,
+          },
+          style: {
+            // Always the resource colour: the edge component derives its own
+            // speed-view stroke at the point of use (it knows the LOD step).
+            stroke: edgeColor,
+            // Volume is the whole message, so no starved dashes chop up a pipe.
+            strokeOpacity: 0.95,
+            strokeWidth: boardView.fixedEdgeWidth
+              ? FLOW_MODE_MIN_WIDTH
+              : laneWidthForHeat(flowHeat),
+          },
+        }),
+      ];
     });
 
     publishGridRouteEdges(gridRouteInputs);
@@ -3984,9 +4013,7 @@ export function FactoryFlow() {
       const launch = Math.min(1, (now - timelapseCameraLaunchRef.current) / rampMs);
       const launchEase = launch * launch * (3 - 2 * launch);
       const factor =
-        remaining > 0.01
-          ? Math.min(1, Math.max(k, minClose / remaining) * launchEase)
-          : 1;
+        remaining > 0.01 ? Math.min(1, Math.max(k, minClose / remaining) * launchEase) : 1;
       const zoom = viewport.zoom + (target.zoom - viewport.zoom) * factor;
       const landX = size.width / 2 - target.x * zoom;
       const landY = size.height / 2 - target.y * zoom;
@@ -4679,7 +4706,6 @@ export function FactoryFlow() {
     };
   }, []);
 
-
   const updateFlowViewportCenter = useCallback(() => {
     const instance = flowInstanceRef.current;
     const board = boardRef.current;
@@ -4845,10 +4871,7 @@ export function FactoryFlow() {
       // captured" with no cause. Past the cap the whole frame scales down
       // instead - the physical pixel count is the same either way, because
       // pixelRatio was already bounded by the same constant.
-      const sizeScale = Math.min(
-        1,
-        EXPORT_PNG_MAX_PIXEL_SIDE / Math.max(graphWidth, graphHeight),
-      );
+      const sizeScale = Math.min(1, EXPORT_PNG_MAX_PIXEL_SIDE / Math.max(graphWidth, graphHeight));
       const imageWidth = Math.round(graphWidth * sizeScale);
       const imageHeight = Math.round(graphHeight * sizeScale);
       const viewport = getViewportForBounds(
@@ -5085,13 +5108,7 @@ export function FactoryFlow() {
       (project.storages ?? []).some(housed) ||
       (project.annotations ?? []).some(housed)
     );
-  }, [
-    project.annotations,
-    project.nodes,
-    project.pockets,
-    project.storages,
-    selectedNodeIds,
-  ]);
+  }, [project.annotations, project.nodes, project.pockets, project.storages, selectedNodeIds]);
 
   // SHARED MACHINES: several selected cards that one machine could run can
   // fold into one card. Only recipe cards count (no drawers, boards or
@@ -5110,7 +5127,12 @@ export function FactoryFlow() {
     let handlers: ReturnType<typeof getSharedMachineHandlers> | undefined;
     for (const card of cards) {
       const recipe = recipesById.get(card.recipeId);
-      if (!recipe || isPowerRecipe(recipe) || isCropFarmRecipe(recipe) || isCustomRateRecipe(recipe)) {
+      if (
+        !recipe ||
+        isPowerRecipe(recipe) ||
+        isCropFarmRecipe(recipe) ||
+        isCustomRateRecipe(recipe)
+      ) {
         return false;
       }
       const own = getSharedMachineHandlers(card, recipesById);
@@ -5575,7 +5597,11 @@ export function FactoryFlow() {
   useBoardTouchGestures({
     boardRef,
     instanceRef: flowInstanceRef,
-    enabled: !checklistMode && nodeColorPaintMode === undefined && annotationTool === undefined && !isDeleteMode,
+    enabled:
+      !checklistMode &&
+      nodeColorPaintMode === undefined &&
+      annotationTool === undefined &&
+      !isDeleteMode,
   });
 
   // The camera under the hand: the wheel eases toward its target, a released
@@ -5665,7 +5691,9 @@ export function FactoryFlow() {
       removeAnnotationIds: staleInkIds,
       // The dump for real: every board goes, its members ride `moves`
       // (root positions from the flattened plan) and surface on the canvas.
-      removeBoards: dumpBoards ? (state.project.pockets ?? []).map((pocket) => pocket.id) : undefined,
+      removeBoards: dumpBoards
+        ? (state.project.pockets ?? []).map((pocket) => pocket.id)
+        : undefined,
     });
     useFactoryStore.getState().frameBoardNodes();
   }, []);
@@ -6019,9 +6047,7 @@ export function FactoryFlow() {
         // back into whichever board the drop belongs to.
         const inside = chainOf(landing);
         const blockers = [
-          ...surface
-            .filter((other) => !inside.has(other.id))
-            .map((other) => other.rect),
+          ...surface.filter((other) => !inside.has(other.id)).map((other) => other.rect),
           ...placedThisDrop,
         ];
         // The live magnet has already kept this card off everything solid
@@ -6162,7 +6188,10 @@ export function FactoryFlow() {
           position: isClick ? draft.start : corner,
           size: isClick
             ? ANNOTATION_DEFAULT_BOX
-            : { width: Math.max(width, ANNOTATION_MIN_BOX), height: Math.max(height, ANNOTATION_MIN_BOX) },
+            : {
+                width: Math.max(width, ANNOTATION_MIN_BOX),
+                height: Math.max(height, ANNOTATION_MIN_BOX),
+              },
         });
         return;
       }
@@ -6191,7 +6220,10 @@ export function FactoryFlow() {
           position: isClick ? draft.start : corner,
           size: isClick
             ? ANNOTATION_DEFAULT_ARROW
-            : { width: Math.max(width, ANNOTATION_MIN_ARROW), height: Math.max(height, ANNOTATION_MIN_ARROW) },
+            : {
+                width: Math.max(width, ANNOTATION_MIN_ARROW),
+                height: Math.max(height, ANNOTATION_MIN_ARROW),
+              },
           arrowDirection: `${draft.end.y >= draft.start.y ? "down" : "up"}-${
             draft.end.x >= draft.start.x ? "right" : "left"
           }` as const,
@@ -6416,21 +6448,35 @@ export function FactoryFlow() {
     [setNodeColorPaintMode],
   );
 
-
   const checklistCapture = useChecklistBoard(visibleFlowEdges);
   const viewerCapture = useViewerLock(boardRef, isReadOnly);
   const checklistNodes = useMemo(() => {
-    if (isReadOnly && !checklistMode) return visibleFlowNodes.map((node) => ({ ...node, draggable: false, connectable: false }));
+    if (isReadOnly && !checklistMode)
+      return visibleFlowNodes.map((node) => ({ ...node, draggable: false, connectable: false }));
     if (!checklistMode) return visibleFlowNodes;
     const checked = new Set(project.checklist?.cards);
-    return visibleFlowNodes.map((node) => ({ ...node, draggable: false,
-      className: [node.className, checked.has(node.id) ? "checklist-done" : ""].filter(Boolean).join(" ") }));
+    return visibleFlowNodes.map((node) => ({
+      ...node,
+      draggable: false,
+      className: [node.className, checked.has(node.id) ? "checklist-done" : ""]
+        .filter(Boolean)
+        .join(" "),
+    }));
   }, [visibleFlowNodes, checklistMode, project.checklist, isReadOnly]);
   const checklistEdges = useMemo(() => {
     if (!checklistMode) return visibleFlowEdges;
     const checked = new Set(project.checklist?.edges);
-    return visibleFlowEdges.map((edge) => ({ ...edge,
-      className: [edge.className, (edge.data?.bundle?.edgeIds ?? [edge.id]).every((id) => checked.has(id)) ? "checklist-done" : ""].filter(Boolean).join(" ") }));
+    return visibleFlowEdges.map((edge) => ({
+      ...edge,
+      className: [
+        edge.className,
+        (edge.data?.bundle?.edgeIds ?? [edge.id]).every((id) => checked.has(id))
+          ? "checklist-done"
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    }));
   }, [visibleFlowEdges, checklistMode, project.checklist]);
 
   const paintCursor =
@@ -6513,13 +6559,28 @@ export function FactoryFlow() {
             : undefined),
         } as CSSProperties
       }
-      onPointerDownCapture={(event) => { if (!checklistCapture(event) && !viewerCapture(event) && !isReadOnly) handleAnnotationPointerDown(event); }}
-      onMouseDownCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
-      onTouchStartCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
-      onClickCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
-      onDoubleClickCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
-      onContextMenuCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
-      onKeyDownCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
+      onPointerDownCapture={(event) => {
+        if (!checklistCapture(event) && !viewerCapture(event) && !isReadOnly)
+          handleAnnotationPointerDown(event);
+      }}
+      onMouseDownCapture={(event) => {
+        if (!checklistCapture(event)) viewerCapture(event);
+      }}
+      onTouchStartCapture={(event) => {
+        if (!checklistCapture(event)) viewerCapture(event);
+      }}
+      onClickCapture={(event) => {
+        if (!checklistCapture(event)) viewerCapture(event);
+      }}
+      onDoubleClickCapture={(event) => {
+        if (!checklistCapture(event)) viewerCapture(event);
+      }}
+      onContextMenuCapture={(event) => {
+        if (!checklistCapture(event)) viewerCapture(event);
+      }}
+      onKeyDownCapture={(event) => {
+        if (!checklistCapture(event)) viewerCapture(event);
+      }}
       onWheelCapture={checklistCapture}
       // Dragging a picture file straight onto the board drops it where it
       // lands, as an image annotation.
@@ -6530,7 +6591,10 @@ export function FactoryFlow() {
         }
       }}
       onDrop={(event) => {
-        if (isReadOnly) { event.preventDefault(); return; }
+        if (isReadOnly) {
+          event.preventDefault();
+          return;
+        }
         const file = Array.from(event.dataTransfer.files).find((candidate) =>
           candidate.type.startsWith("image/"),
         );
@@ -6545,7 +6609,9 @@ export function FactoryFlow() {
         void placeImageFile(file, point);
       }}
     >
-      {boardMenu && !isReadOnly ? <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} /> : null}
+      {boardMenu && !isReadOnly ? (
+        <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} />
+      ) : null}
       <ReactFlow
         nodes={checklistNodes}
         edges={checklistEdges}
@@ -6655,10 +6721,7 @@ export function FactoryFlow() {
         {canvasTheme.grain ? <GrainBackground layers={canvasTheme.grain} /> : null}
         {boardView.canvasPattern === "none" ? null : boardView.canvasPattern === "ruled" ||
           boardView.canvasPattern === "graph" ? (
-          <RuledBackground
-            mode={boardView.canvasPattern}
-            color={canvasTheme.patternColor}
-          />
+          <RuledBackground mode={boardView.canvasPattern} color={canvasTheme.patternColor} />
         ) : (
           // Our own compositor-friendly copy of the stock Background: the
           // stock one repaints the whole viewport every pan frame (see
@@ -6691,27 +6754,29 @@ export function FactoryFlow() {
         className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_60px_10px_rgba(0,0,0,0.35)]"
       />
       <SolvingBooksOverlay />
-      {!isReadOnly ? <PaintToolbar
-        paintMode={nodeColorPaintMode}
-        onPaintModeChange={handlePaintModeChange}
-        activeColorTag={activeColorTag}
-        onColorSelect={handlePaintColorSelect}
-        annotationTool={annotationTool}
-        onAnnotationToolChange={handleAnnotationToolChange}
-        onPlaceImage={placeImageFile}
-        isDeleteMode={isDeleteMode}
-        onDeleteModeChange={handleDeleteModeChange}
-        view={boardView}
-        onViewChange={writeBoardView}
-        onAutoArrange={handleAutoArrange}
-        folded={toolbarFold.paint}
-        foldAll={toolbarFold.paintFoldsAll}
-        modesInBuild={toolbarFold.build}
-        modeIconsOnly={toolbarFold.modeIconsOnly}
-        openGroup={openToolGroup}
-        onToggleGroup={handleToolGroupToggle}
-        shiftedDown={false}
-      /> : null}
+      {!isReadOnly ? (
+        <PaintToolbar
+          paintMode={nodeColorPaintMode}
+          onPaintModeChange={handlePaintModeChange}
+          activeColorTag={activeColorTag}
+          onColorSelect={handlePaintColorSelect}
+          annotationTool={annotationTool}
+          onAnnotationToolChange={handleAnnotationToolChange}
+          onPlaceImage={placeImageFile}
+          isDeleteMode={isDeleteMode}
+          onDeleteModeChange={handleDeleteModeChange}
+          view={boardView}
+          onViewChange={writeBoardView}
+          onAutoArrange={handleAutoArrange}
+          folded={toolbarFold.paint}
+          foldAll={toolbarFold.paintFoldsAll}
+          modesInBuild={toolbarFold.build}
+          modeIconsOnly={toolbarFold.modeIconsOnly}
+          openGroup={openToolGroup}
+          onToggleGroup={handleToolGroupToggle}
+          shiftedDown={false}
+        />
+      ) : null}
       <SourceToolbar
         readOnly={isReadOnly}
         folded={!isReadOnly && toolbarFold.build}
@@ -6840,10 +6905,7 @@ const UnwiredNotice = memo(function UnwiredNotice({
 }) {
   const project = useFactoryStore((state) => state.project);
   const lastResult = useFactoryStore((state) => state.lastResult);
-  const unwired = useMemo(
-    () => findUnwiredNodeIds(project, lastResult),
-    [project, lastResult],
-  );
+  const unwired = useMemo(() => findUnwiredNodeIds(project, lastResult), [project, lastResult]);
 
   if (unwired.length === 0) {
     return null;
@@ -6870,7 +6932,6 @@ const UnwiredNotice = memo(function UnwiredNotice({
   );
 });
 
-
 const DeathSpiralNotice = memo(function DeathSpiralNotice({
   onShow,
 }: {
@@ -6895,9 +6956,7 @@ const DeathSpiralNotice = memo(function DeathSpiralNotice({
       <span className="shrink-0 font-bold tracking-[0.5px] text-[#ff9c9c]">DEAD LOOP</span>
       <span className="text-[#e6d2d2]">{story.short}</span>
       {spirals.length > 1 ? (
-        <span className="shrink-0 text-[#b89a9a]">
-          +{spirals.length - 1} more
-        </span>
+        <span className="shrink-0 text-[#b89a9a]">+{spirals.length - 1} more</span>
       ) : null}
       <button
         type="button"
@@ -6937,10 +6996,7 @@ const ClogLockNotice = memo(function ClogLockNotice({
   const lastResult = useFactoryStore((state) => state.lastResult);
   const [dismissedId, setDismissedId] = useState<string | undefined>(undefined);
   const [showIndex, setShowIndex] = useState(0);
-  const locks = useMemo(
-    () => findClogLocks(project, lastResult).locks,
-    [project, lastResult],
-  );
+  const locks = useMemo(() => findClogLocks(project, lastResult).locks, [project, lastResult]);
 
   const lock = locks[0];
   if (!lock || dismissedId === lock.id) {
@@ -6959,9 +7015,7 @@ const ClogLockNotice = memo(function ClogLockNotice({
       <span className="shrink-0 font-bold tracking-[0.5px] text-[#9cc9ff]">CLOG LOCK</span>
       <span className="text-[#d2e0e6]">{story.short}</span>
       {locks.length > 1 ? (
-        <span className="shrink-0 text-[#9aaab8]">
-          +{locks.length - 1} more
-        </span>
+        <span className="shrink-0 text-[#9aaab8]">+{locks.length - 1} more</span>
       ) : null}
       <button
         type="button"
@@ -7180,19 +7234,19 @@ const SelectionActionsBar = memo(function SelectionActionsBar({
         </button>
       ) : null}
       {canWrap ? (
-      <button
-        type="button"
-        onClick={onWrap}
-        title="Wrap in a board (Ctrl+G)"
-        // Plain chrome, like every other button. It used to wear the pocket
-        // purple, which stopped meaning anything when boards started picking
-        // their own paper - and a purple button is the last thing that should
-        // appear beside a selection now that selection is not purple.
-        className="flex h-9 items-center gap-1.5 whitespace-nowrap border-2 border-[var(--mc-15)] bg-[var(--mc-49)] px-3 font-mono text-[12px] font-bold text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-      >
-        <Box className="h-4 w-4" />
-        Wrap {selectionCount} in a board
-      </button>
+        <button
+          type="button"
+          onClick={onWrap}
+          title="Wrap in a board (Ctrl+G)"
+          // Plain chrome, like every other button. It used to wear the pocket
+          // purple, which stopped meaning anything when boards started picking
+          // their own paper - and a purple button is the last thing that should
+          // appear beside a selection now that selection is not purple.
+          className="flex h-9 items-center gap-1.5 whitespace-nowrap border-2 border-[var(--mc-15)] bg-[var(--mc-49)] px-3 font-mono text-[12px] font-bold text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+        >
+          <Box className="h-4 w-4" />
+          Wrap {selectionCount} in a board
+        </button>
       ) : null}
     </div>
   );
@@ -7273,7 +7327,8 @@ function useFoldoutDismiss(
  * against any hue, including this very grey.
  */
 
-const TOOL_FACE_ON = "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]";
+const TOOL_FACE_ON =
+  "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]";
 const TOOL_FACE_OFF =
   "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110";
 
@@ -7509,8 +7564,7 @@ const missingProductIds = (project: FactoryProject): string[] => {
   const roles = getStorageRoles(project);
   return (project.storages ?? [])
     .filter(
-      (storage) =>
-        roles.get(storage.id) === "product" && !((storage.targetPerSecond ?? 0) > 0),
+      (storage) => roles.get(storage.id) === "product" && !((storage.targetPerSecond ?? 0) > 0),
     )
     .map((storage) => storage.id);
 };
@@ -7545,22 +7599,32 @@ const SolveModeNotice = memo(function SolveModeNotice({
     // One line on a desktop: label, sentence, button. Wider and a point
     // larger than its siblings so the button never folds onto a centred
     // second row; only a phone is allowed to wrap it.
-    <div className={`nodrag pointer-events-auto flex max-w-[min(calc(94*var(--ui-vw)),760px)] flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-2 px-3 py-2 font-mono text-[13px] ${poolMode
-      ? "border-[#6f9cff] bg-[#1a2233] text-[#d3dff4] shadow-[inset_2px_2px_0_#3e567d,inset_-2px_-2px_0_#101622,4px_4px_0_rgba(0,0,0,0.35)]"
-      : "border-[#9a6fd1] bg-[#241a2e] text-[#e0d3ec] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]"}`}>
-      <span className={`shrink-0 font-bold tracking-[0.5px] ${poolMode ? "text-[#adc7ff]" : "text-[#d9b8ff]"}`}>
+    <div
+      className={`nodrag pointer-events-auto flex max-w-[min(calc(94*var(--ui-vw)),760px)] flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-2 px-3 py-2 font-mono text-[13px] ${
+        poolMode
+          ? "border-[#6f9cff] bg-[#1a2233] text-[#d3dff4] shadow-[inset_2px_2px_0_#3e567d,inset_-2px_-2px_0_#101622,4px_4px_0_rgba(0,0,0,0.35)]"
+          : "border-[#9a6fd1] bg-[#241a2e] text-[#e0d3ec] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]"
+      }`}
+    >
+      <span
+        className={`shrink-0 font-bold tracking-[0.5px] ${poolMode ? "text-[#adc7ff]" : "text-[#d9b8ff]"}`}
+      >
         {poolMode ? "POOL MODE" : "SOLVE MODE"}
       </span>
       {/* One line, never a count: what the solve needs is one number,
           anywhere. The button still points at the products missing theirs. */}
-      <span className="whitespace-nowrap compact:whitespace-normal">Set at least one product rate or machine count.</span>
+      <span className="whitespace-nowrap compact:whitespace-normal">
+        Set at least one product rate or machine count.
+      </span>
       {missingCount > 0 ? (
         <button
           type="button"
           onClick={() => onShow(missingProductIds(useFactoryStore.getState().project))}
-          className={`shrink-0 border px-2 py-0.5 font-bold ${poolMode
-            ? "border-[#6f9cff] bg-[#273957] text-[#dce7ff] hover:bg-[#334b70]"
-            : "border-[#9a6fd1] bg-[#3a2a52] text-[#ead9ff] hover:bg-[#4a3766]"}`}
+          className={`shrink-0 border px-2 py-0.5 font-bold ${
+            poolMode
+              ? "border-[#6f9cff] bg-[#273957] text-[#dce7ff] hover:bg-[#334b70]"
+              : "border-[#9a6fd1] bg-[#3a2a52] text-[#ead9ff] hover:bg-[#4a3766]"
+          }`}
         >
           Show me
         </button>
@@ -7568,7 +7632,6 @@ const SolveModeNotice = memo(function SolveModeNotice({
     </div>
   );
 });
-
 
 /**
  * The board's three modes on one switch, exactly one lit. Each step hands
@@ -7627,7 +7690,10 @@ const MODE_KEYS: Array<{
     label: "Pool mode",
     setup: "Select recipes and set target production rates.",
     result: "Required machine counts.",
-    details: ["Resources are shared without wires.", "Inputs with no producer are imported automatically."],
+    details: [
+      "Resources are shared without wires.",
+      "Inputs with no producer are imported automatically.",
+    ],
     note: "For simple production calculations, as in traditional GTNH planners.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
@@ -7641,11 +7707,19 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
   const snug = useIsSnugViewport();
   const iconsOnly = forceIcons || compact || snug;
   const modeStep = iconsOnly ? 44 : 96;
-  const mode = useFactoryStore((state): BoardMode =>
-    state.project.poolMode === true ? "pool" : state.project.solveMode === true ? "solve" : "build",
+  const mode = useFactoryStore(
+    (state): BoardMode =>
+      state.project.poolMode === true
+        ? "pool"
+        : state.project.solveMode === true
+          ? "solve"
+          : "build",
   );
   const setBoardMode = useFactoryStore((state) => state.setBoardMode);
-  const index = Math.max(0, MODE_KEYS.findIndex((entry) => entry.mode === mode));
+  const index = Math.max(
+    0,
+    MODE_KEYS.findIndex((entry) => entry.mode === mode),
+  );
   const pick = useCallback(
     (key: BoardMode) => {
       const current = useFactoryStore.getState().project;
@@ -7728,7 +7802,7 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
     const acc = wheelAccRef.current;
     // A change of direction starts over: leftover from the other way must
     // not make the first notch back a dead one.
-    wheelAccRef.current = (acc > 0) === (event.deltaY > 0) ? acc + event.deltaY : event.deltaY;
+    wheelAccRef.current = acc > 0 === event.deltaY > 0 ? acc + event.deltaY : event.deltaY;
     const NOTCH = 60;
     let steps = Math.trunc(wheelAccRef.current / NOTCH);
     if (steps === 0) {
@@ -7774,16 +7848,22 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
             <div className="w-[340px] max-w-[calc(100*var(--ui-vw)-44px)] space-y-3 text-sm leading-5 text-fg-subtle">
               <div className={`text-base font-semibold leading-6 ${ink}`}>{label}</div>
               <p>
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-muted">Setup</span>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-muted">
+                  Setup
+                </span>
                 {setup}
               </p>
               <p>
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-muted">Calculates</span>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-muted">
+                  Calculates
+                </span>
                 {result}
               </p>
               {details && (
                 <ul className="list-disc space-y-1 pl-4 marker:text-fg-muted">
-                  {details.map((detail) => <li key={detail}>{detail}</li>)}
+                  {details.map((detail) => (
+                    <li key={detail}>{detail}</li>
+                  ))}
                 </ul>
               )}
               {note && <p className="border-t border-line pt-2.5 text-fg-muted">{note}</p>}
@@ -7940,7 +8020,9 @@ const SetupRulesButton = memo(function SetupRulesButton() {
               aria-pressed={choice.on}
               className={[
                 "flex items-start gap-2 border-2 p-2 text-left",
-                choice.on ? `border-[var(--mc-good)] ${TOOL_FACE_ON}` : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
+                choice.on
+                  ? `border-[var(--mc-good)] ${TOOL_FACE_ON}`
+                  : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
                 choice.locked ? "opacity-50" : "",
               ].join(" ")}
             >
@@ -7951,16 +8033,26 @@ const SetupRulesButton = memo(function SetupRulesButton() {
                   choice.on ? "bg-[var(--mc-good)]" : "bg-[var(--mc-24)]",
                 ].join(" ")}
               >
-                {choice.on ? <Check className="h-3 w-3 text-[var(--mc-15)]" strokeWidth={4} /> : null}
+                {choice.on ? (
+                  <Check className="h-3 w-3 text-[var(--mc-15)]" strokeWidth={4} />
+                ) : null}
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex items-baseline justify-between gap-2">
                   <span className="font-mono text-[12px] font-black uppercase">{choice.label}</span>
-                  <span className={choice.on ? "font-mono text-[10px] font-black tracking-[1px] text-[var(--mc-good)]" : "font-mono text-[10px] font-black tracking-[1px] text-[var(--mc-ink-muted)]"}>
+                  <span
+                    className={
+                      choice.on
+                        ? "font-mono text-[10px] font-black tracking-[1px] text-[var(--mc-good)]"
+                        : "font-mono text-[10px] font-black tracking-[1px] text-[var(--mc-ink-muted)]"
+                    }
+                  >
                     {choice.on ? "ON" : "OFF"}
                   </span>
                 </span>
-                <span className="font-mono text-[11px] leading-snug opacity-80">{choice.description}</span>
+                <span className="font-mono text-[11px] leading-snug opacity-80">
+                  {choice.description}
+                </span>
               </span>
             </button>
           ))}
@@ -8058,45 +8150,44 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
           <ToolTray>
             <MinecraftTooltip
               content={
-                picking ? undefined : () => (
-                  <RecipeTooltip
-                    view={{
-                      title: "Product drawer",
-                      mode: "pool",
-                      rows: [],
-                      bullets: [
-                        "Pool mode has no wires, so you need a way to create product cards.",
-                        "Create one with this button, or drag one off an output.",
-                      ],
-                      actions: [{ gesture: "left", label: "Choose a product" }],
-                    }}
-                  />
-                )
+                picking
+                  ? undefined
+                  : () => (
+                      <RecipeTooltip
+                        view={{
+                          title: "Product drawer",
+                          mode: "pool",
+                          rows: [],
+                          bullets: [
+                            "Pool mode has no wires, so you need a way to create product cards.",
+                            "Create one with this button, or drag one off an output.",
+                          ],
+                          actions: [{ gesture: "left", label: "Choose a product" }],
+                        }}
+                      />
+                    )
               }
             >
-            <button
-              type="button"
-              onClick={() => setPicking((was) => !was)}
-              aria-pressed={picking}
-              tabIndex={on ? 0 : -1}
-              className={[
-                "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
-                picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
-              ].join(" ")}
-              aria-label="Add a product drawer"
-            >
-              <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
-            </button>
+              <button
+                type="button"
+                onClick={() => setPicking((was) => !was)}
+                aria-pressed={picking}
+                tabIndex={on ? 0 : -1}
+                className={[
+                  "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
+                  picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
+                ].join(" ")}
+                aria-label="Add a product drawer"
+              >
+                <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
+              </button>
             </MinecraftTooltip>
-            </ToolTray>
+          </ToolTray>
         </div>
       </div>
       {picking ? (
         // Outside the clip, centred under the key that opened it.
-        <div
-          className="absolute top-full z-30 mt-1 -translate-x-1/2"
-          style={{ left: 24 }}
-        >
+        <div className="absolute top-full z-30 mt-1 -translate-x-1/2" style={{ left: 24 }}>
           <ItemPickerPopover
             role="makes"
             placement="below"
@@ -8109,10 +8200,6 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
     </div>
   );
 });
-
-
-
-
 
 const SourceToolbar = memo(function SourceToolbar({
   readOnly = false,
@@ -8150,7 +8237,9 @@ const SourceToolbar = memo(function SourceToolbar({
     try {
       const saved = localStorage.getItem("gtnh-factory-flow.power-display-unit.v1");
       if (isPowerDisplayUnit(saved)) setPowerDisplayUnit(saved);
-    } catch { /* Use EU/t when storage is unavailable. */ }
+    } catch {
+      /* Use EU/t when storage is unavailable. */
+    }
   }, [setPowerDisplayUnit]);
 
   // Subscribe to the DEPTHS, not the history arrays: a selector returning the
@@ -8182,28 +8271,30 @@ const SourceToolbar = memo(function SourceToolbar({
     >
       {/* History first, and set apart on its own plate: it undoes everything
           the rest of the board does, so it belongs to no other group. */}
-      {!readOnly && <ToolTray>
-        <button
-          type="button"
-          onClick={undo}
-          disabled={!canUndo}
-          className={historyButtonClass(canUndo)}
-          title={canUndo ? "Undo (Ctrl+Z)" : "Nothing to undo"}
-          aria-label="Undo"
-        >
-          <Undo2 className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={redo}
-          disabled={!canRedo}
-          className={historyButtonClass(canRedo)}
-          title={canRedo ? "Redo (Ctrl+Shift+Z)" : "Nothing to redo"}
-          aria-label="Redo"
-        >
-          <Redo2 className="h-4 w-4" />
-        </button>
-      </ToolTray>}
+      {!readOnly && (
+        <ToolTray>
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            className={historyButtonClass(canUndo)}
+            title={canUndo ? "Undo (Ctrl+Z)" : "Nothing to undo"}
+            aria-label="Undo"
+          >
+            <Undo2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            className={historyButtonClass(canRedo)}
+            title={canRedo ? "Redo (Ctrl+Shift+Z)" : "Nothing to redo"}
+            aria-label="Redo"
+          >
+            <Redo2 className="h-4 w-4" />
+          </button>
+        </ToolTray>
+      )}
       {/* Undo and redo stay out in the open even on a phone: they are the two
           buttons a mistake sends you looking for, and a mistake is not the
           moment to go hunting through a fold-out. */}
@@ -8216,223 +8307,233 @@ const SourceToolbar = memo(function SourceToolbar({
         label="build tools"
         side="left"
       >
-      {folded && !readOnly && (
-        <>
-          <ToolTray helpAnchor="rules"><ModeKeys forceIcons /></ToolTray>
-          <PoolSpawnKeys />
-        </>
-      )}
-      {/* How the numbers read: ONE key wearing the current unit, opening the
+        {folded && !readOnly && (
+          <>
+            <ToolTray helpAnchor="rules">
+              <ModeKeys forceIcons />
+            </ToolTray>
+            <PoolSpawnKeys />
+          </>
+        )}
+        {/* How the numbers read: ONE key wearing the current unit, opening the
           four units as a named list. Four permanent keys spent three slots
           saying nothing but "not this one", and a blind cycle made you walk
           the whole ring to go back one. */}
-      <ToolTray raised={isRateMenuOpen || isPowerUnitMenuOpen}>
-        <div ref={rateRef} className="relative flex">
-          <button
-            type="button"
-            onClick={() => setRateMenuOpen((was) => !was)}
-            onWheel={(event) => {
-              // The key is also a wheel dial: scroll up climbs the ladder,
-              // clamped at the ends. Stopped so the board never zooms.
-              event.stopPropagation();
-              const index = RATE_UNIT_CHOICES.findIndex((choice) => choice.unit === rateUnit);
-              const next = Math.min(
-                RATE_UNIT_CHOICES.length - 1,
-                Math.max(0, index + (event.deltaY < 0 ? 1 : -1)),
-              );
-              if (next !== index) {
-                playRateDial(RATE_UNIT_CHOICES[next]!.unit, next);
-                setRateUnit(RATE_UNIT_CHOICES[next]!.unit);
-              }
-            }}
-            aria-expanded={isRateMenuOpen}
-            aria-label={`Rate unit: ${rateChoice.title.toLowerCase()}`}
-            className={[
-              "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)] font-mono text-[12px] font-black",
-              isRateMenuOpen ? TOOL_FACE_ON : rateUnit === "eu" ? TOOL_FACE_ENERGY : TOOL_FACE_OFF,
-            ].join(" ")}
-          >
-            {rateChoice.label}
-          </button>
-          {isRateMenuOpen ? (
-            <div className="absolute left-0 top-[calc(100%+10px)] z-30 flex w-max flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
-              {RATE_UNIT_CHOICES.map((choice, index) => (
-                <button
-                  key={choice.unit}
-                  type="button"
-                  onClick={() => {
-                    playRateDial(choice.unit, index);
-                    setRateUnit(choice.unit);
-                    setRateMenuOpen(false);
-                  }}
-                  aria-pressed={rateUnit === choice.unit}
-                  className={[
-                    "pointer-events-auto flex items-center gap-2 border-2 p-1 pr-2 text-left",
-                    rateUnit === choice.unit
-                      ? choice.unit === "eu"
-                        ? "border-white bg-amber-300 text-black ring-2 ring-amber-200"
-                        : "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
-                      : choice.unit === "eu"
-                        ? "border-amber-700 bg-[var(--mc-49)] text-amber-300 hover:bg-[var(--mc-61)]"
-                        : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
-                  ].join(" ")}
-                >
-                  <span className="flex h-6 w-7 shrink-0 items-center justify-center font-mono text-[12px] font-black">
-                    {choice.label}
-                  </span>
-                  <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
-                    {choice.title}
-                  </span>
-                </button>
-              ))}
-              <div className="pt-0.5 text-center font-mono text-[9px] font-semibold uppercase tracking-[0.5px] text-[var(--mc-ink-muted)]">
-                Display only
+        <ToolTray raised={isRateMenuOpen || isPowerUnitMenuOpen}>
+          <div ref={rateRef} className="relative flex">
+            <button
+              type="button"
+              onClick={() => setRateMenuOpen((was) => !was)}
+              onWheel={(event) => {
+                // The key is also a wheel dial: scroll up climbs the ladder,
+                // clamped at the ends. Stopped so the board never zooms.
+                event.stopPropagation();
+                const index = RATE_UNIT_CHOICES.findIndex((choice) => choice.unit === rateUnit);
+                const next = Math.min(
+                  RATE_UNIT_CHOICES.length - 1,
+                  Math.max(0, index + (event.deltaY < 0 ? 1 : -1)),
+                );
+                if (next !== index) {
+                  playRateDial(RATE_UNIT_CHOICES[next]!.unit, next);
+                  setRateUnit(RATE_UNIT_CHOICES[next]!.unit);
+                }
+              }}
+              aria-expanded={isRateMenuOpen}
+              aria-label={`Rate unit: ${rateChoice.title.toLowerCase()}`}
+              className={[
+                "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)] font-mono text-[12px] font-black",
+                isRateMenuOpen
+                  ? TOOL_FACE_ON
+                  : rateUnit === "eu"
+                    ? TOOL_FACE_ENERGY
+                    : TOOL_FACE_OFF,
+              ].join(" ")}
+            >
+              {rateChoice.label}
+            </button>
+            {isRateMenuOpen ? (
+              <div className="absolute left-0 top-[calc(100%+10px)] z-30 flex w-max flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+                {RATE_UNIT_CHOICES.map((choice, index) => (
+                  <button
+                    key={choice.unit}
+                    type="button"
+                    onClick={() => {
+                      playRateDial(choice.unit, index);
+                      setRateUnit(choice.unit);
+                      setRateMenuOpen(false);
+                    }}
+                    aria-pressed={rateUnit === choice.unit}
+                    className={[
+                      "pointer-events-auto flex items-center gap-2 border-2 p-1 pr-2 text-left",
+                      rateUnit === choice.unit
+                        ? choice.unit === "eu"
+                          ? "border-white bg-amber-300 text-black ring-2 ring-amber-200"
+                          : "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
+                        : choice.unit === "eu"
+                          ? "border-amber-700 bg-[var(--mc-49)] text-amber-300 hover:bg-[var(--mc-61)]"
+                          : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
+                    ].join(" ")}
+                  >
+                    <span className="flex h-6 w-7 shrink-0 items-center justify-center font-mono text-[12px] font-black">
+                      {choice.label}
+                    </span>
+                    <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
+                      {choice.title}
+                    </span>
+                  </button>
+                ))}
+                <div className="pt-0.5 text-center font-mono text-[9px] font-semibold uppercase tracking-[0.5px] text-[var(--mc-ink-muted)]">
+                  Display only
+                </div>
               </div>
-            </div>
-          ) : null}
-        </div>
-        {/* The POWER unit: EU/t, or amps of a tier. Amps is how the game's
+            ) : null}
+          </div>
+          {/* The POWER unit: EU/t, or amps of a tier. Amps is how the game's
             logistics are sized - dynamos, cables and hatches are all rated
             in amps at a voltage - so "46 A LuV" answers the build question
             "1.5M EU/t" leaves open. Amps of tier T = EU/t over T's voltage:
             packets per tick, nothing more. */}
-        <div ref={powerUnitRef} className="relative flex">
-          <button
-            type="button"
-            onClick={() => setPowerUnitMenuOpen((was) => !was)}
-            onWheel={(event) => {
-              // Same wheel dial as the rate key: EU/t is the floor, the
-              // tiers climb from it.
-              event.stopPropagation();
-              const ladder: Array<typeof powerDisplayUnit> = [
-                "eu",
-                ...GT_VOLTAGE_TIERS.map((entry) => entry.tier),
-              ];
-              const index = ladder.indexOf(powerDisplayUnit);
-              const next = Math.min(
-                ladder.length - 1,
-                Math.max(0, index + (event.deltaY < 0 ? 1 : -1)),
-              );
-              if (next !== index) {
-                playBoardSound("dialPower", { step: next });
-                setPowerDisplayUnit(ladder[next]!);
+          <div ref={powerUnitRef} className="relative flex">
+            <button
+              type="button"
+              onClick={() => setPowerUnitMenuOpen((was) => !was)}
+              onWheel={(event) => {
+                // Same wheel dial as the rate key: EU/t is the floor, the
+                // tiers climb from it.
+                event.stopPropagation();
+                const ladder: Array<typeof powerDisplayUnit> = [
+                  "eu",
+                  ...GT_VOLTAGE_TIERS.map((entry) => entry.tier),
+                ];
+                const index = ladder.indexOf(powerDisplayUnit);
+                const next = Math.min(
+                  ladder.length - 1,
+                  Math.max(0, index + (event.deltaY < 0 ? 1 : -1)),
+                );
+                if (next !== index) {
+                  playBoardSound("dialPower", { step: next });
+                  setPowerDisplayUnit(ladder[next]!);
+                }
+              }}
+              aria-expanded={isPowerUnitMenuOpen}
+              aria-label={
+                powerDisplayUnit === "eu"
+                  ? "Power unit: EU per tick"
+                  : `Power unit: amps of ${powerDisplayUnit}`
               }
-            }}
-            aria-expanded={isPowerUnitMenuOpen}
-            aria-label={
-              powerDisplayUnit === "eu"
-                ? "Power unit: EU per tick"
-                : `Power unit: amps of ${powerDisplayUnit}`
-            }
-            className={[
-              // Fixed width: the tier names run two to three letters and a
-              // wheel-scroll through them must not pump the toolbar.
-              "pointer-events-auto relative z-10 flex h-8 w-[76px] items-center justify-center gap-1 whitespace-nowrap border-2 px-1 font-mono text-[11px] font-bold",
-              // In a tier mode the WHOLE key IS the tier chip the machine
-              // cards wear: same bevel, same text shadow, same weight.
-              powerDisplayUnit === "eu"
-                ? `border-[var(--mc-15)] font-black text-amber-400 ${isPowerUnitMenuOpen ? TOOL_FACE_ON : TOOL_FACE_OFF}`
-                : `shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] ${isPowerUnitMenuOpen ? "brightness-110" : "hover:brightness-110"}`,
-            ].join(" ")}
-            style={
-              powerDisplayUnit === "eu"
-                ? undefined
-                : {
-                    background: GT_TIER_COLORS[powerDisplayUnit].background,
-                    borderColor: GT_TIER_COLORS[powerDisplayUnit].border,
-                    color: GT_TIER_COLORS[powerDisplayUnit].text,
-                    textShadow: `1px 1px 0 ${GT_TIER_COLORS[powerDisplayUnit].shadow}`,
-                  }
-            }
-          >
-            <Zap className="h-3 w-3 fill-current" />
-            {/* The board's one amps notation: number, then A, then tier -
+              className={[
+                // Fixed width: the tier names run two to three letters and a
+                // wheel-scroll through them must not pump the toolbar.
+                "pointer-events-auto relative z-10 flex h-8 w-[76px] items-center justify-center gap-1 whitespace-nowrap border-2 px-1 font-mono text-[11px] font-bold",
+                // In a tier mode the WHOLE key IS the tier chip the machine
+                // cards wear: same bevel, same text shadow, same weight.
+                powerDisplayUnit === "eu"
+                  ? `border-[var(--mc-15)] font-black text-amber-400 ${isPowerUnitMenuOpen ? TOOL_FACE_ON : TOOL_FACE_OFF}`
+                  : `shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] ${isPowerUnitMenuOpen ? "brightness-110" : "hover:brightness-110"}`,
+              ].join(" ")}
+              style={
+                powerDisplayUnit === "eu"
+                  ? undefined
+                  : {
+                      background: GT_TIER_COLORS[powerDisplayUnit].background,
+                      borderColor: GT_TIER_COLORS[powerDisplayUnit].border,
+                      color: GT_TIER_COLORS[powerDisplayUnit].text,
+                      textShadow: `1px 1px 0 ${GT_TIER_COLORS[powerDisplayUnit].shadow}`,
+                    }
+              }
+            >
+              <Zap className="h-3 w-3 fill-current" />
+              {/* The board's one amps notation: number, then A, then tier -
                 "2.5 A LV" - and the key names the unit half of it, "A LV".
                 The game's underline convention rides only the tier word. */}
-            {powerDisplayUnit === "eu" ? (
-              "EU/t"
-            ) : (
-              <span className="whitespace-nowrap">
-                A{" "}
-                <span
-                  style={{
-                    textDecoration: GT_TIER_COLORS[powerDisplayUnit].underline
-                      ? "underline"
-                      : undefined,
-                  }}
-                >
-                  {powerDisplayUnit}
+              {powerDisplayUnit === "eu" ? (
+                "EU/t"
+              ) : (
+                <span className="whitespace-nowrap">
+                  A{" "}
+                  <span
+                    style={{
+                      textDecoration: GT_TIER_COLORS[powerDisplayUnit].underline
+                        ? "underline"
+                        : undefined,
+                    }}
+                  >
+                    {powerDisplayUnit}
+                  </span>
                 </span>
-              </span>
-            )}
-          </button>
-          {isPowerUnitMenuOpen ? (
-            // EU/t and the fifteen tiers, one uniform 4x4 grid of equal
-            // cells - EU/t is a choice like any other, not a banner.
-            <div className={`absolute ${folded ? "right-0" : "left-0"} top-[calc(100%+10px)] z-30 grid w-max grid-cols-4 gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]`}>
-              <button
-                type="button"
-                onClick={() => {
-                  playBoardSound("dialPower", { step: 0 });
-                  setPowerDisplayUnit("eu");
-                  setPowerUnitMenuOpen(false);
-                }}
-                aria-pressed={powerDisplayUnit === "eu"}
-                aria-label="EU per tick"
-                className={[
-                  // The EU/t cell wears the same bevel as the tier chips,
-                  // on the toolbar's dark face with the amber bolt.
-                  "pointer-events-auto flex h-8 items-center justify-center gap-1 border-2 px-1.5 font-mono text-[11px] font-bold shadow-[inset_2px_2px_0_rgba(255,255,255,0.25),inset_-2px_-2px_0_rgba(0,0,0,0.45)]",
-                  powerDisplayUnit === "eu"
-                    ? "border-[var(--mc-15)] bg-[var(--mc-61)] text-amber-400 ring-2 ring-cyan-300"
-                    : "border-[var(--mc-15)] bg-[var(--mc-49)] text-amber-400 hover:bg-[var(--mc-61)]",
-                ].join(" ")}
+              )}
+            </button>
+            {isPowerUnitMenuOpen ? (
+              // EU/t and the fifteen tiers, one uniform 4x4 grid of equal
+              // cells - EU/t is a choice like any other, not a banner.
+              <div
+                className={`absolute ${folded ? "right-0" : "left-0"} top-[calc(100%+10px)] z-30 grid w-max grid-cols-4 gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]`}
               >
-                <Zap className="h-3 w-3 fill-current" />
-                EU/t
-              </button>
-              {GT_VOLTAGE_TIERS.map(({ tier }, index) => (
                 <button
-                  key={tier}
                   type="button"
                   onClick={() => {
-                    // Rung 1 upward: the EU/t cell is the ladder's floor.
-                    playBoardSound("dialPower", { step: index + 1 });
-                    setPowerDisplayUnit(tier);
+                    playBoardSound("dialPower", { step: 0 });
+                    setPowerDisplayUnit("eu");
                     setPowerUnitMenuOpen(false);
                   }}
-                  aria-pressed={powerDisplayUnit === tier}
-                  aria-label={`Amps of ${tier}`}
+                  aria-pressed={powerDisplayUnit === "eu"}
+                  aria-label="EU per tick"
                   className={[
-                    // The machine cards' own chip treatment: bevel, text
-                    // shadow, bold - the menu is a tray of the real chips.
-                    "pointer-events-auto flex h-8 items-center justify-center border-2 px-1.5 font-mono text-[11px] font-bold shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)]",
-                    powerDisplayUnit === tier ? "ring-2 ring-cyan-300" : "hover:brightness-110",
+                    // The EU/t cell wears the same bevel as the tier chips,
+                    // on the toolbar's dark face with the amber bolt.
+                    "pointer-events-auto flex h-8 items-center justify-center gap-1 border-2 px-1.5 font-mono text-[11px] font-bold shadow-[inset_2px_2px_0_rgba(255,255,255,0.25),inset_-2px_-2px_0_rgba(0,0,0,0.45)]",
+                    powerDisplayUnit === "eu"
+                      ? "border-[var(--mc-15)] bg-[var(--mc-61)] text-amber-400 ring-2 ring-cyan-300"
+                      : "border-[var(--mc-15)] bg-[var(--mc-49)] text-amber-400 hover:bg-[var(--mc-61)]",
                   ].join(" ")}
-                  style={{
-                    background: GT_TIER_COLORS[tier].background,
-                    borderColor: GT_TIER_COLORS[tier].border,
-                    color: GT_TIER_COLORS[tier].text,
-                    textShadow: `1px 1px 0 ${GT_TIER_COLORS[tier].shadow}`,
-                    textDecoration: GT_TIER_COLORS[tier].underline ? "underline" : undefined,
-                  }}
                 >
-                  {tier}
+                  <Zap className="h-3 w-3 fill-current" />
+                  EU/t
                 </button>
-              ))}
-              <div className="col-span-4 pt-0.5 text-center font-mono text-[9px] font-semibold uppercase tracking-[0.5px] text-[var(--mc-ink-muted)]">
-                Display only
+                {GT_VOLTAGE_TIERS.map(({ tier }, index) => (
+                  <button
+                    key={tier}
+                    type="button"
+                    onClick={() => {
+                      // Rung 1 upward: the EU/t cell is the ladder's floor.
+                      playBoardSound("dialPower", { step: index + 1 });
+                      setPowerDisplayUnit(tier);
+                      setPowerUnitMenuOpen(false);
+                    }}
+                    aria-pressed={powerDisplayUnit === tier}
+                    aria-label={`Amps of ${tier}`}
+                    className={[
+                      // The machine cards' own chip treatment: bevel, text
+                      // shadow, bold - the menu is a tray of the real chips.
+                      "pointer-events-auto flex h-8 items-center justify-center border-2 px-1.5 font-mono text-[11px] font-bold shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)]",
+                      powerDisplayUnit === tier ? "ring-2 ring-cyan-300" : "hover:brightness-110",
+                    ].join(" ")}
+                    style={{
+                      background: GT_TIER_COLORS[tier].background,
+                      borderColor: GT_TIER_COLORS[tier].border,
+                      color: GT_TIER_COLORS[tier].text,
+                      textShadow: `1px 1px 0 ${GT_TIER_COLORS[tier].shadow}`,
+                      textDecoration: GT_TIER_COLORS[tier].underline ? "underline" : undefined,
+                    }}
+                  >
+                    {tier}
+                  </button>
+                ))}
+                <div className="col-span-4 pt-0.5 text-center font-mono text-[9px] font-semibold uppercase tracking-[0.5px] text-[var(--mc-ink-muted)]">
+                  Display only
+                </div>
               </div>
-            </div>
-          ) : null}
-        </div>
-      </ToolTray>
-      {!readOnly && <ToolTray>
-        <AutoSolveKeys />
-      </ToolTray>}
-      <ToolTray>
-        <ChecklistKeys folded={folded} />
-      </ToolTray>
+            ) : null}
+          </div>
+        </ToolTray>
+        {!readOnly && (
+          <ToolTray>
+            <AutoSolveKeys />
+          </ToolTray>
+        )}
+        <ToolTray>
+          <ChecklistKeys folded={folded} />
+        </ToolTray>
       </ToolGroup>
     </div>
   );
@@ -9010,12 +9111,15 @@ function ThemeSwatch({ theme }: { theme: CanvasTheme }) {
       style={{ backgroundColor: theme.base, backgroundImage: theme.texture }}
     >
       {[0, 1, 2].map((dot) => (
-        <span key={dot} className="h-[3px] w-[3px]" style={{ backgroundColor: theme.patternColor }} />
+        <span
+          key={dot}
+          className="h-[3px] w-[3px]"
+          style={{ backgroundColor: theme.patternColor }}
+        />
       ))}
     </span>
   );
 }
-
 
 // Memoized because FactoryFlow re-renders every frame of a node drag; with
 // stable callbacks this menu renders only when the view or its open state
@@ -9185,7 +9289,9 @@ const BoardViewMenu = memo(function BoardViewMenu({
                     {on ? "ON" : "OFF"}
                   </span>
                 </span>
-                {line ? <span className="font-mono text-[11px] leading-snug opacity-80">{line}</span> : null}
+                {line ? (
+                  <span className="font-mono text-[11px] leading-snug opacity-80">{line}</span>
+                ) : null}
               </span>
             </button>
           ))}
@@ -9208,7 +9314,9 @@ const BoardViewMenu = memo(function BoardViewMenu({
               <Network className="mt-[1px] h-4 w-4 shrink-0" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[12px] font-black uppercase">Keep boards on rearrange</span>
+                  <span className="font-mono text-[12px] font-black uppercase">
+                    Keep boards on rearrange
+                  </span>
                   <span
                     className={[
                       "font-mono text-[10px] font-black tracking-[1px]",
@@ -9295,7 +9403,8 @@ function ArrangeLoader({
           </div>
           <ol className="mt-3 flex flex-col divide-y divide-[var(--mc-36)]">
             {ARRANGE_STEPS.map((step, index) => {
-              const state = index < progress.step ? "done" : index === progress.step ? "now" : "next";
+              const state =
+                index < progress.step ? "done" : index === progress.step ? "now" : "next";
               return (
                 <li
                   key={step.key}
@@ -9334,7 +9443,9 @@ function ArrangeLoader({
           </ol>
         </div>
         <div className="flex items-center justify-between gap-3 border-t-2 border-[var(--mc-15)] px-4 py-2.5">
-          <span className="text-xs text-[var(--mc-ink-muted)]">Every move is checked against the real wires.</span>
+          <span className="text-xs text-[var(--mc-ink-muted)]">
+            Every move is checked against the real wires.
+          </span>
           <button
             type="button"
             onClick={onCancel}
@@ -9412,8 +9523,7 @@ const PaintToolbar = memo(function PaintToolbar({
   const closeDrawMenu = useCallback(() => setDrawMenuOpen(false), []);
   useFoldoutDismiss(isDrawMenuOpen, drawRef, closeDrawMenu);
   const faceDrawTool = annotationTool ?? lastDrawTool;
-  const FaceDrawIcon =
-    ANNOTATION_TOOLS.find((tool) => tool.kind === faceDrawTool)?.Icon ?? Square;
+  const FaceDrawIcon = ANNOTATION_TOOLS.find((tool) => tool.kind === faceDrawTool)?.Icon ?? Square;
   // The view and rules sheets' open state lives here so the whole row can
   // lift its z while either is out, same as it does for the palette.
   const [isViewMenuOpen, setViewMenuOpen] = useState(false);
@@ -9470,214 +9580,223 @@ const PaintToolbar = memo(function PaintToolbar({
   // both fold under the trigger on a narrow board or a phone.
   const viewTray = (
     <>
-        {/* The corner slot: view options are one button and a sheet at every
+      {/* The corner slot: view options are one button and a sheet at every
             width, reachable while the paint row is folded away on a phone. The
             timelapse door lives beside it: also a way of looking, not a tool
             that changes the plan. */}
-        <ToolTray helpAnchor="view">
-          {/* THE PENCIL (2026-09-06): every way of marking the board in one
+      <ToolTray helpAnchor="view">
+        {/* THE PENCIL (2026-09-06): every way of marking the board in one
               drop-down beside the view options - the annotation tools, paint
               with its colours, and an image. The key itself is pressed while
               a tool or paint is armed, and a click then cancels it. */}
-          <div ref={drawRef} className="relative flex items-start">
-            <div
-              className={[
-                "absolute right-0 top-[calc(100%+10px)] flex w-max flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
-                isDrawMenuOpen
-                  ? "pointer-events-auto translate-y-0 opacity-100"
-                  : "pointer-events-none -translate-y-1 opacity-0",
-              ].join(" ")}
-            >
-              {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => {
-                    setLastDrawTool(kind);
-                    onAnnotationToolChange(kind);
-                    setDrawMenuOpen(false);
-                  }}
-                  aria-pressed={annotationTool === kind}
-                  className={[
-                    "flex items-center gap-2 border-2 p-1 pr-2 text-left",
-                    annotationTool === kind
-                      ? "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
-                      : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
-                  ].join(" ")}
-                >
-                  <span className="flex h-7 w-7 items-center justify-center">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
-                    {label}
-                  </span>
-                </button>
-              ))}
-              <div className="my-0.5 border-t-2 border-[var(--mc-15)]" />
-              {/* Paint: the row arms the brush in the current colour; the
-                  swatches under it pick the colour AND arm it, the eraser
-                  arms erase. */}
+        <div ref={drawRef} className="relative flex items-start">
+          <div
+            className={[
+              "absolute right-0 top-[calc(100%+10px)] flex w-max flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
+              isDrawMenuOpen
+                ? "pointer-events-auto translate-y-0 opacity-100"
+                : "pointer-events-none -translate-y-1 opacity-0",
+            ].join(" ")}
+          >
+            {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
               <button
+                key={kind}
                 type="button"
                 onClick={() => {
-                  onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag);
+                  setLastDrawTool(kind);
+                  onAnnotationToolChange(kind);
                   setDrawMenuOpen(false);
                 }}
-                aria-pressed={paintMode !== undefined}
+                aria-pressed={annotationTool === kind}
                 className={[
                   "flex items-center gap-2 border-2 p-1 pr-2 text-left",
-                  paintMode !== undefined
+                  annotationTool === kind
                     ? "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
                     : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
                 ].join(" ")}
               >
                 <span className="flex h-7 w-7 items-center justify-center">
-                  {paintMode === null ? <X className="h-4 w-4" /> : <Paintbrush className="h-4 w-4" />}
+                  <Icon className="h-4 w-4" />
                 </span>
                 <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
-                  {paintMode === null ? "Erasing colours" : "Paint cards"}
+                  {label}
                 </span>
-                <span
-                  aria-hidden
-                  className="ml-auto h-4 w-4 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
-                  style={{ backgroundColor: activeColor.swatch }}
-                />
               </button>
-              <div className="grid grid-cols-9 gap-1 px-1 pb-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onPaintModeChange(null);
-                    setDrawMenuOpen(false);
-                  }}
-                  className={[
-                    "flex h-6 w-6 items-center justify-center border-2 bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]",
-                    paintMode === null ? "border-white ring-2 ring-cyan-300" : "border-[var(--mc-15)]",
-                  ].join(" ")}
-                  title="Erase colours"
-                  aria-label="Erase colours"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-                {GT_NODE_COLOR_PALETTE.map((entry) => (
-                  <button
-                    key={entry.tag}
-                    type="button"
-                    onClick={() => {
-                      onColorSelect(entry.tag);
-                      onPaintModeChange(entry.tag);
-                      setDrawMenuOpen(false);
-                    }}
-                    className={[
-                      "h-6 w-6 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
-                      activeColorTag === entry.tag && paintMode !== null
-                        ? "border-white ring-2 ring-cyan-300"
-                        : "border-[var(--mc-15)]",
-                    ].join(" ")}
-                    style={{ backgroundColor: entry.color.swatch }}
-                    title={`Paint ${entry.tag}`}
-                    aria-label={`Paint ${entry.tag}`}
-                  />
-                ))}
-              </div>
-              <div className="my-0.5 border-t-2 border-[var(--mc-15)]" />
-              <AddImageButton
-                onPlaceImage={async (file) => {
-                  setDrawMenuOpen(false);
-                  await onPlaceImage(file);
-                }}
-              />
-            </div>
+            ))}
+            <div className="my-0.5 border-t-2 border-[var(--mc-15)]" />
+            {/* Paint: the row arms the brush in the current colour; the
+                  swatches under it pick the colour AND arm it, the eraser
+                  arms erase. */}
             <button
               type="button"
               onClick={() => {
-                if (annotationTool !== undefined || paintMode !== undefined) {
-                  onAnnotationToolChange(undefined);
-                  onPaintModeChange(undefined);
-                  setDrawMenuOpen(false);
-                  return;
-                }
-                setDrawMenuOpen((was) => !was);
+                onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag);
+                setDrawMenuOpen(false);
               }}
-              aria-expanded={isDrawMenuOpen}
-              data-help-anchor="paint"
+              aria-pressed={paintMode !== undefined}
               className={[
-                "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
-                annotationTool !== undefined || paintMode !== undefined ? TOOL_FACE_ON : TOOL_FACE_OFF,
+                "flex items-center gap-2 border-2 p-1 pr-2 text-left",
+                paintMode !== undefined
+                  ? "border-white bg-[var(--mc-85)] text-[var(--mc-ink)] ring-2 ring-cyan-300"
+                  : "border-[var(--mc-15)] bg-[var(--mc-49)] text-white hover:bg-[var(--mc-61)]",
               ].join(" ")}
-              title={annotationTool !== undefined || paintMode !== undefined ? "Stop" : "Markup"}
-              aria-label={annotationTool !== undefined || paintMode !== undefined ? "Stop marking up" : "Markup tools"}
             >
-              <Pencil className="h-4 w-4" />
+              <span className="flex h-7 w-7 items-center justify-center">
+                {paintMode === null ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  <Paintbrush className="h-4 w-4" />
+                )}
+              </span>
+              <span className="whitespace-nowrap font-mono text-[11px] font-semibold">
+                {paintMode === null ? "Erasing colours" : "Paint cards"}
+              </span>
+              <span
+                aria-hidden
+                className="ml-auto h-4 w-4 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
+                style={{ backgroundColor: activeColor.swatch }}
+              />
             </button>
+            <div className="grid grid-cols-9 gap-1 px-1 pb-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onPaintModeChange(null);
+                  setDrawMenuOpen(false);
+                }}
+                className={[
+                  "flex h-6 w-6 items-center justify-center border-2 bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]",
+                  paintMode === null
+                    ? "border-white ring-2 ring-cyan-300"
+                    : "border-[var(--mc-15)]",
+                ].join(" ")}
+                title="Erase colours"
+                aria-label="Erase colours"
+              >
+                <X className="h-3 w-3" />
+              </button>
+              {GT_NODE_COLOR_PALETTE.map((entry) => (
+                <button
+                  key={entry.tag}
+                  type="button"
+                  onClick={() => {
+                    onColorSelect(entry.tag);
+                    onPaintModeChange(entry.tag);
+                    setDrawMenuOpen(false);
+                  }}
+                  className={[
+                    "h-6 w-6 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
+                    activeColorTag === entry.tag && paintMode !== null
+                      ? "border-white ring-2 ring-cyan-300"
+                      : "border-[var(--mc-15)]",
+                  ].join(" ")}
+                  style={{ backgroundColor: entry.color.swatch }}
+                  title={`Paint ${entry.tag}`}
+                  aria-label={`Paint ${entry.tag}`}
+                />
+              ))}
+            </div>
+            <div className="my-0.5 border-t-2 border-[var(--mc-15)]" />
+            <AddImageButton
+              onPlaceImage={async (file) => {
+                setDrawMenuOpen(false);
+                await onPlaceImage(file);
+              }}
+            />
           </div>
-              <BoardViewMenu
-            view={view}
-            onChange={onViewChange}
-            open={isViewMenuOpen}
-            onOpenChange={setViewMenuOpen}
-            arrange={{ keepBoards, onToggleKeepBoards, onArrange: onAutoArrange }}
-          />
-        </ToolTray>
+          <button
+            type="button"
+            onClick={() => {
+              if (annotationTool !== undefined || paintMode !== undefined) {
+                onAnnotationToolChange(undefined);
+                onPaintModeChange(undefined);
+                setDrawMenuOpen(false);
+                return;
+              }
+              setDrawMenuOpen((was) => !was);
+            }}
+            aria-expanded={isDrawMenuOpen}
+            data-help-anchor="paint"
+            className={[
+              "pointer-events-auto relative z-10 flex h-8 w-8 items-center justify-center border-2 border-[var(--mc-15)]",
+              annotationTool !== undefined || paintMode !== undefined
+                ? TOOL_FACE_ON
+                : TOOL_FACE_OFF,
+            ].join(" ")}
+            title={annotationTool !== undefined || paintMode !== undefined ? "Stop" : "Markup"}
+            aria-label={
+              annotationTool !== undefined || paintMode !== undefined
+                ? "Stop marking up"
+                : "Markup tools"
+            }
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
+        <BoardViewMenu
+          view={view}
+          onChange={onViewChange}
+          open={isViewMenuOpen}
+          onOpenChange={setViewMenuOpen}
+          arrange={{ keepBoards, onToggleKeepBoards, onArrange: onAutoArrange }}
+        />
+      </ToolTray>
     </>
   );
 
-
   return (
     <>
-    {/* THE MODE SWITCH, top centre of the board on a plate of its own
+      {/* THE MODE SWITCH, top centre of the board on a plate of its own
         (2026-09-06): it changes what the whole board means, so it stands
         apart from both tool rows until Build tools folds. */}
-    {!modesInBuild && (
-    <div
-      data-board-toolbar-centre
-      className={[
-        "nodrag pointer-events-none absolute left-1/2 z-20 -translate-x-1/2",
-        shiftedDown ? "top-14" : "top-3",
-      ].join(" ")}
-    >
-      <ToolTray helpAnchor="rules">
-        <ModeKeys forceIcons={modeIconsOnly} />
-      </ToolTray>
-      {/* Pool mode's product key: its OWN plate that appears to the right of
+      {!modesInBuild && (
+        <div
+          data-board-toolbar-centre
+          className={[
+            "nodrag pointer-events-none absolute left-1/2 z-20 -translate-x-1/2",
+            shiftedDown ? "top-14" : "top-3",
+          ].join(" ")}
+        >
+          <ToolTray helpAnchor="rules">
+            <ModeKeys forceIcons={modeIconsOnly} />
+          </ToolTray>
+          {/* Pool mode's product key: its OWN plate that appears to the right of
           the switch while that mode is on (Jack, 2026-09-06). Absolutely
           placed, so the switch never moves for it - it is not one of the
           three, it only turns up when Pool does. */}
-      {/* The mask starts AT the switch's edge, so the plate comes out from
+          {/* The mask starts AT the switch's edge, so the plate comes out from
           under Pool; the gap it settles at is inside the slide. */}
-      <div className="absolute left-full top-0">
-        <PoolSpawnKeys />
-      </div>
-    </div>
-    )}
-    <div
-      data-board-toolbar
-      className={[
-        "nodrag pointer-events-none absolute right-[var(--toolbar-inset,0.75rem)] flex items-start gap-2",
-        shiftedDown ? "top-14" : "top-3",
-        // An open fold-out hangs below the row and can cross whatever toolbar
-        // sits beneath, which at the same z and later in the DOM would paint
-        // OVER it and take its clicks: the colours were once visible and
-        // unpickable. The row lifts above every other toolbar for as long as
-        // any of its fold-outs is out.
-        isDrawMenuOpen || isViewMenuOpen
-          ? "z-40"
-          : "z-20",
-      ].join(" ")}
-    >
-      <ToolGroup
-        id="paint"
-        folded={folded}
-        openGroup={openGroup}
-        onToggle={onToggleGroup}
-        icon={Pencil}
-        label="markup and view tools"
-        side="right"
+          <div className="absolute left-full top-0">
+            <PoolSpawnKeys />
+          </div>
+        </div>
+      )}
+      <div
+        data-board-toolbar
+        className={[
+          "nodrag pointer-events-none absolute right-[var(--toolbar-inset,0.75rem)] flex items-start gap-2",
+          shiftedDown ? "top-14" : "top-3",
+          // An open fold-out hangs below the row and can cross whatever toolbar
+          // sits beneath, which at the same z and later in the DOM would paint
+          // OVER it and take its clicks: the colours were once visible and
+          // unpickable. The row lifts above every other toolbar for as long as
+          // any of its fold-outs is out.
+          isDrawMenuOpen || isViewMenuOpen ? "z-40" : "z-20",
+        ].join(" ")}
       >
-      {viewTray}
-      {binTray}
-      </ToolGroup>
-    </div>
+        <ToolGroup
+          id="paint"
+          folded={folded}
+          openGroup={openGroup}
+          onToggle={onToggleGroup}
+          icon={Pencil}
+          label="markup and view tools"
+          side="right"
+        >
+          {viewTray}
+          {binTray}
+        </ToolGroup>
+      </div>
     </>
   );
 });
@@ -9704,9 +9823,9 @@ function ResourceEdgeComponent({
   // reconcile shape node drags use, so no board-wide re-solve runs per
   // pointer frame. While a draft exists the wire draws as simple legs
   // through the dots; the drop brings back the real grid route.
-  const [draftWaypoints, setDraftWaypoints] = useState<
-    Array<{ x: number; y: number }> | undefined
-  >(undefined);
+  const [draftWaypoints, setDraftWaypoints] = useState<Array<{ x: number; y: number }> | undefined>(
+    undefined,
+  );
   const waypointDragRef = useRef<{ pointerId: number; index: number } | undefined>(undefined);
   // Double-press detection for removing a dot. A native dblclick never
   // arrives here: the first press starts a pointer-captured drag and the
@@ -9784,14 +9903,12 @@ function ResourceEdgeComponent({
   // directly made a fat line look faster than a thin one carrying the same
   // amount, because one period is further on a fat line — the width was
   // leaking into a reading that is supposed to be about flow alone.
-  const pulseVelocity = PULSE_MIN_VELOCITY +
-    (flowRate?.heat ?? 0) * (PULSE_MAX_VELOCITY - PULSE_MIN_VELOCITY);
+  const pulseVelocity =
+    PULSE_MIN_VELOCITY + (flowRate?.heat ?? 0) * (PULSE_MAX_VELOCITY - PULSE_MIN_VELOCITY);
   const isGlobalView = hasEdgeDetail(detailLevel, EDGE_DETAIL_GLOBAL);
   // Lit when a hovered port or label pulls this line into its flow scope.
   // Boolean selector: only involved edges re-render on hover changes.
-  const isFlowScopeLit = useFactoryStore((state) =>
-    Boolean(state.hoveredFlowScope?.edges[id]),
-  );
+  const isFlowScopeLit = useFactoryStore((state) => Boolean(state.hoveredFlowScope?.edges[id]));
   const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
   const isHighlighted = selected || data?.isFlowHighlighted === true || isFlowScopeLit;
   // The width this line actually draws at, resolved once. It used to be
@@ -9846,8 +9963,7 @@ function ResourceEdgeComponent({
   // Direction has one voice: the marching dashes when pulse mode is on,
   // arrows when it is off - at every zoom, larger at a glance.
   const showArrowHead =
-    flowRate?.pulse !== true &&
-    (isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS));
+    flowRate?.pulse !== true && (isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS));
   // Every wire routes individually through the board-wide grid solve — the
   // solve's lane sharing is what makes a fan-out ride as one ribbon, which
   // is the look the bundle machinery used to fake by hiding members. The
@@ -9898,7 +10014,8 @@ function ResourceEdgeComponent({
   // see the straight line. Power edges are few by construction (only
   // generators make EU), so the extra path build costs nothing board-wide.
   const lightningPath = useMemo(
-    () => (isPowerEdge && liveRoute.points.length >= 2 ? zigzagSvgPath(liveRoute.points) : undefined),
+    () =>
+      isPowerEdge && liveRoute.points.length >= 2 ? zigzagSvgPath(liveRoute.points) : undefined,
     [isPowerEdge, liveRoute.points],
   );
   const drawnPath = lightningPath ?? liveRoute.path;
@@ -9935,15 +10052,15 @@ function ResourceEdgeComponent({
   // wide and lands under the pointer by accident rather than by aim, so the
   // surface stops being an affordance and is just six hundred more paths for
   // the browser to hit-test on every mouse move.
-  const hoverTrimmedPoints =
-    !hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)
-      ? undefined
-      : trimPolylineEnds(routedEdge.points, 26);
+  const hoverTrimmedPoints = !hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)
+    ? undefined
+    : trimPolylineEnds(routedEdge.points, 26);
   // Checklist clicks cannot start a wire, so there is no reason to reserve
   // 26 px at each port. That reservation erased short wires' entire target.
   // Keep the complete, currently drawn path clickable at every zoom.
   const checklistMode = useFactoryStore((state) => state.checklistMode);
-  const hoverPathD = !checklistMode && hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
+  const hoverPathD =
+    !checklistMode && hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
 
   // Hand this line's dashes to the board's pulse canvas (see edge-pulse.ts).
   // Published after commit rather than during render because it is a
@@ -10005,10 +10122,7 @@ function ResourceEdgeComponent({
     // whole dashes over a half-drawn wire gave the route away instantly.
     if (data?.timelapseDraw) {
       const speed = getBoardTimelapseSnapshot()?.speed ?? 1;
-      const timer = window.setTimeout(
-        publish,
-        getBoardTimelapseWireDrawMs() / speed + 150,
-      );
+      const timer = window.setTimeout(publish, getBoardTimelapseWireDrawMs() / speed + 150);
       return () => window.clearTimeout(timer);
     }
     publish();
@@ -10043,10 +10157,13 @@ function ResourceEdgeComponent({
       retractEdgeWaypointDots(id);
     }
   }, [id, activeWaypoints, coreStrokeWidth]);
-  useEffect(() => () => {
-    retractEdgePulse(id);
-    retractEdgeWaypointDots(id);
-  }, [id]);
+  useEffect(
+    () => () => {
+      retractEdgePulse(id);
+      retractEdgeWaypointDots(id);
+    },
+    [id],
+  );
 
   return (
     <>
@@ -10054,13 +10171,25 @@ function ResourceEdgeComponent({
         <ViewportPortal>
           {/* Only the invisible hit target clears port hit boxes. The visible
               wire keeps its usual depth behind machines and drawers. */}
-          <svg width={1} height={1} aria-hidden className="pointer-events-none absolute left-0 top-0 overflow-visible" style={{ zIndex: 30 }}>
-            <path data-checklist-edge={id} d={liveRoute.path} fill="none" stroke="transparent"
-              strokeWidth={Math.max(14, coreStrokeWidth + 6)} style={{ pointerEvents: "stroke" }} />
+          <svg
+            width={1}
+            height={1}
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 overflow-visible"
+            style={{ zIndex: 30 }}
+          >
+            <path
+              data-checklist-edge={id}
+              d={liveRoute.path}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={Math.max(14, coreStrokeWidth + 6)}
+              style={{ pointerEvents: "stroke" }}
+            />
           </svg>
         </ViewportPortal>
       ) : null}
-      {(
+      {
         <>
           <path
             data-resource-edge-route={id}
@@ -10096,9 +10225,7 @@ function ResourceEdgeComponent({
               strokeLinecap: "round",
               strokeLinejoin: "round",
               strokeOpacity: isHighlighted ? 1 : 0.72,
-              strokeWidth: isHighlighted
-                ? coreStrokeWidth + 6
-                : edgeCasingWidth(coreStrokeWidth),
+              strokeWidth: isHighlighted ? coreStrokeWidth + 6 : edgeCasingWidth(coreStrokeWidth),
               pointerEvents: "none",
             }}
           />
@@ -10144,7 +10271,7 @@ function ResourceEdgeComponent({
               edge-pulse.ts: an animated stroke-dashoffset is a paint property,
               so one per edge repainted the entire board every frame. */}
         </>
-      )}
+      }
       {/* A wire going round a dead ring, breathing on the same clock as the
           cards it joins. This is the ONE animated path allowed on the edge
           layer, and only because a spiral is a handful of wires in one place:
@@ -10264,7 +10391,9 @@ function ResourceEdgeComponent({
           }}
         />
       ) : null}
-      {activeWaypoints && activeWaypoints.length > 0 && hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)
+      {activeWaypoints &&
+      activeWaypoints.length > 0 &&
+      hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)
         ? activeWaypoints.map((waypoint, index) => (
             <circle
               key={index}
@@ -10753,8 +10882,7 @@ function getEdgeBundles(
         demand: mode === "single-target" ? demand : undefined,
         transferred: mode === "single-target" ? transferred : undefined,
         nameplateDemand: mode === "single-target" ? nameplateDemand : undefined,
-        sourceCapacity:
-          mode === "single-target" && sourceCapacity > 0 ? sourceCapacity : undefined,
+        sourceCapacity: mode === "single-target" && sourceCapacity > 0 ? sourceCapacity : undefined,
         isLimited,
         isSupplyCapped,
       });
@@ -10779,8 +10907,7 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
   const storageYById = new Map(
     (project.storages ?? []).map((storage) => [storage.id, storage.position?.y ?? 0]),
   );
-  const counterpartYOf = (id: string) =>
-    nodesById.get(id)?.position.y ?? storageYById.get(id) ?? 0;
+  const counterpartYOf = (id: string) => nodesById.get(id)?.position.y ?? storageYById.get(id) ?? 0;
 
   for (const edge of project.edges) {
     // Rails pool one port per resource, so every edge whose (possibly legacy
@@ -10977,7 +11104,8 @@ function inkPointsFor(
     };
   };
   if (intoSource) out[0] = extend(points[1]!, points[0]!);
-  if (intoTarget) out[out.length - 1] = extend(points[points.length - 2]!, points[points.length - 1]!);
+  if (intoTarget)
+    out[out.length - 1] = extend(points[points.length - 2]!, points[points.length - 1]!);
   return out;
 }
 
@@ -11019,7 +11147,8 @@ function getDirectEdgePath({
   // a moment, so deleting a drawer (or anything else that mounts a card)
   // flashed the old fixed-dock look and then slid into place (Jack,
   // 2026-09-08). Only a wire that has never been routed falls back now.
-  const stale = fresh === undefined && useSmartRouting ? getLastDirectEdgePoints(edgeId) : undefined;
+  const stale =
+    fresh === undefined && useSmartRouting ? getLastDirectEdgePoints(edgeId) : undefined;
   // A wire the router has never seen - one just made by a drawer split, a
   // heal, a paste - has nothing to stand in. Its first frame is the
   // ARRANGER'S PROXY PATH between the two cards (board-arrange-optimize.ts:
@@ -11179,8 +11308,6 @@ function getBestDirectEdgePoints({
   return undefined;
 }
 
-
-
 /**
  * The shape the router is about to draw between two cards, for a wire that
  * has no route yet: the arranger's own proxy path over the measured card
@@ -11245,8 +11372,6 @@ function offsetPointFromSide(point: { x: number; y: number }, side: Position, di
 function isVerticalSide(side: string) {
   return side === "top" || side === "bottom";
 }
-
-
 
 function compactPolylinePoints(points: Array<{ x: number; y: number } | undefined>) {
   const compacted: Array<{ x: number; y: number }> = [];
@@ -11398,7 +11523,6 @@ const EDGE_HOP_MAX_RADIUS = 44;
 const publishedEdgeStrokeWidths = new Map<string, number>();
 const DEFAULT_EDGE_STROKE_WIDTH = 6;
 
-
 /**
  * How far a line must lift to clear the one it crosses: half of each stroke,
  * plus a little air. Two 3px wires give ~6px, near the old fixed 5; two 34px
@@ -11410,9 +11534,7 @@ function hopRadiusFor(ownWidth: number, otherWidth: number): number {
 }
 
 function ownStrokeWidth(edgeId: string | undefined): number {
-  return (
-    (edgeId ? publishedEdgeStrokeWidths.get(edgeId) : undefined) ?? DEFAULT_EDGE_STROKE_WIDTH
-  );
+  return (edgeId ? publishedEdgeStrokeWidths.get(edgeId) : undefined) ?? DEFAULT_EDGE_STROKE_WIDTH;
 }
 
 /**
@@ -12121,9 +12243,13 @@ function getMeasuredSlotEndpoint({
     return undefined;
   }
   const geometry = publishedBoardGeometryById.get(nodeId);
-  const cacheKey = [nodeId, handleId, edgeSide, endpointOffset, boardGeometryDimsKey(geometry)].join(
-    "|",
-  );
+  const cacheKey = [
+    nodeId,
+    handleId,
+    edgeSide,
+    endpointOffset,
+    boardGeometryDimsKey(geometry),
+  ].join("|");
   const cachedRelative = relativeSlotEndpointCache.get(cacheKey);
   if (cachedRelative && geometry) {
     return offsetFlowPointForEdgeSide(
@@ -12145,7 +12271,12 @@ function getMeasuredSlotEndpoint({
     return undefined;
   }
   const slotElement =
-    findResourceEndpointElement(nodeElement, "[data-resource-edge-anchor='true']", nodeId, handleId) ??
+    findResourceEndpointElement(
+      nodeElement,
+      "[data-resource-edge-anchor='true']",
+      nodeId,
+      handleId,
+    ) ??
     findResourceEndpointElement(nodeElement, "[data-resource-handle='true']", nodeId, handleId);
   if (!slotElement) {
     return undefined;
@@ -12315,10 +12446,7 @@ async function computeAutoArrangement(
     // The card that stands for an item at a LEVEL (the root, or one open
     // board's floor): the item itself when it sits there, else the board
     // standing between them, else undefined — the item lives elsewhere.
-    const representativeAt = (
-      level: string | undefined,
-      itemId: string,
-    ): string | undefined => {
+    const representativeAt = (level: string | undefined, itemId: string): string | undefined => {
       let owner = itemPocketById.get(itemId);
       if (owner === level) {
         return itemId;
@@ -12354,8 +12482,7 @@ async function computeAutoArrangement(
         // pass just refitted, whose fresh size is the truth.
         const measured = exactSize ? undefined : publishedBoardGeometryById.get(id);
         const width =
-          exactSize?.width ??
-          (measured?.width ? snapSizeUpToGrid(measured.width) : estimate.width);
+          exactSize?.width ?? (measured?.width ? snapSizeUpToGrid(measured.width) : estimate.width);
         const height =
           exactSize?.height ??
           (measured?.height ? snapSizeUpToGrid(measured.height) : estimate.height);
@@ -12413,8 +12540,7 @@ async function computeAutoArrangement(
         }
         // The live flow, log-compressed so a 10,000 L/s trunk outranks a
         // 2/s side feed without flattening every other distinction.
-        const transferred =
-          result?.edges[edge.id]?.transferredPerSecond ?? edge.ratePerSecond ?? 0;
+        const transferred = result?.edges[edge.id]?.transferredPerSecond ?? edge.ratePerSecond ?? 0;
         wires.push({
           id: edge.id,
           source: sourceRep,
@@ -12573,8 +12699,7 @@ async function computeAutoArrangement(
           role: "machine",
         });
       }
-      const transferred =
-        result?.edges[edge.id]?.transferredPerSecond ?? edge.ratePerSecond ?? 0;
+      const transferred = result?.edges[edge.id]?.transferredPerSecond ?? edge.ratePerSecond ?? 0;
       const weight = (1 + Math.log10(1 + Math.max(transferred, 0))) * 3;
       phantomWires.push(
         inbound
@@ -12618,10 +12743,7 @@ async function computeAutoArrangement(
     }
     const size = {
       width: Math.max(BOARD_WINDOW_MIN_WIDTH, snapSizeUpToGrid(maxX + BOARD_WINDOW_FIT_PAD)),
-      height: Math.max(
-        BOARD_WINDOW_MIN_HEIGHT,
-        snapSizeUpToGrid(maxY + BOARD_WINDOW_FIT_PAD),
-      ),
+      height: Math.max(BOARD_WINDOW_MIN_HEIGHT, snapSizeUpToGrid(maxY + BOARD_WINDOW_FIT_PAD)),
     };
     refitSizes.set(board.id, size);
     boardSizes.push({ id: board.id, size });
@@ -12632,10 +12754,7 @@ async function computeAutoArrangement(
       const position = placed.get(crossing.memberRep);
       const memberSize = bundle.sizeById.get(crossing.memberRep);
       if (position && memberSize) {
-        boundaryPortY.set(
-          `${crossing.edge.id}:${board.id}`,
-          position.y + memberSize.height / 2,
-        );
+        boundaryPortY.set(`${crossing.edge.id}:${board.id}`, position.y + memberSize.height / 2);
       }
     }
   }
@@ -12727,8 +12846,7 @@ async function computeAutoArrangement(
   // rides the frame, so it stays.
   const staleInkIds = (project.annotations ?? [])
     .filter(
-      (annotation) =>
-        annotation.pocketId === undefined || tidiedBoards.has(annotation.pocketId),
+      (annotation) => annotation.pocketId === undefined || tidiedBoards.has(annotation.pocketId),
     )
     .map((annotation) => annotation.id);
 
@@ -12738,9 +12856,7 @@ async function computeAutoArrangement(
   // until the cycle runs dry. Locked boards are never re-dressed: an
   // unpapered one keeps its id colour.
   const setBoardThemes: Array<{ id: string; theme: string }> = [];
-  const wornPapers = new Set(
-    (project.pockets ?? []).map((pocket) => pocket.theme).filter(Boolean),
-  );
+  const wornPapers = new Set((project.pockets ?? []).map((pocket) => pocket.theme).filter(Boolean));
   let paperIndex = 0;
   for (const pocket of addBoards) {
     if (pocket.theme) {
@@ -12826,7 +12942,12 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
     return undefined;
   }
   const slotElement =
-    findResourceEndpointElement(nodeElement, "[data-resource-edge-anchor='true']", nodeId, handleId) ??
+    findResourceEndpointElement(
+      nodeElement,
+      "[data-resource-edge-anchor='true']",
+      nodeId,
+      handleId,
+    ) ??
     findResourceEndpointElement(nodeElement, "[data-resource-handle='true']", nodeId, handleId);
   if (!slotElement) {
     return undefined;
@@ -13184,9 +13305,9 @@ function isCompatibleDraggedResourceTarget(
   // stay strict.
   return Boolean(
     getSetupRules(project).looseCellWires &&
-      !draggedResource.bidirectional &&
-      !(project.storages ?? []).some((storage) => storage.id === targetHandle.nodeId) &&
-      getCrossFormCellMatch(output, input),
+    !draggedResource.bidirectional &&
+    !(project.storages ?? []).some((storage) => storage.id === targetHandle.nodeId) &&
+    getCrossFormCellMatch(output, input),
   );
 }
 
@@ -13437,10 +13558,10 @@ function findNodeDropTargetOnSide(
     accepts(candidate) ||
     Boolean(
       getSetupRules(project).looseCellWires &&
-        !draggedResource.bidirectional &&
-        (side === "input"
-          ? getCrossFormCellMatch(draggedResource, candidate)
-          : getCrossFormCellMatch(candidate, draggedResource)),
+      !draggedResource.bidirectional &&
+      (side === "input"
+        ? getCrossFormCellMatch(draggedResource, candidate)
+        : getCrossFormCellMatch(candidate, draggedResource)),
     );
   const port = (resource: Pick<ResourceAmount, "kind" | "id">): ResolvedResourceHandle => ({
     nodeId,
@@ -13523,10 +13644,12 @@ function findNodeDropTargetOnSide(
   // takes the drop names the section in its handle.
   for (const { section, node: view } of listNodeSections(node)) {
     const sectionRecipe =
-      section === 0 ? contextualRecipe : (() => {
-        const raw = project.recipes.find((entry) => entry.id === view.recipeId);
-        return raw ? getEffectiveNodeRecipe(raw, view) : undefined;
-      })();
+      section === 0
+        ? contextualRecipe
+        : (() => {
+            const raw = project.recipes.find((entry) => entry.id === view.recipeId);
+            return raw ? getEffectiveNodeRecipe(raw, view) : undefined;
+          })();
     if (!sectionRecipe) {
       continue;
     }
@@ -13562,9 +13685,7 @@ function paintNodeDropFit(
     return;
   }
 
-  const selector = onlyUnpainted
-    ? ".react-flow__node:not([data-drop-fit])"
-    : ".react-flow__node";
+  const selector = onlyUnpainted ? ".react-flow__node:not([data-drop-fit])" : ".react-flow__node";
 
   // POOL MODE: nothing connects, so no card washes green or red - a green
   // card promised a wire that could not happen. Every card reads "none",
@@ -13924,8 +14045,8 @@ function isCompatibleResourceConnection(
     const machineHandleId = sourceIsCustom ? connection.targetHandle : connection.sourceHandle;
     return Boolean(
       machineNodeId &&
-        machineHandleId &&
-        getResourceForHandle(project, machineNodeId, machineHandleId),
+      machineHandleId &&
+      getResourceForHandle(project, machineNodeId, machineHandleId),
     );
   }
 
@@ -13954,9 +14075,7 @@ function isCompatibleResourceConnection(
   // LOOSE CELL WIRES: the board rule lets a filled cell land on its fluid's
   // input and a fluid on its cell's input, either way round; handleConnect
   // fetches the Canner ratio and commits the edge.
-  return Boolean(
-    getSetupRules(project).looseCellWires && getCrossFormCellMatch(output, input),
-  );
+  return Boolean(getSetupRules(project).looseCellWires && getCrossFormCellMatch(output, input));
 }
 
 function getDraggedResourceForHandle(

@@ -107,7 +107,9 @@ function ResourceIconComponent({
       {/* A circuit is the setting the recipe runs on, not an ingredient. It is
           never consumed, so "NC" says nothing a player does not already know
           and only crowds a slot that is small to begin with. */}
-      {showConsumedState && resource?.consumed === false && !isProgrammedCircuitResource(resource) ? (
+      {showConsumedState &&
+      resource?.consumed === false &&
+      !isProgrammedCircuitResource(resource) ? (
         <span
           title="Not consumed"
           className="absolute left-0 top-0 font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]"
@@ -145,7 +147,9 @@ function ResourceIconComponent({
   // including the hundreds rendered with `tooltip={false}`, which threw away a
   // multi-pass string build per icon per render.
   return (
-    <MinecraftTooltip label={buildTooltipLabel(resource, alternativeState)}>{icon}</MinecraftTooltip>
+    <MinecraftTooltip label={buildTooltipLabel(resource, alternativeState)}>
+      {icon}
+    </MinecraftTooltip>
   );
 }
 
@@ -167,10 +171,7 @@ function atlasEquals(a?: ResourceIconAtlasRef, b?: ResourceIconAtlasRef): boolea
   );
 }
 
-function displayResourceEquals(
-  a?: DisplayResourceAmount,
-  b?: DisplayResourceAmount,
-): boolean {
+function displayResourceEquals(a?: DisplayResourceAmount, b?: DisplayResourceAmount): boolean {
   if (a === b) {
     return true;
   }
@@ -469,7 +470,24 @@ function SpriteImage({
               }
             : { transform: `scale(${TEXTURE_SCALE})` }
         }
-      />
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={imageRef}
+          src={iconPath}
+          alt={resourceLabel(resource)}
+          draggable={false}
+          onLoad={(event) => {
+            setFitScale(
+              resource.kind === "item" ? getSpriteFitScale(event.currentTarget) : undefined,
+            );
+            setStatus("loaded");
+          }}
+          onError={() => setStatus("failed")}
+          className="block h-full w-full max-w-none object-contain"
+          style={resource.kind === "fluid" ? { clipPath: FLUID_SPRITE_CLIP } : undefined}
+        />
+      </span>
     </>
   );
 }
@@ -764,9 +782,15 @@ function AtlasIconImage({
     let active = true;
     const image = new Image();
     image.onload = () => {
-      if (active) setFitScale(getSpriteFitScale(image, {
-        x: atlas.x, y: atlas.y, width: atlas.width, height: atlas.height,
-      }));
+      if (active)
+        setFitScale(
+          getSpriteFitScale(image, {
+            x: atlas.x,
+            y: atlas.y,
+            width: atlas.width,
+            height: atlas.height,
+          }),
+        );
     };
     image.src = atlas.imagePath;
     return () => {

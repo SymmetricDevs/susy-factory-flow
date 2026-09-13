@@ -59,11 +59,22 @@ fi
 : "${SUSY_INSTANCE_DIR:=$INSTANCEDIR}"
 : "${SUSY_DATASET_VERSION_ID:=$VERSION}"
 : "${SUSY_DATASET_VERSION_LABEL:=SUSY $VERSION}"
-: "${SUSY_HEI_ORACLE_JAR:=$ORACLEJAR}"
+: "${SUSY_HEI_ORACLE_JAR:=${ORACLEJAR:-}}"
+: "${SUSY_JAVA_8:=${JAVA8:-}}"
+if [[ -z "$SUSY_JAVA_8" || ! -f "$SUSY_JAVA_8" ]]; then
+  echo "Java 8 was not resolved before the client launch. Set SUSY_JAVA_8 or rerun the download step." >&2
+  exit 1
+fi
+export JAVA_HOME="$(dirname "$(dirname "$SUSY_JAVA_8")")"
+export PATH="$(dirname "$SUSY_JAVA_8"):$PATH"
 : "${SUSY_DATASET_OUT_DIR:=$repo_root/public/datasets/susy/$SUSY_DATASET_VERSION_ID}"
 : "${SUSY_RAW_EXPORT_DIR:=$repo_root/temp/raw-export}"
 if [[ -z "${SUSY_LAUNCH_COMMAND:-}" && -n "${LAUNCHSCRIPT:-}" ]]; then
-  SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  if [[ "$LAUNCHSCRIPT" == *.sh ]]; then
+    SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  else
+    echo "WARNING: ignoring non-shell launch script $LAUNCHSCRIPT on this platform." >&2
+  fi
 fi
 
 : "${SUSY_DATASET_VERSION_ID:?SUSY_DATASET_VERSION_ID could not be derived from the instance}"
@@ -162,7 +173,11 @@ export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} \
 -Dsusy.oracle.iconDir=$rendered_icon_dir"
 
 if [[ -z "${SUSY_LAUNCH_COMMAND:-}" && -n "${LAUNCHSCRIPT:-}" ]]; then
-  SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  if [[ "$LAUNCHSCRIPT" == *.sh ]]; then
+    SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  else
+    echo "WARNING: ignoring non-shell launch script $LAUNCHSCRIPT on this platform." >&2
+  fi
 fi
 if [[ -z "${SUSY_LAUNCH_COMMAND:-}" && -n "${PRISMINSTANCEID:-}" ]]; then
   # Launcher-managed instance (Prism/PolyMC/...): launch through the launcher
@@ -185,7 +200,7 @@ if [[ -z "${SUSY_LAUNCH_COMMAND:-}" ]]; then
     chmod +x "$start_script"
     SUSY_LAUNCH_COMMAND="bash '$(realpath "$start_script")'"
   else
-    SUSY_LAUNCH_COMMAND="xvfb-run -a bash -lc 'cd \"$SUSY_INSTANCE_DIR\" && java -jar binClient-modified.jar nogui'"
+    SUSY_LAUNCH_COMMAND="xvfb-run -a bash -lc 'cd \"$SUSY_INSTANCE_DIR\" && \"$SUSY_JAVA_8\" -jar binClient-modified.jar nogui'"
     echo "No start script found; falling back to: $SUSY_LAUNCH_COMMAND"
   fi
 fi
@@ -232,16 +247,15 @@ while (( SECONDS < deadline )); do
         dump_ready=1
         break
       fi
-      if [[ -n "${PRISMINSTANCEID:-}" ]]; then
-        # Launched through a launcher CLI: the launcher stays open after the
-        # game exits (QuitAfterGameStop=false), so process death never comes.
-        # The dump runs synchronously on the client thread right before the
-        # shutdown, so a settled file means the pipeline is complete.
-        echo "recipedump.json settled; treating the export as complete."
-        dump_ready=1
-        break
-      fi
-      echo "recipedump.json present but the client is still running; waiting for its own exit."
+      # The dump runs synchronously on the client thread right before the
+      # shutdown, so a settled file means the pipeline is complete. The
+      # CleanroomMC relauncher stays open after the game exits even in
+      # standalone launches (and launcher CLIs never close at all), so
+      # process death never comes; treat the settled dump as the completion
+      # signal instead of waiting forever.
+      echo "recipedump.json settled; treating the export as complete."
+      dump_ready=1
+      break
     fi
   fi
   if ! kill -0 "$runtime_pid" 2>/dev/null; then

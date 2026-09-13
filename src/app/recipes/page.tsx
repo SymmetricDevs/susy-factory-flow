@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type Version = { id: string; gtnhVersion: string; channel: string; publishedAt: string; local?: boolean; recipeCount?: number };
@@ -183,14 +184,14 @@ export default function RecipeEditorPage() {
       <div className="mx-auto max-w-7xl">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div><p className="text-xs uppercase tracking-[0.25em] text-[#9c8b72]">Supersymmetry</p><h1 className="text-3xl font-bold">Recipe workshop</h1><p className="mt-1 text-sm text-[#b8ab99]">Published recipes stay read-only. Local changes are saved as custom recipes.</p></div>
-          <a className="rounded border border-[#665b4d] px-3 py-2 text-sm hover:bg-[#29251f]" href="/">Back to planner</a>
+          <Link className="rounded border border-[#665b4d] px-3 py-2 text-sm hover:bg-[#29251f]" href="/">Back to planner</Link>
         </header>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
           <section className="rounded border border-[#4d463d] bg-[#202329] p-4">
             <div className="mb-4 flex flex-wrap gap-3">
               <select className="rounded bg-[#17191d] px-3 py-2" value={versionId} onChange={(event) => setVersionId(event.target.value)}><option value="all">All versions</option>{versions.map((version) => <option key={version.id} value={version.id}>{version.gtnhVersion}{version.local ? " (local)" : ""}</option>)}</select>
               <input className="min-w-48 flex-1 rounded bg-[#17191d] px-3 py-2" placeholder="Search recipe, machine, item..." value={query} onChange={(event) => setQuery(event.target.value)} />
-              <a className="rounded border border-[#665b4d] px-3 py-2 text-sm" href="/api/recipes/export">Export custom</a>
+              <Link className="rounded border border-[#665b4d] px-3 py-2 text-sm" href="/api/recipes/export">Export custom</Link>
             </div>
             {selectedVersion?.local && <p className="mb-3 text-xs text-[#b8ab99]">Local version: {selectedVersion.id} · {selectedVersion.recipeCount ?? 0} recipes</p>}
             <div className="space-y-2">{rows.map((row) => <article key={`${row.source}-${row.recipe.id}`} className="rounded border border-[#3b3d42] bg-[#191b20] p-3"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">{row.recipe.name}</h2><p className="text-xs text-[#b8ab99]">{row.recipe.machineType} · {row.recipe.durationTicks} ticks · {row.recipe.eut} EU/t · {row.source}</p><p className="mt-1 text-xs text-[#9c8b72]">{row.recipe.inputs.map((input) => `${input.amount} ${input.id}`).join(", ")} → {row.recipe.outputs.map((output) => `${output.amount} ${output.id}`).join(", ")}</p></div>{row.source === "custom" && <div className="flex gap-2"><button className="text-xs text-[#9ecbff]" onClick={() => editRecipe(row)}>Edit</button><button className="text-xs text-[#ff9f9f]" onClick={() => void deleteRecipe(row.recipe.metadata?.customRecipeId ?? row.recipe.id)}>Delete</button></div>}</div></article>)}</div>

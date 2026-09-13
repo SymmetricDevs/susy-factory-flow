@@ -13,6 +13,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local working area (gitignored): raw exports and unpacked mod jars
+    // contain third-party JS that is not ours to lint.
+    "temp/**",
   ]),
   prettier,
   {
@@ -30,6 +33,10 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
       "react-hooks/preserve-manual-memoization": "off",
+      // Module-level mutable state is a deliberate cross-component channel
+      // here (FactoryFlow.tsx publishes the live connection point to the
+      // ghost overlay's rAF loop the same way board-motion.tsx does).
+      "react-hooks/globals": "off",
       // Underscore-prefixed bindings are deliberate placeholders.
       "@typescript-eslint/no-unused-vars": [
         "warn",

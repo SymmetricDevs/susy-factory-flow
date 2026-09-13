@@ -70,7 +70,11 @@ export PATH="$(dirname "$SUSY_JAVA_8"):$PATH"
 : "${SUSY_DATASET_OUT_DIR:=$repo_root/public/datasets/susy/$SUSY_DATASET_VERSION_ID}"
 : "${SUSY_RAW_EXPORT_DIR:=$repo_root/temp/raw-export}"
 if [[ -z "${SUSY_LAUNCH_COMMAND:-}" && -n "${LAUNCHSCRIPT:-}" ]]; then
-  SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  if [[ "$LAUNCHSCRIPT" == *.sh ]]; then
+    SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  else
+    echo "WARNING: ignoring non-shell launch script $LAUNCHSCRIPT on this platform." >&2
+  fi
 fi
 
 : "${SUSY_DATASET_VERSION_ID:?SUSY_DATASET_VERSION_ID could not be derived from the instance}"
@@ -169,7 +173,11 @@ export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} \
 -Dsusy.oracle.iconDir=$rendered_icon_dir"
 
 if [[ -z "${SUSY_LAUNCH_COMMAND:-}" && -n "${LAUNCHSCRIPT:-}" ]]; then
-  SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  if [[ "$LAUNCHSCRIPT" == *.sh ]]; then
+    SUSY_LAUNCH_COMMAND="bash '$LAUNCHSCRIPT'"
+  else
+    echo "WARNING: ignoring non-shell launch script $LAUNCHSCRIPT on this platform." >&2
+  fi
 fi
 if [[ -z "${SUSY_LAUNCH_COMMAND:-}" && -n "${PRISMINSTANCEID:-}" ]]; then
   # Launcher-managed instance (Prism/PolyMC/...): launch through the launcher

@@ -489,16 +489,19 @@ try {
       $sizeAfter = (Get-Item -LiteralPath $RecipedumpPath).Length
       if ($sizeBefore -eq $sizeAfter -and $sizeAfter -gt 2) {
         # The client exits itself after the dump settles; give it a moment.
-        # Prism itself can remain open after the game exits, so a settled dump
-        # is sufficient for launcher-managed instances.
+        # The dump runs synchronously on the client thread right before the
+        # shutdown, so a settled file means the pipeline is complete. The
+        # CleanroomMC relauncher stays open after the game exits even in
+        # standalone launches (and Prism never closes at all), so process
+        # death never comes; treat the settled dump as the completion signal
+        # instead of waiting forever.
         if ($proc.HasExited) {
-          if ($launcherManaged) { $dumpReady = $true; break }
           $dumpReady = $true
           break
         }
         Start-Sleep -Seconds 15
-        if ($launcherManaged -or $proc.HasExited) { $dumpReady = $true; break }
-        Write-Log "recipedump.json present but the client is still running; waiting for its own exit."
+        $dumpReady = $true
+        break
       }
     }
 

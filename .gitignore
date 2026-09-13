@@ -57,3 +57,7 @@ public/highs.js
 # susy-factory-flow working area (never committed)
 /temp/
 /temp
+
+# susy-hei-oracle gradle build artifacts
+/tools/dataset-pipeline/susy-hei-oracle/build/
+/tools/dataset-pipeline/susy-hei-oracle/.gradle/

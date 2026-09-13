@@ -62,6 +62,11 @@ export function compareVersions(left, right) {
 
 const SUSY_JAR_PATTERN = /(?:^|[-_.])(?:supersymmetry|susycore|susy-?core)(?:[-_.]|$)/i;
 const LAUNCH_SCRIPT_PATTERN = /^(?:start|launch)[^/]*\.(?:sh|cmd|bat)$/i;
+// The bootstrap writes both a .sh and a .cmd launcher, and readdir order is
+// not sorted, so "first match" can hand the runner a Windows batch file on a
+// Unix host (or vice versa). Rank the platform-native extension first.
+const LAUNCH_SCRIPT_EXT_RANK = (platform) =>
+  platform === "win32" ? [".cmd", ".bat", ".sh"] : [".sh", ".cmd", ".bat"];
 
 /**
  * What the export can learn about one directory. `kind`:
@@ -69,7 +74,7 @@ const LAUNCH_SCRIPT_PATTERN = /^(?:start|launch)[^/]*\.(?:sh|cmd|bat)$/i;
  *   "pack-source" — packwiz metadata only; needs an install pass first.
  *   "unknown"     — nothing SUSY-shaped.
  */
-export function inspectInstanceDir(dir) {
+export function inspectInstanceDir(dir, platform = process.platform) {
   const info = {
     dir,
     kind: "unknown",
@@ -134,12 +139,19 @@ export function inspectInstanceDir(dir) {
     if (info.hasForgeRuntime) info.score += 3;
   }
 
-  for (const entry of entries) {
-    if (entry.isFile() && LAUNCH_SCRIPT_PATTERN.test(entry.name)) {
-      info.launchScript = path.join(dir, entry.name);
-      info.score += 2;
-      break;
-    }
+  const launchScripts = entries
+    .filter((entry) => entry.isFile() && LAUNCH_SCRIPT_PATTERN.test(entry.name))
+    .sort((a, b) => {
+      const rank = LAUNCH_SCRIPT_EXT_RANK(platform);
+      const aRank = rank.indexOf(path.extname(a.name).toLowerCase());
+      const bRank = rank.indexOf(path.extname(b.name).toLowerCase());
+      if (aRank !== bRank) return aRank - bRank;
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
+  const launchScript = launchScripts[0];
+  if (launchScript) {
+    info.launchScript = path.join(dir, launchScript.name);
+    info.score += 2;
   }
 
   if (info.jarCount > 0 && (info.pack || info.susyJar || info.susyCoreJar)) {

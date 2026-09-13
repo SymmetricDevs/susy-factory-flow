@@ -1,8 +1,8 @@
 /**
  * The planner's font, as a setting.
  *
- * Everything renders in Inter by default (Monocraft, the pixel font, until
- * 2026-09-07). This module owns the choice of something else: the option list the settings dialog shows, the localStorage
+ * Everything renders in the Minecraft pixel font (Monocraft) by default.
+ * This module owns the choice of something else: the option list the settings dialog shows, the localStorage
  * key it persists to, and the `data-app-font` attribute on <html> that
  * globals.css keys its `--app-font` overrides on.
  *
@@ -94,7 +94,7 @@ export const APP_FONTS: readonly AppFontOption[] = [
   },
 ];
 
-export const DEFAULT_APP_FONT: AppFontId = "inter";
+export const DEFAULT_APP_FONT: AppFontId = "minecraft";
 
 /** Shared with the inline boot script in layout.tsx. */
 export const APP_FONT_STORAGE_KEY = "susy-factory-flow.app-font.v1";

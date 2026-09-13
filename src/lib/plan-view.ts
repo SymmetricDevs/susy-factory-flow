@@ -168,9 +168,7 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
     // under - so a plan that somehow carries a key in both cannot land the
     // viewer in a state the UI has no button for.
     const starred = new Set(workspacePatch.favouriteResourceKeys ?? []);
-    workspacePatch.hiddenResourceKeys = view.hiddenResourceKeys.filter(
-      (key) => !starred.has(key),
-    );
+    workspacePatch.hiddenResourceKeys = view.hiddenResourceKeys.filter((key) => !starred.has(key));
   }
   if (Object.keys(workspacePatch).length > 0) {
     writeWorkspaceView(workspacePatch);

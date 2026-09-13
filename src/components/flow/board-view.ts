@@ -1,11 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import {
-  DEFAULT_CANVAS_THEME_ID,
-  isCanvasThemeId,
-  type CanvasThemeId,
-} from "./canvas-themes";
+import { DEFAULT_CANVAS_THEME_ID, isCanvasThemeId, type CanvasThemeId } from "./canvas-themes";
 
 /**
  * Board view settings: how the canvas looks, and which of the read-only display

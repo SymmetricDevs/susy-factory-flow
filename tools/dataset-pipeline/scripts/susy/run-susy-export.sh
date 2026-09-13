@@ -247,16 +247,15 @@ while (( SECONDS < deadline )); do
         dump_ready=1
         break
       fi
-      if [[ -n "${PRISMINSTANCEID:-}" ]]; then
-        # Launched through a launcher CLI: the launcher stays open after the
-        # game exits (QuitAfterGameStop=false), so process death never comes.
-        # The dump runs synchronously on the client thread right before the
-        # shutdown, so a settled file means the pipeline is complete.
-        echo "recipedump.json settled; treating the export as complete."
-        dump_ready=1
-        break
-      fi
-      echo "recipedump.json present but the client is still running; waiting for its own exit."
+      # The dump runs synchronously on the client thread right before the
+      # shutdown, so a settled file means the pipeline is complete. The
+      # CleanroomMC relauncher stays open after the game exits even in
+      # standalone launches (and launcher CLIs never close at all), so
+      # process death never comes; treat the settled dump as the completion
+      # signal instead of waiting forever.
+      echo "recipedump.json settled; treating the export as complete."
+      dump_ready=1
+      break
     fi
   fi
   if ! kill -0 "$runtime_pid" 2>/dev/null; then

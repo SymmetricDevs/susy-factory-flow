@@ -106,6 +106,17 @@ describe("inspectInstanceDir", () => {
     expect(inspectInstanceDir(dir).launchScript).toMatch(/launch-susy-client\.cmd$/);
   });
 
+  it("prefers the platform-native launcher when both exist", () => {
+    const dir = makeDir({
+      "pack.toml": PACK_TOML,
+      "mods/susycore-1.4.jar": "jar",
+      "launch-susy-client.sh": "#!/bin/sh\n",
+      "launch-susy-client.cmd": "@echo off\n",
+    });
+    expect(path.basename(inspectInstanceDir(dir, "linux").launchScript)).toBe("launch-susy-client.sh");
+    expect(path.basename(inspectInstanceDir(dir, "win32").launchScript)).toBe("launch-susy-client.cmd");
+  });
+
   it("treats packwiz metadata without jars as a pack source, not an instance", () => {
     const dir = makeDir({
       "pack.toml": PACK_TOML,

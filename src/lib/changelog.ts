@@ -47,6 +47,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.9.3",
+    date: "2026-09-28",
+    headline: "Importing a plan opens a new tab",
+    notes: [
+      "Import a plan now opens the file as a new design. It used to replace the design you had open, even while the Library was covering it.",
+    ],
+  },
+  {
     version: "3.9.2",
     date: "2026-09-25",
     headline: "Big plans save to your account",

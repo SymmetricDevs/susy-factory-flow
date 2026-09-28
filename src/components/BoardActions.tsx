@@ -54,6 +54,8 @@ import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { isPowerRecipe } from "@/lib/power/power-recipe";
 import { pickRecipeRefMatch, recipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import { useFactoryStore } from "@/store/factory-store";
+import { useDesignStore } from "@/store/design-store";
+import { untagCommunityPlan } from "@/lib/community/client";
 import { copyToClipboard } from "@/lib/clipboard";
 import { PastePlanDialog } from "./export/PastePlanDialog";
 
@@ -103,8 +105,7 @@ export function BoardActions({
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const canUndo = useFactoryStore((state) => state.undoHistory.length > 0);
   const canRedo = useFactoryStore((state) => state.redoHistory.length > 0);
-  const setProject = useFactoryStore((state) => state.setProject);
-  const frameBoardNodes = useFactoryStore((state) => state.frameBoardNodes);
+  const importProjectAsDesign = useDesignStore((state) => state.importProjectAsDesign);
   const setProjectImporting = useFactoryStore((state) => state.setProjectImporting);
   const cleanBoard = useFactoryStore((state) => state.cleanBoard);
   const undo = useFactoryStore((state) => state.undo);
@@ -171,6 +172,14 @@ export function BoardActions({
     }, 450);
   };
 
+  /**
+   * An imported file opens as a NEW design tab, never over the plan on the
+   * board (a player lost a big design, 2026-09-28: they imported from the
+   * Library, which covers the board without closing the design under it, and
+   * the file replaced that design out of sight, undo history and all). Same
+   * door as Paste a copied plan and a shared link. Its post link is dropped,
+   * like any copy that arrives: a file is a plain design of your own.
+   */
   const importProjectJson = async (file: File) => {
     setProjectImporting(true);
 
@@ -180,15 +189,14 @@ export function BoardActions({
         (version) => version.id === selectedDatasetVersionId,
       );
       const importedProject = refreshImportedProjectEdges(
-        cloneImportedProject(parseFactoryProjectJson(text)),
+        cloneImportedProject(untagCommunityPlan(parseFactoryProjectJson(text)) as FactoryProject),
       );
+      const name = importedProject.name || file.name.replace(/\.[^.]+$/, "");
 
-      // An imported plan was built on someone else's board, so its cards can
-      // sit anywhere at all: the camera goes to them rather than leaving the
-      // viewer on blank canvas.
+      // A new tab has no camera of its own yet, so it lands framed on the
+      // imported cards, wherever the plan's author left them.
       if (!selectedDatasetVersion) {
-        setProject(importedProject);
-        frameBoardNodes();
+        await importProjectAsDesign(importedProject, name);
         console.warn(
           "Plan imported without an active GTNH dataset; embedded recipe data was kept.",
         );
@@ -199,8 +207,7 @@ export function BoardActions({
         importedProject,
         selectedDatasetVersion,
       );
-      setProject(refreshImportedProjectEdges(hydration.project));
-      frameBoardNodes();
+      await importProjectAsDesign(refreshImportedProjectEdges(hydration.project), name);
 
       if (hydration.missingRecipes.length) {
         console.warn(

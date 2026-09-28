@@ -1698,6 +1698,13 @@ Working notes for future agents on GTNH Factory Flow.
 - A viewer keeps its public URL across reloads; making a copy removes it.
   An owner's posted design still follows autosaves through `post-follow.ts`.
 
+- EVERY PLAN THAT ARRIVES OPENS AS A NEW DESIGN (a player lost a big design,
+  2026-09-28): the plan menu's "Import a plan..." goes through
+  `importProjectAsDesign` like Paste, links and Open a copy, with its post
+  link dropped. It used to `setProject` over the active design, and the
+  Library covers the board without closing that design, so the file replaced
+  it out of sight and wiped undo. No app path calls `setProject` now; keep it
+  that way. `BoardActions.test.tsx` is the exam.
 - Plan import/export must preserve item/fluid identity. `fluid.*` showing in UI usually means fluid IDs were imported without resolving display resource metadata.
 - When importing image-embedded or JSON plans, preserve node recipe overrides, selected machine handler, tier/config selections, and concrete oredict alternatives.
 - Creating a storage/drawer by dragging from a recipe slot must create both the storage node and the edge.

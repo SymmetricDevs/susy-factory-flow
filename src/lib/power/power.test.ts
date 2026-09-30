@@ -219,6 +219,22 @@ describe("turbines", () => {
     expect(model.outputs[0].perSecond).toBe(model.inputs[0].perSecond);
   });
 
+  it("runs SC steam at the rotor's own steam flow, like HP", () => {
+    const rotor = { rotor: "MAR-Ce-M200 Steel", size: "Large", fitting: "tight", flowMode: "optimal" };
+    const sc = compute("large-sc-steam-turbine", rotor);
+    const hp = compute("large-hp-steam-turbine", rotor);
+    // Workbook and MTELargeTurbineSCSteam: 22,500 L/t at 1 EU/L x 145%.
+    expect(sc.inputs[0]).toMatchObject({ name: "SC Steam", perSecond: 22_500 * 20 });
+    expect(sc.euPerTick).toBe(32_625);
+    expect(sc.inputs[0].perSecond).toBe(hp.inputs[0].perSecond);
+    // The XL is sixteen rotors, nothing more; dense steam divides by 1000.
+    const xl = { rotor: "Duranium", size: "Large", grade: "Dense SC Steam", flowMode: "optimal" };
+    const tight = compute("xl-turbo-sc-steam-turbine", { ...xl, fitting: "tight" });
+    const loose = compute("xl-turbo-sc-steam-turbine", { ...xl, fitting: "loose" });
+    expect(tight.inputs[0].perSecond).toBe(1_228 * 20);
+    expect(loose.inputs[0].perSecond).toBe(48_328 * 20);
+  });
+
   it("penalizes over-optimal flow but caps at max", () => {
     const source = getPowerSource("large-steam-turbine");
     const atOptimal = compute("large-steam-turbine", {

@@ -40,6 +40,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.9.6",
+    date: "2026-09-30",
+    headline: "SC steam turbines fixed",
+    notes: [
+      "Large and XL Turbo SC Steam Turbines showed 16 times their real steam flow and EU; they now match the game.",
+    ],
+  },
+  {
     version: "3.9.5",
     date: "2026-09-30",
     headline: "Behind-the-scenes cleanup",

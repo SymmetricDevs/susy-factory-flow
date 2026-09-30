@@ -86,7 +86,8 @@ loose.
 
 Steam EU/L (`'Fuel Data'!B6:C11`): Steam 0.5, SH Steam 1.0, SC Steam 1.0,
 Dense Steam 500, Dense SH 1000, Dense SC 1000 (dense = 1000x, XL turbines
-only; the SC turbine's optimal flow is the rotor figure x16).
+only). Every steam grade, SC included, runs the rotor's own steam flow; the
+x16 in the sheet's XL columns is the XL's sixteen rotors, not an SC rule.
 
 ### The turbine cascade
 

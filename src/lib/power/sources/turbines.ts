@@ -297,9 +297,9 @@ function buildTurbine(spec: TurbineSpec): PowerSourceDefinition {
       // Optimal flow per class, in the class's native unit.
       let optimal: number;
       if (spec.turbineClass === "steam") {
-        // SC steam runs the rotor's optimal x16; dense steam divides by 1000.
-        const scFactor = fuelName.endsWith("SC Steam") ? 16 : 1;
-        optimal = Math.max(1, optLookup * scFactor * (spec.xl ? 16 : 1) * (dense ? 1 / 1000 : 1));
+        // Every steam grade runs the rotor's steam flow (SC included: MTELargeTurbineSCSteam
+        // uses getOptimalSteamFlow like HP); XL is x16, dense steam divides by 1000.
+        optimal = Math.max(1, optLookup * (spec.xl ? 16 : 1) * (dense ? 1 / 1000 : 1));
         optimal = Math.floor(optimal);
       } else if (spec.turbineClass === "gas") {
         optimal = Math.floor(Math.max(1, (optLookup * (spec.xl ? 16 : 1)) / fuelEu));

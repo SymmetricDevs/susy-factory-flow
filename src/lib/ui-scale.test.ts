@@ -33,17 +33,17 @@ describe("interface size", () => {
     Reflect.deleteProperty(window, "matchMedia");
   });
 
-  it("renders 100% at 1.17 on a desktop window", async () => {
+  it("renders the default 80% at 0.936 on a desktop window", async () => {
     stubMatchMedia(() => false);
     const { getUiScale, getUiScalePercent } = await import("./ui-scale");
-    expect(getUiScalePercent()).toBe(100);
-    expect(getUiScale()).toBe(1.17);
+    expect(getUiScalePercent()).toBe(80);
+    expect(getUiScale()).toBe(0.936);
   });
 
-  it("renders 100% at 0.9 on a phone", async () => {
+  it("renders the default 80% at 0.72 on a phone", async () => {
     stubMatchMedia((media) => media.includes("899.98px"));
     const { getUiScale } = await import("./ui-scale");
-    expect(getUiScale()).toBe(0.9);
+    expect(getUiScale()).toBe(0.72);
   });
 
   it("is 1 where there is no matchMedia to ask", async () => {
@@ -59,7 +59,7 @@ describe("interface size", () => {
     expect(clampUiScalePercent(125)).toBe(130);
     expect(clampUiScalePercent(10)).toBe(60);
     expect(clampUiScalePercent(999)).toBe(200);
-    expect(clampUiScalePercent(Number.NaN)).toBe(100);
+    expect(clampUiScalePercent(Number.NaN)).toBe(80);
 
     setUiScalePercent(120);
     expect(getUiScalePercent()).toBe(120);
@@ -82,7 +82,8 @@ describe("interface size", () => {
   });
 
   it("builds the breakpoint queries from the factor and stamps the attributes", async () => {
-    // 1400px window at 1.3: 1077 shell px, so snug (under 1280) but not compact.
+    // 1400px window at about 1.3: roughly 1088 shell px, so snug but not compact.
+    window.localStorage.setItem("gtnh-factory-flow.ui-scale.v1", "110");
     stubMatchMedia((media) => {
       const width = Number(/max-width: ([\d.]+)px/.exec(media)?.[1] ?? 0);
       return media.includes("899.98px") ? false : 1400 <= width;

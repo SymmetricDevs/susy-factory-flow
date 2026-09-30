@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 import { APP_FONTS, DEFAULT_APP_FONT, isAppFontId } from "./app-font";
 
 describe("app fonts", () => {
-  it("has unique ids and includes the default", () => {
+  it("has unique ids and defaults to Minecraft", () => {
     const ids = APP_FONTS.map((option) => option.id);
+    expect(DEFAULT_APP_FONT).toBe("minecraft");
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toContain(DEFAULT_APP_FONT);
   });

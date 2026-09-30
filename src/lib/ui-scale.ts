@@ -123,11 +123,12 @@ export function getUiScalePercent(): number {
 }
 
 /**
- * The live CSS zoom factor of the shell. 1 on the server and in tests, where
- * nothing is zoomed and every measurement is already in real pixels.
+ * The live CSS zoom factor of the shell. 1 on the server and where matchMedia
+ * is unavailable (including jsdom), where nothing is zoomed and every
+ * measurement is already in real pixels.
  */
 export function getUiScale(): number {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return 1;
   }
   return uiScaleFactor(readPercent());

@@ -51,7 +51,10 @@ export function getRecipeMachineHandlers(
   const handlersByFamily = new Map<string, MachineHandler>();
   const fusionMark = isFusionRecipe(recipe) ? getFusionRecipeMark(recipe) : undefined;
   for (const handler of recipe.machineHandlers ?? []) {
-    const normalized = normalizeFusionHandler(normalizeMachineHandler(handler), recipe);
+    const normalized = normalizeFusionHandler(
+      normalizeMachineHandler(handler, recipe.machineType),
+      recipe,
+    );
     const fusion = getFusionMachine(normalized.machineType);
     if (fusion && fusionMark !== undefined && fusion.mark < fusionMark) continue;
     const familyId = slug(normalized.label);
@@ -458,17 +461,24 @@ export function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): s
   return recipe.source?.recipeMap ?? recipe.machineType;
 }
 
-function normalizeMachineHandler(handler: MachineHandler): MachineHandler {
+function normalizeMachineHandler(
+  handler: MachineHandler,
+  fallbackMachineType?: string,
+): MachineHandler {
+  // Some search summaries can carry incomplete handler metadata. The recipe's
+  // machine type is the final useful name when the handler omitted its label.
+  const label = handler.label || handler.machineType || fallbackMachineType || "Machine";
+  const machineType = handler.machineType || label;
   // Fusion's Roman numeral names a different reactor, not a singleblock
   // voltage suffix. Stripping it merged I/II/III and IV/V into two families.
-  if (getFusionMachine(handler.machineType)) return handler;
-  const familyLabel = machineHandlerFamilyLabel(handler.label);
+  if (getFusionMachine(machineType)) return { ...handler, label, machineType };
+  const familyLabel = machineHandlerFamilyLabel(label);
   return {
     ...handler,
     label: familyLabel,
     // Some dataset handlers carry no machineType (single-block exports);
     // the label is the recipe map name, so it is the right fallback.
-    machineType: machineHandlerFamilyLabel(handler.machineType ?? handler.label),
+    machineType: machineHandlerFamilyLabel(machineType),
   };
 }
 

@@ -16,7 +16,7 @@ export const UI_SCALE_PHONE_BASE = 0.9;
 export const UI_SCALE_MIN_PERCENT = 60;
 export const UI_SCALE_MAX_PERCENT = 200;
 export const UI_SCALE_STEP_PERCENT = 10;
-export const DEFAULT_UI_SCALE_PERCENT = 100;
+export const DEFAULT_UI_SCALE_PERCENT = 80;
 
 export const UI_SCALE_VAR = "--ui-scale";
 export const UI_SCALE_INVERSE_VAR = "--ui-scale-inverse";

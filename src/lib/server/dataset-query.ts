@@ -2996,24 +2996,6 @@ function hydrateRecipeMapIconResource(
   };
 }
 
-function findResourceByKindAndId(
-  resourcesByKey: Map<string, DatasetResource | DatasetResourceIndexEntry>,
-  kind: ResourceAmount["kind"],
-  id: string,
-): DatasetResource | DatasetResourceIndexEntry | undefined {
-  const exact = resourcesByKey.get(`${kind}:${id}`);
-  if (exact) {
-    return exact;
-  }
-  const normalizedKey = normalizeText(`${kind}:${id}`);
-  for (const [key, resource] of resourcesByKey) {
-    if (normalizeText(key) === normalizedKey) {
-      return resource;
-    }
-  }
-  return undefined;
-}
-
 interface RecipeMapIconCandidate {
   resource: DatasetResourceIndexEntry;
   label: string;

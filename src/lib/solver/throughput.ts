@@ -4,7 +4,6 @@ import {
   isRecipeInputConsumed,
   makeResourceKey,
   primaryOutput,
-  resourceLabel,
 } from "../model/resources";
 import type {
   BottleneckReport,
@@ -1451,22 +1450,5 @@ function calculateFuelEstimate(
   }
 
   return undefined;
-}
-
-export function getResourceDisplayName(
-  kind: ResourceKind,
-  resourceId: string,
-  project: FactoryProject,
-): string {
-  for (const recipe of project.recipes) {
-    const resource = [...recipe.inputs, ...recipe.outputs].find(
-      (entry) => entry.kind === kind && entry.id === resourceId,
-    );
-    if (resource) {
-      return resourceLabel(resource);
-    }
-  }
-
-  return resourceId;
 }
 

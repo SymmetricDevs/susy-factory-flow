@@ -30,7 +30,7 @@ import {
   isBeeFrameSlotControlId,
   isBeeProductionRecipe,
 } from "@/lib/model/passive-production";
-import { getVoltageTierForEuT, getVoltageTierIndex, getVoltageTierMaxEuT } from "@/lib/model/tiers";
+import { getVoltageTierForEuT, getVoltageTierIndex } from "@/lib/model/tiers";
 import { getHeatDiscountMultiplier } from "./heat";
 import { getEffectiveVoltageOrdinal, getNodeRunTier, getPowerPoolEuT } from "./power";
 import {

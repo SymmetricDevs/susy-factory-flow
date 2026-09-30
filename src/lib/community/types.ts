@@ -133,11 +133,6 @@ export interface CommunityUser {
   isAdmin?: boolean;
 }
 
-export interface CommunityVoteRequest {
-  deviceId: string;
-  value: 1 | -1;
-}
-
 export interface CommunityVoteResponse {
   upvotes: number;
   downvotes: number;

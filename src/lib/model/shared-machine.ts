@@ -77,17 +77,9 @@ export function parseSectionNodeId(id: string): { nodeId: string; section: numbe
   return { nodeId: id.slice(0, at), section: Number(tail) };
 }
 
-export function isSectionNodeId(id: string): boolean {
-  return parseSectionNodeId(id).section > 0;
-}
-
 /** The card a solve node id belongs to: itself for a card, the card for a section. */
 export function sectionOwnerId(id: string): string {
   return parseSectionNodeId(id).nodeId;
-}
-
-export function getNodeSectionRecipeId(node: FactoryNode, section: number): string | undefined {
-  return section === 0 ? node.recipeId : node.extraRecipes?.[section - 1]?.recipeId;
 }
 
 /**
@@ -254,9 +246,4 @@ export function listSharedMachineGroups(nodeIds: Iterable<string>): Map<string, 
     }
   }
   return groups;
-}
-
-/** Every solve id a card answers to: itself and its sections. */
-export function listSectionNodeIds(node: FactoryNode): string[] {
-  return listNodeSections(node).map(({ node: view }) => view.id);
 }

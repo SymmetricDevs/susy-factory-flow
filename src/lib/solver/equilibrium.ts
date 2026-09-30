@@ -2587,10 +2587,6 @@ export function clampUtilization(utilization: number): number {
   return Math.min(Math.max(utilization, 0), 1);
 }
 
-export function getEffectiveFlowRate(flow: ResourceFlow | undefined, utilization: number): number {
-  return (flow?.amountPerSecond ?? 0) * clampUtilization(utilization);
-}
-
 export function getEdgeTargetDemandKey(
   project: FactoryProject,
   edge: FactoryProject["edges"][number],

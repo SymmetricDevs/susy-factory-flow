@@ -2740,7 +2740,6 @@ const RECIPE_SEARCH_MIN_WIDTH = 640;
 const RECIPE_SEARCH_MAX_WIDTH = 2200;
 const RECIPE_SEARCH_MAX_HEIGHT = 1200;
 const RECIPE_SEARCH_SHEET_BELOW = 700;
-const ZERO_OFFSET = { x: 0, y: 0 };
 
 interface RecipeSearchViewport {
   /** Filling the screen rather than floating over the board. */

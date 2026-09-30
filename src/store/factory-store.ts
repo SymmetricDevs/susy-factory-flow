@@ -5042,23 +5042,6 @@ function nodeSectionForHandle(
   return sectionNodeView(node, section);
 }
 
-/** The card with one section's oredict picks replaced. */
-function withSectionInputOverrides(
-  node: FactoryNode,
-  section: number,
-  recipeInputOverrides: Record<string, RecipeInput> | undefined,
-): FactoryNode {
-  if (section === 0) {
-    return { ...node, recipeInputOverrides };
-  }
-  return {
-    ...node,
-    extraRecipes: (node.extraRecipes ?? []).map((extra, index) =>
-      index === section - 1 ? { ...extra, recipeInputOverrides } : extra,
-    ),
-  };
-}
-
 /**
  * The wires on a card's first recipe, and which of them the new recipe can
  * still serve, re-docked onto its matching slot. A shared machine's other

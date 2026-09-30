@@ -588,25 +588,9 @@ export interface NodeSurfaceColor {
   shadow: string;
 }
 
-/** The custom rate card's own colour: the app's blue. */
-export const CUSTOM_RATE_NODE_COLOR: NodeSurfaceColor = GT_NODE_COLORS.blue;
-
 /** The ramp a card wears, painted or not. Undefined means the neutral one. */
 export function rampFor(tag: FactoryNodeColorTag | undefined): Record<string, string> | undefined {
   return tag ? GT_NODE_RAMPS[tag] : undefined;
-}
-
-/**
- * The heatmap's ramp: the same construction as a paint tag's, mixed live off
- * the heat colour because heat is continuous and cannot be a preset. It is a
- * VIEW, not a card's colour, so it is allowed to be derived.
- */
-export function heatmapRamp(panel: string): Record<string, string> {
-  const stops: Record<string, string> = {};
-  for (const [token, neutral] of Object.entries(GT_NODE_RAMPS.gray)) {
-    stops[token] = mixHex(neutral, panel, 0.34);
-  }
-  return stops;
 }
 
 /**

@@ -289,8 +289,6 @@ export async function queryRecipeDatasetResources(
   return fetchJson<RecipeDatasetResourceQueryResult>(url.toString(), { signal: options.signal });
 }
 
-export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   // No cache mode: every GET here carries the dataset checksum in its URL, so
   // the browser's HTTP cache can legally reuse responses across reloads and

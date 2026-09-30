@@ -56,13 +56,6 @@ export interface OptimizeWire {
   weight?: number;
   /** The stroke the wire routes at, in px: sets its weight (wireWeight). */
   width?: number;
-  /**
-   * Port rows, from the card's top. Carried through but not read by the
-   * proxy: docking is free, so proxy paths leave at the rim point facing
-   * the far card (see proxyPath).
-   */
-  sourcePortY?: number;
-  targetPortY?: number;
 }
 
 export interface OptimizeOptions {
@@ -394,8 +387,6 @@ export function optimizeIslandLayout(
     b: number;
     weight: number;
     width: number;
-    sourcePortY?: number;
-    targetPortY?: number;
   }> = [];
   for (const wire of wires) {
     const a = index.get(wire.source);
@@ -408,8 +399,6 @@ export function optimizeIslandLayout(
       // scale (flow, log-compressed) otherwise.
       weight: wire.width !== undefined ? wireWeight(wire.width) : Math.max(wire.weight ?? 1, 0.01),
       width: wire.width ?? 6,
-      sourcePortY: wire.sourcePortY,
-      targetPortY: wire.targetPortY,
     });
   }
   const rowGap = (options.rowGapCells ?? 2) * BOARD_GRID;

@@ -29,7 +29,6 @@ import {
   RefreshCw,
   Sprout,
   X,
-  Zap,
 } from "lucide-react";
 import type {
   FactoryNode,
@@ -82,7 +81,6 @@ import {
   getRecipeMaximumVoltageTier,
   getRecipeAvailableVoltageTiers,
   getRunVoltageTier,
-  getRecipeMinimumVoltageTier,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
   CROP_GAIN_STAT_CONTROL_ID,
@@ -142,11 +140,9 @@ import {
 import {
   powerDisplayFromEuT,
   powerDisplaySuffix,
-  rateMultiplierForKind,
   rateSuffixForKind,
   rateUnitMultiplier,
   rateUnitPrecisionScale,
-  rateUnitSuffix,
 } from "@/lib/model/rate-unit";
 import {
   getRecipeProgrammedCircuit,
@@ -185,7 +181,7 @@ import {
 import { PowerConfigPanel } from "./PowerConfigPanel";
 import { getPowerSource } from "@/lib/power/registry";
 import { getMachineStructureArt, getPowerStructureArt } from "@/lib/power/structure-art";
-import { getPowerMachineIcon, type PowerMachineIcon } from "@/lib/power/planner-data";
+import { getPowerMachineIcon } from "@/lib/power/planner-data";
 import type { PowerSelectSetting } from "@/lib/power/types";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { useWorkspaceView } from "@/lib/workspace-view";
@@ -207,7 +203,6 @@ import { buildPortFlowScope } from "./flow-scope";
 import {
   buildRailPorts,
   deriveNodeVerdict,
-  isSupplyShort,
   type NodeVerdict,
   type RailPort,
 } from "./node-verdict";
@@ -216,7 +211,6 @@ import {
   formatPortRate,
   formatSlotRate,
   formatSlotRateBare,
-  formatSlotRateOrNull,
   portReadsEnergy,
   ENERGY_READING_TEXT,
   formatEnergyPerUnitParts,
@@ -237,8 +231,7 @@ import {
   type NodeSurfaceColor,
 } from "./node-colors";
 import { useBoardView } from "./board-view";
-import { MotionNumberText, useBoardMotion, useMotionValues } from "./board-motion";
-import { getPaintBrushCursor } from "./paint-cursor";
+import { MotionNumberText } from "./board-motion";
 import { GT_TIER_COLORS } from "./tier-colors";
 import { playBoardSound, suppressBoardSound } from "@/lib/board-sounds";
 import { fetchRecipeTwins, recipeMayHaveTwins, type RecipeTwin } from "@/lib/datasets/recipe-twins";
@@ -327,7 +320,6 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   const browseMachineRecipes = useFactoryStore((state) => state.browseMachineRecipes);
   const removeRecipeSection = useFactoryStore((state) => state.removeRecipeSection);
   const moveRecipeSection = useFactoryStore((state) => state.moveRecipeSection);
-  const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const dataset = useFactoryStore((state) => state.dataset);
   const isSearchHighlighted = recipeContainsSearchResource(recipe, recipeSearch);
@@ -360,10 +352,9 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   // Recipe cards take no paint, so the brush cursor is not offered here; it
   // still shows over drawers and boards.
   const paintCursor = undefined;
-  // Recipe derivation is pure in (recipe, projectNode, dataset) but ran on every
-  // render, including renders caused by unrelated store writes such as hover or
-  // search. It also rebuilt `overclockedRecipe` each time, whose fresh identity
-  // defeated NeiRecipeWindow's memo and re-ran the whole NEI pipeline downstream.
+  // Recipe derivation is pure in (recipe, projectNode, dataset); memoize it so
+  // unrelated store writes (hover, search) do not rebuild `overclockedRecipe`
+  // and defeat memoized children.
   const previewedNode = useMemo(() => {
     if (!previewConfigTier) {
       return projectNode;
@@ -3427,63 +3418,6 @@ function PowerTierChip({
 }
 
 /**
- * A power card's EU as the first output row: a generator's product is power,
- * so it sits where the products sit, lightning bolt for a face. The coupling
- * slot is inert.
- */
-function PowerEuSocketRow({
-  euPerTick,
-  machines,
-  drawScale,
-  average,
-}: {
-  euPerTick: number;
-  machines: number;
-  /** The PEAK/AVG switch, applied like every other EU figure's; a stalled
-   * generator makes 0 EU/t under both readings. */
-  drawScale: number;
-  /** Which reading the switch has picked, named beside the EU title so the
-   * figure says what it is. */
-  average: boolean;
-}) {
-  const totalEuT = euPerTick * machines * drawScale;
-  return (
-    <div className="relative flex items-stretch">
-      <MinecraftTooltip label="Power this card makes. Power does not wire to machines yet; it counts in POWER MADE, bottom right.">
-        <div
-          className={`flow-port relative flex h-[40px] ${PORT_CHIP_WIDTH_CLASS} flex-none items-center gap-1 px-0.5 py-0`}
-        >
-          <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
-            <span className="flex h-7 w-7 items-center justify-center border border-[var(--mc-47)] bg-[var(--mc-55)]">
-              <Zap className="h-4 w-4 text-amber-300" aria-hidden />
-            </span>
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
-            <span className="block truncate text-[9px] font-bold leading-[9px] text-[var(--mc-ink)]">
-              EU{" "}
-              <span className="text-[8px] font-normal text-[var(--mc-ink-muted)] opacity-75">
-                ({average ? "avg" : "peak"})
-              </span>
-            </span>
-            <span className="block truncate text-[9px] leading-[9px] tabular-nums text-amber-200/90">
-              <MotionNumberText
-                values={[totalEuT]}
-                render={(shown) =>
-                  `${formatPowerValue(powerDisplayFromEuT(shown[0] ?? totalEuT))} ${powerDisplaySuffix()}`
-                }
-              />
-            </span>
-          </span>
-        </div>
-      </MinecraftTooltip>
-      <span className="flow-socket-empty">
-        <Zap className="h-3 w-3 text-amber-300/60" aria-hidden />
-      </span>
-    </div>
-  );
-}
-
-/**
  * An output row: the maker chip plus the coupling chip at the node's right
  * edge — inside the card, like inputs. The row is the edge anchor, so wires
  * reach the coupling the same way they reach an input chip.
@@ -4463,9 +4397,6 @@ function PassiveProductionConfigPanel({
     </GridBlock>
   );
 }
-
-/** Caption line plus an h-6 control row, the power config panel's shape. */
-const CROP_PANEL_ROW_PX = 40;
 
 /** The unit types' pip colours, one per block, echoed by the slot pips. */
 const CROP_UNIT_PIP_COLORS: Record<string, string> = {

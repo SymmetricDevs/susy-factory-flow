@@ -66,13 +66,6 @@ export function isVoltageTierName(value: unknown): value is Exclude<MachineTier,
   return GT_VOLTAGE_TIERS.some((entry) => entry.tier === value);
 }
 
-export function isVoltageTierAbove(
-  tier: Exclude<MachineTier, "DEMO">,
-  maxTier: Exclude<MachineTier, "DEMO">,
-): boolean {
-  return getVoltageTierIndex(tier) > getVoltageTierIndex(maxTier);
-}
-
 /** EU/t a single energy hatch of this tier delivers - the machine's power budget. */
 export function getVoltageTierMaxEuT(tier: Exclude<MachineTier, "DEMO">): number {
   return GT_VOLTAGE_TIERS.find((entry) => entry.tier === tier)?.maxEuT ?? Number.POSITIVE_INFINITY;

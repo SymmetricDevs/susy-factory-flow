@@ -61,10 +61,6 @@ export function useSavedSetups(): string[] {
   );
 }
 
-export function isSetupSaved(planId: string): boolean {
-  return load().has(planId);
-}
-
 export function toggleSavedSetup(planId: string): boolean {
   const set = load();
   if (set.has(planId)) {

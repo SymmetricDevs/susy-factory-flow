@@ -22,15 +22,3 @@ export function getSetupRules(_project: {
 }): ResolvedSetupRules {
   return RULES;
 }
-
-/** Stored form: nothing set at all when every rule is off. */
-export function packSetupRules(rules: ResolvedSetupRules): SetupRules | undefined {
-  if (!rules.freeInputs && !rules.freeOutputs && !rules.looseCellWires) {
-    return undefined;
-  }
-  return {
-    freeInputs: rules.freeInputs || undefined,
-    freeOutputs: rules.freeOutputs || undefined,
-    looseCellWires: rules.looseCellWires || undefined,
-  };
-}

@@ -1,5 +1,5 @@
-import { parseDatasetManifestJson, parseRecipeDatasetJson } from "../import-export";
-import type { DatasetManifest, DatasetVersion, RecipeDataset } from "./types";
+import { parseDatasetManifestJson } from "../import-export";
+import type { DatasetManifest, DatasetVersion } from "./types";
 
 export const DEFAULT_DATASET_MANIFEST_URL =
   process.env.NEXT_PUBLIC_GTNH_DATASET_MANIFEST_URL ?? "/datasets/gtnh/datasets.manifest.json";
@@ -18,33 +18,6 @@ export async function fetchDatasetManifest(
   }
 
   return parseDatasetManifestJson(await response.text());
-}
-
-export async function fetchRecipeDatasetVersion(
-  manifestUrl: string,
-  version: DatasetVersion,
-): Promise<RecipeDataset> {
-  const datasetUrl = resolveDatasetUrl(manifestUrl, version.recipeDatasetPath);
-  const response = await fetch(datasetUrl, {
-    cache: "force-cache",
-    headers: {
-      Accept: "application/json, application/gzip, application/octet-stream",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Could not load dataset ${version.id} (${response.status}).`);
-  }
-
-  const dataset = parseRecipeDatasetJson(await readDatasetResponseText(response, datasetUrl));
-
-  if (dataset.datasetVersionId !== version.id) {
-    throw new Error(
-      `Dataset id mismatch: manifest expected ${version.id}, file contains ${dataset.datasetVersionId}.`,
-    );
-  }
-
-  return dataset;
 }
 
 /**
@@ -72,27 +45,6 @@ export function pickDefaultDatasetVersion(manifest: DatasetManifest): DatasetVer
   }
 
   return selectable[0];
-}
-
-export function resolveDatasetUrl(manifestUrl: string, datasetPath: string): string {
-  if (/^https?:\/\//i.test(datasetPath) || datasetPath.startsWith("/")) {
-    return datasetPath;
-  }
-
-  return new URL(datasetPath, new URL(manifestUrl, window.location.origin)).toString();
-}
-
-async function readDatasetResponseText(response: Response, datasetUrl: string): Promise<string> {
-  if (!datasetUrl.endsWith(".gz")) {
-    return response.text();
-  }
-
-  if (!response.body || !("DecompressionStream" in globalThis)) {
-    throw new Error("This browser cannot decompress GTNH dataset files.");
-  }
-
-  const stream = response.body.pipeThrough(new DecompressionStream("gzip"));
-  return new Response(stream).text();
 }
 
 function withCacheBust(url: string): string {

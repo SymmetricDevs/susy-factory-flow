@@ -1,6 +1,6 @@
 import { rateMultiplierForKind, rateSuffixForKind } from "@/lib/model/rate-unit";
 import { formatPowerValue } from "@/lib/model/resources";
-import { formatEnergyPerUnitParts, formatSlotRateBare } from "../flow/flow-explainers";
+import { formatSlotRateBare } from "../flow/flow-explainers";
 
 /** Remove sub-machine-precision residue without changing solver values or saved rates. */
 export function isPoolDisplayZero(value: number): boolean {
@@ -33,9 +33,4 @@ function compactBound(text: string): string {
 
 export function formatPoolPowerValue(value: number): string {
   return isPoolDisplayZero(value) ? "0" : compactBound(formatPowerValue(value));
-}
-
-export function formatPoolEnergyPerUnitParts(value: number, kind: string) {
-  const parts = formatEnergyPerUnitParts(value, kind);
-  return { ...parts, value: compactBound(parts.value) };
 }

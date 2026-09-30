@@ -537,22 +537,6 @@ function polishWithJudge(
   let best = verdict;
   const start = { positions: new Map(positions), verdict };
   const gap = BOARD_GRID;
-  const overlaps = (id: string, x: number, y: number): boolean => {
-    const size = sizeById.get(id)!;
-    for (const [other, at] of positions) {
-      if (other === id) continue;
-      const otherSize = sizeById.get(other)!;
-      if (
-        x < at.x + otherSize.width + gap &&
-        x + size.width + gap > at.x &&
-        y < at.y + otherSize.height + gap &&
-        y + size.height + gap > at.y
-      ) {
-        return true;
-      }
-    }
-    return false;
-  };
   const tried = new Set<string>();
   // A machine moves with the drawers that serve only it, the way a hand
   // drags a machine and its buds together.
@@ -1702,8 +1686,6 @@ function layoutIsland(
         target: link.to.card.id,
         weight: link.weight,
         width: link.width,
-        sourcePortY: link.fromAnchor,
-        targetPortY: link.toAnchor,
       }));
     if (optimizeWires.length > 0) {
       // The host's judge sees the whole board; the island's finalists are

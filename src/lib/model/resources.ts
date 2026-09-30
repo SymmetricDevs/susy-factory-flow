@@ -2,11 +2,9 @@ import type {
   Recipe,
   RecipeOutput,
   ResourceAmount,
-  ResourceFlow,
   ResourceKey,
   ResourceKind,
 } from "./types";
-import { rateMultiplierForKind, rateSuffixForKind } from "./rate-unit";
 import { getCropsNhStats } from "./passive-production";
 import { isFreeRecipeInput } from "./free-input";
 
@@ -43,17 +41,6 @@ function isWildcardChoiceResource(resource: Pick<ResourceAmount, "id" | "display
     /^any(?:$|[:@._-])/i.test(id) ||
     /^any(?:$|\s|[:@._-])/i.test(displayName)
   );
-}
-
-export function parseResourceKey(key: ResourceKey): {
-  kind: ResourceKind;
-  resourceId: string;
-} {
-  const separatorIndex = key.indexOf(":");
-  return {
-    kind: key.slice(0, separatorIndex) as ResourceKind,
-    resourceId: key.slice(separatorIndex + 1),
-  };
 }
 
 export function resourceLabel(resource: Pick<ResourceAmount, "id" | "displayName"> & Partial<Pick<ResourceAmount, "alternatives">>): string {
@@ -186,16 +173,6 @@ export function formatNumberWithThousands(value: number | string): string {
 
 export function trimTrailingDecimalZeros(value: string): string {
   return value.replace(/(\.\d*[1-9])0+$/, "$1").replace(/\.0+$/, "");
-}
-
-export function formatResourceRate(flow: ResourceFlow | undefined): string {
-  if (!flow) {
-    return "none";
-  }
-
-  return `${resourceLabel({ id: flow.resourceId, displayName: flow.displayName })} ${formatRate(
-    flow.amountPerSecond * rateMultiplierForKind(flow.kind),
-  )}${rateSuffixForKind(flow.kind).trimStart()}`;
 }
 
 export function primaryOutput(recipe: Recipe): RecipeOutput | undefined {

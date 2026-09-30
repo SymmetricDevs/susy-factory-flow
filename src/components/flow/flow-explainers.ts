@@ -1,4 +1,4 @@
-import type { EdgeThroughput, FactoryProject, ThroughputResult } from "@/lib/model/types";
+import type { FactoryProject, ThroughputResult } from "@/lib/model/types";
 import { formatCompact, formatPowerValue, formatNumberWithThousands, formatRate, makeResourceKey } from "@/lib/model";
 import {
   energyPerUnitDisplaySuffix,
@@ -8,7 +8,6 @@ import {
   rateSuffixForKind,
   rateUnitMultiplier,
   rateUnitPrecisionScale,
-  rateUnitSuffix,
 } from "@/lib/model/rate-unit";
 import { describeStorage, getStorageRoles } from "@/lib/model/storage-role";
 import { inputEdgeRate, inputEdgeResourceKey } from "./input-edge";
@@ -375,16 +374,6 @@ export function explainPlug(
     tone: PLUG_STATE_TONE[plug.state],
     lines,
   };
-}
-
-function supplierNote(row: PortLineRow): string | undefined {
-  if (row.isStorage) {
-    return "buffer";
-  }
-  if (row.sourcePct === undefined) {
-    return undefined;
-  }
-  return row.sourcePct >= 99.5 ? "at full speed" : `runs at ${formatPct(row.sourcePct)}%`;
 }
 
 function explainOutputPort(

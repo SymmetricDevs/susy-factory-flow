@@ -108,7 +108,6 @@ export function ResourceIndexPane({
       ? [powerRow, ...resourceResults]
       : resourceResults;
   const displayedTotal = onBoard ? boardResults.total : resourceTotal;
-  const displayedMods = onBoard ? boardResults.mods : resourceMods;
   const displayedOutcome = onBoard ? boardResults.outcome : resourceSearchOutcome;
   const resourcePageCount = Math.max(
     1,
@@ -413,7 +412,6 @@ const RESOURCE_DEFAULT_PAGE_SIZE = 6;
 const RESOURCE_TILE_HEIGHT = 66;
 const RESOURCE_TILE_MIN_WIDTH = 58;
 const RESOURCE_TILE_GAP = 2;
-const RESOURCE_GRID_CELL = 56;
 const RESOURCE_GRID_GAP = 4;
 /**
  * Magnifies the art inside its fixed grid cell. ResourceIcon caps that zoom

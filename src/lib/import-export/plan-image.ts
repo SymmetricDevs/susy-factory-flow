@@ -180,11 +180,6 @@ export function dataUrlToText(dataUrl: string): string {
   return decodeURIComponent(payload);
 }
 
-export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const response = await fetch(dataUrl);
-  return response.blob();
-}
-
 function encodeText(value: string): string {
   const bytes = TEXT_ENCODER.encode(value);
   let binary = "";

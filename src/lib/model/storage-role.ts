@@ -19,11 +19,6 @@ import type { FactoryProject, FactoryStorage, StorageBufferMode } from "./types"
  */
 export type StorageRole = "source" | "buffer" | "product" | "byproduct" | "trash" | "idle";
 
-/** The ones that sit ON the boundary rather than inside it. */
-export function isBoundaryRole(role: StorageRole): boolean {
-  return role === "source" || role === "product" || role === "byproduct" || role === "trash";
-}
-
 /** The ends of a drain: all accept freely, only the product asks. */
 export function isDrainRole(role: StorageRole): boolean {
   return role === "product" || role === "byproduct" || role === "trash";

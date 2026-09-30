@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local-only agent scratch (probes, captures, old harnesses).
+    "scratch/**",
   ]),
   prettier,
 ]);

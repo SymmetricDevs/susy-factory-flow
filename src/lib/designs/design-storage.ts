@@ -10,9 +10,8 @@ import {
 } from "./design-library";
 
 /*
- * Deliberately a different database from the dataset cache in
- * `lib/datasets/browser-cache.ts`: adding a store there means a version bump,
- * which blocks while another connection is open, and both open at startup.
+ * Designs keep their own database: adding a store to a shared one means a
+ * version bump, which blocks while another connection is open.
  */
 const DB_NAME = "gtnh-factory-flow-designs";
 // 3 adds the folders store (2 also did, but some browsers reached 2 without

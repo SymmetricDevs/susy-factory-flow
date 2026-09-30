@@ -66,9 +66,6 @@ export const RECIPE_RAIL_AREA_WIDTH = RECIPE_NODE_WIDTH - 2 * (2 + RECIPE_NODE_P
 /** The input chip, and the chip half of an output row. */
 export const PORT_CHIP_WIDTH = 112;
 
-/** The `→` divider between the two rails. */
-export const RAIL_DIVIDER_WIDTH = 16;
-
 /** Chip + 2px gap + the 30px coupling (`.flow-plug` in globals.css). */
 export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 30; // 144
 
@@ -86,9 +83,6 @@ export const PICTURE_MIN_HEIGHT = PORT_ROW_HEIGHT * 2; // 80
 
 /** The title row. */
 export const HEAD_ROW_HEIGHT = cells(2); // 40
-
-/** The stat footer. */
-export const FOOTER_HEIGHT = cells(2); // 40
 
 /** One row of a machine-config panel (label over a dropdown). */
 export const CONFIG_PANEL_ROW_HEIGHT = cells(3); // 60

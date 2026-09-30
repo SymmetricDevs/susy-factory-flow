@@ -237,12 +237,3 @@ function withUnit(value: number, unit: string): string {
     ? `${formatEdgeValue(scaled)}${unit}`
     : `${formatEdgeValue(scaled)} ${unit}`;
 }
-
-/**
- * How much of the line's potential is flowing, as a percent. On red edges the
- * potential is what the consumer needs; on green edges it is what the
- * producer could make. Either way 100% means the line is maxed out.
- */
-export function formatSatisfactionPercent(ratio: number): string {
-  return `${Math.min(Math.round(ratio * 100), 999)}%`;
-}

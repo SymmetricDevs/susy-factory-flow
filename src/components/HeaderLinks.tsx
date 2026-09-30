@@ -50,22 +50,6 @@ export function HeaderLinks() {
   );
 }
 
-/** An icon-only bug report button in its own red; the tooltip carries the words. */
-export function ReportBugButton() {
-  return (
-    <a
-      href={BUG_REPORT_URL}
-      target="_blank"
-      rel="noreferrer noopener"
-      title="Report a bug"
-      aria-label="Report a bug"
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-red-800 bg-red-950 text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200"
-    >
-      <Bug className="h-3.5 w-3.5" aria-hidden />
-    </a>
-  );
-}
-
 /** The donation link: a heart in its own colour, labelled for screen readers. */
 export function SupportButton() {
   return (
@@ -169,29 +153,6 @@ function MenuLink({
     >
       <span className="flex h-4 w-4 shrink-0 items-center justify-center">{children}</span>
       <span className="truncate">{label}</span>
-    </a>
-  );
-}
-
-function HeaderLink({
-  href,
-  label,
-  children,
-}: {
-  href: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      title={label}
-      aria-label={label}
-      className="inline-flex h-5 w-5 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
-    >
-      {children}
     </a>
   );
 }

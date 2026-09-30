@@ -114,10 +114,6 @@ export function setActivePowerDisplayUnit(unit: PowerDisplayUnit): void {
   powerState.unit = unit;
 }
 
-export function getActivePowerDisplayUnit(): PowerDisplayUnit {
-  return powerState.unit;
-}
-
 /**
  * The kind-aware pair. POWER ignores the board's rate unit on purpose: EU is
  * quoted per tick everywhere (the game, the wiki, every power surface here).

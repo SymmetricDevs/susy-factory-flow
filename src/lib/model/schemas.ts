@@ -585,8 +585,6 @@ export const factoryProjectSchema = z.object({
     .optional(),
 });
 
-export type FactoryProjectInput = z.input<typeof factoryProjectSchema>;
-
 /**
  * A captured board selection (the clipboard/blueprint payload): validated
  * server-side before a blueprint is stored, so a hand-crafted upload cannot

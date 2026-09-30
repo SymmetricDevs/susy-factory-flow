@@ -763,11 +763,6 @@ export function isCropProductionRecipe(recipe: PassiveProductionRecipeLabel) {
   );
 }
 
-export function isIc2LegacyCropRecipe(recipe: PassiveProductionRecipeLabel) {
-  const label = passiveProductionLabel(recipe);
-  return /\bic2 crops?\b/.test(label) && !/\bcropnh\b/.test(label);
-}
-
 export function isCropNhRecipe(recipe: PassiveProductionRecipeLabel) {
   const label = passiveProductionLabel(recipe);
   return /\bcrops?nh\b/.test(label) || /\bcrop farm\b/.test(label);
@@ -894,19 +889,6 @@ export function getBeeProductionTermModifier(controlId: string, key: string) {
     default:
       return 0;
   }
-}
-
-export function getCropStatsPreset(value: string | undefined): CropStatsPreset | undefined {
-  const match = /^(\d+)-(\d+)-(\d+)$/.exec(value ?? "");
-  if (!match) {
-    return undefined;
-  }
-
-  return {
-    growth: Number.parseInt(match[1] ?? "0", 10),
-    gain: Number.parseInt(match[2] ?? "0", 10),
-    resistance: Number.parseInt(match[3] ?? "0", 10),
-  };
 }
 
 function enrichCropProductionRecipe(recipe: Recipe): Recipe {

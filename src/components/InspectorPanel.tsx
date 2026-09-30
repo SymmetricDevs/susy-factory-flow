@@ -363,22 +363,6 @@ function FlowIOPanel() {
     ],
   );
 
-  // Charted resources come from the plan's own books, so a starred resource
-  // that has left the board stops being charted rather than lingering at a
-  // stale value.
-  const favourites = useMemo(() => {
-    const byKey = new Map<string, ResourceBalance>();
-    for (const balance of Object.values(scope.resources)) {
-      if (marks.favourites.has(balance.key)) {
-        byKey.set(balance.key, balance);
-      }
-    }
-    // Ordered by the saved list so the charts hold still as values move.
-    return workspace.favouriteResourceKeys
-      .map((key) => byKey.get(key))
-      .filter((balance): balance is ResourceBalance => balance !== undefined);
-  }, [marks.favourites, scope.resources, workspace.favouriteResourceKeys]);
-
   // Declared boundary: resources with a source, product or byproduct drawer.
   // Those rows stay listed at 0/s instead of vanishing; internal rows come
   // and go with the wiring.

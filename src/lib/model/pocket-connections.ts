@@ -3,10 +3,7 @@ import type {
   FactoryProject,
   FactoryStorage,
   Recipe,
-  ResourceAmount,
-  ResourceKind,
 } from "./types";
-import { isRecipeInputConsumed, resourceMatchesInput } from "./resources";
 import {
   applyRecipeInputOverrides,
 } from "./recipe-input-overrides";

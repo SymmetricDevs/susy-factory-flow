@@ -71,7 +71,6 @@ import {
   Type,
   Undo2,
   Blocks,
-  Check,
   Sigma,
   Waves,
   X,
@@ -147,9 +146,7 @@ import { hasAnySolveNumbers } from "@/lib/solver/throughput";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { useBlueprintStore } from "@/store/blueprint-store";
 import {
-  areBoardSoundsEnabled,
   playBoardSound,
-  setBoardSoundsEnabled,
 } from "@/lib/board-sounds";
 import { projectSoundFingerprint } from "./use-board-sound-effects";
 import { useDesignStore } from "@/store/design-store";
@@ -162,14 +159,12 @@ import {
 } from "@/lib/designs/design-camera";
 import { isEditableKeyboardTarget } from "./keyboard";
 import {
-  BOARD_TIMELAPSE_PRESETS,
   didBoardTimelapseEndHeld,
   getBoardTimelapseCameraMode,
   getBoardTimelapseCameraPace,
   getBoardTimelapseCineZoom,
   getBoardTimelapseHoldEnding,
   getBoardTimelapsePopMs,
-  runBoardTimelapsePreset,
   getBoardTimelapseSnapshot,
   getBoardTimelapseWireDrawMs,
   getBoardTimelapseZoomRange,
@@ -269,16 +264,13 @@ import {
   laneWidthForHeat,
   solveGridRoutes,
   type GridEndpoint,
-  type GridSide,
   type GridRouteRequest,
   type GridObstacle,
   type GridRoutedEdge,
   measureRoutes,
 } from "./grid-edge-router";
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
-import type { ArrangeInput } from "@/lib/board-arrange";
 import { proxyPath } from "@/lib/board-arrange-optimize";
-import { makeRouteJudge } from "@/lib/route-judge";
 import { routePoints } from "@/lib/route-metrics";
 import { registerBoardGeometryReader, registerBoardScoreReader } from "./board-score";
 import { flattenBoards } from "@/lib/model/flatten-boards";
@@ -306,9 +298,9 @@ import {
 import { isTrashRecipe, TRASH_ANY_RESOURCE_ID } from "@/lib/model/trash";
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import { GT_TIER_COLORS } from "./tier-colors";
-import { isPowerDisplayUnit, rateSuffixForKind, rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
+import { isPowerDisplayUnit, type RateUnit } from "@/lib/model/rate-unit";
 import { useIsCompactViewport } from "@/lib/compact-view";
-import { getUiScale, useUiScale } from "@/lib/ui-scale";
+import { useUiScale } from "@/lib/ui-scale";
 import { BOARD_TOOL_SCALE, useToolbarFold } from "./toolbar-fold";
 import { browseHoveredPort } from "./port-browse";
 import { useBoardTouchGestures } from "./board-touch-gestures";
@@ -1453,19 +1445,6 @@ function installSolvedRoutes(result: RouteSolveResult) {
 }
 setRouteSolveSink(installSolvedRoutes);
 
-/**
- * The arranger's judge: routes the board's OWN wires (the published route
- * inputs) at hypothetical card positions and reports crossings and total
- * length. Each card shifts by the difference between where it stands and
- * where the layout puts it, so measured perimeters and ports move with it.
- * Undefined when any card on the level is unmeasured or no wire has
- * resolvable ends.
- */
-function buildArrangeJudge(cardIds: readonly string[]): ArrangeInput["judge"] | undefined {
-  const input = buildArrangeJudgeInput(cardIds);
-  return input ? makeRouteJudge(input.obstacles, input.requests, input.tuning) : undefined;
-}
-
 /** The judge's inputs, serialisable: what the arrange worker builds its judge from. */
 function buildArrangeJudgeInput(cardIds: readonly string[]): ArrangeJudgeInput | undefined {
   const ids = new Set(cardIds);
@@ -2293,9 +2272,6 @@ export function FactoryFlow() {
   // moment it opens, and a second request arriving mid-capture (a background
   // swap, strict mode's double mount) must wait its turn, not error.
   const exportQueueRef = useRef<Promise<void>>(Promise.resolve());
-  // True while an export photographs the board. Culling is off
-  // (`onlyRenderVisibleElements={false}`), so nothing reads this to un-cull.
-  const [isExportRendering, setExportRendering] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
   // Every breathing mark under this element - dead rings and their wires,
   // unwired cards and the notice about them, the hovered-resource wash - shares
@@ -4569,7 +4545,6 @@ export function FactoryFlow() {
           board.removeAttribute(NODE_DETAIL_ATTRIBUTE);
         }
       };
-      setExportRendering(true);
       setNodeDetailLevel(isStatLook ? NODE_DETAIL_GLANCE : NODE_DETAIL_FULL);
       applyCardDetail(cardDetail === "full" ? NODE_DETAIL_FULL : NODE_DETAIL_GLANCE);
       // Captures use the ordinary board colours (calm off) and the smart view
@@ -4703,7 +4678,6 @@ export function FactoryFlow() {
         });
         setNodeDetailLevel(restoreDetailLevel);
         applyCardDetail(restoreDetailLevel);
-        setExportRendering(false);
         dispatchImageExportComplete(requestId, capture, failure);
       }
     },
@@ -6753,17 +6727,6 @@ function SelectionHandoffController({ signal }: { signal: number }) {
 }
 
 /**
- * How far down a banner centred over the board sits; a second banner stacks
- * under the first.
- */
-function centredBannerTop(compact: boolean, second: boolean): string {
-  if (compact) {
-    return second ? "top-14" : "top-3";
-  }
-  return second ? "top-14" : "top-3";
-}
-
-/**
  * A bar of actions: at the bottom on a phone, in reach of a thumb (the top
  * line already carries the tool triggers).
  */
@@ -7444,7 +7407,6 @@ const SourceToolbar = memo(function SourceToolbar({
   /** A banner has the top line: step down one. */
   shiftedDown: boolean;
 }) {
-  const boardView = useBoardView();
   const rateUnit = useFactoryStore((state) => state.rateUnit);
   const setRateUnit = useFactoryStore((state) => state.setRateUnit);
   const rateChoice =
@@ -8634,13 +8596,9 @@ const PaintToolbar = memo(function PaintToolbar({
   // draw tools live under ONE slot: the menu holds them all with their names;
   // the face opens it, or cancels when a tool is armed.
   const [isDrawMenuOpen, setDrawMenuOpen] = useState(false);
-  const [lastDrawTool, setLastDrawTool] = useState<BoardDrawTool>("box");
   const drawRef = useRef<HTMLDivElement | null>(null);
   const closeDrawMenu = useCallback(() => setDrawMenuOpen(false), []);
   useFoldoutDismiss(isDrawMenuOpen, drawRef, closeDrawMenu);
-  const faceDrawTool = annotationTool ?? lastDrawTool;
-  const FaceDrawIcon =
-    ANNOTATION_TOOLS.find((tool) => tool.kind === faceDrawTool)?.Icon ?? Square;
   // The view sheet's open state lives here so the whole row can lift its z
   // while it is out, as it does for the draw menu.
   const [isViewMenuOpen, setViewMenuOpen] = useState(false);
@@ -8710,7 +8668,6 @@ const PaintToolbar = memo(function PaintToolbar({
                   key={kind}
                   type="button"
                   onClick={() => {
-                    setLastDrawTool(kind);
                     onAnnotationToolChange(kind);
                     setDrawMenuOpen(false);
                   }}
@@ -11425,12 +11382,6 @@ async function computeAutoArrangement(
   const basePockets = baseProject.pockets ?? [];
   const lockedBoardIds = new Set(basePockets.map((pocket) => pocket.id));
 
-  const mintZoneId = () =>
-    `pocket-${
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`
-    }`;
   const addBoards: FactoryPocket[] = [];
   const setOwners: Array<{ id: string; pocketId?: string }> = [];
   // The arrange never wraps islands in fresh boards (islands emerge from the
@@ -13110,10 +13061,6 @@ function makeExportNodeFilter(hideAnnotations: boolean) {
       element?.classList.contains("react-flow__handle")
     );
   };
-}
-
-function nextAnimationFrame(): Promise<void> {
-  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
 }
 
 /** Resolves after the NEXT frame's paint, not merely before this one's. */

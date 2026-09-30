@@ -10,10 +10,8 @@ import {
   Download,
   ImageDown,
   LoaderCircle,
-  Redo2,
   Share2,
   Trash2,
-  Undo2,
   Upload,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -98,8 +96,6 @@ export function BoardActions({
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
-  const canUndo = useFactoryStore((state) => state.undoHistory.length > 0);
-  const canRedo = useFactoryStore((state) => state.redoHistory.length > 0);
   const importProjectAsDesign = useDesignStore((state) => state.importProjectAsDesign);
   const setProjectImporting = useFactoryStore((state) => state.setProjectImporting);
   const cleanBoard = useFactoryStore((state) => state.cleanBoard);

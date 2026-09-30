@@ -18,7 +18,6 @@ import { effectiveBufferMode, isDrainRole, storageRoleFor, type StorageRole } fr
 import {
   rateMultiplierForKind,
   rateSuffixForKind,
-  rateUnitMultiplier,
   rateUnitPrecisionScale,
 } from "@/lib/model/rate-unit";
 import { FLUID_ICON_SCALE, fluidArtPixels, ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -30,7 +29,6 @@ import { buildBufferKeyTooltip, buildDrainKeyTooltip, buildStorageTooltip, build
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useBoardView } from "./board-view";
 import { MotionNumberText } from "./board-motion";
-import { formatSlotRate } from "./flow-explainers";
 import { makeResourceHandleId } from "./resource-handles";
 import { buildStorageFlowScope } from "./flow-scope";
 import { useRenderedHandles } from "./use-rendered-handles";
@@ -153,13 +151,6 @@ const WELL_HANDLE: CSSProperties = {
   zIndex: 30,
 };
 
-/**
- * Item icon box on the card face; fluids invert FLUID_ICON_SCALE to match.
- * Square and fixed, NOT the well's full box: the well is flexible (a drain
- * spends a row on its mode) and stretching a sprite to a non-square hole
- * distorts it.
- */
-const CARD_ICON_PX = 32;
 /** The port chip's picture. */
 const CHIP_ICON_PX = 32;
 /**

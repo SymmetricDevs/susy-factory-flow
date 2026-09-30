@@ -3,7 +3,6 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { PoolWorksheet } from "../pool/PoolWorksheet";
 import { TargetLine } from "./StorageNode";
-import { StorageTargetRule } from "./StorageTargetRule";
 import { useFactoryStore } from "@/store/factory-store";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { DEFAULT_WORKSPACE_VIEW, writeWorkspaceView } from "@/lib/workspace-view";
@@ -67,7 +66,6 @@ function BoardSource() {
   const result = useFactoryStore((state) => state.lastResult.storages.input);
   return (
     <>
-      <StorageTargetRule storage={storage} input />
       <TargetLine storage={storage} result={result} input />
     </>
   );
@@ -88,7 +86,7 @@ it("edits a positive source amount on the board and carries its signed rate and 
     target: { value: "10" },
   });
   fireEvent.blur(screen.getByRole("textbox", { name: "Required amount" }));
-  fireEvent.change(screen.getByRole("combobox"), { target: { value: "at-most" } });
+  act(() => useFactoryStore.getState().setStorageTargetMode("input", "at-most"));
   expect(useFactoryStore.getState().project.storages![0]).toMatchObject({
     targetPerSecond: -10,
     targetMode: "at-most",
@@ -149,31 +147,10 @@ it("keeps separate source drawers independent", () => {
 it("makes both the source rate and rule read-only for viewers", () => {
   useFactoryStore.setState({ isReadOnly: true });
   render(<BoardSource />);
-  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Required amount" }));
   expect(screen.queryByRole("textbox")).toBeNull();
   useFactoryStore.getState().setStorageTargetMode("input", "ignore");
   expect(useFactoryStore.getState().project.storages![0].targetMode).toBeUndefined();
-});
-
-it("offers the same rules for both rate directions", () => {
-  const p = project();
-  render(
-    <>
-      <StorageTargetRule storage={p.storages![0]} input />
-      <StorageTargetRule storage={p.storages![1]} input={false} />
-    </>,
-  );
-  const menus = screen.getAllByRole("combobox") as HTMLSelectElement[];
-  expect([...menus[0].options].map((o) => o.value)).toEqual([
-    "at-least",
-    "exact",
-    "at-most",
-    "ignore",
-  ]);
-  expect([...menus[1].options].map((o) => o.value)).toEqual(
-    [...menus[0].options].map((o) => o.value),
-  );
 });
 
 it("keeps the chosen rule when the signed rate changes direction", () => {
@@ -265,26 +242,6 @@ it("scrolls Pool rate rules without scrolling the page", () => {
   expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBe(initial.storages![0].targetPerSecond);
   act(() => useFactoryStore.getState().undo());
   expect(shown()).toBe("Rule for Ore: At least. Click to choose.");
-});
-it("scrolls board rate rules without scrolling the page", () => {
-  render(<BoardSource />);
-  const select = screen.getByRole("combobox", { name: "Target rule for Ore" });
-  const initial = useFactoryStore.getState().project;
-  const wheel = () => fireEvent(select, new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true }));
-  expect(wheel()).toBe(false);
-  expect((select as HTMLSelectElement).value).toBe("at-most");
-  wheel();expect((select as HTMLSelectElement).value).toBe("ignore");
-  wheel();expect((select as HTMLSelectElement).value).toBe("ignore");
-  fireEvent.wheel(select, { deltaY: -100 });expect((select as HTMLSelectElement).value).toBe("at-most");
-  expect(useFactoryStore.getState().project.edges).toEqual(initial.edges);
-  expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBe(initial.storages![0].targetPerSecond);
-  act(() => useFactoryStore.getState().undo());
-  expect((select as HTMLSelectElement).value).toBe("ignore");
-});
-it.each(["isReadOnly", "checklistMode"] as const)("does not wheel-edit rate rules in %s", (lock) => {
-  useFactoryStore.setState({ [lock]: true });render(<BoardSource />);
-  fireEvent.wheel(screen.getByRole("combobox"), { deltaY: 100 });
-  expect(useFactoryStore.getState().project.storages![0].targetMode).toBeUndefined();
 });
 it("shows stopped target residue as zero without changing the solved value", () => {
   const p = project();p.poolMode = true;p.nodes = [];p.edges = [];p.storages![1].poolSide = "drain";

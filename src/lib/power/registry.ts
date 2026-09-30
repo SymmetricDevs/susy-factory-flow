@@ -37,7 +37,3 @@ const byId = new Map(POWER_SOURCES.map((source) => [source.id, source]));
 export function getPowerSource(sourceId: string): PowerSourceDefinition | undefined {
   return byId.get(sourceId);
 }
-
-export function powerSourcesInGroup(group: PowerGroupId): PowerSourceDefinition[] {
-  return POWER_SOURCES.filter((source) => source.group === group);
-}

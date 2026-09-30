@@ -168,20 +168,6 @@ export function getSelectedMachineHandler(
   return handlers.find((handler) => handler.id === node.machineHandlerId) ?? handlers[0];
 }
 
-export function getAdjacentMachineHandler(
-  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers">,
-  currentId: string | undefined,
-  direction: -1 | 1,
-): MachineHandler {
-  const handlers = getRecipeMachineHandlers(recipe);
-  const currentIndex = Math.max(
-    0,
-    handlers.findIndex((handler) => handler.id === currentId),
-  );
-  const nextIndex = (currentIndex + direction + handlers.length) % handlers.length;
-  return handlers[nextIndex] ?? handlers[0];
-}
-
 export function applyMachineHandlerToRecipe(
   recipe: Recipe,
   node: Pick<FactoryNode, "machineHandlerId">,
@@ -243,14 +229,6 @@ export function applyMachineHandlerToRecipe(
       notes: handler.notes ?? recipe.machineProfile?.notes,
     },
   };
-}
-
-export function isRecipeTierAdjustable(
-  recipe: Pick<Recipe, "machineType" | "source" | "nei">,
-): boolean {
-  const recipeMap = recipeMapName(recipe);
-
-  return !isTieredMachineRecipeMap(recipeMap) && getRecipeSpecialValue(recipe) === undefined;
 }
 
 export function getRecipeCoilTierControl(
@@ -350,20 +328,6 @@ export function getAdjacentMachineConfigTier(
     Math.max(Math.max(0, minimumIndex), currentIndex + direction),
   );
   return control.tiers[nextIndex]?.key ?? control.current.key;
-}
-
-function isTieredMachineRecipeMap(recipeMap: string): boolean {
-  const normalized = normalizeRecipeMapName(recipeMap);
-  return (
-    normalized === "blast furnace" ||
-    normalized === "electric blast furnace" ||
-    normalized === "pyrolyse oven" ||
-    normalized === "cracker" ||
-    normalized === "chemical plant" ||
-    normalized === "distillation tower" ||
-    normalized === "vacuum freezer" ||
-    normalized === "fusion reactor"
-  );
 }
 
 export function getRecipeSpecialValue(recipe: Pick<Recipe, "nei">): number | undefined {

@@ -39,16 +39,10 @@ let workerBroken = false;
 let inFlight: RouteSolveJob | undefined;
 let queued: RouteSolveJob | undefined;
 let sink: RouteSolveSink | undefined;
-let lastSolveDurationMs: number | undefined;
 
 /** Whether a solve can leave the main thread at all (no Worker in SSR/tests). */
 export function routeWorkerAvailable(): boolean {
   return !workerBroken && typeof Worker !== "undefined";
-}
-
-/** How long the last worker solve took, for anyone deciding what to follow. */
-export function lastRouteSolveDurationMs(): number | undefined {
-  return lastSolveDurationMs;
 }
 
 /** Where finished routes go. One board at a time, like every route cache. */
@@ -84,7 +78,6 @@ function getWorker(): Worker {
     worker.onmessage = (event: MessageEvent<RouteSolveResult | { error: string }>) => {
       inFlight = undefined;
       if ("routes" in event.data) {
-        lastSolveDurationMs = event.data.solveMs;
         sink?.(event.data);
       } else {
         console.error("route worker error:", event.data.error);

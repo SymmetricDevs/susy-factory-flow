@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useReducer, useRef, useSyncExternalStore } from "react";
 
 import {
   lerpSampledPolylines,

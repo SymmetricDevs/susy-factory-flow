@@ -1,6 +1,5 @@
 import { makeResourceKey, formatRate } from "@/lib/model";
 import type { FactoryProject, ResourceKey, ThroughputResult } from "@/lib/model/types";
-import { formatSatisfactionPercent } from "../flow/edge-labels";
 
 /**
  * One factor that could cap a machine's usage. The chain answers "what limits

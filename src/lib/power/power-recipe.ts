@@ -45,20 +45,6 @@ export function isPowerRecipe(
   return Boolean(recipe?.power);
 }
 
-export function isPowerNodeId(
-  project: {
-    nodes: Array<Pick<FactoryNode, "id" | "recipeId">>;
-    recipes: Array<Pick<Recipe, "id" | "power" | "category">>;
-  },
-  nodeId: string | null | undefined,
-): boolean {
-  if (!nodeId) {
-    return false;
-  }
-  const node = project.nodes.find((entry) => entry.id === nodeId);
-  return Boolean(node && isPowerRecipe(project.recipes.find((entry) => entry.id === node.recipeId)));
-}
-
 function flowToSlot(flow: PowerFlowLine): (RecipeInput & RecipeOutput) | undefined {
   const resource = resolvePowerResource(flow.name);
   if (!resource || !(flow.perSecond > 0)) {

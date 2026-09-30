@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { EntryIcon, PlanResourceStat } from "@/lib/community/types";
+import type { PlanResourceStat } from "@/lib/community/types";
 import type { MachineTier } from "@/lib/model/types";
 import { formatSlotRate } from "@/components/flow/flow-explainers";
 import { GT_TIER_COLORS } from "@/components/flow/tier-colors";
@@ -31,38 +31,6 @@ export function formatRelativeDate(iso: string): string {
     return `${Math.floor(seconds / 86400)}d ago`;
   }
   return new Date(iso).toLocaleDateString();
-}
-
-/** A row's tags as small chips; clicking one searches for it (`#tag`).
-    They opt out of the row's hover card — a chip is its own control. */
-export function TagChips({
-  tags,
-  onTag,
-  className,
-}: {
-  tags: string[];
-  onTag: (tag: string) => void;
-  className?: string;
-}) {
-  if (tags.length === 0) {
-    return null;
-  }
-  return (
-    <div className={["mt-0.5 flex flex-wrap gap-1", className ?? ""].join(" ")}>
-      {tags.map((tag) => (
-        <button
-          key={tag}
-          type="button"
-          data-tooltip-stop=""
-          onClick={() => onTag(tag)}
-          title={`Search #${tag}`}
-          className="rounded-[3px] border border-neutral-700 bg-[#17191d] px-1 py-px text-[9px] leading-3 text-neutral-400 hover:border-cyan-600 hover:text-cyan-300"
-        >
-          #{tag}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 export type VoltageTier = Exclude<MachineTier, "DEMO">;
@@ -174,78 +142,6 @@ export function renderIoStats(
     <div className="space-y-1.5">
       <IoSection label="Needs" stats={needs} limit={limit} />
       <IoSection label="Makes" stats={outputs} limit={limit} />
-    </div>
-  );
-}
-
-/**
- * A hovered row's full card: icon and full title (rows truncate names),
- * author and date, headline numbers with the tier in its GT colour, the
- * description, then Needs/Makes.
- */
-export function renderEntryHoverCard(entry: {
-  icon?: EntryIcon;
-  name: string;
-  authorName?: string;
-  createdAt?: string;
-  cardCount: number;
-  machineCount: number;
-  tier?: VoltageTier;
-  gameVersion?: string;
-  description?: string;
-  needs?: PlanResourceStat[];
-  outputs?: PlanResourceStat[];
-}): ReactNode {
-  return (
-    // Wide enough that neither resource column wraps or truncates.
-    <div className="w-[34rem]">
-      <div className="flex items-center gap-2">
-        {entry.icon ? (
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
-            <ResourceIcon
-              resource={{
-                id: entry.icon.resourceId,
-                kind: entry.icon.kind,
-                amount: 1,
-                displayName: entry.icon.displayName,
-                iconPath: entry.icon.iconPath,
-                iconAtlas: entry.icon.iconAtlas,
-                dominantColor: entry.icon.dominantColor,
-              }}
-              bare
-              tooltip={false}
-              showAmount={false}
-              className="!h-full !w-full"
-            />
-          </span>
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-bold leading-4 text-white">{entry.name}</div>
-          {entry.authorName || entry.createdAt ? (
-            <div className="mt-0.5 text-[10px] text-slate-400">
-              {entry.authorName ? `by ${entry.authorName}` : ""}
-              {entry.authorName && entry.createdAt ? ", " : ""}
-              {entry.createdAt ? formatRelativeDate(entry.createdAt) : ""}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      <div className="mt-1.5 flex items-center gap-2 text-[10px] tabular-nums text-slate-400">
-        <span>{entry.cardCount} cards</span>
-        <span>{entry.machineCount} machines</span>
-        {entry.tier ? <TierBadge tier={entry.tier} /> : null}
-        {entry.gameVersion ? (
-          <span className="ml-auto shrink-0 truncate">GTNH {entry.gameVersion}</span>
-        ) : null}
-      </div>
-      {entry.description ? (
-        <p className="mt-1.5 max-h-28 overflow-hidden whitespace-pre-wrap text-[11px] leading-4 text-slate-300">
-          {entry.description}
-        </p>
-      ) : null}
-      <div className="mt-2">
-        {renderIoStats(entry.needs ?? [], entry.outputs ?? [], { layout: "side-by-side" })}
-      </div>
     </div>
   );
 }

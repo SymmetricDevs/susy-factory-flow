@@ -20,7 +20,6 @@ import {
   getSessionUser,
   isAdminRequest,
   isCommunityConfigured,
-  makeActorKey,
   makeVoterKey,
   parseEntryIcon,
   isMissingColumnError,

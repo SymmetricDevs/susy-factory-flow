@@ -83,8 +83,6 @@ const MOTTLE = `url("${MOTTLE_URI}")`;
 
 const LIGHT_GRAIN: CanvasGrainLayer[] = [{ uri: GRAIN_LIGHT_URI, size: GRAIN_TILE }];
 
-const DARK_GRAIN: CanvasGrainLayer[] = [{ uri: GRAIN_DARK_URI, size: GRAIN_TILE }];
-
 export const CANVAS_THEMES: CanvasTheme[] = [
   {
     // The default: React Flow's own dark wrapper colour, a shade down from

@@ -912,7 +912,12 @@ export async function queryDatasetRecipes(versionId: string, request: DatasetRec
         )
       : matchingAll;
 
-  const recipeIndexes = rankRecipes(await applyFocusScores(recipeCatalog, matching, clauses))
+  const ranked = rankRecipes(await applyFocusScores(recipeCatalog, matching, clauses));
+  const recipeIndexes = (
+    request.allMaps
+      ? orderByRecipeMap(ranked, (recipeIndex) => indexes.recipeMaps[recipeIndex], sortedRecipeMaps)
+      : ranked
+  )
     .slice(request.offset, request.offset + request.limit)
     .map((match) => match.recipeIndex);
   const recipes = (await getRecipeSummariesByIndex(recipeCatalog, recipeIndexes)).map((recipe) =>
@@ -983,6 +988,29 @@ function rankRecipes(matches: RankedRecipe[]): RankedRecipe[] {
       right.iconScore - left.iconScore ||
       left.recipeIndex - right.recipeIndex,
   );
+}
+
+/**
+ * An all-maps answer pages through the maps in the order it lists them
+ * (`recipeMaps`), best match first inside each. The search shows one section
+ * per machine in that order, so pages must fill the sections top-down: ranked
+ * across every map, the first page scattered over all the sections and left
+ * whole machines empty until a later page (player report: Vacuum Furnace said
+ * 1 antimony dust recipe and showed none; Bricked Blast Furnace said 26
+ * antimony ingot recipes and showed 8, the Blast Furnace's one nowhere).
+ */
+export function orderByRecipeMap<T extends { recipeIndex: number }>(
+  ranked: T[],
+  recipeMapOf: (recipeIndex: number) => string | undefined,
+  recipeMaps: string[],
+): T[] {
+  const position = new Map(recipeMaps.map((recipeMap, index) => [recipeMap, index]));
+  const place = (match: T) => {
+    const recipeMap = recipeMapOf(match.recipeIndex);
+    return (recipeMap === undefined ? undefined : position.get(recipeMap)) ?? recipeMaps.length;
+  };
+  // Array sort is stable, so the ranking survives inside each map.
+  return [...ranked].sort((left, right) => place(left) - place(right));
 }
 
 /** {@link RankedRecipe.focus}, read against one recipe body. */
@@ -1249,7 +1277,16 @@ async function queryDatasetRecipesFromLookup(
     });
   }
 
-  const pageRecipeIndexes = rankRecipes(await applyFocusScores(catalog, matching, clauses))
+  const ranked = rankRecipes(await applyFocusScores(catalog, matching, clauses));
+  const pageRecipeIndexes = (
+    request.allMaps
+      ? orderByRecipeMap(
+          ranked,
+          (recipeIndex) => lookup.recipeMaps[lookup.recipeMapIdsByRecipeIndex[recipeIndex] ?? -1],
+          sortedRecipeMaps,
+        )
+      : ranked
+  )
     .slice(request.offset, request.offset + request.limit)
     .map((match) => match.recipeIndex);
   const recipes = (await getRecipeSummariesByIndex(catalog, pageRecipeIndexes)).map((recipe) =>

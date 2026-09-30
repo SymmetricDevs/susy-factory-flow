@@ -47,6 +47,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.9.4",
+    date: "2026-09-29",
+    headline: "Every machine in the recipe search shows its recipes",
+    notes: [
+      "A machine in the recipe search no longer shows an empty section when its count says it has recipes, and a count like Bricked Blast Furnace 26 now shows all 26 cards.",
+      "Recipes load from the top machine down, and a machine still waiting for its cards shows grey placeholders that fill in as you scroll.",
+    ],
+  },
+  {
     version: "3.9.3",
     date: "2026-09-28",
     headline: "Importing a plan opens a new tab",

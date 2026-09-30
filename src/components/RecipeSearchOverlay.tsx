@@ -13,13 +13,20 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   ReactNode,
-  UIEvent,
 } from "react";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
 import type { RecipeQueryRole, RecipeQuerySideOp } from "@/lib/datasets/recipe-query";
@@ -850,17 +857,32 @@ export function RecipeSearchOverlay({
     return sections;
   }, [recipeMapChips, recipes]);
 
-  // Loading more when the bottom of the list scrolls near, so the grid reads
-  // as one endless list rather than ending on a button.
-  const handleResultsScroll = (event: UIEvent<HTMLDivElement>) => {
-    const scroller = event.currentTarget;
-    if (!hasMore || isLoading) {
+  // Loading more as the list scrolls, so the grid reads as one endless list
+  // rather than ending on a button. Pages arrive in section order (the server
+  // walks the maps the way the chips list them), so the first skeleton of an
+  // open section short of its count is exactly where the next page lands. It
+  // asks for that page when it comes near the viewport - or is already above
+  // it, when the reader went straight to a machine further down - and asks
+  // again after every page until it is out of reach.
+  const resultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreIfAwaitedNear = () => {
+    const scroller = resultsScrollRef.current;
+    if (!scroller || !hasMore || isLoading) {
       return;
     }
-    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 480) {
+    const awaited = scroller.querySelector("[data-awaiting-page] .recipe-search-skeleton");
+    const awaitedNear =
+      awaited !== null &&
+      awaited.getBoundingClientRect().top - scroller.getBoundingClientRect().bottom < 480;
+    if (awaitedNear || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 480) {
       onLoadMore();
     }
   };
+  const loadMoreIfAwaitedNearAfterPage = useEffectEvent(loadMoreIfAwaitedNear);
+  useEffect(() => {
+    loadMoreIfAwaitedNearAfterPage();
+  }, [recipes, hasMore, isLoading]);
+  const handleResultsScroll = () => loadMoreIfAwaitedNear();
 
   // The same controls wear different clothes on the two layouts, so they are
   // built once and placed twice.
@@ -1115,6 +1137,7 @@ export function RecipeSearchOverlay({
               "recipe-search-scroll min-h-0 flex-1 overflow-y-auto",
               sheet ? "px-1.5" : "px-3",
             ].join(" ")}
+            ref={resultsScrollRef}
             onScroll={handleResultsScroll}
           >
             {queryError ? (
@@ -1211,85 +1234,80 @@ export function RecipeSearchOverlay({
                         never reorders or blanks the titles: an open section
                         whose cards are still travelling shows skeletons in
                         their place. */}
-                    {machineSections.map((section) => (
-                      <section key={section.id} className="mb-3">
-                        <MachineSectionHeader
-                          label={section.label}
-                          count={section.count}
-                          icon={section.icon}
-                          open={section.open}
-                          onToggle={() => hideRecipeMap(section.id)}
-                          onHover={() => onRecipeMapHover(section.id)}
-                        />
-                        {section.open && section.recipes.length > 0 ? (
-                          <div
-                            className="grid items-start gap-2"
-                            style={{
-                              gridTemplateColumns: sheet
-                                ? "minmax(0, 1fr)"
-                                : "repeat(auto-fill, minmax(480px, 1fr))",
-                            }}
-                          >
-                            {section.recipes.map((recipe) => (
-                              <CompactRecipeCard
-                                key={recipe.id}
-                                recipe={recipe}
-                                contextResource={contextResource}
-                                selected={selectedRecipeId === recipe.id}
-                                onSelectRecipe={onSelectRecipe}
-                                onAdd={onAdd}
-                                onPrefetch={onPrefetch}
-                                onBrowseResource={onBrowseResource}
-                                onChipMenu={openChipMenu}
-                                onChipDragStart={beginChipDrag}
-                                rateView={rateView}
-                                onCardMenu={(event, machineLabel, add) =>
-                                  openCardMenu(event, {
-                                    label: recipe.name,
-                                    machineLabel,
-                                    add,
-                                    hide: () => hideRecipeMap(recipe.recipeMap),
-                                    only: () => onlyRecipeMap(recipe.recipeMap),
-                                  })
-                                }
-                              />
-                            ))}
-                          </div>
-                        ) : section.open && isLoading ? (
-                          <div
-                            className="grid items-start gap-2"
-                            style={{
-                              gridTemplateColumns: sheet
-                                ? "minmax(0, 1fr)"
-                                : "repeat(auto-fill, minmax(480px, 1fr))",
-                            }}
-                            role="status"
-                            aria-label={`Loading ${section.label} recipes`}
-                          >
-                            {Array.from(
-                              { length: Math.min(sheet ? 2 : 3, Math.max(1, section.count ?? 3)) },
-                              (_, index) => <SkeletonResultCard key={index} delay={index * 110} />,
-                            )}
-                          </div>
-                        ) : null}
-                      </section>
-                    ))}
-                    {isLoading && recipes.length > 0 ? (
-                      <div
-                        className="mt-2 grid items-start gap-2"
-                        style={{
-                          gridTemplateColumns: sheet
-                            ? "minmax(0, 1fr)"
-                            : "repeat(auto-fill, minmax(480px, 1fr))",
-                        }}
-                        role="status"
-                        aria-label="Loading more recipes"
-                      >
-                        {Array.from({ length: sheet ? 1 : 3 }, (_, index) => (
-                          <SkeletonResultCard key={index} delay={index * 110} />
-                        ))}
-                      </div>
-                    ) : null}
+                    {machineSections.map((section) => {
+                      // Cards this open section counts but no page has
+                      // brought yet: skeletons hold their place, and the
+                      // first of them is where the next page is asked for.
+                      const awaited =
+                        section.open && (hasMore || isLoading) && section.count !== undefined
+                          ? Math.max(0, section.count - section.recipes.length)
+                          : 0;
+                      return (
+                        <section
+                          key={section.id}
+                          className="mb-3"
+                          data-awaiting-page={awaited > 0 ? "" : undefined}
+                        >
+                          <MachineSectionHeader
+                            label={section.label}
+                            count={section.count}
+                            icon={section.icon}
+                            open={section.open}
+                            onToggle={() => hideRecipeMap(section.id)}
+                            onHover={() => onRecipeMapHover(section.id)}
+                          />
+                          {section.open && (section.recipes.length > 0 || awaited > 0) ? (
+                            <div
+                              className="grid items-start gap-2"
+                              style={{
+                                gridTemplateColumns: sheet
+                                  ? "minmax(0, 1fr)"
+                                  : "repeat(auto-fill, minmax(480px, 1fr))",
+                              }}
+                            >
+                              {section.recipes.map((recipe) => (
+                                <CompactRecipeCard
+                                  key={recipe.id}
+                                  recipe={recipe}
+                                  contextResource={contextResource}
+                                  selected={selectedRecipeId === recipe.id}
+                                  onSelectRecipe={onSelectRecipe}
+                                  onAdd={onAdd}
+                                  onPrefetch={onPrefetch}
+                                  onBrowseResource={onBrowseResource}
+                                  onChipMenu={openChipMenu}
+                                  onChipDragStart={beginChipDrag}
+                                  rateView={rateView}
+                                  onCardMenu={(event, machineLabel, add) =>
+                                    openCardMenu(event, {
+                                      label: recipe.name,
+                                      machineLabel,
+                                      add,
+                                      hide: () => hideRecipeMap(recipe.recipeMap),
+                                      only: () => onlyRecipeMap(recipe.recipeMap),
+                                    })
+                                  }
+                                />
+                              ))}
+                              {awaited > 0 ? (
+                                <div
+                                  className="contents"
+                                  role="status"
+                                  aria-label={`Loading ${section.label} recipes`}
+                                >
+                                  {Array.from(
+                                    { length: Math.min(sheet ? 2 : 3, awaited) },
+                                    (_, index) => (
+                                      <SkeletonResultCard key={index} delay={index * 110} />
+                                    ),
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </section>
+                      );
+                    })}
                   </>
                 )}
               </>

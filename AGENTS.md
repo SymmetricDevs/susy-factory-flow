@@ -240,6 +240,18 @@ Working notes for future agents on GTNH Factory Flow.
   from MTEElectricAutoWorkbench: flat 2048 EU per craft), with the instant
   hand-craft as the second handler. Purging the crafting maps from the
   dataset itself is a pipeline decision that has NOT been made.
+- PAGES WALK THE SECTIONS (player report, 2026-09-29: Vacuum Furnace said 1
+  antimony dust recipe and showed none; Bricked Blast Furnace said 26 antimony
+  ingot recipes and showed 8). An all-maps answer pages through its
+  `recipeMaps` list - the chip and section order - best match first inside
+  each map (`orderByRecipeMap` in dataset-query.ts). Ranked across maps, the
+  first page scattered over every section and left whole machines empty. An
+  open section short of its count shows skeletons; the first of them
+  (`[data-awaiting-page]`) asks for the next page when it nears the viewport
+  or is already above it, and asks again after every page lands.
+  `onLoadMore` advances only from a page that has LANDED
+  (`landedRecipePageKeyRef`) and always to that page + 1, so a burst of scroll
+  events cannot skip a page.
 - Result cards merge duplicate slot entries (nine planks is one line, x9) and
   oredict slots cycle through concrete faces; both are display-only.
   Chips that satisfy a stencil condition ring cyan; chips browse on

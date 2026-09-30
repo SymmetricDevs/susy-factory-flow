@@ -97,6 +97,12 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   const resolveRecipeAdd = useFactoryStore((state) => state.resolveRecipeAdd);
   const failRecipeAdd = useFactoryStore((state) => state.failRecipeAdd);
   const [recipePage, setRecipePage] = useState(0);
+  // The query key of the page whose answer is on screen. More is asked for
+  // only on top of a page that has landed, and always as that page + 1, so
+  // however many scroll events fire before the next page arrives they all
+  // ask for the same one. `page => page + 1` skipped a page whenever two
+  // beat the loading flag, and a skipped page is a hole in the sections.
+  const landedRecipePageKeyRef = useRef<string | undefined>(undefined);
   const [recipeBookSearch, setRecipeBookSearch] = useState("");
   const [filteredRecipes, setFilteredRecipes] = useState<RecipeSummary[]>([]);
   const [recipeTotal, setRecipeTotal] = useState(0);
@@ -688,6 +694,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
     const cached = getCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey);
     if (cached) {
       return scheduleAfterPaint(() => {
+        landedRecipePageKeyRef.current = cacheKey;
         setFilteredRecipes((current) =>
           recipePage === 0 ? cached.recipes : appendUniqueRecipes(current, cached.recipes),
         );
@@ -748,6 +755,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
           }
           setCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey, result);
           trimRecipeQueryCache(recipeQueryCacheRef.current);
+          landedRecipePageKeyRef.current = cacheKey;
           setFilteredRecipes((current) =>
             recipePage === 0 ? result.recipes : appendUniqueRecipes(current, result.recipes),
           );
@@ -879,8 +887,13 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
             )
           }
           onLoadMore={() => {
-            if (!recipeQueryLoading && recipeHasMore) {
-              setRecipePage((page) => page + 1);
+            if (
+              !recipeQueryLoading &&
+              recipeHasMore &&
+              landedRecipePageKeyRef.current ===
+                getRecipeQueryKey(effectiveMapSelection, recipePage)
+            ) {
+              setRecipePage(recipePage + 1);
             }
           }}
           onClose={clearResourceBrowser}

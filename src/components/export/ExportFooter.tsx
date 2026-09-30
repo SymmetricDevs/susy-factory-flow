@@ -6,21 +6,16 @@ import { TierBadge } from "@/components/shelf-cards";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
 
 /**
- * The trim under an exported board image: the plan's face (icon, name,
- * headline numbers) and its boundary in resources - what goes in, what comes
- * out - so a screenshot dropped in a chat answers the questions a plan link
- * would. Rendered as ordinary DOM at a design width, photographed with the
- * same pipeline as the board, then scaled to the board's width; on a huge
- * zoomed-out factory the bar therefore grows with the image instead of
- * shrinking into an unreadable strip.
+ * The trim under an exported board image: the plan's icon, name, headline
+ * numbers and resource boundary (what goes in and out). Rendered as DOM at a
+ * design width, captured with the board's pipeline, then scaled to the
+ * board's width so it grows with a huge image instead of becoming unreadable.
  */
 
 /**
- * Below this the bar's columns collide; above it, rows spread too thin. The
- * ceiling is deliberately low: the bar is scaled UP to the board's width, so
- * a small design width is what makes the lettering a large fraction of the
- * final image - the difference between readable and a hairline once Discord
- * fits a 3000px export into a chat column.
+ * Below this the bar's columns collide. Kept low on purpose: the bar is
+ * scaled UP to the board's width, so a small design width keeps the lettering
+ * readable when a chat client shrinks a wide export.
  */
 export const EXPORT_FOOTER_MIN_WIDTH = 640;
 export const EXPORT_FOOTER_MAX_WIDTH = 960;
@@ -37,10 +32,8 @@ export function resolveExportFooterWidth(boardWidth: number): number {
 export type ExportTone = "dark" | "light";
 
 /**
- * Which face the bar wears, decided by the paper behind the board: a light
- * theme (Parchment, Paper) gets ink on cream, everything else - including a
- * transparent export, which lands who-knows-where but usually on Discord's
- * dark chat - gets the dark plate.
+ * Which face the bar wears: a light theme (Parchment, Paper) gets ink on
+ * cream; everything else, including a transparent export, gets the dark plate.
  */
 export function resolveExportTone(background?: string): ExportTone {
   const hex = background?.trim().match(/^#([0-9a-f]{6})$/i)?.[1];
@@ -216,9 +209,8 @@ export function ExportFooter({
 }
 
 /**
- * One side of the boundary as its own tinted panel: the wash of the
- * section's colour behind its rows is what lets a reader split needs from
- * makes at arm's length, before any label is legible.
+ * One side of the boundary as its own tinted panel, so needs and makes read
+ * apart before any label is legible.
  */
 function IoColumn({
   label,

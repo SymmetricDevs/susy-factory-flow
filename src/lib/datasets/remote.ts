@@ -48,9 +48,8 @@ export async function fetchRecipeDatasetVersion(
 }
 
 /**
- * 2.8.4 is temporarily withdrawn from the picker (2026-08-23): everyone plays
- * on 2.9 betas and the manifest's order cannot be trusted to keep 2.9 first.
- * Delete the entry to offer it again.
+ * Dataset versions never offered in the picker, even if a manifest still
+ * lists them. 2.8.4 is no longer supported; only 2.9 is.
  */
 export const HIDDEN_DATASET_VERSION_IDS = new Set(["local-2.8.4"]);
 

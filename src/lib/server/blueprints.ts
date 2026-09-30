@@ -84,7 +84,7 @@ const KNOWN_TIERS = new Set([
 ]);
 
 export function parseHighestTier(value: unknown): string | null {
-  // "OpV" is the old misname of the 536M EU/t tier; it stores as UXV now.
+  // "OpV" is a legacy spelling of the 536M EU/t tier, stored as UXV.
   const tier = value === "OpV" ? "UXV" : value;
   return typeof tier === "string" && KNOWN_TIERS.has(tier) ? tier : null;
 }

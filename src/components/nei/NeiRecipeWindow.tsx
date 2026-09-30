@@ -91,11 +91,9 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
     );
   }
 
-  // On-node (compact) the strip states recipe identity only: time per craft
-  // and energy per craft. Live per-second draw lives in the node footer, so
-  // no EU number - and especially no second meaning of the word "Usage" -
-  // appears twice on the same card. The recipe browser keeps the full
-  // NEI-style three lines.
+  // On-node (compact) the strip shows only time and energy per craft; live
+  // draw is in the node footer, so no EU figure appears twice on a card. The
+  // recipe browser keeps the full NEI-style three lines.
   const stats = compact ? (
     <div className="relative mt-1 text-[var(--mc-ink)]">
       <div className="min-w-0 pr-11 text-[10px] leading-tight">
@@ -120,10 +118,8 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
   );
 
   if (compact) {
-    // On the flow board the node shell already provides the outer frame and
-    // the canvas draws its own panel rim, so the window adds no chrome of its
-    // own - the old bevel-in-frame-in-shell nesting read as stacked picture
-    // frames.
+    // On the flow board the node shell provides the outer frame and the
+    // canvas draws its own rim, so the window adds no chrome of its own.
     return (
       <div
         className={["relative inline-block font-mono text-[10px] text-[var(--mc-ink)]", className]
@@ -135,10 +131,9 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
           layout={layout}
           scale={scale}
           slotPixelSize={compactSlotPixelSize}
-          // Tied to the slot rather than fixed, because the slot size is what
-          // actually sets how large a compact recipe draws: the canvas works
-          // its scale out from it and ignores `scale` entirely. A fixed icon
-          // left every card the same size however much room it was given.
+          // Tied to the slot size, which is what sets how large a compact
+          // recipe draws: the canvas derives its scale from it and ignores
+          // `scale` entirely.
           iconPixelSize={Math.round(
             compactSlotPixelSize * (QUICK_SLOT_ICON_PIXEL_SIZE / QUICK_SLOT_PIXEL_SIZE),
           )}

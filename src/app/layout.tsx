@@ -84,17 +84,15 @@ const openDyslexic = localFont({
   ],
   variable: "--font-open-dyslexic",
   display: "swap",
-  // OpenDyslexic's x-height runs far past every other face here, so at the
-  // same px size it rendered a size up and overflowed fixed-height chrome.
-  // size-adjust scales the glyphs, not the layout, back into the app's scale.
+  // OpenDyslexic's x-height is far larger than the other faces' and overflows
+  // fixed-height chrome; size-adjust scales the glyphs back down.
   declarations: [{ prop: "size-adjust", value: "82%" }],
 });
 
 /*
  * Restamps the saved font choice before anything paints, so a reload never
- * flashes the default font at someone who switched away from it. Unknown or absent
- * values simply match no CSS rule and land on the default; setAppFont owns
- * the real validation.
+ * flashes the default font. Unknown values match no CSS rule and land on the
+ * default; setAppFont owns the real validation.
  */
 const appFontBootScript = `try{var f=localStorage.getItem(${JSON.stringify(
   APP_FONT_STORAGE_KEY,
@@ -165,11 +163,9 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   other: {
-    // The app is already dark. Without this, the Dark Reader extension
-    // darkens it a second time and rewrites inline styles before React
-    // hydrates, which both wrecks the palette and throws hydration mismatches.
-    // Next drops metadata entries with an empty content value, so this carries
-    // one even though Dark Reader only checks that the tag exists.
+    // The app is already dark. Without this, Dark Reader rewrites inline
+    // styles before React hydrates (hydration mismatches). Next drops empty
+    // metadata values, so it carries one; Dark Reader only checks the tag.
     "darkreader-lock": "true",
   },
 };

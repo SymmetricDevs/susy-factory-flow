@@ -81,13 +81,10 @@ export function StackIconButton(props: StackViewProps) {
 }
 
 /**
- * A slot whose oredict input rotates through the items it accepts, the way NEI
- * does in game.
- *
- * Hovering holds the current face so it can be read without moving; scrolling
- * with shift steps through the faces and locks the slot to the one chosen.
- * Only slots that actually have alternatives mount this component, so the clock
- * subscription costs nothing on the ordinary case.
+ * A slot whose oredict input rotates through the items it accepts, as NEI
+ * does in game. Hovering holds the current face; the wheel steps through the
+ * faces and locks the slot on the one chosen. Only slots with alternatives
+ * mount this, so ordinary slots pay no clock subscription.
  */
 function CyclingStackIcon({
   slot,
@@ -136,14 +133,10 @@ function CyclingStackIcon({
       return;
     }
 
-    // Attached natively rather than through `onWheel` because React registers
-    // wheel handlers passively, where `preventDefault` is ignored, and without
-    // it the slot would step AND the list would scroll out from under it.
-    //
-    // Plain scroll, not shift+scroll. Pointing at a slot that is visibly
-    // rotating and turning the wheel has one obvious meaning, and only slots
-    // with something to rotate through mount this at all, so the rest of the
-    // list scrolls normally.
+    // Attached natively, not via `onWheel`: React registers wheel handlers
+    // passively, where `preventDefault` is ignored, and the list would scroll
+    // as the slot steps. Plain scroll, not shift+scroll; only rotating slots
+    // mount this, so the rest of the list scrolls normally.
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
       event.stopPropagation();

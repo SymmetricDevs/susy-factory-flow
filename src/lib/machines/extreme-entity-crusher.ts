@@ -29,7 +29,7 @@ export const EEC_INFERNAL = "eecInfernal";
 export const EEC_MODE = "eecMode";
 export const EEC_VOID = "eecVoid";
 
-/** The machine's own constants, used when an old dataset does not carry them. */
+/** The machine's own constants, used when the dataset does not carry them. */
 const SPAWN_INTERVAL = 55;
 const SPIKES_DAMAGE = 9;
 const MAX_LOOTING = 4;

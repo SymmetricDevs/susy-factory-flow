@@ -32,9 +32,8 @@ export function basePanel(width: number, height: number): NeiDrawCommand {
 
 /**
  * Procedural recipe-panel background: flat face plus a 1-unit soft rim
- * (highlight top-left, shade bottom-right). Replaces the old 64x64
- * nei_single_recipe.png, whose rounded corners smeared when the flat texture
- * was stretched across the whole canvas.
+ * (highlight top-left, shade bottom-right). Procedural because a stretched
+ * panel texture smears its rounded corners.
  */
 export function panelBackground(
   width: number,

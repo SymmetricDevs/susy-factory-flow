@@ -87,10 +87,8 @@ const DARK_GRAIN: CanvasGrainLayer[] = [{ uri: GRAIN_DARK_URI, size: GRAIN_TILE 
 
 export const CANVAS_THEMES: CanvasTheme[] = [
   {
-    // The colour the site actually shipped with: before themes existed, the
-    // board you saw was React Flow's own dark wrapper at #141414. A shade
-    // down from Slate, well short of Void — and the default, so the planner
-    // still opens looking like itself.
+    // The default: React Flow's own dark wrapper colour, a shade down from
+    // Slate and well short of Void.
     id: "charcoal",
     name: "Charcoal",
     base: "#141414",
@@ -108,7 +106,7 @@ export const CANVAS_THEMES: CanvasTheme[] = [
   },
   {
     // The step between Slate and Graphite: cooler than one, dimmer than the
-    // other. Asked for by name, more or less.
+    // other.
     id: "gunmetal",
     name: "Gunmetal",
     base: "#23262c",
@@ -125,8 +123,8 @@ export const CANVAS_THEMES: CanvasTheme[] = [
     texture: NOISE_LIGHT,
   },
   {
-    // Near-black and FLAT: the centre glow it used to carry was screen-space,
-    // so it sat still while the board panned and read as a smudged monitor.
+    // Near-black and FLAT: a screen-space centre glow sits still while the
+    // board pans and reads as a smudged monitor.
     id: "void",
     name: "Void",
     base: "#0b0c0f",
@@ -140,14 +138,14 @@ export const CANVAS_THEMES: CanvasTheme[] = [
     base: "#152540",
     patternColor: "#48699c",
     grain: LIGHT_GRAIN,
-    // Edge darkening only; the old corner light was a landmark and it stayed
-    // put during pans.
+    // Edge darkening only: a corner light is a landmark and stays put during
+    // pans.
     vignette: "radial-gradient(140% 120% at 50% 50%, transparent 52%, rgba(0,8,26,0.45) 100%)",
     texture: NOISE_LIGHT,
   },
   {
-    // The chalk-wipe streaks are gone: diagonal haze in screen space slid
-    // against the board on every pan, which is the shimmer that got reported.
+    // No streaks: diagonal haze in screen space slides against the board on
+    // every pan.
     id: "chalkboard",
     name: "Chalkboard",
     base: "#243329",

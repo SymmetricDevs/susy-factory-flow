@@ -5,17 +5,15 @@ import { BOARD_WINDOW_DEFAULT_SIZE, BOARD_WINDOW_TITLE_HEIGHT } from "@/lib/boar
  * The board-window view of the pocket tree.
  *
  * Every `FactoryPocket` IS a board: open (`expanded`) it is a window frame
- * whose members render inside it; collapsed it is the same window shaded down
- * to its title bar, members hidden behind the bar. There is no other pocket
- * representation and no separate "dive-in" level — the canvas always shows
- * the root, plus the contents of every board whose whole chain of ancestors
- * is open. Everything here is pure derivation from the project; the only
- * stored state is the `expanded` flag and the frame size.
+ * whose members render inside it; minimized it is a summary card with its
+ * members hidden. The canvas shows the root plus the contents of every board
+ * whose whole ancestor chain is open. Everything here is pure derivation; the
+ * only stored state is the `expanded` flag and the frame size.
  *
  * Coordinate spaces: an item's stored position is relative to its OWNER's
- * frame origin (the window's top-left corner), and a root item is in plain
- * flow space. That is exactly React Flow's parent/child contract, which is
- * what lets a dragged frame carry its members.
+ * frame origin (the window's top-left corner); a root item is in plain flow
+ * space. That is React Flow's parent/child contract, which lets a dragged
+ * frame carry its members.
  */
 
 /** The slice of a project the view derives from. */
@@ -34,11 +32,11 @@ export interface BoardLevelView {
   isLevelShown: (levelId: string | undefined) => boolean;
   /**
    * What stands for an item in this view: the item itself when its owner
-   * chain is open, otherwise the outermost collapsed board bar hiding it.
+   * chain is open, otherwise the outermost minimized board hiding it.
    * Undefined only for dangling owners (repaired on load).
    */
   representativeOf: (itemId: string) => string | undefined;
-  /** Boards drawn as collapsed title bars in this view. */
+  /** Boards drawn minimized (summary cards) in this view. */
   collapsedBoards: FactoryPocket[];
   /** Boards standing open as window frames, parents always before children. */
   openBoards: FactoryPocket[];
@@ -179,11 +177,9 @@ export function boardBodyRect(rect: OpenBoardRect): {
 
 /**
  * Which open board a dropped CARD lands in: the deepest frame whose floor
- * holds the whole card. Wholly, not mostly — a card lying across a wall
- * belongs to neither side, and the placement magnet has already refused to
- * leave one there. Excluded boards are skipped (a dragged board and its
- * descendants: nothing may become its own ancestor). Undefined = the card
- * came to rest on the canvas, out of every room.
+ * holds the whole card (the placement magnet never leaves a card straddling
+ * a wall). Excluded boards are skipped (a dragged board and its descendants:
+ * nothing may become its own ancestor). Undefined = the root canvas.
  */
 export function pickBoardOwnerFor(
   rects: OpenBoardRect[],

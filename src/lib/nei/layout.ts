@@ -565,11 +565,9 @@ function getExplicitSlotFrames(
       };
     });
 
-  // Exported slot positions win, but an ingredient that carries none must still
-  // be drawn. Ore dictionary inputs have no `neiSlot` at all, so matching on
-  // position alone dropped every one of them and a shaped crafting recipe
-  // rendered as an empty grid. Whatever the first pass could not place falls
-  // into the leftover frames of its own pool, in order.
+  // Exported slot positions win, but an ingredient that carries none (ore
+  // dictionary inputs have no `neiSlot`) must still be drawn: whatever the
+  // first pass could not place falls into its pool's leftover frames, in order.
   for (const frame of frames) {
     if (frame.resource) {
       continue;

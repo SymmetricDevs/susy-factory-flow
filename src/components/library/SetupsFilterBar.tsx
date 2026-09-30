@@ -16,15 +16,11 @@ import { useFactoryStore } from "@/store/factory-store";
 import { Face } from "./LibraryTile";
 
 /**
- * THE ONE FILTER BAR over every grid in the library: your designs and the
- * public setups share it exactly, so a filter learned on one works on the
- * other. Two rows: what you are looking for (search with #tag completion,
- * the EU/t ceiling, tier, sort, and My posts on the public page), then
- * what it must be (ITEM FILTER: what it makes and takes, as chips).
- *
- * The state lives in `useSetupFilters` so a page can read the same fields
- * the bar edits and apply them however it lists things: the public grid
- * sends them to the server, the design grid filters in memory.
+ * The one filter bar over every library grid (your designs and public
+ * setups). Two rows: search with #tag completion, EU/t ceiling, tier, sort
+ * (and My posts on the public page); then the ITEM FILTER chips for what it
+ * makes and takes. State lives in `useSetupFilters`: the public grid sends it
+ * to the server, the design grid filters in memory.
  */
 
 export interface SetupFilters {

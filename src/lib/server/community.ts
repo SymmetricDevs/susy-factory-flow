@@ -13,19 +13,18 @@ let cachedClient: SupabaseClient | undefined;
 
 /**
  * How long one database request may take before it is abandoned. Without a
- * limit, a stalled Supabase instance (2026-09-24: Cloudflare 522s for hours)
- * held every request open for 90-120 s, so the public setups, the library
- * and the item list's popularity sort all hung instead of failing, and the
- * server piled up hundreds of open sockets. A 3 MB plan moves in well under
- * a second from the droplet, so this only ever cuts off a stall.
+ * limit, a stalled Supabase instance holds requests open for minutes, so
+ * pages hang instead of failing and the server piles up open sockets. A
+ * healthy request finishes in well under a second, so this only cuts off a
+ * stall.
  */
 export const COMMUNITY_DB_TIMEOUT_MS = 20_000;
 
 /**
  * The client's fetch (database, storage), abandoned after `timeoutMs`,
  * body included. It aborts with a plain AbortError on purpose: postgrest-js
- * RETRIES a GET that fails any other way, three more times with backoff, so
- * `AbortSignal.timeout`'s TimeoutError turned a 20 s limit into ~87 s.
+ * RETRIES a GET that fails any other way three more times with backoff, so
+ * `AbortSignal.timeout`'s TimeoutError would multiply the limit about fourfold.
  */
 export function fetchWithDbTimeout(
   input: Parameters<typeof fetch>[0],
@@ -63,7 +62,7 @@ export function getCommunityDb(): SupabaseClient {
 
 /**
  * Anonymous identity: a salted hash of client IP + device id. Good enough to
- * dedupe votes and rate-limit without storing raw IPs.
+ * rate-limit without storing raw IPs (votes use `makeVoterKey`).
  */
 export function makeActorKey(request: Request, deviceId?: string): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -76,15 +75,12 @@ export function makeActorKey(request: Request, deviceId?: string): string {
 }
 
 /**
- * Who a VOTE belongs to: the signed-in user, else the browser's device id.
+ * Who a VOTE belongs to: the signed-in user, else the browser's device id
+ * (a random UUID kept in localStorage).
  *
- * Not the actor key above. That one folds the client IP in, which is right
- * for a rate limit and wrong for a vote: IPv6 privacy addresses and carrier
- * NAT hand the same browser a new address every few minutes, and every new
- * address was a new voter, so a player could upvote their own setup again
- * after a short wait. The device id is a random UUID the browser keeps in
- * localStorage; a signed-in account beats it so one person's vote follows
- * them between browsers.
+ * Not the actor key above: it folds the client IP in, and IPv6 privacy
+ * addresses and carrier NAT change a browser's IP every few minutes, which
+ * would let one person vote again.
  */
 export async function makeVoterKey(request: Request, deviceId: string): Promise<string> {
   const user = await getSessionUser(request);
@@ -209,24 +205,24 @@ export async function checkRateLimit(
 /**
  * The one item face an author picks for a shared entry. Client-supplied but
  * harmless: it only ever renders as an icon. Anything that doesn't parse
- * becomes "no icon", never a rejection. The schema lives with the model now
- * (a plan carries its own face); this stays the server's lenient reading.
+ * becomes "no icon", never a rejection. The schema lives with the model; this
+ * is the server's lenient reading.
  */
 export function parseEntryIcon(value: unknown): EntryIcon | null {
   const parsed = entryIconSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
-/** Columns returned for plan listings (everything except the plan JSON). */
 /** The columns before the activity trio: what a database not yet migrated can answer. */
 export const PLAN_SUMMARY_COLUMNS_LEGACY =
   "id,name,description,game_version,dataset_version,tags,is_public,icon,needs,outputs," +
   "total_eu_t,machine_count,node_count,storage_count,edge_count,highest_tier," +
   "highest_tier_index,upvotes,downvotes,score,downloads,views,created_at,updated_at," +
   "user_id,author_name";
-/** The activity columns added 2026-09-04; a sort on one needs them. */
+/** The activity columns, which a later migration added; a sort on one needs them. */
 export const PLAN_ACTIVITY_COLUMNS = new Set(["comment_count", "last_comment_at", "last_activity_at"]);
 
+/** Columns returned for plan listings (everything except the plan JSON). */
 export const PLAN_SUMMARY_COLUMNS =
   "id,name,description,game_version,dataset_version,tags,is_public,icon,needs,outputs," +
   "total_eu_t,machine_count,node_count,storage_count,edge_count,highest_tier," +
@@ -340,11 +336,9 @@ export async function recountPlanComments(planId: string): Promise<void> {
 }
 
 /**
- * Same convergence contract as the blueprint tables: PGRST204/42703 mean the
- * community_plans table predates a column this build reads or writes, and
- * re-running supabase/schema.sql (idempotent ALTERs) fixes it.
+ * PGRST204 / 42703: the table predates a column this build reads or writes.
+ * Re-running supabase/schema.sql (idempotent ALTERs) fixes it.
  */
-/** PGRST204 / 42703: the table predates a column this build reads or writes. */
 export function isMissingColumnError(error: { code?: string } | null | undefined): boolean {
   return error?.code === "PGRST204" || error?.code === "42703";
 }

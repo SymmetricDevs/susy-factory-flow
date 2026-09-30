@@ -221,8 +221,7 @@ export const recipeSchema = z.object({
   inputs: z.array(recipeInputSchema),
   // Zero outputs is legal: the crop-farm placeholder recipe
   // (factoryflow:crop-farm:empty) has none until a crop is picked, and it
-  // stays in project.recipes, which made plans containing a crop farm fail
-  // validation on community upload and JSON import.
+  // stays in project.recipes.
   outputs: z.array(recipeOutputSchema),
   programmedCircuit: z.string().optional(),
   specialValue: z.number().optional(),
@@ -392,11 +391,9 @@ export const factoryStorageSchema = z.object({
   iconAtlas: resourceIconAtlasRefSchema.optional(),
   dominantColor: dominantColorSchema,
   capacity: z.number().positive().optional(),
-  // Absent on every plan written before drains had a mode, and absent is
-  // `product` - the pulling one - so nothing anybody has saved changes pace.
+  // Absent means `product` (the pulling one), as on legacy plans.
   drainMode: z.enum(["product", "byproduct", "trash"]).optional(),
-  // Absent means `overflow`: every buffer catches surplus unless the player
-  // deliberately sets it strict.
+  // Absent means `overflow` in Build and `strict` in Solve (effectiveBufferMode).
   bufferMode: z.enum(["overflow", "strict", "ratio"]).optional(),
   ratioExportPercent: z.number().min(0).max(100).optional(),
   // Pool mode: which side of the shared pool an unwired drawer sits on.
@@ -463,7 +460,7 @@ export const factoryPocketSchema = z.object({
     x: z.number(),
     y: z.number(),
   }),
-  // Standing open as a board window; absent = the classic collapsed card.
+  // Standing open as a board window; absent = minimized summary card.
   expanded: z.boolean().optional(),
   size: z
     .object({
@@ -512,12 +509,11 @@ export const fuelProfileSchema = z
 /**
  * The author's workspace arrangement, carried by shared setups only.
  *
- * Every field is optional and loosely typed on purpose. This has to survive a
- * round trip through `factoryProjectSchema.parse` (which strips what it does
- * not know) and the server's own re-validation, and a plan saved by a newer
- * build must not be rejected wholesale because it mentions a view setting this
- * one has never heard of. Unknown values are dropped when the view is APPLIED,
- * where the real constants live, rather than being policed here.
+ * Every field is optional and loosely typed on purpose: it must survive
+ * `factoryProjectSchema.parse` (which strips unknown keys) and server
+ * re-validation, and a plan from a newer build must not be rejected over a
+ * view setting this one does not know. Unknown values are dropped when the
+ * view is APPLIED, where the real constants live.
  */
 export const planViewStateSchema = z.object({
   canvasPattern: z.string().optional(),
@@ -553,7 +549,7 @@ export const factoryProjectSchema = z.object({
   icon: entryIconSchema.optional(),
   view: planViewStateSchema.optional(),
   targetRate: targetRateSchema.optional(),
-  // What the board does with an input nothing feeds and output nothing takes.
+  // Legacy setup rules: still parsed so old JSON validates, dropped on load.
   setupRules: z
     .object({
       freeInputs: z.boolean().optional(),
@@ -561,7 +557,7 @@ export const factoryProjectSchema = z.object({
       looseCellWires: z.boolean().optional(),
     })
     .optional(),
-  // Legacy sketch mode, rewritten as both rules on load.
+  // Legacy sketch mode, dropped on load.
   assumeBoundaries: z.boolean().optional(),
   // Solve mode: product amounts are the question, machine counts the answer.
   solveMode: z.boolean().optional(),

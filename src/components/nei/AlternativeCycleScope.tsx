@@ -6,15 +6,12 @@ import type { AlternativeCycleFace } from "@/lib/nei/alternative-cycle";
 export interface AlternativeCycleScopeValue {
   /** Face index a slot was locked to; absent means it is still rotating. */
   locked: Readonly<Record<number, number>>;
-  /** Locks a slot to a face. Called when a player scrolls the slot. */
+  /** Locks a slot to a face. Called when the slot is scrolled. */
   lock: (resourceIndex: number, faceIndex: number) => void;
   /**
-   * Records what a slot is showing right now, WITHOUT re-rendering anything.
-   *
-   * The add button needs to know which face each slot was displaying at the
-   * moment it was clicked. Routing that through state would re-render every
-   * card on every tick, which is the whole cost this design avoids, so the
-   * leaves write into a ref and the button reads it once, on click.
+   * Records what a slot is showing right now, WITHOUT re-rendering: the add
+   * button reads each slot's face once, on click. State would re-render every
+   * card on every tick, so the leaves write into a ref.
    */
   report: (resourceIndex: number, face: AlternativeCycleFace | undefined) => void;
 }
@@ -22,10 +19,8 @@ export interface AlternativeCycleScopeValue {
 const AlternativeCycleContext = createContext<AlternativeCycleScopeValue | undefined>(undefined);
 
 /**
- * Marks a subtree as one where oredict slots rotate through their alternatives.
- *
- * Slots outside a scope never cycle and never subscribe to the clock, so the
- * board is unaffected by this feature existing.
+ * Marks a subtree where oredict slots rotate through their alternatives.
+ * Slots outside a scope never cycle or subscribe to the clock.
  */
 export function AlternativeCycleScope({
   children,

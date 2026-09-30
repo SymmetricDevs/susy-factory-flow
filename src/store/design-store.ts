@@ -164,16 +164,11 @@ interface DesignStore {
  * Loads a plan onto the canvas without marking it edited, dressed the way that
  * plan was last left and pointed at whatever you were looking at on it.
  *
- * A tab is a whole factory, and how a factory is DRAWN is part of it: one build
- * wants rate labels and fat lines, the next wants a clean board. Sharing a
- * setup has always carried those settings along with it, so a tab not carrying
- * them between switches was the odd one out. See PlanViewScope for the line
- * between the board's look (per plan) and the workspace around it (yours).
- *
- * Where the CAMERA lands is `design-camera.ts`: a tab you have been on before
- * comes back up exactly where you left it, and one you have not is framed, which
- * is what every tab used to get. Framing a tab you know your way around means
- * scrolling back to the corner you were working in every single time.
+ * How a factory is DRAWN is part of the plan (it travels with a shared setup
+ * too); see PlanViewScope for the line between the board's look (per plan)
+ * and the workspace around it (per user). Where the CAMERA lands is
+ * `design-camera.ts`: a tab visited before comes back where it was left, one
+ * never visited is framed.
  */
 function showProject(project: FactoryProject, designId?: string) {
   landingCanvas = true;
@@ -188,23 +183,19 @@ function showProject(project: FactoryProject, designId?: string) {
 }
 
 /*
- * WHICH VERSION THIS TAB IS HOLDING (Jack, 2026-09-23: a player lost hours to
- * a second browser tab). Every browser tab keeps its open design in memory,
- * and they all share one library. A tab left open on this morning's copy used
- * to write that copy back over a whole afternoon's work saved from another
- * tab, the next time it saved anything at all.
+ * WHICH VERSION THIS TAB IS HOLDING. Every browser tab keeps its open design
+ * in memory and they all share one library, so a tab left open on an old copy
+ * must never write it back over newer work saved from another tab.
  *
- * So each tab remembers the stored version its canvas was loaded from (the
+ * Each tab remembers the stored version its canvas was loaded from (the
  * record's `updatedAt`), and a save only lands if the stored plan is still
- * that version (`writeDesignIfUnchanged`: the check and the write are one
- * transaction). A tab also only writes what it was EDITED into: a change
- * counts only if it happened while this tab had focus, because a tab in the
- * background changes its plan by itself (the recipe refresh after loading
- * another tab's save) and must never echo that back. When a stale tab truly
- * holds edits of its own, they are kept as a copy rather than lost either
- * way. The other tabs hear about every save (design-tab-sync.ts) and reload
- * when they have nothing of their own to keep, and a tab coming back into
- * view checks too.
+ * that version (`writeDesignIfUnchanged`: check and write in one
+ * transaction). A tab only writes what it was EDITED into: a change counts
+ * only while this tab has focus, because a background tab changes its plan
+ * by itself (the recipe refresh after loading another tab's save) and must
+ * never echo that back. A stale tab holding its own edits keeps them as a
+ * conflict copy. Other tabs hear about every save (design-tab-sync.ts) and
+ * reload when they have nothing of their own to keep.
  */
 
 /** The stored version of the active design this tab's canvas started from. */
@@ -283,10 +274,9 @@ type PersistOutcome =
 /**
  * ONE SAVE AT A TIME in this tab. A save checks the stored version against
  * `canvasBase` and moves `canvasBase` once its write lands, so two saves in
- * flight together both checked against the same version and the second read
- * the first as ANOTHER tab's save: a player on one browser tab got a fresh
- * "(conflict copy)" every few autosaves (2026-09-25; a big plan's write is
- * slow enough for the next autosave to start before it lands).
+ * flight together would both check the same version and the second would
+ * read the first as ANOTHER tab's save, minting a conflict copy. A big plan's
+ * write can outlast the autosave debounce.
  */
 let persistQueue: Promise<unknown> = Promise.resolve();
 
@@ -358,10 +348,10 @@ async function persistCanvasNow(summary: DesignSummary, canvas: FactoryProject):
 /**
  * Writes whatever is on the canvas into `summary`'s record.
  *
- * Runs before every switch, copy and close: autosave is debounced, and those
- * actions land inside that window often enough that skipping this would quietly
- * drop the last few edits of the design being left behind. Guarded like every
- * save (persistCanvas): a tab holding an old copy never writes it back.
+ * Runs before every switch, copy and close: autosave is debounced, and
+ * skipping this would drop the last edits of the design being left. Guarded
+ * like every save (persistCanvas): a tab holding an old copy never writes it
+ * back.
  */
 async function flushCanvasInto(summary: DesignSummary | undefined): Promise<void> {
   const viewing = useDesignStore.getState().publicView;
@@ -459,10 +449,9 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       if (summaries.length === 0) {
         summaries = [await seedFirstDesign()];
       } else {
-        // NOT awaited: the pass reads every plan, which on a big library is
-        // many seconds, and the strip must not sit as a placeholder for it.
-        // A New design pressed in that window used to open a canvas the
-        // strip could not list, and then be stamped over when this landed.
+        // NOT awaited: the pass reads every plan (many seconds on a big
+        // library), and the strip must be usable meanwhile; the backfill
+        // relists afterwards so designs added in that window are kept.
         scheduleSummaryBackfill();
       }
       folders = sortFolders(await listDesignFolders());
@@ -498,13 +487,11 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       return;
     }
 
-    // The strip is listed BEFORE the remembered design is opened, and its
-    // opening is guarded on its own: a plan saved by an older version that
-    // trips a load-time migration used to take every other tab down with it
-    // (issue #45, "all my plans disappeared"), when nothing but that one plan
-    // was ever at fault. And a design whose plan cannot be read lands NOWHERE:
-    // making it active over an empty canvas let the next autosave write that
-    // emptiness over the record, which is the one way to really lose a plan.
+    // The strip is listed BEFORE the remembered design is opened, and that
+    // opening is guarded on its own, so one plan tripping a load-time
+    // migration cannot take every other tab down with it. A design whose plan
+    // cannot be read lands NOWHERE: made active over an empty canvas, the
+    // next autosave would write that emptiness over its record.
     try {
       const active = await readDesign(activeId);
       if (active) {
@@ -982,13 +969,10 @@ export function startDesignTabSync(): () => void {
 }
 
 /**
- * Summaries written before they carried an icon never get one until their plan
- * happens to be saved again, so tabs would sit blank for exactly the designs
- * that have been around longest. Once per browser, every plan is read and its
- * summary restamped; new writes keep the copy fresh from then on.
- *
- * The same pass, under a second key, stamps the post link and the stat row
- * onto every summary for the library's tiles.
+ * Summaries written before they carried an icon get none until their plan is
+ * saved again. Once per browser, every plan is read and its summary
+ * restamped; new writes keep it fresh from then on. The same pass, under a
+ * second key, stamps the post link and the stat row for the library's tiles.
  */
 const ICON_BACKFILL_KEY = "gtnh-factory-flow.design-summary-icons.v1";
 // v2: the stat row joined the pass.
@@ -1058,10 +1042,9 @@ async function backfillSummaryIcons(
 }
 
 /**
- * First run: adopt the plan the app used to keep under a single localStorage
- * key, so existing work becomes the first tab instead of being stranded behind a
- * storage change. The old key is read, never cleared: if anything here goes
- * wrong the original is still sitting where it was.
+ * First run: adopt the legacy single-plan localStorage key (`LOCAL_STORAGE_KEY`)
+ * as the first tab. The key is read, never cleared, so the original survives
+ * if anything here goes wrong.
  */
 async function seedFirstDesign(): Promise<DesignSummary> {
   const legacy = readLegacyProject();

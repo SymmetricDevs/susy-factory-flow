@@ -3,8 +3,7 @@ import type { ResourceKind } from "@/lib/model/types";
 /**
  * One condition of a recipe search: an item or fluid and which side of the
  * recipe it must appear on. "makes" means the resource is among the outputs,
- * "takes" among the inputs — the same two answers the book has always given,
- * now composable.
+ * "takes" among the inputs.
  */
 export interface RecipeQueryClause {
   kind: ResourceKind;

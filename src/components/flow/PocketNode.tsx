@@ -28,23 +28,15 @@ export type PocketFlowNode = Node<PocketNodeData, "pocketNode">;
 
 /**
  * A MINIMIZED BOARD: a summary you can look at, not a machine you can wire.
- *
  * It says what is inside (machines, cards, power) and what crosses its
- * border, and that is all it says. There are no ports on it: a wire from the
- * outside cannot be dropped on it, a drag cannot start from it, and nothing
- * on it claims to be starved or clogged. To change anything about the
- * factory in here you open the window - double-click, or the restore button.
+ * border. There are no ports: a wire cannot be dropped on it, a drag cannot
+ * start from it, and nothing on it claims to be starved or clogged; to change
+ * anything you open the window (double-click or the restore button). Its
+ * figures come from the plan-wide solve, never a scoped solve of the members
+ * (which would call a board holding its own source starving).
  *
- * That is a deliberate retreat. The card used to wear input and output
- * ports built from a solve of the members with the outside world unhooked,
- * which meant a board holding its own source was told it was starving and a
- * board exporting a byproduct was told it was clogged. The numbers here now
- * come from the plan-wide solve, so they are the same numbers the board
- * itself would show with the window open.
- *
- * The wires crossing the border still land on the card - they have to go
- * somewhere - but they dock anywhere on its perimeter, like a drawer's, not
- * on a row that means something.
+ * Wires crossing the border still land on the card, docking anywhere on its
+ * perimeter like a drawer's.
  */
 export const POCKET_NODE_WIDTH = RECIPE_NODE_WIDTH;
 
@@ -59,9 +51,9 @@ export const POCKET_CARD_SOURCE_HANDLE = "board-card-out";
 /*
  * Red for what the board must be brought, green for what it has to give
  * away: faint grounds with a title chip on each, the same pair the
- * right-hand panel uses. Only the BALANCE wears them. What crosses the
- * border is a plain accounting of wires - colouring it too made the card
- * two stacks of the same two colours saying different things.
+ * right-hand panel uses. Only the BALANCE wears them; the wire crossings
+ * stay plain, so the card never shows the same two colours saying two
+ * different things.
  */
 const IN_GROUND = "bg-red-500/18";
 const IN_CHIP = "bg-red-500/30 text-red-50";
@@ -187,9 +179,7 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
       {/* The folded window. The rim is the board's own frame line at the
           board's own weight, drawn as an inset shadow on all four sides (a
           real border would push the rows off the grid) with a dark seat
-          just inside it. It used to be a bevel - light top-left, dark
-          bottom-right - which on dark paper read as an edge that simply
-          stopped halfway round the card. */}
+          just inside it. */}
       <div
         data-node-glance-root=""
         className="relative"
@@ -417,7 +407,7 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
 /**
  * One two-column block: what comes in on the left, what goes out on the
  * right, each half on its own faint ground - red in, green out, the pair
- * the right-hand panel has always used. A 20px label line carries a chip
+ * the right-hand panel uses. A 20px label line carries a chip
  * over each column so the two halves read as two lists rather than one
  * wide table. An empty section draws nothing at all, which is what keeps
  * `pocketCardHeight` and the DOM agreeing on the card's height.

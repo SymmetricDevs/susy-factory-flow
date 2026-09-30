@@ -3,12 +3,10 @@ import type { Recipe, RecipeInput, RecipeOutput, ResourceKind } from "@/lib/mode
 /**
  * What an imported plan knows about a recipe the dataset no longer lists.
  *
- * Recipe ids are minted per dataset build, and every build before 2026-09
- * minted them from a JVM identity hash, so a plan exported one week and
- * imported the next found none of its ids. The only durable identity a
- * recipe has is what it does: which slots it takes and makes, how long it
- * runs and what it draws. That is what a ref carries and what a candidate is
- * scored against.
+ * Recipe ids are minted per dataset build and are not stable across
+ * rebuilds. The only durable identity a recipe has is what it does: which
+ * slots it takes and makes, how long it runs and what it draws. That is what
+ * a ref carries and what a candidate is scored against.
  */
 export interface RecipeRefSlot {
   kind: ResourceKind;

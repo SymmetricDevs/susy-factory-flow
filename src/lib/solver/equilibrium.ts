@@ -15,90 +15,50 @@ import type {
 const EPSILON = 0.000001;
 
 /**
- * Equilibrium solver for the wired factory graph.
+ * Iterative equilibrium solver for the wired factory graph. The equation
+ * books (equations-core.ts) supply the final acts and flows; this engine
+ * supplies the DIAGNOSIS (capability, disposal, clog names).
  *
- * The old iteration seeded every node from a demand-only guess and let asks
- * chase each other around the graph. That system has many self-consistent
- * answers: "F asks for no apples because it has no bananas, B makes no
- * bananas because F is not asking" is as stable as the fully running plan,
- * and real boards kept landing on the starved one (community gridlock
- * report, 2026-08-02: 26.67/s of toluene in the tank, consumers granted
- * 1.8/s of it, everything downstream at 0.5%).
- *
- * This solver removes the low answers instead of damping toward them, the
- * same way Helmod's matrix solver (MIT, github.com/Helfima/helmod) treats a
- * production block: solve the coupled system simultaneously rather than
- * propagate asks sequentially. Our unknowns differ - machine counts are
- * fixed here, so we solve for per-node utilizations - which turns the
- * problem into a monotone fixed point:
- *
- * - every node starts at FULL BLAST (capability 1, demand 1); the board is
- *   born jump-started, so a feedback loop that can sustain itself never
- *   needs a phantom source to prove it;
- * - each Jacobi round recomputes offers, honest asks, and allocations from
- *   the previous round's vectors only (no mid-pass reads, so wiring order
- *   cannot change the answer), and utilizations descend until the real
- *   constraints - machine counts, genuinely scarce inputs - stop them;
+ * Machine counts are fixed, so the unknowns are per-node utilizations and
+ * the problem is a monotone fixed point (the approach of Helmod's matrix
+ * solver, MIT, github.com/Helfima/helmod: solve the coupled system rather
+ * than propagate asks one by one):
+ * - every node starts at FULL BLAST (capability 1, demand 1), so a loop that
+ *   can sustain itself never needs a phantom source, and the starved
+ *   self-consistent answers ("F asks nothing because B makes nothing because
+ *   F asks nothing") are never reached from above;
+ * - each Jacobi round reads only the previous round's vectors, so wiring
+ *   order cannot change the answer;
  * - lossy loops decay geometrically, so a per-component geometric
- *   extrapolation jumps them straight to their limit instead of grinding
- *   thousands of passes.
+ *   extrapolation jumps them to their limit.
+ * Scarce supply is split by water-filling: equal shares, lines needing less
+ * are capped at their ask, slack re-offered, so a big asker cannot crush a
+ * small one.
  *
- * Scarce supply is split by water-filling (progressive filling): every
- * hungry line gets an equal share, lines that need less than their share
- * are capped at their ask, and the slack is re-offered to the still-hungry.
- * A 2000/s fleet next to a 400/s fleet on a 26/s tank therefore cannot
- * crush the small asker out of the trickle it needs.
+ * CONSERVATION. The plan is CLOSED: only a SOURCE drawer (nothing feeds it)
+ * invents material and only a DRAIN drawer or trash swallows it. A BUFFER
+ * passes on what its consumers pull. A machine runs at the lesser of
+ * `capableByNode` (every ingredient has a source) and `disposalByNode`
+ * (every output has somewhere to go); an unwired input is an empty bus and
+ * an unwired output a full one. A node on its disposal limit is CLOGGED.
  *
- * CONSERVATION. The plan is a CLOSED system. Nothing appears from nowhere and
- * nothing vanishes, and the only places that rule is suspended are the two a
- * player declares by hand:
+ * A clog must be JUSTIFIED by what takers would take if nothing were
+ * clogged, or it holds itself in place (held machine asks less, suppliers
+ * read "not wanted", their clogs deepen). Disposal is therefore judged
+ * against a SHADOW demand system: same asks and fairness, but throttled by
+ * pressure-only demand (`demWant`) and offered capability.
  *
- *   a SOURCE drawer  nothing feeds it, so it invents its resource
- *   a DRAIN drawer   nothing draws from it, so it swallows what arrives
+ * BALANCED RINGS (a cell loop that conserves its goods exactly) have a
+ * continuum of levels and the descent ratchets them to zero, though in game
+ * a primed ring runs forever. A ring converging to zero is re-solved with its
+ * internal needs borrowing against its own capability, adopted only if the
+ * borrowing idles out (the balanced-ring rescue below).
  *
- * plus the trash can, which is a drain you can see destroying things. A
- * BUFFER is neither: it passes on exactly what its consumers pull.
- *
- * So a machine is bounded at BOTH ends. `capableByNode` asks whether every
- * ingredient has somewhere to come from, `disposalByNode` whether everything
- * it makes has somewhere to go, and it runs at the lesser. A port with no
- * wire on it is not an escape hatch in either direction: an input with no
- * feeder is an empty bus and an output with no taker is a full one, and both
- * stop the machine dead. A node standing on the disposal limit is CLOGGED.
- *
- * A clog has to be JUSTIFIED by what takers would take if nothing were
- * clogged. Judged on live flows alone, a clog can hold itself in place: the
- * held machine asks for less, its suppliers read "not wanted", their clogs
- * deepen, and a one-round allocation wobble becomes a stable answer a fixed
- * fraction below the truth (the platline board stranded at exactly 90%).
- * Disposal is therefore judged against a SHADOW of the demand system - same
- * asks, same fairness, but throttled by pressure-only demand (`demWant`) and
- * offered capability instead of throttled rates - a world with no clogs in
- * it, where a suppressed want cannot masquerade as a missing one.
- *
- * This is a real cost and it is the point. Every plan now has to say where
- * its raw materials come from and where its product goes, in drawers, on the
- * board - and until it does, it reads zero rather than quietly inventing the
- * answer at both ends.
- *
- * BALANCED RINGS get one appeal. A ring that conserves its circulating goods
- * exactly (the cell loops: every cell out of the electrolyzer comes back
- * through a canner) has a continuum of self-consistent levels and no
- * restoring force between them, so the descent's transients ratchet it to
- * zero even though the same ring, primed once in game, runs forever. A ring
- * whose machines all converge to zero capability is therefore re-solved with
- * its internal needs allowed to borrow against the ring's own capability
- * (the solver priming the loop), and that answer is adopted only if the
- * borrowing idles out - see the balanced-ring rescue below.
- *
- * THE SETTLEMENT closes the books last. Because capability is clog-blind on
- * purpose, a consumer downstream of a clogged supplier converges wanting and
- * "capable of" full blast while its wire carries a trickle - and every
- * figure multiplied off that level mints material from nowhere. After the
- * verdicts converge (and any rescue is judged), a separate fixed point
- * bounds each node's ACTUAL level by what its wires really delivered and
- * re-settles the actual flows at it, without ever feeding back into
- * capability, demand or disposal: the card still diagnoses the clog, the
+ * THE SETTLEMENT runs last. Capability is clog-blind on purpose, so a
+ * consumer below a clogged supplier converges "capable of" full blast while
+ * its wire carries a trickle. A separate fixed point bounds each node's
+ * ACTUAL level by what its wires really delivered, never feeding back into
+ * capability, demand or disposal: the card still diagnoses the clog and the
  * books stop paying out on it.
  */
 
@@ -299,11 +259,9 @@ const RING_ANCHOR_FLOOR = 1e-6;
 /**
  * Below this a node has converged to a hard stop, not merely to "slow".
  * Shared by the dead-loop badge (death-spiral.ts) and the balanced-ring
- * rescue's detection, deliberately: a descent can converge at a microscopic
- * dust level (2e-5 of full speed) instead of ratcheting all the way to the
- * snap threshold, and a ring the badge calls dead while the rescue calls
- * alive gets a DEAD LOOP verdict with no appeal - the one-electrolyzer
- * strict-buffer board fell exactly in that gap.
+ * rescue's detection on purpose: a descent can settle at dust (2e-5 of full
+ * speed) above the snap threshold, and if the two disagreed a ring would get
+ * a DEAD LOOP verdict with no rescue.
  */
 export const DEAD_RING_EPSILON = 1e-4;
 
@@ -413,22 +371,11 @@ export function solveEquilibrium(
         : sourceStorage
           ? "storage-source"
           : "machine";
-    // A pool is ONE DRAWER, not one item.
-    //
-    // This used to key on the resource, which quietly rebuilt the drawer
-    // network the conservation rework exists to remove: every drawer holding
-    // carbon dust anywhere on the board was one tank, so a product drawer
-    // parked beside an unrelated chain gave a source drawer on the titanium
-    // line `sinkEdges`, dropped its offer from infinite to that OTHER chain's
-    // output, and starved a line it shares no wire with. Material teleported
-    // between drawers nobody had connected.
-    //
-    // Keyed by node, every drawer is its own container and the roles fall out
-    // of its own wires: nothing feeds a SOURCE, so it has no sinks and offers
-    // without limit; a BUFFER's outflow is bounded by its own inflow, which is
-    // exactly "you can never take out more than you put in". Two drawers of
-    // the same item are two containers, whatever their roles - to move goods
-    // between them you wire them together, like everything else on the board.
+    // A pool is ONE DRAWER (keyed by node), never one item: keying by resource
+    // would let material teleport between unconnected drawers of the same item.
+    // Each drawer's role falls out of its own wires: nothing feeds a SOURCE,
+    // so it offers without limit; a BUFFER's outflow is bounded by its own
+    // inflow. Goods move between two drawers only along a wire.
     const poolKey = targetStorage?.id ?? sourceStorage?.id ?? "";
     // A buffer catches overflow unless the player set it strict. This is what
     // makes "machine into tank into machine" behave like the in-game build:
@@ -449,20 +396,17 @@ export function solveEquilibrium(
       budgetKey: sourceStorage ? "" : `${edge.source}|${sourceOutputFlow?.key ?? key}`,
       sinkPoolKey: "",
       poolKey,
-      // A can always. A drawer only when nothing draws from it, which is what
-      // makes it the plan's declared export rather than an ordinary buffer.
-      // BOTH kinds of drain accept without limit; they differ only in whether
-      // they ask (see `silent` below). An overflow buffer accepts freely too,
-      // but unlike a drain the material stays in the plan's books: it piles up
-      // in the tank at a rate the card shows.
+      // Trash always. A drawer only when nothing draws from it (the plan's
+      // declared export). Drains accept without limit and differ only in
+      // whether they ask (`silent`). An overflow buffer accepts freely too, but
+      // its material stays in the books, piling up at a visible rate.
       freeDisposal:
         role === "trash" ||
         isOverflowBufferSink ||
         (role === "storage-sink" && isDrainRole(storageRoles.get(edge.target) ?? "idle")),
       // A BYPRODUCT or TRASH drawer takes what is left and asks for nothing,
-      // so it must not report what it absorbed as demand: doing so would pace
-      // its feeder to full blast purely by existing, which is what a PRODUCT
-      // drawer is for. This is the one flag that separates them from it.
+      // so it must not report what it absorbed as demand, or it would pace its
+      // feeder to full blast by existing. This flag separates it from a PRODUCT.
       silent:
         role === "storage-sink" &&
         (storageRoles.get(edge.target) === "byproduct" ||
@@ -541,9 +485,8 @@ export function solveEquilibrium(
     }
   }
 
-  // A pool is bottomless when NOTHING feeds it - no machine line and no
-  // drawer line - which is the SOURCE rule with drawer feeders now counted.
-  // Walking the feed lines out from every bottomless pool marks the drawers
+  // A pool is bottomless when NOTHING feeds it, machine line or drawer line
+  // (the SOURCE rule). Walking the feed lines out from every bottomless pool marks the drawers
   // that have one somewhere behind them; that mark is what lets their takers
   // read full capability and their shortfalls pull through the chain.
   const isBottomlessPool = (poolKey: string): boolean => {
@@ -600,10 +543,8 @@ export function solveEquilibrium(
       if (needs.has(needKey)) {
         wiredInputs.push({ needKey, nameplatePerSecond: flow.amountPerSecond });
       } else {
-        // Nothing feeds this ingredient. In a closed plan that is not a
-        // standing assumption that you carry it in by hand, it is a machine
-        // with an empty input bus: it does not run until something declares
-        // where the ingredient comes from.
+        // Nothing feeds this ingredient: in a closed plan that is an empty
+        // input bus, and the machine does not run.
         bareInputKeys.push(inputKey as ResourceKey);
       }
     }
@@ -736,60 +677,43 @@ export function solveEquilibrium(
 
   const runRound = (): RoundOutput => {
     // TWO offers, because the two fills ask different questions.
-    //
     // `budgetOffer` is capability: what this producer could ship if everything
-    // upstream ran flat out. A clog is deliberately absent from it. Capability
-    // answers "are my inputs short", the clog is the player's own wiring, and
-    // one wire clears it - so a consumer downstream of a clogged machine must
-    // not read as INPUT-starved, and a ring idling for want of a customer must
-    // keep the capability that proves it is not a dead loop.
-    //
-    // `budgetOfferActual` is what really moves this round. A machine sitting
-    // at 50% because its other output has nowhere to go cannot hand anybody
-    // its full-blast rate; without this the desire fill would mint the very
-    // resource conservation is here to protect.
+    // upstream ran flat out, deliberately clog-blind, so a consumer below a
+    // clogged machine does not read INPUT-starved and a ring idling for want of
+    // a customer does not read as a dead loop.
+    // `budgetOfferActual` is what really moves this round (a machine held at
+    // 50% by another output cannot hand out its full rate); without it the
+    // desire fill would mint material.
     const budgetOffer = new Map<string, number>();
     const budgetOfferActual = new Map<string, number>();
     for (const [budgetKey, budget] of budgets) {
       const capable = clampUtilization(cap.get(budget.ownerId) ?? 1);
       const disposal = disp.get(budget.ownerId) ?? 1;
-      // STOPPED is not THROTTLED, and the difference is STRUCTURAL, not a
-      // matter of the number reaching zero.
-      //
-      // A machine with a slot nobody has wired can never ship anything, so it
-      // advertises nothing. Without this a consumer downstream computed a
-      // utilization out of material that never arrives - a card reading 12.5%
-      // on a line carrying 0/s, fed by a machine sitting at 0% because one of
-      // its OWN slots is bare.
-      //
-      // A machine whose disposal merely converged to zero is a different
-      // animal and keeps advertising its capability: that is a ring idling for
-      // want of a customer, and collapsing its capability would resurrect the
-      // gridlock lie this solver exists to kill (it would read as a dead loop).
-      // Hence the test is `bareOutputKeys`, never `disposal <= 0`.
+      // STOPPED is not THROTTLED, and the difference is STRUCTURAL. A machine
+      // with a bare slot (or a power stall) can never ship, so it advertises
+      // nothing; otherwise consumers would compute utilization from material
+      // that never arrives. A machine whose disposal merely converged to zero
+      // is a ring idling for want of a customer and keeps its capability, or
+      // it would read as a dead loop. Hence the test is `stoppedByBareSlot`,
+      // never `disposal <= 0`.
       budgetOffer.set(
         budgetKey,
         stoppedByBareSlot.has(budget.ownerId) ? 0 : budget.makePerSecond * capable,
       );
       // The actual offer is floored at the budget's own must-ship rate. The
-      // disposal throttle exists so a machine choked by ANOTHER output cannot
-      // hand out material it will not make - but a budget's own clog must not
-      // cap its own offer, or the fill can never drain the clog it is being
-      // asked to relieve: the throttled offer keeps the demand low, the low
-      // demand keeps the clog, and a loop that one more grant would clear
-      // settles half-dead instead. The must-ship rate already respects the
-      // machine's inputs and its OTHER outputs' throttles, so nothing here
-      // offers material that would not exist.
+      // disposal throttle stops a machine choked by ANOTHER output handing out
+      // material it will not make, but a budget's own clog must not cap its
+      // own offer, or the fill can never drain that clog and the loop latches
+      // half-dead. The must-ship rate already respects the machine's inputs
+      // and its other outputs' throttles, so this mints nothing.
       budgetOfferActual.set(
         budgetKey,
         stoppedByBareSlot.has(budget.ownerId)
           ? 0
           : settleAct
             ? // Settling: a machine ships exactly what it makes at its
-              // delivered-input level. The tranche floor is deliberately gone
-              // - it exists to break latches DURING the descent, and material
-              // above the settled level is exactly what the settlement is
-              // here to stop shipping. runFill still serves the (capped)
+              // delivered-input level. No tranche floor here: it only breaks
+              // latches during the descent. runFill still serves the (capped)
               // priority tranche first, so the allocation ORDER between
               // competing consumers stays the converged one.
               budget.makePerSecond * clampUtilization(settleAct.get(budget.ownerId) ?? 0)
@@ -802,20 +726,13 @@ export function solveEquilibrium(
               ),
       );
     }
-    // TWO offers again, for the same reason the budgets have two.
-    //
-    // `poolOffer` is what a tank can really hand out this round: last round's
-    // inflow, which is the rule that stops a buffer inventing material.
-    //
-    // `poolOfferCapable` is what its feeders COULD put in if everything ran
-    // flat out. Capability has to be demand-blind or a buffer launders a
-    // downstream choke into an upstream shortage: a consumer thottled to 91%
-    // by its own clogged output pulls 91% of the nitrogen, so 91% is all that
-    // ever entered the tank, so the tank offers 91%, so the consumer reads as
-    // STARVED of nitrogen - by a producer sitting at 4% with plenty to spare.
-    // Wire the same producer straight in and it reads correctly, because a
-    // machine budget already answers this question with `budgetOffer`. A tank
-    // in the middle must not change the diagnosis.
+    // TWO offers again, as for budgets. `poolOffer` is what a tank can really
+    // hand out this round: last round's inflow, so a buffer never invents
+    // material. `poolOfferCapable` is what its feeders COULD put in flat out;
+    // it must be demand-blind, or a buffer turns a consumer's own downstream
+    // clog into a phantom upstream shortage (the consumer pulls less, less
+    // enters the tank, the tank offers less, the consumer reads STARVED). A
+    // tank in the middle must not change the diagnosis.
     const poolOffer = new Map<string, number>();
     const poolOfferCapable = new Map<string, number>();
     for (const [poolKey, pool] of pools) {
@@ -901,9 +818,9 @@ export function solveEquilibrium(
       }
     }
 
-    // Potentials: what each input could draw if everything else wanted it -
-    // sibling ceilings judge by capability, never by the current starved
-    // state, or the gridlock lie re-enters through the side door.
+    // Potentials: what each input could draw if everything else wanted it.
+    // Sibling ceilings judge by capability, never by the current starved
+    // state, or the starved self-consistent answer comes back.
     const potentialByNeed = new Map<string, number>();
     for (const [needKey, need] of needs) {
       let potential = 0;
@@ -944,15 +861,11 @@ export function solveEquilibrium(
       }
       const ceiling = sibCeil(info, needKey);
       // Settling: OFFERS follow each node's actual level (conservation), but
-      // asks must NOT - an ask throttled by the falling level is the ratchet
-      // that killed balanced rings: a transient dip shrinks the ask, the
-      // source drawer stops covering the difference, and nothing ever pulls
-      // the level back up. Asks stay at the live settle-world DEMAND, so a
-      // need keeps asking for what its takers genuinely want and a dip can
-      // recover. Consumption is booked at the actual level regardless (the
-      // taker-attribution in the settle bounds and the export clamp both
-      // scale intake to act). The availability and shadow asks stand down
-      // (their fills answer verdict questions the settlement leaves frozen).
+      // asks must NOT, or a transient dip shrinks the ask, the source stops
+      // covering it, and a balanced ring ratchets to zero. Asks stay at the
+      // live settle-world DEMAND so a dip can recover; consumption is still
+      // booked at the actual level. The availability and shadow asks stand
+      // down: their fills answer verdict questions the settlement leaves frozen.
       askAvailability.set(needKey, settleAct ? 0 : need.nameplatePerSecond * ceiling);
       const askDemand = settleAct
         ? clampUtilization(settleDem?.get(need.targetId) ?? dem.get(need.targetId) ?? 1)
@@ -988,23 +901,15 @@ export function solveEquilibrium(
       backedPoolKeys,
       activeAnchors,
     );
-    // THE SHADOW FILL. Disposal - the clog ceiling below - must not be judged
-    // by the desire fill, because the desire fill is downstream of every clog:
-    // a machine held low asks its suppliers for less, the supplier's output
-    // reads "not wanted", ITS disposal drops, and a slowdown that started as a
-    // one-round allocation wobble justifies itself forever. On a board of
-    // mass-conserving loops (every recycle chain is one) that stranded state
-    // is a genuine fixed point, and the whole plan settles a fixed fraction
-    // below the answer - the platline board that ran at exactly 90% until an
-    // unrelated drawer perturbed it.
-    //
-    // So the clog question is asked in a world with no clogs in it: capability
-    // offers (a supplier competes at what it COULD make, so a source drawer
-    // takes only the true residue), and asks throttled by demWANT - the
-    // pressure-only demand iterated alongside dem, which never takes the
-    // disposal min. A real surplus still clogs: demWant honours what takers
-    // genuinely want (a taker that wants no more asks for no more), it merely
-    // refuses to count a want that a clog itself suppressed.
+    // THE SHADOW FILL. Disposal (the clog ceiling below) must not be judged by
+    // the desire fill, which is downstream of every clog: a machine held low
+    // asks its suppliers for less, their output reads "not wanted", their
+    // disposal drops, and on mass-conserving loops a one-round wobble becomes
+    // a stable fixed point below the true answer. So the clog question is
+    // asked in a world with no clogs: capability offers (a source drawer takes
+    // only the true residue) and asks throttled by demWANT, the pressure-only
+    // demand that never takes the disposal min. A real surplus still clogs;
+    // only a want that a clog itself suppressed is not counted.
     const shadowFill = runFill(
       needs,
       budgetOffer,
@@ -1041,11 +946,8 @@ export function solveEquilibrium(
     const freeLeftoverByBudget = new Map<string, number>();
     const strictOfferByEdge = new Map<string, number>();
     for (const [budgetKey, budget] of budgets) {
-      // What the owner actually RUNS at, not what it could offer. A sink can
-      // never absorb more than the machine makes, and the offer above is
-      // deliberately demand-blind - so without this a BYPRODUCT drawer would
-      // bank the full nameplate off a machine idling at a fifth of it, which
-      // is exactly the conservation break the drawer exists to prevent.
+      // What the owner actually RUNS at, not what it could offer (the offer is
+      // demand-blind): a sink can never absorb more than the machine makes.
       const runs = clampUtilization(
         settleAct
           ? (settleAct.get(budget.ownerId) ?? 0)
@@ -1067,14 +969,12 @@ export function solveEquilibrium(
         strictOfferByEdge.set(sink.id, leftover / bufferSinks.length);
       }
     }
-    // A STRICT buffer takes exactly what its consumers pull, and the pull is
-    // attributed across its feeders by saturate-and-reoffer, same as the
-    // overflow relay below: split evenly instead, two unequal canners feeding
-    // one cell drawer were each asked for the average, the bigger one's
-    // declined surplus read as a real clog, and a balanced loop died the
-    // moment its buffer went strict. What the pull does not claim stays on
-    // the producer's budget, where either a drain takes it or it clogs the
-    // machine - that is what strict OPTS INTO.
+    // A STRICT buffer takes exactly what its consumers pull, attributed across
+    // its feeders by saturate-and-reoffer (an even split would ask unequal
+    // feeders for the average and read the bigger one's surplus as a false
+    // clog). What the pull does not claim stays on the producer's budget,
+    // where a drain takes it or it clogs the machine: that is what strict
+    // OPTS INTO.
     for (const [poolKey, pool] of pools) {
       if (pool.bufferSinkEdges.length === 0) {
         continue;
@@ -1092,19 +992,12 @@ export function solveEquilibrium(
     }
 
     /**
-     * How much of the surplus a drain that ASKS is asking on behalf of.
-     *
-     * The leftover splits evenly across every drain on an output, which is
-     * what each one physically catches. Demand cannot be read off that share
-     * directly once some of the drains are silent: a product drawer beside a
-     * byproduct drawer would ask for half the output, the machine would drop
-     * to half, that halves the leftover, and the whole thing spirals to zero -
-     * a machine wired to a drawer that wants everything it makes sitting at 0%.
-     *
-     * So the askers claim the silent ones' shares as well. One product drawer
-     * next to one byproduct drawer asks for the lot, the machine runs flat out,
-     * and the two still catch half each. With no silent drains this is 1 and
-     * nothing changes.
+     * How much of the surplus a drain that ASKS is asking on behalf of. Each
+     * drain physically catches an even share, but if demand were read off that
+     * share a product drawer beside a byproduct drawer would ask for half, the
+     * machine would drop to half, and the loop spirals to zero. So askers claim
+     * the silent drains' shares too (the machine runs flat out, each still
+     * catches half). With no silent drains this is 1.
      */
     const drainClaimByBudget = new Map<string, number>();
     for (const [budgetKey, budget] of budgets) {
@@ -1125,10 +1018,8 @@ export function solveEquilibrium(
     // saturate-and-reoffer instead of an even split: the pool's requested
     // pull water-fills across its sink edges, each capped by what that edge
     // absorbed this round (the real relay) or by its budget's capability
-    // (the shadow relay). An even split understates the bigger feeder - two
-    // canners at 0.67/s and 0.89/s into one cell buffer were each asked for
-    // 0.78/s, the bigger one read "nothing asks for more", and its idling
-    // held a clog upstream that the idling itself justified.
+    // (the shadow relay). An even split understates the bigger feeder, which
+    // then idles and holds a self-justifying clog upstream.
     const overflowPullByEdge = new Map<string, number>();
     const shadowRelayByEdge = new Map<string, number>();
     for (const [poolKey, pool] of pools) {
@@ -1143,10 +1034,8 @@ export function solveEquilibrium(
           : (bufferAbsorbByEdge.get(edge.id) ?? 0);
       });
       // In the settle world the pull relays by CAPABILITY, not absorption:
-      // absorption follows the feeder's falling level, so a buffer-fed ring
-      // member that dips loses its demand credit, the lost credit justifies
-      // the dip, and the ring's demand collapses through the tank (the same
-      // self-justifying idle the shadow relay cures in the verdict world).
+      // absorption follows the feeder's falling level, so a dip would lose its
+      // demand credit and justify itself, collapsing a ring through the tank.
       const pullTakes = waterFillShares(
         desireFill.poolRequested.get(poolKey) ?? 0,
         settleAct
@@ -1164,16 +1053,13 @@ export function solveEquilibrium(
       });
     }
 
-    // A source drawer is MAKEUP, not competition. The fills already serve
-    // real machines before touching the infinite drawer (drain priority),
-    // and the demand relay has to agree: judged on grants alone, a machine
-    // idling beside a source reads "nothing asks for more" because the source
-    // quietly covered the residual ask, the idling justifies itself, and the
-    // artifact is a fixed point (the silicone electrolyzer pinned at 75%
-    // while its suppliers' HCl must be drunk; in game it runs flat out). So
-    // each machine edge reclaims demand credit for the share of the source-
-    // covered ask it COULD supply - up to its capability offer - and the
-    // source lines give exactly that credit back.
+    // A source drawer is MAKEUP, not competition. The fills serve real
+    // machines before the infinite drawer, and the demand relay must agree:
+    // judged on grants alone, a machine beside a source reads "nothing asks
+    // for more" because the source covered the residual ask, and the idling
+    // justifies itself. So each machine edge reclaims demand credit for the
+    // share of the source-covered ask it COULD supply (up to its capability
+    // offer), and the source lines give exactly that credit back.
     const reclaimByEdge = new Map<string, number>();
     for (const [, need] of needs) {
       if (need.machineEdges.length === 0 || need.storageEdges.length === 0) {
@@ -1247,23 +1133,13 @@ export function solveEquilibrium(
         const pool = pools.get(edge.poolKey);
         const deficitShare =
           (poolDeficit.get(edge.poolKey) ?? 0) / Math.max(1, pool?.sinkEdges.length ?? 1);
-        // A PRODUCT drawer's absorption IS its demand: it asks its feeder for
-        // everything the machine can make, which is what pins a terminal
-        // machine at full blast and is exactly what you want from the thing
-        // the factory is for.
-        //
-        // A BYPRODUCT drawer asks for nothing. It still eats the surplus
-        // (`eatenByEdge` above, so conservation holds and nothing clogs), it
-        // simply never begs, which leaves the pace to real consumers and to
-        // the plan's target rate.
-        //
-        // An OVERFLOW buffer asks for what its takers pull, and not one item
-        // more. It still catches the whole surplus (so the feeder never clogs
-        // on it), but reporting the catch as demand would drive the feeder to
-        // produce FOR the tank, and a buffer that manufactures demand is a
-        // product drawer wearing the wrong badge. Each feeder's share of the
-        // pull is the water-filled attribution above, already capped by what
-        // this edge absorbed.
+        // A PRODUCT drawer's absorption IS its demand, which pins a terminal
+        // machine at full blast. A BYPRODUCT drawer still eats the surplus
+        // (conservation holds, nothing clogs) but asks for nothing, leaving the
+        // pace to real consumers and targets. An OVERFLOW buffer catches the
+        // whole surplus but asks only for what its takers pull (the
+        // water-filled share above); reporting the catch as demand would make
+        // the feeder produce FOR the tank.
         demandByEdge.set(
           edge.id,
           edge.silent
@@ -1306,13 +1182,11 @@ export function solveEquilibrium(
 
     // ---- Drawer-to-drawer settlement. ------------------------------------
     // A drawer feeder owes its drawer what the drawer's takers pulled beyond
-    // what machine deliveries covered - the buffer's own "pass on the pull,
-    // not one item more" rule, applied one container up. Committed stock
-    // migrates first; a chain ending in a SOURCE covers the rest, which is
-    // what holds a top-up line at exactly the loop's shortfall - and at 0/s
-    // the day the loop turns net-positive. Relayed a few passes so a chain
-    // settles inside the round; deeper ones converge across rounds like
-    // every other lagged figure here.
+    // what machine deliveries covered (the buffer's "pass on the pull, no
+    // more" rule, one container up). Committed stock migrates first; a chain
+    // ending in a SOURCE covers the rest, so a top-up line carries exactly the
+    // loop's shortfall. Relayed a few passes per round; deeper chains converge
+    // across rounds.
     if (storageFeedEdges.length > 0) {
       // Stock still uncommitted after the fills. Cans already drank theirs.
       const stockByPool = new Map<string, number>();
@@ -1472,21 +1346,15 @@ export function solveEquilibrium(
           demandSum += demandByEdge.get(edge.id) ?? 0;
         }
         // The same takers, read in the shadow fill: their pull with every clog
-        // throttle removed. Storage sinks keep their real figures - a tank's
-        // absorption follows production, it has no suppressed want to restore.
+        // throttle removed.
         let shadowSum = 0;
         for (const edge of budget.edges) {
           if (!edge.needKey) {
-            // Tanks keep their real figures in the shadow - absorption
-            // follows production - EXCEPT a buffer, whose demand is its
-            // takers' pull relayed. Judged on the REAL pull, a clog-held
-            // taker depresses the tank's pull, the low pull justifies the
-            // feeder's clog, and the latch the shadow exists to break simply
-            // re-forms one drawer upstream (the three-electrolyzer cell
-            // board: the electrolyzer read clogged on oxygen cells because
-            // the canner idled, and the canner idled because the cell
-            // buffer's pull was depressed by that very clog). So a buffer
-            // relays its takers' SHADOW pull instead.
+            // Tanks keep their real figures in the shadow (absorption follows
+            // production), EXCEPT a buffer, whose demand is its takers' pull
+            // relayed: judged on the real pull, the clog latch the shadow
+            // breaks would re-form one drawer upstream. So a buffer relays its
+            // takers' SHADOW pull.
             const isBufferSink =
               edge.overflow || (edge.role === "storage-sink" && !edge.freeDisposal);
             if (isBufferSink) {
@@ -1508,16 +1376,10 @@ export function solveEquilibrium(
           }
         }
         const required = Math.max(demandSum, floorRate);
-        // A voided output is a fully demanded output: the can drinks whatever
-        // arrives, so this budget can never pace the machine below full blast
-        // (the in-game void-pipe semantic, the jump-start trick built in).
-        //
-        // A DRAIN deliberately does not do this. The two are different asks: a
-        // can says "run flat out and destroy the rest", a drain says only
-        // "a surplus here is allowed". Pinning drains too would drive every
-        // machine feeding a dead-end drawer to full blast for no reason but
-        // the drawer's existence. Overflow buffers are absent from the pin for
-        // the same reason: catching a surplus is not wanting one, and a tank
+        // A voided output is fully demanded: trash drinks whatever arrives, so
+        // this budget never paces the machine below full blast (the in-game
+        // void pipe). An asking drain pins it too. Silent drains and overflow
+        // buffers do not: catching a surplus is not wanting one, and a tank
         // must never be the reason a machine runs flat out.
         const pinned =
           budget.trashEdges.length > 0 ||
@@ -1558,19 +1420,15 @@ export function solveEquilibrium(
         }
       }
 
-      // CONSERVATION. Demand says how fast this node is WANTED; disposal says
-      // how fast it CAN go before a wired output it cannot shift backs up on
-      // it. A budget with a drain or a can on it can always shift everything.
-      // Any other one moves only what its consumers pull, and the tightest of
-      // those is the ceiling. Target floors are asks, not outlets, so they are
-      // deliberately absent here: dialling a rate does not create somewhere to
-      // put the result.
-      // The ceiling honours the HIGHER of the two readings. The real fill can
-      // dip below the truth for a round while signals cross (the latch the
-      // shadow exists to break); the shadow can sit below the truth when a
-      // competing supplier is genuinely clogged elsewhere and its imagined
-      // unclogged offer absorbs ask it will never really serve. Either alone
-      // understates somewhere; a want is proven by whichever world shows it.
+      // CONSERVATION. Demand says how fast this node is WANTED; disposal how
+      // fast it CAN go before a wired output backs up. A budget with a drain or
+      // trash can always shift everything; any other moves only what its
+      // consumers pull, and the tightest is the ceiling. Target floors are
+      // asks, not outlets, so they are absent here.
+      // The ceiling takes the HIGHER of the real and shadow readings: the real
+      // fill can dip for a round while signals cross, and the shadow can dip
+      // when a competing supplier clogged elsewhere absorbs ask it will never
+      // serve. A want is proven by whichever world shows it.
       let disposal = Number.POSITIVE_INFINITY;
       let clogKey: ResourceKey | undefined;
       for (const stat of budgetStats) {
@@ -1585,15 +1443,12 @@ export function solveEquilibrium(
       }
 
       // THE PRIORITY MAP. For each output, the rate the machine would run at
-      // even if this output's takers pulled nothing: what the REST of the node
-      // wants of it (its other outputs' demand and pins, the plan's dialled
-      // floors), bounded by what its inputs allow. Whatever this output makes
-      // at that rate exists whether or not anybody drinks it - so next round's
-      // fills serve it FIRST, before any feeder that is free to idle. This is
-      // what lets a byproduct return-feed be drained ahead of an honest supply
-      // line instead of clogging its machine while the supply line hogs the
-      // ask (the NyrZ collapse), without touching the fairness rule between
-      // competing consumers.
+      // even if this output's takers pulled nothing (its other outputs' demand
+      // and pins, target floors, bounded by its inputs). That much exists
+      // whether or not anybody drinks it, so next round's fills serve it FIRST,
+      // before any feeder free to idle. This drains a byproduct return-feed
+      // ahead of a supply line instead of clogging its machine, without
+      // touching fairness between competing consumers.
       for (const stat of budgetStats) {
         let pressureExcl = floorPressure;
         let dispExcl = Number.POSITIVE_INFINITY;
@@ -1628,9 +1483,8 @@ export function solveEquilibrium(
       if (clogKey !== undefined && !(disposal < pressure - CLOG_EPSILON)) {
         clogKey = undefined;
       }
-      // A bare output is a hard zero, but it is never NAMED as the clog: a
-      // slot with no wire on it is reported as UNWIRED, which says the same
-      // thing in a word the reader can act on without any arithmetic.
+      // A bare output is a hard zero but never NAMED as the clog: it is
+      // reported as UNWIRED instead.
       if (info.bareOutputKeys.length > 0) {
         disposal = 0;
         clogKey = undefined;
@@ -1681,11 +1535,9 @@ export function solveEquilibrium(
         clampUtilization(output.demNext.get(info.id) ?? 1);
       currentDelta.set(`c|${info.id}`, capDelta);
       currentDelta.set(`d|${info.id}`, demDelta);
-      // Disposal counts toward CONVERGENCE but is deliberately kept out of
-      // `currentDelta`: the geometric jump below routes every entry into
-      // either `cap` or `dem` by key prefix, and it is re-derived from the
-      // edge demands each round anyway, so extrapolating it would only let it
-      // disagree with the numbers it came from.
+      // Disposal counts toward CONVERGENCE but stays out of `currentDelta`:
+      // the geometric jump below routes entries into `cap` or `dem` only, and
+      // disposal is re-derived from edge demands each round anyway.
       const dispDelta =
         clampUtilization(disp.get(info.id) ?? 1) -
         clampUtilization(output.disposalNext.get(info.id) ?? 1);
@@ -1703,12 +1555,11 @@ export function solveEquilibrium(
       );
     }
 
-    // The lagged auxiliary state is part of the fixed point too. Watching
-    // only the four vectors, a board could repeat them exactly for one round
-    // while the priority tranches were still moving, stop, and report a
-    // round computed from mid-flight tranches - the silicone board read its
-    // LCR's inputs at one level and its outputs at another. Both figures are
-    // normalized onto the same utilization scale the vector deltas use.
+    // The lagged auxiliary state is part of the fixed point too: watching only
+    // the four vectors, a solve could stop on a round computed from
+    // mid-flight priority tranches (a machine's inputs and outputs read at
+    // different levels). Both figures are normalized onto the utilization
+    // scale the vector deltas use.
     for (const [budgetKey, budget] of budgets) {
       if (budget.makePerSecond <= EPSILON) {
         continue;
@@ -1910,27 +1761,17 @@ export function solveEquilibrium(
   };
 
   // ---- THE BALANCED-RING RESCUE. --------------------------------------------
-  // A ring that conserves its circulating goods EXACTLY (loop gain 1.0 - the
-  // in-game cell loop: an electrolyzer eats 1 acid cell + 6 empty and hands
-  // all 7 cells back through its canners) has a continuum of self-consistent
-  // levels and no restoring force between them. The descent's transients -
-  // fair-share splits taken while a sibling ceiling is still settling, a
-  // drawer's one-round offer lag - each shave a little off the circulating
-  // level, and with nothing to put a dip back (a SURPLUS ring re-inflates by
-  // itself, which is why gain > 1 rings hold) the level ratchets down the
-  // continuum to zero. In game the same ring, primed once, runs forever.
-  //
-  // So a ring whose machines all converged to zero CAPABILITY gets one
-  // appeal: solve again with the ring's internal needs allowed to draw their
-  // residual ask from an anchor - thin air, landing on the ring's own wires,
-  // strictly after every real supplier, with potentials untouched so real
-  // constraints (a short water line, machine counts) still pace the level.
-  // The anchor is the solver's own version of the player priming the loop.
-  // The verdict is read off the settled anchors themselves: a ring that
-  // sustains itself leaves them idling at ~0/s (the workaround that exposed
-  // this bug - a source drawer wired into the cell buffer - settles at 0/s
-  // the same way), while a genuinely lossy ring leans on them every round,
-  // and that rescue is thrown away in favour of the honest dead answer.
+  // A ring with loop gain exactly 1.0 (a cell loop: every cell an
+  // electrolyzer eats comes back through its canners) has a continuum of
+  // self-consistent levels, and the descent's transients ratchet it to zero;
+  // in game the same ring, primed once, runs forever. (Gain > 1 rings
+  // re-inflate by themselves.) So a ring whose machines all converged to zero
+  // CAPABILITY is solved again with its internal needs allowed to draw their
+  // residual ask from an ANCHOR (thin air on the ring's own wires, served
+  // after every real supplier, potentials untouched so real constraints still
+  // pace it): the solver priming the loop. A self-sustaining ring leaves its
+  // anchors idling at ~0/s and the rescue is adopted; a lossy ring leans on
+  // them and the honest dead answer stands.
   {
     const deadRings = findDeadRings();
     if (deadRings.length > 0) {
@@ -1965,12 +1806,9 @@ export function solveEquilibrium(
           }
         }
         const settled = descend();
-        // Judged PER NEED against that need's own real flow, never against a
-        // ring total: a ring's fluids run at hundreds of litres a second and
-        // its cells at one, so a ring-relative gate waves through an anchor
-        // that is quietly minting most of an item line (0.25/s of hydrogen
-        // cells hid under 0.05% of a litre-dominated sum, and the plan made
-        // empty cells from nothing).
+        // Judged PER NEED against that need's own real flow, never a ring
+        // total: fluids run at hundreds of L/s and cells at one, so a
+        // ring-relative gate would hide an anchor minting most of an item line.
         const sustained = candidates.filter((ring) => {
           for (const [needKey, anchorEdges] of ring.anchoredNeeds) {
             const anchorFlow = settled.anchorGrantByNeed.get(needKey) ?? 0;
@@ -2012,25 +1850,16 @@ export function solveEquilibrium(
   }
 
   // ---- THE SETTLEMENT. -------------------------------------------------------
-  // The converged answer can still CLAIM more than the wires deliver.
-  // Capability is deliberately clog-blind (see the two offers in runRound),
-  // so a consumer downstream of a clogged supplier converges wanting full
-  // blast, reads capable of it, and eats material that never arrives - the
-  // silicone board's chem reactor sat at "100%", minting 43.2 L/s of product
-  // from a 0.03/s trickle of PDMS. The verdict layer is RIGHT to keep the
-  // clog-blind reading - it is what says "one wire clears it" instead of
-  // cascading one clog into a board of phantom shortages - but the settled
-  // flows must conserve.
-  //
-  // So one last, separate fixed point, AFTER the verdicts are done: each
-  // node's actual level is bounded by what its wires really delivered, and
-  // the actual-flow side (desire asks, actual offers, sink absorption) is
-  // re-run at that level - a starved machine releases its other ingredients'
-  // unclaimed shares, its own output offer shrinks, and the bound chases
-  // down its consumers hop by hop. None of it feeds back into cap/dem/disp,
-  // so the diagnosis keeps naming the clog while the books keep the truth.
-  // Boards whose deliveries already cover every claim - almost all of them -
-  // skip this entirely and keep their figures bit for bit.
+  // The converged answer can still CLAIM more than the wires deliver:
+  // capability is clog-blind (see the two offers in runRound), so a consumer
+  // below a clogged supplier reads capable of full blast and eats material
+  // that never arrives. The verdicts keep that reading (it is what says "one
+  // wire clears it"), but the settled flows must conserve. So one last
+  // fixed point: each node's actual level is bounded by what its wires
+  // really delivered and the actual-flow side is re-run at that level, the
+  // bound chasing down consumers hop by hop. Nothing feeds back into
+  // cap/dem/disp. Boards whose deliveries already cover every claim skip
+  // this and keep their figures bit for bit.
   const act = new Map<string, number>();
   const actBinders = new Map<string, ResourceKey>();
   const actClogBinders = new Map<string, ResourceKey>();
@@ -2070,33 +1899,14 @@ export function solveEquilibrium(
       }
       return { bound, binder };
     };
-    // The MIRROR bound: production has to be TAKEN, not only fed. An output
-    // wired only to machines (no drain, no can, no overflow buffer) has
-    // nowhere to shed a surplus, so in game the chest behind it fills and the
-    // machine slows to its takers' real pace. Without this half, a machine
-    // could settle above its consumers, the difference vanished from every
-    // book, and - worse - its OTHER outputs, byproducts of production that
-    // never really happened, kept feeding the board: the bauxite line's mixer
-    // needs 9 NaOH per op, the loop returns 0.75, and the plan still read 23%
-    // because the AlOH reactor ran 3x past its taker and the phantom run's
-    // byproduct NaOH was booked as real. The verdict layer stays clog-blind
-    // on purpose (one wire clears it); the settled flows must not.
-    // Grants are demand-level asks (see askDesire), but a taker only EATS at
-    // its own actual level - a machine at 10% eats 10% of everything. The
-    // scale per need turns granted flow into consumed flow, so a producer is
-    // bounded by what its takers really drink, never by what they were merely
-    // handed.
-    // THE MIRROR BOUND IS PARKED, deliberately (2026-08-19). Bounding a
-    // machine by what its takers actually drink is the right physics - an
-    // output with no drawer backs up in game - but crediting a producer with
-    // its takers' consumption needs an allocation rule that is fair to
-    // co-suppliers AND leaves a dipped supplier room to recover, and every
-    // rule tried so far fixes one pinned board while breaking another.
-    // Judged on the fill's own grants it walked healthy boards to zero, and
-    // the player who repaired his bauxite line with an NaOH source drawer
-    // watched the repair READ as dead. Branch solver-sustained-credit-wip
-    // carries the four attempted rules and the acceptance matrix for the
-    // real fix. Until then an unconsumed surplus shows on the books but does
+    // NO MIRROR BOUND (deliberately): a machine is not bounded by what its
+    // takers actually drink. That is the right physics (an output with no
+    // drawer backs up in game), but crediting a producer with its takers'
+    // consumption needs a rule that is fair to co-suppliers AND lets a dipped
+    // supplier recover, and no rule found does both; judged on the fill's
+    // grants it walks healthy boards to zero. Branch
+    // solver-sustained-credit-wip holds the attempted rules and their
+    // acceptance matrix. So an unconsumed surplus shows on the books but does
     // not throttle its maker: too-generous numbers over false zeros.
     let needsSettling = false;
     for (const info of machineNodes) {
@@ -2110,13 +1920,10 @@ export function solveEquilibrium(
     }
     if (needsSettling) {
       // The settle world's own descent. Verdict capability and disposal are
-      // the hard ceilings (the settlement may never outrun the could-world),
-      // but DEMAND is re-read from each settled round: the verdict demand was
-      // computed around the phantom operating point, and a node it pinned low
-      // (the silicone electrolyzer stuck at 75% while its suppliers' output
-      // must be drunk) may honestly rise once the settled asks reach it. A
-      // rise is never invention - it is still capped by what the wires
-      // actually granted (deliveredBound), which rides act-throttled offers.
+      // hard ceilings, but DEMAND is re-read from each settled round: the
+      // verdict demand was computed around the phantom operating point, and
+      // a node it pinned low may rise once the settled asks reach it. A rise
+      // is still capped by what the wires granted (deliveredBound).
       const verdictLastRound = lastRound;
       const verdictAct = new Map(act);
       const verdictInputBinders = new Map(actBinders);
@@ -2134,12 +1941,10 @@ export function solveEquilibrium(
         let maxDelta = 0;
         for (const info of machineNodes) {
           const delivered = deliveredBound(settled, info);
-          // Demand may only RISE from its verdict seed. A rise is the honest
-          // correction (a node pinned by a demand computed around the phantom
-          // point, like the silicone electrolyzer at 75%); a fall is the
-          // collapse vector - settle demand rides the settle asks, which ride
-          // the falling levels, and letting it follow them down unravels
-          // every ring. The delivered bound does all honest downward work.
+          // Demand may only RISE from its verdict seed. A rise corrects a node
+          // pinned by demand computed around the phantom point; a fall would
+          // follow the falling levels down and unravel every ring. The
+          // delivered bound does all honest downward work.
           const demandCeiling = Math.max(
             clampUtilization(dem.get(info.id) ?? 1),
             clampUtilization(settleDem?.get(info.id) ?? 0),
@@ -2184,18 +1989,13 @@ export function solveEquilibrium(
       runSettleLoop();
 
       // ---- The settlement's own ring appeal. -----------------------------
-      // A self-contained ring that conserves its goods EXACTLY (the magnesium
-      // loop: 8 salt -> 4 sodium, 2 magnesium -> 6 MgCl2 -> back, gain 1.0)
-      // has no restoring force under the flow bounds: delivered rides the
-      // supplier's level and sustained rides the taker's, each one pass
-      // behind, and the lag mismatch bleeds the level a little every pass all
-      // the way to zero - a board that runs forever in game reads dead. Same
-      // disease, same cure as the main descent's balanced-ring rescue: rings
-      // the settlement zeroed (that the verdicts ran) get one appeal with
-      // their internal needs allowed to draw the anchor, dead last, and the
-      // appeal is adopted only if the settled anchors idle at ~0/s. A ring
-      // that leans on the anchor every round - the bauxite lye loop, short
-      // 8.25 NaOH per op - is honestly dead and keeps its zero.
+      // A gain-1.0 ring has no restoring force under the flow bounds either:
+      // each bound lags the other by a pass and the mismatch bleeds the level
+      // to zero. Same cure as the balanced-ring rescue: rings the settlement
+      // zeroed (that the verdicts ran) get one appeal with their internal
+      // needs allowed to draw the anchor, dead last, adopted only if the
+      // settled anchors idle at ~0/s. A ring that leans on the anchor every
+      // round is honestly dead and keeps its zero.
       {
         const crushedRings = findDeadRings((id) => act.get(id) ?? 1).filter((ring) => {
           for (const needKey of ring.anchoredNeeds.keys()) {
@@ -2292,18 +2092,13 @@ export function solveEquilibrium(
     }
   }
 
-  // The physical-flow book must not outrun the machines it feeds. The desire
-  // fill's asks are throttled by DEMAND alone, deliberately (see askDesire):
-  // a machine pinned below its demand - a bare slot, a clog, the settlement -
-  // was still granted its full demand-level intake, and exporting that grant
-  // as-is makes every downstream book lie in unison: the wire pill carries
-  // flow the card denies, a source drawer "drains" 0.05/s into an EBF at 0%,
-  // and the boundary calls the plan short of material nothing consumes. So
-  // the exported intake of every need is scaled down to the node's actual
-  // level here, after all verdicts are final. Settled boards already sit at
-  // exactly this bound (the settle asks are act-throttled), so this touches
-  // only the skip case. The verdict books - demand, availability, unmet
-  // desire - keep telling what is WANTED; this is only what MOVES.
+  // The physical-flow book must not outrun the machines it feeds. Desire asks
+  // are throttled by DEMAND alone (see askDesire), so a machine pinned below
+  // its demand (bare slot, clog) is still granted demand-level intake, and
+  // exporting that makes wires carry flow the card denies. So every need's
+  // exported intake is scaled to the node's actual level, after all verdicts
+  // are final. Settled boards already sit at this bound; the verdict books
+  // (demand, availability, unmet desire) keep telling what is WANTED.
   for (const [, need] of needs) {
     const info = infoById.get(need.targetId);
     if (!info || need.nameplatePerSecond <= EPSILON) {
@@ -2382,38 +2177,13 @@ interface FillResult {
 }
 
 /**
- * Water-filling over the edge graph, in FOUR passes, and the order of the
- * passes is drain priority:
- *
- *   1. must-ship machine output   (the priority tranche: co-products of
- *                                  machines that run anyway - see the
- *                                  priority map in runRound)
- *   2. tanks                      (material already committed into a buffer)
- *   3. machine supply free to idle
- *   4. source drawers             (bottomless makeup, always last - including
- *                                  drawers with a SOURCE up their feed chain,
- *                                  which serve here on the chain's behalf)
- *
- * A consumer therefore drinks what EXISTS before asking anybody to make more,
- * and asks everybody real before touching the infinite drawer. This is what
- * lets a byproduct return-feed or a recycling loop be drained first while the
- * honest supply line paces down to cover the difference - the fix for the
- * whole-board collapse a closed loop used to cause. Within every pass the
- * max-min rule stands unchanged: each hungry line gets an equal share of a
- * contended budget, small askers saturate, and the slack is re-offered, so a
- * 2000/s zombie ask still cannot crush a 10/s asker out of its trickle.
- * Grant factors are frozen per budget per round so iteration order cannot
- * shortchange later edges.
- */
-/**
  * The balanced-ring rescue's anchor plan: which needs may draw on the anchor,
  * on which ring wires the draw lands, and - per allowance bucket
  * (`${ring}|${resourceKey}`) - which ring budgets and pools measure the
  * ring's own supply of the resource. The anchor may REDISTRIBUTE that supply
- * (cover a fair-split transient that starved one ring member while another
- * over-claimed), never invent beyond it: without the bound, a demand-pinned
- * ring member would happily run flat out on conjured material and the rescue
- * would always read "lossy" and reject itself.
+ * (cover a fair-split transient), never invent beyond it, or a demand-pinned
+ * member would run on conjured material and the rescue would always reject
+ * itself as lossy.
  */
 interface RingAnchorPlan {
   needs: Map<string, PreparedEdge[]>;
@@ -2425,14 +2195,28 @@ interface RingAnchorPlan {
   /**
    * SETTLE-world anchors only: per need, the consumer's actual consumption
    * (its settle level x nameplate). The settle fills ask at DEMAND, so the
-   * residual ask includes slack the node never eats - an anchor covering it
-   * would hold deliveredBound at demand-level forever and the ring would run
-   * on anchor material. Capped at consumption, the anchor smooths dips and
-   * idles at the fixed point, where the original validation reads it.
+   * residual ask includes slack the node never eats; an uncapped anchor would
+   * hold deliveredBound at demand level and the ring would run on anchor
+   * material. Capped, the anchor smooths dips and idles at the fixed point.
    */
   consumptionCapByNeed?: Map<string, number>;
 }
 
+/**
+ * Water-filling over the edge graph in FOUR passes, ordered by drain
+ * priority:
+ *   1. must-ship machine output (the priority tranche, see runRound)
+ *   2. tanks (material already committed into a buffer)
+ *   3. machine supply free to idle
+ *   4. source drawers, and drawers with a SOURCE up their feed chain
+ *      (bottomless makeup, always last)
+ * A consumer drinks what EXISTS before asking anyone to make more, and asks
+ * everyone real before the infinite drawer, so a return-feed or recycling
+ * loop drains first while the supply line paces down. Within each pass the
+ * max-min rule holds (equal shares, small askers saturate, slack re-offered).
+ * Grant factors are frozen per budget per round so iteration order cannot
+ * shortchange later edges.
+ */
 function runFill(
   needs: Map<string, Need>,
   budgetOfferBase: Map<string, number>,
@@ -2600,26 +2384,18 @@ function runFill(
   runMachinePass(undefined);
   runStoragePass(false);
 
-  // THE RING ANCHOR, last of all - after every real supplier has spoken. A
-  // need inside a ring under rescue (see the balanced-ring rescue in
-  // solveEquilibrium) may draw its residual ask against the ring's own supply
-  // of the resource, landing the grant on the ring's own wires. `anchorGrants`
-  // is the rescue's evidence: a ring that sustains itself leaves its anchor
-  // idling at ~0/s once settled, a lossy ring leans on it every round and the
-  // rescue is thrown away.
+  // THE RING ANCHOR, last of all, after every real supplier. A need inside a
+  // ring under rescue may draw its residual ask against the ring's own
+  // supply, landing on the ring's own wires. `anchorGrants` is the rescue's
+  // evidence: a self-sustaining ring leaves it at ~0/s once settled.
   const anchorGrants = new Map<string, number>();
   if (anchors) {
-    // The bound is per CONSUMER, not per resource: no single ring member may
-    // end up holding more of a resource than the ring's whole capability on
-    // it (`allowanceByBucket`, stamped by runRound - capability, never the
-    // throttled actual, because a primed loop's banked stock covers a dip at
-    // the sustainable level). Across consumers the sum may transiently
-    // double-book - that is exactly the wobble the stock exists to absorb
-    // when a fair split hands one member's share to a sibling whose own
-    // ceiling has not settled yet - and the rescue's validation (anchors idle
-    // once settled) guarantees no double-booking survives to the answer. A
-    // demand-pinned member still cannot conjure supply: its real grants
-    // already reach the ring's capability, so its anchor stays shut.
+    // The bound is per CONSUMER: no ring member may hold more of a resource
+    // than the ring's whole capability on it (`allowanceByBucket`;
+    // capability, not the throttled actual, because a primed loop's stock
+    // covers a dip). Across consumers the sum may transiently double-book;
+    // the rescue's validation (anchors idle once settled) ensures none
+    // survives to the answer.
     for (const [needKey, anchorEdges] of anchors.needs) {
       const rem = remainingNeed.get(needKey) ?? 0;
       const bucket = anchors.bucketByNeed.get(needKey);
@@ -2676,22 +2452,13 @@ function runFill(
 type PreparedEdgeRef = Pick<PreparedEdge, "id" | "budgetKey" | "needKey" | "poolKey">;
 
 /**
- * Project-level target rate, split across producers of the target resource
- * that have no outgoing wire for it (the plan's terminal makers).
- */
-/**
  * Producers that carry the plan's target rate: the ones with nowhere for the
- * target resource to go except out of the plan.
+ * target resource to go except out of the plan. A wire into a DRAIN or trash
+ * does NOT count as somewhere it goes: draining the product is how a closed
+ * plan declares its export, and it must not cancel the target.
  *
- * A wire into a DRAIN or a trash can does NOT count as somewhere it goes.
- * Those accept without asking, so a node that drains its product is still the
- * end of the line and still on the hook for the rate you dialled. That matters
- * far more than it used to: draining the product IS how a closed plan says
- * "this is the thing I make", so without this exception dialling a target and
- * then declaring your export would silently cancel the target.
- *
- * Shared with the reporting pass in throughput.ts, which has to pick the same
- * nodes or the two would disagree about who owes the rate.
+ * Shared with the reporting pass in throughput.ts, which must pick the same
+ * nodes.
  */
 export function selectProjectTargetNodes(
   project: FactoryProject,
@@ -2713,6 +2480,7 @@ export function selectProjectTargetNodes(
   );
 }
 
+/** Project-level target rate, split evenly across the terminal makers. */
 function calculateProjectTargetShares(
   project: FactoryProject,
   nodes: Record<string, NodeThroughputResult>,
@@ -2736,12 +2504,10 @@ function calculateProjectTargetShares(
 }
 
 /**
- * Strongly connected components, iteratively (Tarjan).
- *
- * Iterative on purpose: a 1,200-node plan is a supported board size and a
- * recursive walk over a long chain blows the stack. One pass, O(nodes+edges).
- * The balanced-ring rescue uses it here; death-spiral.ts imports it for the
- * board's dead-loop badges, so the two always agree on what a ring is.
+ * Strongly connected components, iteratively (Tarjan): a recursive walk over
+ * a long chain on a big plan blows the stack. O(nodes+edges). Shared with
+ * death-spiral.ts so the rescue and the dead-loop badge agree on what a ring
+ * is.
  */
 export function stronglyConnectedComponents(
   nodeIds: string[],

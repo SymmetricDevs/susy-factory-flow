@@ -11,9 +11,8 @@ import { APP_VERSION } from "@/lib/version";
 const GITHUB_URL = "https://github.com/jackwrichards/gtnh-factory-flow";
 
 /**
- * The planner's thread in the Greg Tech: New Horizons Discord. This is a
- * thread inside the pack's own server, not a server invite, so it only opens
- * for people who are already in there.
+ * The planner's thread in the GTNH Discord. A thread, not a server invite,
+ * so it only opens for people already in the server.
  */
 const DISCORD_THREAD_URL = "https://discord.com/channels/181078474394566657/1531402304530682036";
 
@@ -25,20 +24,14 @@ const DISCORD_THREAD_URL = "https://discord.com/channels/181078474394566657/1531
 const KOFI_URL = "https://ko-fi.com/gtnhplanner";
 
 /**
- * Straight into the bug report form rather than a blank issue box, with the
- * version chip's value already filled in: the first thing anyone triaging a
- * report needs is which build it happened on, and that is the detail players
- * are least likely to think of.
+ * The bug report form with the app version pre-filled, since reporters rarely
+ * think to include the build.
  */
 const BUG_REPORT_URL = `${GITHUB_URL}/issues/new?template=bug_report.yml&version=${encodeURIComponent(
   APP_VERSION,
 )}`;
 
-/**
- * Source and chat, sitting in the header beside the board actions. The bug
- * report is not one of these squares: it sits at the far right in its own
- * red so it is still the one thing on the bar that stands out.
- */
+/** The header's "Help" dropdown: the auxiliary set of MenuLinks. */
 export function HeaderLinks() {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -57,11 +50,7 @@ export function HeaderLinks() {
   );
 }
 
-/**
- * Reporting a bug keeps its red so it is still the one control that stands
- * out, but it lost its word (Jack, 2026-09-06): the bar was too wide, and the
- * tooltip says the rest.
- */
+/** An icon-only bug report button in its own red; the tooltip carries the words. */
 export function ReportBugButton() {
   return (
     <a
@@ -77,12 +66,7 @@ export function ReportBugButton() {
   );
 }
 
-/**
- * The donation link, dressed like its two labelled neighbours but in its own
- * colour. The word on the bar is just "Support": the app's name is already the
- * first thing on the same line, and this is the button that has to survive the
- * snug squeeze down to its heart.
- */
+/** The donation link: a heart in its own colour, labelled for screen readers. */
 export function SupportButton() {
   return (
     <a
@@ -102,9 +86,9 @@ export function SupportButton() {
 }
 
 /**
- * The same three links as labelled rows, for the compact menu. Two brand marks
- * a phone can read at a glance are still two brand marks nobody can hover for a
- * tooltip, so up here they carry their names.
+ * The app's links as labelled rows (touch has no hover tooltips), for the
+ * compact menu. `auxiliary` (the header's Help dropdown) leaves out Library
+ * and Support.
  */
 export function MenuLinks({ onAction, auxiliary = false }: { onAction?: () => void; auxiliary?: boolean }) {
   return (

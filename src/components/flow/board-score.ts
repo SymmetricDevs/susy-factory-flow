@@ -1,14 +1,14 @@
 /**
  * The board's SCORE and GEOMETRY, read straight off what the board is
- * drawing, for the dev menu's versus mode (Jack, 2026-09-08).
+ * drawing, for the dev menu's versus mode.
  *
- * The score is the two numbers the arrange is judged by: how many times the
- * displayed wires cross, and how much wire there is. The geometry is
- * everything needed to rebuild the board's routing problem without the
- * plan: every card's top-left and measured size, every wire's two ends,
- * port rows and width. FactoryFlow registers the readers (it owns the
- * installed routes and the published geometry); the dev menu asks. A tiny
- * registry so the menu never imports the board.
+ * The score is what the arrange is judged by: how often the displayed wires
+ * cross, and how much wire there is. The geometry is everything needed to
+ * rebuild the routing problem without the plan: every card's top-left and
+ * measured size, every wire's two ends, port rows and width. FactoryFlow
+ * registers the readers (it owns the installed routes and the published
+ * geometry); the dev menu asks. A tiny registry so the menu never imports
+ * the board.
  */
 
 export interface BoardScore {

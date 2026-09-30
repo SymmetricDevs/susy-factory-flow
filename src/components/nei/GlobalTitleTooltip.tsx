@@ -7,23 +7,18 @@ import { isTouchPointer } from "@/lib/pointer-kind";
 import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
 
 /**
- * Every browser `title` attribute in the app, rendered as the planner's own
- * tooltip instead of the browser's.
+ * Renders every browser `title` attribute as the planner's own tooltip.
  *
- * One delegated listener, mounted once: on hover it finds the nearest
- * `[title]`, MOVES the text into `data-tip-title` (so the native popup can
- * never render - an attribute that is gone cannot be shown), and paints the
- * same words in the Minecraft panel every other tooltip here uses. React
- * changing a hovered control's title updates the panel immediately, without
- * requiring the pointer to leave and re-enter.
+ * One delegated listener: on hover it finds the nearest `[title]`, MOVES the
+ * text into `data-tip-title` (so the native popup can never render), and
+ * paints it in the Minecraft panel. A title React changes while hovered
+ * updates the panel at once.
  *
- * Precedence with the rich tooltips (MinecraftTooltip):
- * - An element that IS a rich root keeps its rich panel; its `title` was a
- *   duplicate and is stripped without replacement.
- * - A titled element INSIDE a rich area gets stamped `data-tooltip-stop`,
- *   which the rich wrapper already yields to - so hovering a button inside a
- *   card swaps the card's story for the button's own line, one panel at a
- *   time, never two.
+ * Precedence with rich tooltips (MinecraftTooltip):
+ * - An element that IS a rich root keeps its rich panel; its duplicate
+ *   `title` is stripped without replacement.
+ * - A titled element INSIDE a rich area is stamped `data-tooltip-stop`, which
+ *   the rich wrapper yields to, so only one panel shows at a time.
  */
 const STORED = "data-tip-title";
 
@@ -40,8 +35,8 @@ export function GlobalTitleTooltip() {
     let pressedAt: { x: number; y: number } | undefined;
     let settleFrame: number | undefined;
     const observer = new MutationObserver((records) => {
-      // A removed title means the help was removed, not that the cached old
-      // title should live forever. Our own title conversion is unobserved.
+      // A title removed by React means the tip is gone; do not keep showing
+      // the cached text. Our own title conversion is unobserved.
       if (records.some(record => record.attributeName === "title") && !hovered?.hasAttribute("title")) {
         hovered?.removeAttribute(STORED);
       }
@@ -137,11 +132,9 @@ export function GlobalTitleTooltip() {
       buttons = event.buttons;
       resolveAt(event.target as Element | null, event.clientX, event.clientY, event.buttons);
     };
-    // A wheel or scroll never hides a tip by itself (Jack, 2026-09-07): a
-    // frame later, once the page has settled, the tip is re-read from
-    // whatever is under the pointer - the same thing keeps it, something
-    // else scrolled in re-targets it, and where the document cannot say
-    // (no elementFromPoint) the tip stays.
+    // A wheel or scroll never hides a tip by itself: a frame later the tip is
+    // re-read from whatever is under the pointer (same element keeps it, a new
+    // one re-targets it; without elementFromPoint it stays).
     const recheckAtPointer = () => {
       if (settleFrame !== undefined) {
         return;

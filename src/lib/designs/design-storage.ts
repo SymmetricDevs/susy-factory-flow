@@ -11,22 +11,17 @@ import {
 
 /*
  * Deliberately a different database from the dataset cache in
- * `lib/datasets/browser-cache.ts`. Adding a store to that one means bumping its
- * version, and a version change blocks while any other connection is open — so
- * the two would race on startup, when both are opened at once.
+ * `lib/datasets/browser-cache.ts`: adding a store there means a version bump,
+ * which blocks while another connection is open, and both open at startup.
  */
 const DB_NAME = "gtnh-factory-flow-designs";
-// 2: the library's folders store. 3: the same store again, because a browser
-// that hot-reloaded through the change reached 2 before the store was in the
-// code, and an upgrade never re-runs at the same number; the create below is
-// guarded, so a database that already has it is untouched.
+// 3 adds the folders store (2 also did, but some browsers reached 2 without
+// it). The create below is guarded, so an existing store is untouched.
 const DB_VERSION = 3;
 
 /*
- * Metadata and plans live in separate stores so the tab strip costs almost
- * nothing to draw: names and timestamps are a few hundred bytes each, while the
- * plans they belong to are hundreds of kilobytes with recipe data embedded.
- * Reading one to render the other would load every plan at startup.
+ * Metadata and plans live in separate stores so the tab strip can be drawn
+ * without loading every plan (hundreds of kilobytes each) at startup.
  */
 const META_STORE = "design-meta";
 const PLAN_STORE = "design-plans";
@@ -124,8 +119,8 @@ export async function readDesignSummary(id: string): Promise<DesignSummary | und
  * saving at once cannot both pass it. `expectedUpdatedAt` undefined writes
  * unconditionally, and so does a design not stored yet.
  *
- * This is what stops a tab left open on an old copy of a plan from writing
- * that copy over hours of work saved from another tab (design-tab-sync.ts).
+ * This stops a tab left open on an old copy from overwriting work saved from
+ * another tab (design-tab-sync.ts).
  */
 export async function writeDesignIfUnchanged(
   record: DesignRecord,
@@ -161,10 +156,7 @@ export async function writeDesignIfUnchanged(
 }
 
 /**
- * Writes only the metadata.
- *
- * Renaming shouldn't rewrite a megabyte of plan, and autosave shouldn't be
- * forced to wait behind it.
+ * Writes only the metadata, so a rename never rewrites the whole plan.
  *
  * The plan's own stamp and marks stay as stored (`keepStoredPlanMarks`), read
  * and written in one transaction, so a summary read before a save cannot put
@@ -307,18 +299,14 @@ function openDesignDb(): Promise<IDBDatabase> {
         db.close();
         return;
       }
-      // Another tab of the app wanting a NEWER schema asks this connection
-      // to step aside. Every operation here closes its own connection
-      // anyway, but a long transaction should not be the thing that blocks
-      // the other tab's upgrade forever.
+      // Another tab wanting a NEWER schema asks this connection to step
+      // aside, so a long transaction here never blocks its upgrade.
       db.onversionchange = () => db.close();
       resolve(db);
     };
-    // The mirror case: THIS open wants a newer schema than a connection some
-    // other tab is holding. Without this the open just never settles, the
-    // library never hydrates, and the strip sits empty with a dead plus. A
-    // clear failure is better than a silent hang; a reload once the other
-    // tab has let go clears it.
+    // The mirror case: THIS open wants a newer schema than a connection
+    // another tab holds. Otherwise the open never settles and the library
+    // never hydrates; a clear failure beats a silent hang.
     request.onblocked = () => {
       gaveUp = true;
       reject(

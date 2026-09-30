@@ -16,12 +16,12 @@ import { buildRatePlateTooltip } from "./storage-tooltip-data";
 
 /**
  * A rate rule and your rate, the way a source or product drawer sets them in
- * Solve (Jack, 2026-09-22): a rule BUTTON with a ▾ that opens the four rules
- * in words, and your rate in a sunken BOX you click and type into. Pool's
- * Desired rates borrow the rule button (`useTableRule`), with the word
- * spelled out beside its mark; their Target column keeps its own editor.
- * The resources panel's drawer rows use the drawer's own pair, the rule
- * button wearing its word as in Pool.
+ * Solve: a rule BUTTON with a ▾ that opens the four rules in words, and your
+ * rate in a sunken BOX you click and type into. Pool's Desired rates borrow
+ * the rule button (`useTableRule`), with the word spelled out beside its
+ * mark; their Target column keeps its own editor. The resources panel's
+ * drawer rows use the drawer's own pair, the rule button wearing its word as
+ * in Pool.
  */
 
 /** The rule list, in the order the rule button's wheel steps through it. Any
@@ -240,10 +240,10 @@ export type RuleControl = Pick<RateRule, "shownMode" | "any" | "locked" | "open"
 };
 
 /**
- * Pool's Desired rates rule (Jack, 2026-09-22): the drawer's button and list
- * with its marks, but Pool's own behaviour - picking a rule only switches the
- * rule, the rate stays where the Target column put it, and Any is the old
- * Ignore. The table shows the rule as stored even with no rate typed yet.
+ * Pool's Desired rates rule: the drawer's button and list with its marks, but
+ * Pool's own behaviour - picking a rule only switches the rule, the rate stays
+ * where the Target column put it, and Any is stored as Ignore. The table
+ * shows the rule as stored even with no rate typed yet.
  */
 export function useTableRule({ storage, role, name }: { storage: FactoryStorage; role: StorageRole | undefined; name: string }): RuleControl {
   const setStorageTarget = useFactoryStore((state) => state.setStorageTarget);

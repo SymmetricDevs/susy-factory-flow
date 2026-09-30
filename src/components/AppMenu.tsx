@@ -21,16 +21,10 @@ interface AppMenuProps {
 }
 
 /**
- * The whole top bar, folded into one button.
- *
- * On a narrow window the bar's contents — a pack picker, five plan actions, two
- * brand links, a bug report and an account — ran a good 600px past the edge of
- * the screen, which in a mobile browser widens the layout viewport and shrinks
- * everything on the page to fit. So below the compact threshold the bar keeps
- * only the app's name and its version chip, and everything else moves in here.
- *
- * A sheet under the header rather than a full-screen overlay: it is a handful of
- * rows, the board stays visible behind it, and a tap anywhere else puts it away.
+ * The whole top bar folded into one button, for compact windows. An
+ * overflowing bar makes a mobile browser widen the layout viewport and shrink
+ * the page, so the bar keeps only the name and version chip and everything
+ * else moves here: a sheet under the header, dismissed by a tap elsewhere.
  */
 export function AppMenu({
   onLoadDatasetVersion,
@@ -59,11 +53,9 @@ export function AppMenu({
       {isOpen ? (
         <div
           ref={sheetRef}
-          // Anchored to the header, which is the app's one `relative` bar, so
-          // the sheet hangs off the button that opened it at any width.
-          // `text-sm` up here because buttons inherit their font (the global
-          // reset outranks text-* on the control): without it the sheet's
-          // button rows render a size up from its link rows.
+          // Anchored to the header (the app's one `relative` bar). `text-sm`
+          // here because the global font reset outranks text-* on buttons,
+          // which inherit this size instead.
           className="absolute right-2 top-full z-[90] mt-1 flex w-[min(320px,calc(100*var(--ui-vw)-16px))] flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
         >
           {/* Pinned with the header's pack picker: see SHOW_PACK_PICKER. */}

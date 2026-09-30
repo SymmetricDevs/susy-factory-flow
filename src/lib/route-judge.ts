@@ -1,14 +1,14 @@
 /**
  * The layout judge: routes a board's real wires at hypothetical card
- * positions and reports crossings and length (`board-arrange`'s judge).
+ * positions and reports crossings, length and points (`board-arrange`'s
+ * judge).
  *
- * A full verdict solves every wire. A QUICK verdict, asked with the
- * positions it differs from (`base`), reuses the base's routes for every
- * wire that neither touches a moved card nor runs through where one now
- * stands, pins them, and re-solves only the rest - the polish tries dozens
- * of one-card moves, and each costs a fraction of a solve this way. Full
- * verdicts are cached by their positions so a base is found by identity of
- * layout, not of Map.
+ * A full verdict solves every wire. A QUICK verdict, given the `base`
+ * positions it differs from, pins the base's routes for every wire that
+ * neither touches a moved card nor runs through where one now stands, and
+ * re-solves only the rest, so the polish's many one-card trials stay cheap.
+ * Full verdicts are cached by their positions, so a base is found by
+ * layout, not by Map identity.
  */
 
 import {

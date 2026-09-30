@@ -49,7 +49,7 @@ const DEFAULT_ANNOTATION_COLOR = "yellow" as const;
  */
 export const ANNOTATION_DRAG_HANDLE_CLASS = "annotation-drag-handle";
 
-/** Text notes: 14px matches the old fixed `text-sm`, so existing notes look identical. */
+/** Text note size when unset: 14px (Tailwind's `text-sm`), so notes saved without a size keep their look. */
 const DEFAULT_ANNOTATION_FONT_SIZE = 14;
 const MIN_ANNOTATION_FONT_SIZE = 8;
 const MAX_ANNOTATION_FONT_SIZE = 96;
@@ -460,12 +460,11 @@ function AnnotationStylePanel({
       isVisible={selected}
       position={Position.Top}
       align="start"
-      // INSIDE the shape's top left, not above it: a panel above the box sat
-      // on the top edge's move strip and resize knobs. Position Top pins the
-      // toolbar's BOTTOM edge, so the negative offset reaches 48px into the
-      // shape and the chip row's place never changes - the menus below are
-      // an absolute overlay that grows DOWNWARD without moving a single
-      // button you are about to click.
+      // INSIDE the shape's top left, not above it: above, the panel covers the
+      // top edge's move strip and resize knobs. Position Top pins the toolbar's
+      // BOTTOM edge, so the negative offset reaches 48px into the shape; the
+      // menus below are an absolute overlay that grows DOWNWARD without moving
+      // the chip row.
       offset={-48}
       // The toolbar portal carries no z of its own, and this node sits at -5
       // (a backdrop), so without a lift the PANE hit-tests above the panel
@@ -1373,9 +1372,8 @@ function TextShape({
 
   return (
     <div
-      // No outer offset shadow of its own any more: every node casts the
-      // board-wide drop shadow now (globals.css), and a second one here read
-      // as a double edge.
+      // No outer offset shadow: every node already casts the board-wide drop
+      // shadow (globals.css), and a second one reads as a double edge.
       className="group/text relative h-full w-full border-2 font-mono shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]"
       style={{
         // The paint reaches the face, not just the frame: a 20% wash of the

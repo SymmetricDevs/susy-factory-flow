@@ -2,29 +2,23 @@
 @import "@xyflow/react/dist/style.css";
 
 /*
- * `compact:` — a phone, or any window too narrow or too short for the board to
- * share the screen with both side columns. The height half catches a phone held
- * sideways, which is wider than the width test but only ~430px tall.
+ * `compact:` — a phone, or any window too narrow or too short (a phone held
+ * sideways) for the board to share the screen with both side columns.
  *
- * Keyed on the `data-compact` attribute that `src/lib/compact-view.ts` stamps
- * on <html> (and the boot script in layout.tsx stamps before first paint),
- * not on a media query of its own: the numbers are shell pixels and the shell
- * is zoomed by the interface size (`--ui-scale`), so the query has to be built
- * from the live factor, which CSS cannot do. compact-view.ts owns the numbers
- * (COMPACT_MAX_WIDTH, COMPACT_MAX_HEIGHT) and the behavioural half of the
- * switch (drawers instead of columns, one menu instead of a top bar, folded
- * toolbars). This variant is for the style-only half: heights, minimum
- * heights, tap targets, font sizes.
+ * Keyed on the `data-compact` attribute that `src/lib/compact-view.ts` (and
+ * the boot script in layout.tsx) stamps on <html>, not on a media query: the
+ * breakpoints are shell pixels under `--ui-scale` zoom, which CSS cannot
+ * compute. compact-view.ts owns the numbers and the behavioural half; this
+ * variant is for style-only changes.
  */
 @custom-variant compact (&:where(html[data-compact], html[data-compact] *));
 
 /*
- * `snug:` — wide enough for the full top bar, not wide enough for every button
- * to keep its word. Between the compact cutoff and SNUG_MAX_WIDTH the bar's
- * labelled buttons (Support, What's new, Report Bug) drop to their icons; the
- * bar used to overflow here, and an overflowing bar is what makes a phone
- * browser widen its layout viewport and shrink the whole page to fit (see
- * AppMenu). Same attribute scheme as `compact:`.
+ * `snug:` — wide enough for the full top bar, not for every button to keep
+ * its word: between the compact cutoff and SNUG_MAX_WIDTH labelled buttons
+ * drop to icons. An overflowing bar makes a phone browser widen its layout
+ * viewport and shrink the page (see AppMenu). Same attribute scheme as
+ * `compact:`.
  */
 @custom-variant snug (&:where(html[data-snug], html[data-snug] *));
 
@@ -39,11 +33,9 @@
  */
 :root {
   --ui-scale: 1.17;
-  /* The EXACT reciprocal, never a rounded decimal: 1.3 x 0.76923 is not 1,
-     and an effective zoom of 0.99996 on the board put every card on
-     sub-pixel geometry, which doubled the compositor's per-frame layer
-     rebuild while panning (measured 2026-09-07). calc(1 / 1.3) cancels
-     exactly. ui-scale.ts and the boot script write the same form. */
+  /* The EXACT reciprocal, never a rounded decimal: an effective board zoom
+     of 0.99996 puts every card on sub-pixel geometry and slows panning.
+     ui-scale.ts and the boot script write the same calc() form. */
   --ui-scale-inverse: calc(1 / var(--ui-scale));
   --ui-vh: calc(1vh * var(--ui-scale-inverse));
   --ui-vw: calc(1vw * var(--ui-scale-inverse));
@@ -60,19 +52,13 @@
   zoom: var(--ui-scale);
 }
 
-/* THE BOARD IS ITS OWN COMPOSITOR LAYER. A pan moves the viewport's
-   composited transform, and Chrome then re-tests everything painted after
-   it on the PAGE for overlap with that moving layer, expanded out to the
-   nearest COMPOSITED clip. The board had none, so the clip was the whole
-   page: ~200 rows in the two side columns became layers of their own, and
-   rebuilding that layer list cost ~40 ms on every pan frame (a 13 fps pan
-   on a 100-card plan, measured 2026-09-07). will-change: opacity gives the
-   board a composited layer of its own, so its overflow clip bounds the
-   test; unlike transform it is not a containing block for fixed
-   descendants (the in-board menus are body portals regardless). Layer
-   build fell from 41 ms to 14 ms a frame, the overview pan from 13 to
-   ~48 fps. Do not swap it for isolation or contain: paint - neither
-   composites, both were measured doing nothing. */
+/* THE BOARD IS ITS OWN COMPOSITOR LAYER. A pan moves a composited transform,
+   and Chrome re-tests everything painted after it for overlap, out to the
+   nearest COMPOSITED clip; without one that is the whole page, and the side
+   columns' rows each become layers (a slow pan on big plans). will-change:
+   opacity gives the board its own layer so its clip bounds the test, and
+   unlike transform it is not a containing block for fixed descendants.
+   isolation and contain: paint do not composite, so they do not help. */
 .factory-flow-board {
   will-change: opacity;
 }
@@ -89,24 +75,19 @@
 /*
  * Theme tokens. The app renders dark, and only dark.
  *
- * The `--mc-*` scale is the Minecraft GUI bevel ramp, still named by the
- * LIGHTNESS OF THE ORIGINAL LIGHT RAMP — --mc-100 is the lightest token and
- * --mc-12 the darkest, which on this palette means --mc-100 is a mid grey and
- * --mc-12 is near black. Panels build their raised/inset look by pairing a
- * face colour with a lighter token (top-left highlight) and a darker one
- * (bottom-right shadow), so it is the ORDERING of the ramp that keeps every
- * bevel reading correctly; the names must keep matching that order. The range
- * is deliberately narrow and blue-tinted to match the recipe browser chrome.
+ * The `--mc-*` scale is the Minecraft GUI bevel ramp: --mc-100 is the
+ * lightest token (a mid grey here) and --mc-12 the darkest. Panels build
+ * their raised/inset look by pairing a face colour with a lighter token
+ * (top-left highlight) and a darker one (bottom-right shadow), so the names
+ * must keep matching the lightness ORDER or every bevel inverts.
  */
 :root {
   color-scheme: dark;
 
   /*
-   * The one font the whole app renders in. Inter unless the settings dialog
-   * stamped a choice on <html> (Jack, 2026-09-07: the pixel font read as
-   * bloomed and shadowed on smaller screens, so Monocraft became the option
-   * and Inter the default); the option list, the storage key and these same
-   * stacks live in src/lib/app-font.ts, and the boot script in layout.tsx
+   * The one font the whole app renders in: Inter unless the settings dialog
+   * stamped a choice on <html>. The option list, storage key and these same
+   * stacks live in src/lib/app-font.ts; the boot script in layout.tsx
    * restores the attribute before first paint.
    */
   --app-font: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -132,13 +113,9 @@
   --line-strong: #4a4b52;
 
   /*
-   * Chart tokens.
-   *
-   * Voltage tier is an ordinal scale — ULV below LV below MV — so it takes one
-   * hue stepped by lightness rather than a set of unrelated colours: the reader
-   * sees the order in the ramp itself. Steps are validated against this panel's
-   * own surface (#303238) for monotone lightness, a visible gap between
-   * neighbours, and a light end that still clears the surface.
+   * Chart tokens. Voltage tier is ordinal, so it takes one hue stepped by
+   * lightness. Steps are checked against the panel surface (#303238) for
+   * monotone lightness and a visible gap between neighbours.
    */
   --viz-ordinal-1: #256abf;
   --viz-ordinal-2: #3987e5;
@@ -187,15 +164,10 @@
   --mc-bad: #f87171;
   --mc-info: #22d3ee;
 
-  /* SELECTION, in one place. Every mark that answers "what did I click" is
-     this colour: a card's inner ring, a drawer's rim, a board frame's ring,
-     the marquee you drag, and the panel band that says the numbers are a
-     selection. It is the site's own accent (--mc-info's cyan), so the board
-     agrees with the chrome around it instead of running its own hue.
-
-     It was Tailwind purple-500 (#a855f7), which belonged to nothing else
-     here. Change these five and every selection mark moves together; nothing
-     else should hardcode a selection colour. */
+  /* SELECTION, in one place. Every mark that answers "what did I click"
+     (card ring, drawer rim, board frame ring, marquee, the panel's selection
+     band) uses these tokens, in the site's accent cyan. Nothing else should
+     hardcode a selection colour. */
   --selection: #22d3ee;
   --selection-soft: rgba(34, 211, 238, 0.6);
   --selection-line: rgba(34, 211, 238, 0.5);
@@ -204,28 +176,21 @@
   --selection-ink-dim: rgba(207, 250, 254, 0.7);
 
   /* The glow: one warm colour for "this carries the hovered resource" —
-     cards outline in it, wires halo in it. The old look stacked a yellow
-     outline on a cyan ring on a cyan blur; three colours said less than
-     one. A glow answers "where is this item", a ring answers "what did I
-     click", and they are kept different weights so both can be on at once. */
+     cards outline in it, wires halo in it. A glow answers "where is this
+     item", a ring answers "what did I click"; they are kept different
+     weights so both can be on at once. */
   --glow-line: #ffd257;
   --glow-halo: rgba(255, 202, 84, 0.8);
 
   /* The board's heartbeat. EVERY breathing mark on the board runs for exactly
-     this long - the hovered-resource wash, an unwired card's dashes, ring and
-     reason cell, a dead ring's cards and its wires - so no two of them can
-     drift apart over time. They are pinned to the same phase in JS as well;
-     see animation-phase.ts, which also lists them. Marks used to run at
-     1.15s, 1.9s and 2.6s, which meant a board showing two kinds of trouble
-     never looked like one board. */
+     this long so none drift apart; they are also pinned to one phase in JS
+     (animation-phase.ts, which lists them). */
   --board-pulse: 1.9s;
 }
 
 /* The pointed-at resource row, redrawn wide over the board. It grows out of
-   the width the real row had, which is measured when the pointer arrives and
-   handed over as --row-start-width, so the panel can be any width and the
-   animation still starts exactly where the row it replaces ended. Appearing at
-   full size read as a popup rather than as the row itself widening. */
+   the real row's width (measured on pointer arrival, handed over as
+   --row-start-width), so it reads as the row itself widening. */
 .resource-row-expand {
   animation: resource-row-expand 130ms ease-out;
 }
@@ -264,17 +229,9 @@
   }
 }
 
-/* The star and eye that live at the right end of a row, and the gap they open in
-   front of themselves, arrive with the widening rather than in one jump.
-
-   The row underneath transitions both on hover, but the wide copy is a freshly
-   mounted element: its gap starts AT its final width and its buttons at full
-   opacity, so there is nothing for a transition to run from. The rate landed
-   44px to the left of where it had been, instantly, while the row around it was
-   still growing. An animation has a `from` and needs no previous value, so it is
-   what works on something that has only just appeared.
-
-   Same 130ms as the widening itself: one movement, not two. */
+/* The row's star and eye, and the gap they open, arrive with the widening.
+   The wide copy is freshly mounted, so a transition has no previous value to
+   run from; an animation's `from` does. Same 130ms as the widening. */
 .resource-row-expand .resource-row-marks-gap {
   animation: resource-row-marks-gap 130ms ease-out;
 }
@@ -319,16 +276,12 @@
   position: relative;
 }
 
-/* An outline alone loses a card in a crowd: on a busy board the eye reads
-   fill, not frame. So a lit card also WASHES in the glow colour and breathes,
-   which is the one thing nothing else on the board does — colour tags, the
-   heatmap and the selection ring are all static, so movement cannot be
-   confused with any of them.
+/* An outline alone loses a card in a crowd, so a lit card also WASHES in the
+   glow colour and breathes. Colour tags and the selection ring are static,
+   so the movement cannot be confused with them.
 
-   The wash is a pseudo-element animating OPACITY only. Animating the card's
-   own background would repaint the card and everything in it every frame, on
-   every match at once; a compositor-only opacity fade on one absolutely
-   positioned layer costs nothing per node. */
+   The wash is a pseudo-element animating OPACITY only: animating the card's
+   background would repaint every matching card every frame. */
 .resource-glow::after {
   content: "";
   position: absolute;
@@ -492,19 +445,11 @@ body {
 }
 
 /*
- * The page is not a document, and a phone must stop treating it like one.
- *
- * `pan-x pan-y` leaves scrolling inside the panels alone and takes away the two
- * gestures the browser was stealing: pinch, which zoomed the PAGE instead of the
- * board — including from the top bar, where there is nothing to zoom — and double
- * tap, which is the board's own zoom gesture and was being read as "zoom the text"
- * as well. `overscroll-behavior: none` takes the third: a drag that begins at the
- * top of the board was arming pull-to-refresh, so double-tap-and-drag reloaded the
- * app instead of zooming it.
- *
- * CSS rather than `user-scalable=no` in the viewport tag, which iOS has ignored
- * since iOS 10 — and quite right, since a page of text should always be
- * zoomable. This is not a page of text.
+ * The page is an app, not a document. `pan-x pan-y` keeps panel scrolling but
+ * stops pinch zooming the PAGE and double tap (the board's own zoom gesture)
+ * zooming text. `overscroll-behavior: none` stops a drag from the board's top
+ * arming pull-to-refresh. CSS rather than `user-scalable=no`, which iOS
+ * ignores.
  */
 html,
 body {
@@ -520,16 +465,12 @@ textarea {
 }
 
 /*
- * The board owns every touch that lands on it.
+ * The board owns every touch that lands on it. `touch-action: none` extends
+ * React Flow's pane rule to the toolbars and cards, so the browser never
+ * takes a board drag as a scroll, pull-to-refresh or page zoom.
  *
- * `touch-action: none` is what React Flow already asks of its own pane; saying it
- * on the whole board extends it to the toolbars and cards, so no drag that starts
- * on the board can be taken by the browser as a scroll, a pull-to-refresh or a
- * page zoom.
- *
- * And no text selection. A press and hold on a card used to raise the blue
- * selection band and the copy/lookup callout over half the screen — the exact
- * gesture that opens a slot's menu. Fields keep their own selection below.
+ * No text selection either: a long press opens a slot's menu and must not
+ * raise the selection band and copy callout. Fields keep their selection.
  */
 .factory-flow-board {
   touch-action: none;
@@ -545,16 +486,11 @@ textarea {
 }
 
 /*
- * On a touchscreen, nothing outside a field is selectable either.
- *
- * The board rule above is not enough on its own: a slot's menu, its tooltips and
- * both drawers render OUTSIDE the board — the menu opens under the finger that
- * is still pressing, and that press then found the menu's own words to select.
- * So the blue band and the copy callout kept appearing, just not always, which is
- * exactly how a rule that covers most of the screen behaves.
- *
- * `hover: none` scopes this to devices where a long press is a gesture rather than
- * a way to select a word. A mouse keeps every selection it ever had.
+ * On a touchscreen, nothing outside a field is selectable either: a slot's
+ * menu, its tooltips and both drawers render OUTSIDE the board, and the menu
+ * opens under the still-pressing finger, which would select its words.
+ * `hover: none` scopes this to devices where a long press is a gesture; a
+ * mouse keeps normal selection.
  */
 @media (hover: none) {
   body {
@@ -570,11 +506,6 @@ textarea {
     user-select: text;
   }
 }
-
-/* The white placed-flash beacon (four pulses, white outline and wash on a
-   fresh card) used to live here. Removed by request 2026-08-28: the landing
-   thump and the arrive pop carry the moment, and the flash read as noise on
-   a polished board. */
 
 /* The chip the recipe book leaves behind while a pressed plus button's recipe
    is still on the wire. The animation delay is the point: an add answered
@@ -608,86 +539,62 @@ textarea {
   z-index: 20 !important;
 }
 
-/* Thickness mode: the whole edge LAYER drops beneath the node layer.
-
-   Note on why it is the layer and not the edge: both rules above set a z-index
-   on a positioned element, which makes each layer a stacking context, so an
-   edge's own z-index is sealed inside .react-flow__edges and is never compared
-   against anything inside a node. It is edges-over-all or edges-under-all —
-   "above the card, below the ports" cannot be expressed, and a per-edge value
-   is silently ignored. Flipping the layer is the only lever there is.
-
-   Thin lines keep the old order, on top, where a 3px wire crossing a card is a
-   detail rather than an obstruction. */
+/* The whole edge LAYER drops beneath the node layer. It has to be the layer:
+   both rules above make each layer a stacking context, so an edge's own
+   z-index is sealed inside .react-flow__edges and never compared against a
+   node. Per-edge values are silently ignored. */
 .factory-flow-board--edges-under .react-flow__edges {
   z-index: 10 !important;
 }
 
-/* In that same mode the NODES layer stops being a stacking context, so each
-   node's own depth is compared against the edge layer directly: cards (20)
-   stay on top of the pipes (10), while backdrop annotations (-5) fall
-   beneath them - a box's fill must never cover the wires crossing it, which
-   a sealed layer made inexpressible (the very "above the card, below the
-   ports" note above). The drag and popup lifts further down re-seal the
-   layer while they apply, which is exactly what they are for. */
+/* The NODES layer stops being a stacking context, so each node's depth is
+   compared against the edge layer directly: cards (20) sit over the wires
+   (10), backdrop annotations (-5) under them, so a box's fill never covers
+   the wires crossing it. The drag and popup lifts below re-seal the layer
+   while they apply. */
 .factory-flow-board--edges-under .react-flow__nodes {
   z-index: auto !important;
 }
 
-/* Always, not only while a gesture is flagged as moving: a keyboard pan
-   calls setViewport per frame, which fires move start and end per frame, so
-   the flag flickered and the layer was promoted and dropped every frame. The
-   pan is a scroll offset now (scroll-camera.tsx) and this transform only
-   changes on zoom; the retained layer is what keeps a zoom from repainting
-   the whole board. */
+/* Always, not only while a gesture is flagged as moving: that flag flickers
+   per frame on keyboard pans, promoting and dropping the layer. The pan is a
+   scroll offset (scroll-camera.tsx), so this transform only changes on zoom;
+   the retained layer keeps a zoom from repainting the whole board. */
 .factory-flow-board .react-flow__viewport {
   will-change: transform;
 }
 
 /* NO gesture hides the drop-shadows. A pan never re-rasterises a composited
-   filter, and during a zoom the compositor scales the existing raster and
-   only re-rasterises at rest - so switching the filters off mid-gesture
-   (tried for both pan and zoom, 2026-08-23) saved close to nothing and read
-   as the board losing its depth every time the camera moved. Do not bring
-   the gate back without profiling first. */
+   filter and a zoom only re-rasterises at rest, so hiding them mid-gesture
+   saves almost nothing and makes the board flatten whenever the camera
+   moves. Profile before adding such a gate. */
 
 .factory-flow-board .react-flow__node {
   contain: layout style;
   /* Everything on the paper casts a shadow. drop-shadow follows each node's
-     PAINTED silhouette rather than its box: a card and a picture cast from
-     their whole rectangle, a box or zone mostly from its frame (the
-     translucent wash inside casts only a faint one, exactly as translucent
-     things should), an arrow from its line, a hexagon from its outline.
-     Offset far enough to read as height and blurred enough to read as
-     light; the alpha rises with the blur since blur spreads the ink thin. */
+     PAINTED silhouette rather than its box, so a translucent box casts from
+     its frame and an arrow from its line. */
   filter: drop-shadow(6px 8px 7px rgba(0, 0, 0, 0.45));
 }
 
-/* The grid magnet (the movement-motion toggle, board-motion.tsx). Every card
-   position is a whole cell, so a drag is a series of 20px teleports; easing
-   the transform turns each hop into a short glide and the card reads as
-   being PULLED onto its cell. The same ease covers programmatic moves —
-   undo, paste nudges — and multi-select drags for free. Mounting is exempt
-   by construction: a transition needs a previous value, and a node inserted
-   by the viewport cull paints at its position on its first frame. Duration
-   mirrors MOVE_SNAP_MS. */
+/* The grid magnet (board-motion.tsx). Card positions are whole cells, so a
+   drag is a series of 20px hops; easing the transform turns each into a
+   short glide. Also covers undo and paste moves. Mounts do not animate (no
+   previous value). Duration mirrors MOVE_SNAP_MS. */
 .factory-flow-board--move-motion .react-flow__node {
   transition: transform 120ms cubic-bezier(0.25, 0.9, 0.35, 1);
 }
 
-/* Except an annotation that is not being MOVED. Resizing a box, dragging a
-   zone corner or an arrow end changes position and size in the same frame
-   through its own pointer handlers (no .dragging class), and easing only the
-   translate half makes the far edge wobble. Moves through the move strip are
-   real React Flow drags, carry .dragging, and keep the glide. */
+/* Except an annotation that is not being MOVED: a resize changes position
+   and size in one frame (no .dragging class), and easing only the translate
+   makes the far edge wobble. Real moves carry .dragging and keep the glide. */
 .factory-flow-board--move-motion .react-flow__node-annotationNode:not(.dragging) {
   transition: none;
 }
 
-/* Just added (same DOM pass as the placed flash): the card materialises
-   instead of blinking into existence. Opacity rides the wrapper — its
-   transform is React Flow's positioning and must not be animated — and the
-   little scale-up rides the card root inside it. */
+/* Just added: the card materialises instead of blinking into existence.
+   Opacity rides the wrapper (its transform is React Flow's positioning and
+   must not be animated); the scale-up rides the card root inside it. */
 .factory-flow-board--move-motion .board-card-arrive {
   animation: board-card-arrive 200ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
 }
@@ -708,12 +615,9 @@ textarea {
   }
 }
 
-/* The dev-menu build timelapse (board-timelapse.ts): every card and wire
-   MOUNTS on the beat it is revealed, so the arrival dress rides the board
-   class instead of a per-card one. Same split as the arrive pop above:
-   opacity on the wrapper (its transform is React Flow's positioning and
-   must not be animated), the scale-up on the card root inside it. Wires
-   fade in a touch slower, landing after the card they plug into. */
+/* The build timelapse (board-timelapse.ts): every card and wire MOUNTS on
+   the beat it is revealed, so the arrival rides the board class. Same split
+   as the arrive pop above: opacity on the wrapper, scale on the card root. */
 .factory-flow-board--timelapse .react-flow__node {
   animation: board-card-arrive var(--timelapse-pop, 260ms) cubic-bezier(0.25, 1, 0.5, 1)
     backwards;
@@ -746,21 +650,13 @@ textarea {
   scale: 0.6;
 }
 
-/* A wire DRAWS itself from source to target when it mounts mid-show: a
-   long dash slid in by its offset, so the ink travels the route the way a
-   pen would. The dash length is a generous ceiling over real wire lengths
-   - shorter wires just finish their stroke early inside the same window.
-   The duration variable comes from the board (the dev menu's wire-draw
-   slider over the playback speed), and the beat scheduler waits the same
-   number, so the next thing happens after the ink is dry. Dashed channel
-   wires render solid for the run's duration; their pattern returns with
-   the class's exit. */
+/* A wire DRAWS itself from source to target when it mounts mid-show, a
+   dash slid in by its offset. The beat scheduler waits the same duration
+   variable, so the next beat starts after the ink is dry. Dashed channel
+   wires render solid for the run. */
 .factory-flow-board--timelapse .react-flow__edge path.react-flow__edge-path {
   /* Against pathLength=1 (set on exactly these BaseEdge paths during a
-     run), so the stroke covers ANY route exactly and every wire spends
-     the full duration drawing. The first cut used a big pixel dash
-     instead, and a short wire completed inside the first few percent of
-     the window - which read as no animation at all. Scoped to the
+     run), so every route takes the full duration to draw. Scoped to the
      BaseEdge class: a unit dash on a path WITHOUT the normalized length
      renders as one-pixel dots. */
   stroke-dasharray: 1;
@@ -775,19 +671,12 @@ textarea {
   }
 }
 
-/* The demo-card tilt (board-tilt.ts): the whole canvas leans like a
-   product page showing off a card, with a slow breathing drift on the
-   inner renderer so it feels held rather than pinned. Angles ride CSS
-   variables from the board container, so the dev menu's sliders apply
-   live; the cover scale keeps the leaning plane's corners under the 2D
-   chrome (a rotated plane's projection shrinks toward the centre, and
-   the canvas edges peeked out from behind the toolbars without it).
-   Only the visual layer tilts - React Flow's own viewport transform
-   stays 2D, so the camera math never knows. The transition lives on the
-   base class so putting the tilt on and taking it off both ease; the
-   timelapse finale takes it off by dropping the class for the wide
-   reveal (the drift rides a separate element, so killing its animation
-   mid-swing costs at most a couple of degrees under a moving camera). */
+/* The demo-card tilt (board-tilt.ts): the whole canvas leans, with a slow
+   drift on the inner renderer. Angles ride CSS variables so the dev menu's
+   sliders apply live; the cover scale keeps the rotated plane's shrinking
+   corners behind the 2D chrome. Only the visual layer tilts: React Flow's
+   viewport transform stays 2D, so camera math is unaffected. The transition
+   lives on the base class so the tilt eases both on and off. */
 .factory-flow-board .react-flow {
   transition: transform 1200ms cubic-bezier(0.33, 1, 0.68, 1);
 }
@@ -839,35 +728,17 @@ textarea {
   transition: left 1000ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* Zoom detail steps. See node-detail.ts for what each step keeps and why, and
-   for the four numbers that decide when they happen.
+/* Zoom detail steps; node-detail.ts decides what each step keeps and when.
+   Zoomed out, a node is reduced to its one legible fact.
 
-   `visibility` and NOT `display`: every hidden element keeps its layout box, so
-   the card's size never changes with zoom. The router measures node bounds and
-   slot anchors through those boxes (getBoundingClientRect still reports a real
-   rect for a hidden element), which means a route computed zoomed in and the
-   same route computed zoomed out are identical — the viewport-independent
-   routing rule holds by construction rather than by luck.
+   `visibility` + opacity, NEVER `display`: hidden elements keep their layout
+   boxes, so card size and the router's measured slot anchors do not change
+   with zoom (viewport-independent routing), and the two details can
+   cross-fade. Hidden subtrees also drop out of hit-testing, on purpose.
 
-   Hiding a subtree also removes it from hit-testing, which is the intent: at
-   these sizes the dials and tabs are far too small to aim at, and the pointer
-   should fall through to the card. */
-/* Zoomed out, a node is reduced to its one legible fact. See node-detail.ts.
-
-   The glance root is the CARD — the element carrying the frame, the colour and
-   the texture — and what stops painting is its contents. So a drawer still
-   looks like a drawer and a tank like a tank; they just hold a big item icon
-   instead of a name, a rate and a fill bar.
-
-   Stated as "every child that isn't the glance" rather than as a list of
-   sections, so a panel, dropdown or badge added later is covered without anyone
-   having to remember to wire it up. A list is exactly what leaked dropdowns
-   through the first time.
-
-   The switch is opacity + visibility on BOTH sides now, never `display`: the
-   two details cross-fade at the threshold (the rules further down), and a
-   display flip cannot fade. Everything keeps its layout box either way, which
-   is what the router measures. */
+   The glance root is the CARD (frame, colour, texture); only its contents
+   stop painting. The rule targets "every child that isn't the glance", not a
+   list, so anything added later is covered automatically. */
 .factory-flow-board [data-node-detail="glance"] {
   opacity: 0;
   visibility: hidden;
@@ -879,10 +750,8 @@ textarea {
 }
 
 /* A tooltip wrapper is `display: contents`, and opacity cannot dim a box the
-   element does not have — a drawer's whole face sat inside one, held at full
-   strength through the fade, and blinked out when the delayed visibility
-   landed. So where a glance root's direct child is a tooltip root, the fade
-   lands one level down, on the wrapper's children, which are real boxes. */
+   element does not have. So where a glance root's direct child is a tooltip
+   root, the fade lands one level down, on its children. */
 .factory-flow-board[data-detail-level="glance"] [data-node-glance-root] > [data-tooltip-root] > * {
   visibility: hidden;
   opacity: 0;
@@ -898,25 +767,12 @@ textarea {
   background-color: var(--glance-bg, transparent);
 }
 
-/* The fade across the LOD threshold, and it is the SAME crossing both ways:
-   slow enough to read as the board settling between its two views, going out
-   and coming back. It used to snap back in at a quarter of the time on the
-   grounds that in is the direction someone is trying to work in; what that
-   actually bought was one gesture that answers at two different speeds
-   depending on which way the wheel went. `visibility` rides along with a
-   delay only on the way OUT of sight, so whichever side is appearing shows
-   its whole fade and whichever is going stays interactive-invisible only
-   after it has finished going.
+/* The fade across the LOD threshold, the same speed both ways. `visibility`
+   is delayed only on the way OUT, so the appearing side shows its whole fade.
+   Both sides move together on one clock (sequenced, it reads as two events).
 
-   The two sides move TOGETHER on one clock, one going as the other comes —
-   the step is a single continuous action, not two half-length ones queued up.
-   Sequencing them was tried and it reads as two events: the card empties, sits
-   blank for a beat, and the icon then arrives as a separate arrival.
-
-   Scoped to the value-motion class on purpose: the motion switch is the one
-   promise that the board holds still, and the image export flips it off
-   before capturing — a photograph taken two frames after the detail flip must
-   not come out half-faded. */
+   Scoped to the value-motion class: the image export turns motion off before
+   capturing, so a photograph must not come out half-faded. */
 .factory-flow-board--value-motion [data-node-detail="glance"] {
   transition: opacity 560ms ease, visibility 0s 560ms;
 }
@@ -929,18 +785,11 @@ textarea {
 .factory-flow-board--value-motion[data-detail-level="glance"] [data-node-detail="glance"] {
   transition: opacity 560ms ease, visibility 0s;
   /* Mount fade. A transition only plays on a value CHANGE, and switching
-     smart views replaces the whole layer — the identity tile or a stat row
-     arrives as a NEW element already at opacity 1, which is why mode
-     switches used to pop while the card colour underneath glided. An
-     animation runs whenever the rule starts applying, mounts included, so
-     the incoming layer fades in on the same clock as the wash.
-
-     It is also, in practice, what draws the fade INTO the glance: an animation
-     is part of the style a transition is measured against, so the transition
-     above finds no change to start from and the animation does the whole job.
-     Keep the two timed alike, and give this NO fill — an animation that holds
-     its end value is one the fade OUT cannot start from, and the icon would
-     vanish on the spot instead of leaving. */
+     smart views mounts a NEW layer already at opacity 1; an animation also
+     runs on mount. In practice it also draws the fade INTO the glance (the
+     transition above finds no change to start from). Keep the two timed
+     alike, and give this NO fill: an animation holding its end value leaves
+     the fade OUT nothing to start from, and the icon would vanish at once. */
   animation: glance-layer-in 560ms ease;
 }
 
@@ -960,11 +809,9 @@ textarea {
   transition: opacity 560ms ease, visibility 0s 560ms;
 }
 
-/* The paper's ruling — the stock dot/line pattern and the ruled/graph
-   rulings — sinks out with the rest of the near view: the glance step is lit
-   tiles on dark ground, and a grid under them is close-up furniture the far
-   view has no use for. Same clock as the cards, the same both ways, and only
-   the motion rules below animate it so an export capture stays clean. */
+/* The paper's ruling (dots, lines, ruled/graph) fades out with the rest of
+   the near view. Same clock as the cards; only the motion rules below
+   animate it, so an export capture stays clean. */
 .factory-flow-board[data-detail-level="glance"] .react-flow__background,
 .factory-flow-board[data-detail-level="glance"] .board-ruling {
   opacity: 0;
@@ -981,12 +828,11 @@ textarea {
   transition: opacity 560ms ease, visibility 0s 560ms;
 }
 
-/* The smart views' card colour (see glanceCardVars in node-colors.ts): the
-   node carries its wash as inert --glance-* variables on every render, and
-   only this rule — behind the detail attribute — reads them onto the window.
-   That is the whole LOD gate: no React ever asks the zoom. !important because
-   a painted card's ring arrives as an inline box-shadow, and at the glance
-   step the view wash outranks the paint. */
+/* The smart views' card colour (glanceCardVars in node-colors.ts): the node
+   always carries inert --glance-* variables, and only this rule, behind the
+   detail attribute, applies them, so React never reads the zoom.
+   !important: at the glance step the view wash outranks a painted card's
+   inline box-shadow ring. */
 .factory-flow-board[data-detail-level="glance"] [data-glance-paint] .recipe-node-window {
   background-color: var(--glance-face);
   box-shadow:
@@ -1009,26 +855,20 @@ textarea {
   transition: stroke 560ms ease;
 }
 
-/* The LED rim: every card wears its thin coloured border at constant SCREEN
-   thickness — divided by the live zoom so it neither fades to sub-pixel when
-   parked way out (a 2px border at 0.2 zoom is 0.4px: gone) nor fattens as
-   you come back in. min() caps it so a deep zoom-out can't turn the rim
-   into the card. !important because the identity tile's border arrives as
-   an inline shorthand. Drawers are absent on purpose: forcing a width onto
-   the bare card div painted a border with no colour of its own - currentColor,
-   a white box - over a tile whose real frame was hidden with the rest of its
-   children. Their silhouette stays painted instead (below). */
+/* The LED rim: a constant SCREEN thickness (divided by the live zoom) so it
+   never goes sub-pixel far out; min() caps it. !important because the
+   identity tile's border is an inline shorthand. Drawers are excluded: a
+   width on their bare card div paints a currentColor (white) box; their
+   silhouette is kept instead (below). */
 .factory-flow-board[data-detail-level="glance"] .trash-node-card,
 .factory-flow-board[data-detail-level="glance"] .glance-identity-tile {
   border-width: min(calc(2px / var(--board-zoom, 1)), 12px) !important;
 }
 
-/* Zoomed out a drawer KEEPS its silhouette: the shape spans stay painted in
-   the role's colour with the big item icon riding on top, and the frame
-   thickens against the zoom exactly like the LED rim it replaces - the fill
-   is inset by the frame's thickness, so pushing the inset out IS the frame
-   growing. The selection rim is a shape span too, so a selected drawer stays
-   marked at any distance; the glow variants are switched off above. */
+/* Zoomed out a drawer KEEPS its silhouette, with the big item icon on top.
+   The fill is inset by the frame's thickness, so growing the inset against
+   the zoom grows the frame like the LED rim. The selection rim is a shape
+   span too, so it stays visible at any distance. */
 .factory-flow-board[data-detail-level="glance"] [data-node-glance-root] > .storage-shape {
   visibility: visible;
   opacity: 1;
@@ -1038,16 +878,11 @@ textarea {
   inset: min(calc(2px / var(--board-zoom, 1)), 12px) !important;
 }
 
-/* The identity glance's hover reveal: name, count and I/O rates in a panel
-   below the card. Pure CSS — hover must never rebuild the board — and only at
-   the glance step, where the reveal replaces the hop map's job of answering
-   "what is this card doing".
-
-   The scale is the point: the viewer is way zoomed out, so a panel sized in
-   flow pixels would be a postage stamp. Dividing by the live zoom
-   (NodeDetailController publishes --board-zoom) renders it at constant SCREEN
-   size; translateX centres it under the card and survives the scale because
-   the transform origin is the panel's own top centre. */
+/* The identity glance's hover reveal: name, count and I/O rates below the
+   card. Pure CSS (hover must never rebuild the board), glance step only.
+   Scaled by 1 / --board-zoom (published by NodeDetailController) so it
+   renders at constant SCREEN size; the transform origin is the panel's top
+   centre, so translateX still centres it. */
 .glance-io {
   display: none;
 }
@@ -1057,13 +892,10 @@ textarea {
   transform: translateX(-50%) scale(calc(1 / var(--board-zoom, 1)));
 }
 
-/* While a reveal is up it must beat EVERYTHING — wires, rate pills, sibling
-   cards, and the annotation notes and arrows that ride in the same nodes
-   layer at zIndex 1000 (hovered-usage cards go to 1500). The reveal is the
-   final destination: the layer lifts over the other layers the way the
-   picker popups do, and the hovered node outranks every inline zIndex a
-   sibling can carry. Scoped to identity mode; the status view's hover paints
-   the hop map instead. */
+/* While a reveal is up it beats EVERYTHING: the nodes layer lifts over the
+   other layers, and the hovered node outranks every inline zIndex a sibling
+   can carry (annotations 1000, hovered-usage cards 1500). Identity mode only;
+   the status view's hover paints the hop map instead. */
 .factory-flow-board[data-detail-level="glance"][data-glance-mode="identity"]:has(.react-flow__node:hover)
   .react-flow__nodes {
   z-index: 2200 !important;
@@ -1075,14 +907,9 @@ textarea {
 }
 
 /* The hop map: hovering a card zoomed out colours every other card by how many
-   wires away it is. See hop-map.ts for the whole design, and in particular for
-   why the colours arrive as two custom properties written onto the node
-   elements instead of as React props — the short version is that this is a
-   hover feature on a board that must not re-render on hover, and doing it the
-   obvious way cost 5× the frame rate.
-
-   Only the glance layer is painted, so the map exists only at the zoom step
-   where the cards had stopped saying anything anyway. */
+   wires away it is. See hop-map.ts: the colours are custom properties written
+   onto node elements, not React props, because the board must not re-render
+   on hover. Only the glance layer is painted. */
 .factory-flow-board[data-hop-map] .react-flow__node [data-node-detail="glance"] {
   background-color: var(--hop-fill);
   /* Makes the layer a query container so the figure below can be sized from the
@@ -1099,22 +926,14 @@ textarea {
   display: none;
 }
 
-/* The figure itself. `content: var(--hop-label)` is what lets the card change
-   what it SAYS from outside React — hop-map.ts writes the quoted string. Out of
-   reach means an empty label, and the grey card just sits there.
+/* The figure itself. `content: var(--hop-label)` lets the card change what it
+   SAYS from outside React (hop-map.ts writes the quoted string; out of reach
+   is empty).
 
-   Sized from the card, to land on the same glyph height as the utilisation
-   figure it replaces. That one is an SVG with a `viewBox`, so the browser fits
-   it to the card for free; a pseudo-element gets no such help, and a fixed size
-   left the number looking timid next to the percentage on every card bigger
-   than a drawer. The two numbers are the same thing said differently and they
-   should be the same size.
-
-   The maths, exactly: the percentage fits a 100×30 viewBox into the layer's
-   content box, then draws 30 units of text into it — so its font size is
-   min(0.3 × content width, content height). Container query units resolve
-   against that same content box, which makes the two expressions the same
-   number rather than a tuned approximation of it. */
+   Sized to match the utilisation figure it replaces: that SVG fits a 100×30
+   viewBox into the layer's content box and draws 30 units of text, so its
+   font size is min(0.3 × content width, content height). Container query
+   units resolve against the same box, so the two are exactly equal. */
 .factory-flow-board[data-hop-map] .react-flow__node [data-node-detail="glance"]::after {
   content: var(--hop-label, "");
   color: var(--hop-ink);
@@ -1134,11 +953,8 @@ textarea {
     0 0 0 4px #101014;
 }
 
-/* While a map is up, the wires step back. The map IS the wiring, counted and
-   coloured, and the lines themselves are what makes a zoomed-out board
-   unreadable in the first place. They stay drawn — the route is still the
-   answer to "how does it get there" — just quiet enough that the colours in
-   front of them win. */
+/* While a map is up, the wires step back: the map IS the wiring, counted and
+   coloured. They stay drawn, just quiet enough that the colours win. */
 .factory-flow-board[data-hop-map] .react-flow__edges {
   opacity: 0.28;
 }
@@ -1150,12 +966,9 @@ textarea {
 }
 
 /*
- * Scrolls, but without a scrollbar taking a bite out of the row.
- *
- * For a short horizontal strip inside a fixed-height bar, a classic Windows
- * scrollbar is a sizeable fraction of the bar's height. Scrolling stays
- * available by wheel, trackpad, drag and keyboard; the arrows beside the strip
- * are the visible affordance.
+ * Scrolls without a scrollbar taking a bite out of a short strip in a
+ * fixed-height bar. Wheel, trackpad, drag and keyboard still scroll; arrows
+ * beside the strip are the visible affordance.
  */
 .no-scrollbar {
   scrollbar-width: none;
@@ -1225,10 +1038,7 @@ img {
 }
 
 /* Backdrops (boxes, zones, images) never take the lift above: selecting or
-   dragging one must not raise its wash over the very machines it frames.
-   They stay at their published depth; the corner handles stay grabbable
-   because pointer events don't care about paint order between layers that
-   never overlap a hit target. */
+   dragging one must not raise its wash over the machines it frames. */
 .factory-flow-board .react-flow__node.board-backdrop.selected,
 .factory-flow-board .react-flow__node.board-backdrop.dragging {
   z-index: -5 !important;
@@ -1247,17 +1057,15 @@ img {
    z -4, under the wires and over the backdrop ink) — see BoardFloors. */
 
 /* While a drag is live the NODES layer rides above the wires: the card in
-   hand must visibly pass over them (wires hold still for the whole drag and
-   reroute on drop). This used to be the other way around — the edge layer
-   lifted to 2000 so pointer-chasing edges stayed visible — which buried the
-   dragged card under the entire wiring. Within the lifted layer the
-   .dragging rule above keeps the held card over its siblings. */
+   hand must visibly pass over them (wires hold still and reroute on drop).
+   Within the lifted layer the .dragging rule above keeps the held card over
+   its siblings. */
 .factory-flow-board--dragging .react-flow__nodes {
   z-index: 2100 !important;
 }
 
-/* A node with an open picker popup must beat everything: the edge layer sits
-   above the nodes layer by design (80 vs 20), so the whole nodes layer lifts
+/* A node with an open picker popup must beat everything: the edge layer can
+   sit above the nodes layer (80 vs 20), so the whole nodes layer lifts
    while any popup is open, and the owning node rises above its selected (20)
    and dragging (30) siblings. */
 .factory-flow-board .react-flow__nodes:has(.recipe-node-popup-open) {
@@ -1276,10 +1084,8 @@ img {
   z-index: 60;
 }
 
-/* The marquee. React Flow ships its own royal blue here, which was a THIRD
-   blue on a board that already has a selection colour and a search colour;
-   the box you drag and the rings it leaves behind are one gesture and should
-   be one hue. */
+/* The marquee takes the selection colour instead of React Flow's own blue:
+   the box you drag and the rings it leaves are one gesture, one hue. */
 .factory-flow-board .react-flow__selection {
   background: var(--selection-wash);
   border: 1px solid var(--selection);
@@ -1324,14 +1130,11 @@ img {
   opacity: 0 !important;
 }
 
-/* While a wire is being dragged, every card wears the answer to "would this
-   drop work?": green takes it, red does not, and the whole card is the target
-   either way. The verdict is written straight onto the React Flow node wrapper
-   by the connect handlers — a board-wide drag effect must never go through
-   React (see ARCHITECTURE.md), so all of the paint happens here.
-
-   Cards the drag came from and annotation backdrops get data-drop-fit="none"
-   and stay untouched. */
+/* While a wire is being dragged, every card shows whether the drop would
+   work: green yes, red no. The connect handlers write the verdict straight
+   onto the node wrapper, because a board-wide drag effect must never go
+   through React (see src/components/flow/CLAUDE.md). The drag's own cards and annotation
+   backdrops get data-drop-fit="none". */
 .factory-flow-board .react-flow__node[data-drop-fit="yes"]::after,
 .factory-flow-board .react-flow__node[data-drop-fit="no"]::after {
   content: "";
@@ -1351,13 +1154,10 @@ img {
   box-shadow: inset 0 0 0 1px rgb(248 113 113 / 0.35);
 }
 
-/* Wiring is a MODE. With a wire out, the only live question is where it lands,
-   and the wash plus the snapping pipe answer it. Lines, labels and their
-   tooltips stop taking the pointer entirely, so none of their hover handlers
-   ever fire — cheaper and more certain than gating each one in JS. The hover
-   effects that live purely in CSS are switched off below for the same reason.
-   (Item tooltips need no help: MinecraftTooltip already refuses to open while
-   a button is held.) */
+/* Wiring is a MODE. With a wire out, lines, labels and their tooltips stop
+   taking the pointer entirely, so no hover handler fires (cheaper and surer
+   than gating each in JS); CSS-only hover effects are switched off below.
+   Item tooltips already refuse to open while a button is held. */
 .factory-flow-board--wiring .react-flow__edge,
 .factory-flow-board--wiring .react-flow__edgelabel-renderer,
 .factory-flow-board--wiring .react-flow__edgelabel-renderer * {
@@ -1392,11 +1192,9 @@ img {
 }
 
 /*
-   The recipe search's scrollers: a wide bar that is ALWAYS there, dark track
-   visibly recessed, bright grab bar. Paired with overflow-y: scroll on the
-   containers so the lane shows even before anything overflows. Firefox gets
-   the colours through scrollbar-color; Chromium turns that off (auto) so the
-   webkit sizing below applies.
+   The recipe search's scrollers: a wide, always-present bar (paired with
+   overflow-y: scroll on the containers). Firefox takes scrollbar-color;
+   Chromium resets it to auto so the webkit sizing below applies.
 */
 .recipe-search-scroll {
   scrollbar-color: var(--mc-ink-muted) var(--mc-25);
@@ -1428,9 +1226,8 @@ img {
 
 /*
    The recipe search's loading state: ghost result cards in the real card
-   anatomy, breathing in a staggered wave, each with its arrow filling like a
-   furnace's progress bar. The wave reads as work happening; the shapes say
-   what is about to appear.
+   anatomy, breathing in a staggered wave, arrows filling like a furnace's
+   progress bar.
 */
 @keyframes recipe-search-skeleton-breathe {
   0%,
@@ -1513,20 +1310,11 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 }
 
 /* ===== Painted cards =====================================================
-   A card takes a colour by REDEFINING its own --mc-* tokens, on the shell, in
-   node-colors.ts (GT_NODE_RAMPS). There is nothing to do here: every surface
-   inside a card already reads those tokens, so the face, the name bar, the
-   port chips, the plugs, the stat tiles, the config dials, the dropdowns and
-   the block beside them, the machine tabs and the head buttons all arrive at
-   the card's colour without any rule naming them.
-
-   That is deliberate. Every earlier version of this tinted a LIST of elements
-   and the list was never complete, so a painted card always had a few pieces
-   left at board grey. A ramp cannot miss one.
-
-   Semantic colour is the exception and stays out of it: a binding input, a
-   hungry plug, a tier badge and the delete button's red are their own values,
-   not tokens, so what a card is telling you never depends on its paint. */
+   A card takes a colour by REDEFINING its own --mc-* tokens on the shell
+   (node-colors.ts, GT_NODE_RAMPS). Every surface inside reads those tokens,
+   so no rule here names elements; a list of elements to tint always misses
+   some. Semantic colours (binding input, hungry plug, tier badge, delete
+   red) are fixed values, not tokens, so they never depend on paint. */
 
 /* ===== Node verdict strip + port rails ===================================
    A card has exactly one reason, and everything wrong on that card is painted
@@ -1538,10 +1326,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
      blocked     amber       inputs are short and somebody IS waiting
      bottleneck  red         inputs are fine, it just can't keep up: act here
 
-   Gold sits BELOW amber deliberately. On a dark panel yellow is the highest
-   luminance hue going, so a "pale" yellow shouts louder than the amber it is
-   meant to defer to; the quiet state has to be desaturated and dimmed, not
-   lightened. */
+   Gold sits BELOW amber: on a dark panel yellow is the brightest hue, so the
+   quiet state is desaturated and dimmed, not lightened. */
 :root {
   --rail-bar-track: #3c3c3c;
   --rail-bar-ok: #3fae5c;
@@ -1561,17 +1347,9 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
      is a FACT about the plan, not a fault in it, and any amber or red would
      put it on the to-do list beside the two states that really are. */
   --verdict-clogged-ink: #6fb2d6;
-  /* UNWIRED is deliberately NOT a hue.
-     Every hue on this board is spoken for and every one of them grades how
-     WRONG something is: yellow starved, amber blocked, red bottleneck, blue
-     clogged, purple selected, sky a search hit. Unwired is not a degree of
-     wrong at all, it is "this card is not finished yet", so putting it
-     anywhere on that ramp would answer the wrong question — and the two
-     nearest free hues are one step from selection and from search.
-     So it goes achromatic and bright, the drafting-chalk convention: white
-     marks on a dark board are the unbuilt part of a drawing. It carries by
-     MOVEMENT instead of hue (see unwired-breathe), which nothing else on a
-     card does except the dead-loop ring. */
+  /* UNWIRED is deliberately NOT a hue. Every hue on the board is taken and
+     grades how wrong something is; unwired means "not finished yet". So it is
+     achromatic chalk white and carries by MOVEMENT (see unwired-breathe). */
   --verdict-unwired-ink: #eef2f8;
 }
 
@@ -1607,25 +1385,15 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   --state-accent: #ffd76a;
 }
 
-/* A drawer's SILHOUETTE and COLOUR both say which of its four jobs it is
- * doing - the same fact in two channels, because they fail differently.
- * Colour is the side panel's own dialect (red import, blue product, green
- * byproduct, steel plumbing; ROLE_TINTS in StorageNode.tsx) and reads at any
- * distance; shape is the channel that survives BOTH the glance step (text
- * gone, outline remains) and calm mode (colour flattened, outline remains).
- * The ITEM'S colour lives in its icon, not on the frame: a copper drawer and
- * a copper product drawer are different facts, and the frame carries the job.
+/* A drawer's SILHOUETTE and COLOUR both name its role, because they fail
+ * differently: colour (ROLE_TINTS in StorageNode.tsx: red source, green
+ * product and byproduct, steel buffer and trash) reads at any distance, and
+ * shape survives the glance step and calm mode. The item's colour lives in
+ * its icon, not the frame.
  *
- * PRODUCT is the plain box: the crate the plan ships. A source opens
- * (rounded), a byproduct is the shield that catches what falls, a buffer is
- * the hexagon the flow passes through. Product and byproduct deliberately
- * keep a SQUARE top row: the swap button flips one into the other, and a
- * button that jumps sideways under the click would punish the very flip the
- * button exists for.
- *
- * The card's BOX never changes by role: 6x4 cells, whatever is painted inside it.
- * Wires dock on the box perimeter and the router is centre-biased, so the
- * corners these shapes cut away were already the least likely dock points.
+ * Product and byproduct keep a SQUARE top row so the swap button between them
+ * never jumps under the click. The card's BOX never changes by role (6x4
+ * cells); wires dock on the box perimeter.
  */
 /* The frame and its fill take the silhouette. The CONTENT is not clipped -
    the rule list has to open past the drawer's edge - so the title bar clips
@@ -1649,9 +1417,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   clip-path: inset(0 round 12px);
 }
 
-/* BYPRODUCT: the shield - square shoulders, tapered base. It catches what
-   falls and holds what nobody asked for; its square top keeps the title
-   bar, and the switch on it, still through the product/byproduct swap. */
+/* BYPRODUCT: the shield - square shoulders, tapered base. */
 .storage-shape[data-storage-shape="byproduct"],
 .storage-shape[data-storage-shape="byproduct"] .storage-shape-fill {
   clip-path: polygon(
@@ -1699,9 +1465,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   background: linear-gradient(155deg, rgba(255,255,255,0.06), transparent 48%, rgba(0,0,0,0.12));
 }
 
-/* The body under the title bar wears the darker accent the port chip used to
-   carry in a box of its own. Painted here, on the silhouette's clipped fill,
-   it fills edge to edge and follows every cut (Jack, 2026-09-22). */
+/* The body under the title bar wears a darker accent, painted on the
+   silhouette's clipped fill so it runs edge to edge and follows every cut. */
 .storage-node-card .storage-shape-fill::before {
   content: "";
   position: absolute;
@@ -1750,12 +1515,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   --band-clip: polygon(9.6px 0, calc(100% - 9.6px) 0, calc(100% - 5.1px) 100%, 5.1px 100%);
 }
 
-/* The TITLE BAR: the move grip, like a machine card's title row. One cell
-   tall with the frame's 2px above it; darker than the face, in the role's
-   own tint. The name is centred on the card while it fits: the two side
-   columns share the leftover room equally, but each only insists on the
-   keys it holds (--side-l / --side-r), so a long name on a drawer with no
-   switch takes the empty right side instead of fading early. */
+/* The TITLE BAR: the move grip, one cell tall under the frame's 2px. The
+   name stays centred while it fits: the side columns share leftover room
+   equally but only insist on the keys they hold (--side-l / --side-r), so a
+   long name takes an empty side before it fades. */
 .storage-title-bar {
   --side-l: 13px;
   --side-r: 13px;
@@ -1868,7 +1631,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 
 /* Solve's ruled chip: the rule row and the reading well as one group,
    centred, so the space above the rule row equals the space below the
-   well (Jack, 2026-09-22). */
+   well. */
 .storage-port-chip:not(.storage-port-chip--centered) {
   padding-top: 3px;
   padding-bottom: 3px;
@@ -2057,8 +1820,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 }
 
 /* The number comes first: when it and the unit do not both fit, the unit
-   wraps to a second line the box hides, instead of the number being cut
-   (Jack, 2026-09-23: "5.4k" lost its k). The rate under it keeps the unit. */
+   wraps to a second line the box hides, instead of the number being cut.
+   The rate under it keeps the unit. */
 .storage-rate-field {
   display: flex;
   flex: 1;
@@ -2305,20 +2068,16 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   --state-accent: #ffffff;
 }
 
-/* Three marks, one clock (1.9s), graded by how much each one is the ANSWER.
-   The slots are what you go and fix, so they swing hardest; the reason cell
-   names them; the card only breathes enough to be findable across a board.
-   All three share the period so a card reads as one object pulsing, not as
-   three things flickering near each other. */
+/* Three unwired marks on one clock (--board-pulse), loudest on the slots you
+   must fix, then the reason cell, then a quiet ring on the card.
 
-/* The loud one. A slot with no wire is drawn like an unfinished line on a
-   plan - dashed - and swings the full width of the chalk range, picking up a
-   halo at the top of the breath so it carries at a distance.
+   All three are compositor-only: the element holds the dim state and a
+   ::after carries the lit state, fading on OPACITY. Animating border,
+   background or box-shadow is a paint property and repaints every marked
+   card every frame. */
 
-   Compositor-only, like the rings below: the element holds the dim state and
-   a ::after carries the lit dashed ring and halo, fading on OPACITY. The old
-   version animated border-color, background and box-shadow - all paint
-   properties, repainting every marked chip every frame, forever. */
+/* The loud one: a slot with no wire is dashed, like an unfinished line on a
+   plan, and gains a halo at the top of the breath. */
 @keyframes unwired-port-breathe {
   0%,
   100% {
@@ -2329,11 +2088,9 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   }
 }
 
-/* The middle one: the whole REASON cell, label included. The element's own
-   opacity breathes (compositor); the background wash rides a ::after whose
-   opacity fades on the same clock (unwired-wash-breathe below) - animating
-   the background itself repainted the cell, and the board-level notice that
-   shares this mark repainted its whole overlay layer, every frame. */
+/* The middle one: the whole REASON cell, label included. Its opacity
+   breathes, and the background wash rides a ::after on the same clock
+   (unwired-wash-breathe below). */
 @keyframes unwired-reason-breathe {
   0%,
   100% {
@@ -2354,16 +2111,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   }
 }
 
-/* The quiet one: the card itself, a ring only. Width is constant and only
-   colour and halo move, for the reason the dead-loop ring documents at
-   length - a ring that thins below a device pixel at glance zoom does not
-   dim, it vanishes and comes back.
-
-   The breath is two STACKED shadows cross-faded by opacity, not an animated
-   box-shadow: box-shadow is a paint property, so animating it repainted
-   every marked card (and re-ran its drop-shadow filter) sixty times a
-   second, forever, on an idle board. The dim ring sits on the element, the
-   lit ring on a ::after whose opacity fades - compositor-only, same read. */
+/* The quiet one: the card itself, a ring only. Width is constant (see the
+   dead-loop ring: a ring thinning below a device pixel at glance zoom
+   vanishes). The dim ring sits on the element, the lit ring on a fading
+   ::after. */
 @keyframes unwired-ring-breathe {
   0%,
   100% {
@@ -2520,41 +2271,19 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   --state-accent: #ff9c9c;
 }
 
-/* A ring is the one state you cannot read off a single card: the machine is
-   fine, its neighbour is fine, and the FAULT is the circle they stand in. So
-   it gets the one thing a static mark cannot do — every card in the ring
-   breathes on the same slow clock, and the eye joins them up by itself.
-   Slow on purpose (2.6s): fast enough to notice at a glance, slow enough not
-   to nag while you work on the board.
+/* A dead loop is a fault in the circle, not in any one card, so every card in
+   the ring breathes on the shared clock and the eye joins them up.
 
-   Two things decide where this is allowed to live.
+   `.dead-loop-ring` (RecipeNode.tsx) is its own element inside the WINDOW,
+   not on the shell: the shell includes the unpainted tab zone, and a glow
+   there boxes empty space. It is not the window itself because the window's
+   frame and bevel ARE its box-shadow.
 
-   It goes inside the WINDOW, not on the shell. The shell is the whole box,
-   tab zone included, and the tab zone is deliberately unpainted so the machine
-   tabs protrude over bare canvas. A glow around the shell draws a rectangle
-   around empty space above the card, and the card reads as floating inside a
-   box that is not its own — which is exactly what kept happening while this
-   was a pseudo-element hung off a descendant selector.
-
-   So it is its own element now (`.dead-loop-ring`, see RecipeNode.tsx), a
-   child of the window: its box IS the card's box by construction, with no
-   selector left to get wrong. It stays a separate element rather than moving
-   onto the window itself because the window's 2px frame and bevel ARE its
-   box-shadow, and animating box-shadow there would paint the frame away for
-   the duration. The overlay owns the glow; the window keeps its frame. */
-/* The ring's WIDTH is constant and only its colour and halo move.
-
-   Everything on the board is drawn through React Flow's zoom transform, so a
-   CSS pixel here is `zoom` device pixels on screen. An animation that thinned
-   the ring from 3px to 2px looked like a gentle breath at 100% and, at a zoom
-   of 0.2, swung it from 0.6 to 0.4 of a device pixel — under the threshold
-   where the compositor has anything left to draw. The mark did not dim, it
-   disappeared and came back, which reads as a rendering fault rather than as
-   a pulse. Nothing that has to survive zoom-out may animate its size. */
-/* Same two-layer bargain as the unwired ring: the dim shadow lives on the
-   element, the lit one on a ::after, and only the ::after's OPACITY animates.
-   An animated box-shadow is a paint property - it repainted every ring card
-   and its drop-shadow filter every frame, forever. */
+   The ring's WIDTH is constant; only colour and halo move. Board pixels are
+   scaled by zoom, so a ring thinning below a device pixel far out vanishes
+   rather than dims. Nothing that must survive zoom-out may animate its size.
+   Same two layers as the unwired ring: dim shadow on the element, lit one on
+   a ::after, and only the ::after's OPACITY animates. */
 @keyframes dead-loop-breathe {
   0%,
   100% {
@@ -2626,16 +2355,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 }
 
 /* Selection, the over-tier warning and a search hit: the same overlay trick,
-   on the card's box rather than the shell's, so none of them draws a rectangle
-   around the machine tabs. The rings themselves are written inline from
-   RecipeNode, because their widths stack and only the component knows which
-   are showing; this rule owns nothing but the box.
-
-   One above the dead-loop ring. A selected card in a dead ring was showing
-   nothing but red — a 2px purple line inside a breathing 24px red halo is not
-   a line anyone can see — and the click that selected it has to land visibly.
-   The red still says its piece: the purple only covers the ring's first 2px,
-   and the halo outside it is untouched. */
+   on the card's box rather than the shell's. The rings are written inline
+   from RecipeNode (their widths stack); this rule owns only the box. One
+   above the dead-loop ring, so a selection stays visible inside a dead ring's
+   halo. */
 .card-outline {
   position: absolute;
   inset: 0;
@@ -2643,25 +2366,18 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   pointer-events: none;
 }
 
-/* The glance step hides every child of a card's glance root, which these now
-   are. They are the exception it was written to have: zoomed out is where a
-   ring MOST needs saying, because the card has stopped saying anything else.
-   Same specificity as the hide rule, and after it, so it wins.
-   (This is why the dead-loop mark used to be a pseudo-element — `> *` cannot
-   reach one. An element that says so out loud beats a box in the wrong place.) */
+/* The glance step hides every child of a card's glance root; these rings are
+   the exception, since zoomed out is where they matter most. Same
+   specificity as the hide rule and after it, so it wins. */
 .factory-flow-board[data-detail-level="glance"] [data-node-glance-root] > .dead-loop-ring,
 .factory-flow-board[data-detail-level="glance"] [data-node-glance-root] > .card-outline {
   visibility: visible;
   opacity: 1;
 }
 
-/* Zoomed out, 3px of a card is worth less than a device pixel and the ring is
-   competing with a whole board. The card's contents are hidden at this level
-   anyway, so the ring can afford to be the loud thing on it.
-   Sizes ride custom properties rather than a second @keyframes on purpose:
-   swapping animation-name restarts the animation, which would re-scatter the
-   phase of every card in the ring on each zoom across the threshold. Changing
-   a custom property re-resolves the running keyframes in place. */
+/* Zoomed out, 3px is less than a device pixel, so the ring grows. Sizes ride
+   custom properties, not a second @keyframes: swapping animation-name
+   restarts the animation and scatters the ring's shared phase. */
 .factory-flow-board[data-detail-level="glance"] .dead-loop-ring {
   --dead-loop-ring: 8px;
   --dead-loop-halo: 26px;
@@ -2689,15 +2405,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   content: none;
 }
 
-/* The ring's wires, on the SAME clock as its cards: the whole circle has to
-   breathe as one shape, or it reads as unrelated things blinking.
-
-   Sharing --board-pulse is necessary but NOT sufficient. A CSS animation's
-   clock starts when it is applied to the element, so cards and wires that
-   mount at different moments — scrolled into view, recycled by React Flow,
-   pulled into the ring by a fresh solve — each run their own cycle and drift
-   apart permanently. Every mark in a ring is pinned to the document timeline
-   in JS instead; see animation-phase.ts. */
+/* The ring's wires, on the SAME clock as its cards. Sharing --board-pulse is
+   not enough: an animation's clock starts when it is applied, so marks that
+   mount at different moments drift apart. Every mark in a ring is pinned to
+   the document timeline in JS; see animation-phase.ts. */
 @keyframes dead-loop-wire-breathe {
   0%,
   100% {
@@ -2749,10 +2460,9 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   stroke: #7b8b9c;
 }
 
-/* Hovering the usage cell lights the marks that produced that word. No gating
-   any more: a card has one reason, so everything marked on it IS that reason,
-   and lighting all of it is lighting the answer. Pure CSS — hover must never
-   rebuild a node. */
+/* Hovering the usage cell lights the marks that produced that word; a card
+   has one reason, so every mark on it belongs to that word. Pure CSS: hover
+   must never rebuild a node. */
 .recipe-node-shell:has(.flow-usage-stat:hover) .flow-port--bind,
 .recipe-node-shell:has(.flow-usage-stat:hover) .flow-plug--hungry,
 .recipe-node-shell:has(.flow-usage-stat:hover) .flow-plug--clogged,
@@ -2771,12 +2481,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
     inset -1px -1px 0 var(--mc-47);
 }
 
-/* A port name wraps to TWO compact lines instead of ending in three dots:
-   the chip gave up 8px when the card came back to 21 cells, and a second
-   line is what pays for it. CLAMP ONLY — the size and weight are utilities
-   on the element, so a name whose stylesheet has not arrived is small and
-   unclamped rather than 16px text bursting out of the chip. Pure CSS: no
-   text measurement and no observers on a board of a hundred cards. */
+/* A port name wraps to TWO compact lines instead of ending in three dots.
+   CLAMP ONLY: the size and weight are utilities on the element, so a name
+   whose stylesheet is late renders small and unclamped, not as 16px text
+   bursting out of the chip. Pure CSS, no text measurement. */
 .flow-port-name {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -2785,10 +2493,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   overflow-wrap: anywhere;
 }
 
-/* A pocket card's port chip: the machine chip's raised tile, in purple. */
-/* Blueprint overwrite picker: every folded board is a target. Amber dashed
-   ring on all of them, solid and brighter under the pointer — hover answers
-   "what happens if I click": THIS board becomes the waiting blueprint. */
+/* Blueprint overwrite picker: every folded board is a target, ringed in amber
+   dashes; the one under the pointer goes solid and brighter. */
 .factory-flow-board--blueprint-picking .react-flow__node-pocketNode {
   cursor: pointer;
 }
@@ -2912,14 +2618,11 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 }
 
 /* Dashes marching source -> target inside the stroke. The offset counts DOWN
-   so they travel along the path's own direction, which routes are always built
-   in (source endpoint first). The travel distance is one dash+gap period,
-   published per edge as --flow-march-period, so the loop is seamless at every
-   line width.
+   because routes are built source endpoint first. The travel is one dash+gap
+   period (--flow-march-period, per edge), so the loop is seamless.
 
-   No prefers-reduced-motion guard here on purpose: this is not decoration that
-   appears unasked, it is a mode the user switches on to watch things move, and
-   silently disabling it reads as a broken button. */
+   No prefers-reduced-motion guard on purpose: the user switches this mode on
+   to watch things move, and silently disabling it reads as a broken button. */
 @keyframes flow-rate-march {
   from {
     stroke-dashoffset: 0;
@@ -2932,14 +2635,11 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 /* ---------- output couplings: the slim plug chip at the node's edge ---------- */
 
 /* The coupling chip: one percent over one bar, in the asker's frame, colored
-   by the coupling's state. Sits INSIDE the card at the row's right edge —
-   wires reach it exactly the way they reach an input chip. Everything wordy
-   (who asks, gets/asks, ×N, the fix) lives in its hover. */
-/* 30px, and the output rail is exactly chip + 2px gap + this — a coupling
-   wider than the rail hangs off the card's right edge. Keep the two in step:
-   PORT_CHIP_WIDTH_CLASS (132) + 2 + 30 = the rail's w-[164px], which with the
-   input rail (132), the picture (96) and two 4px gaps fills the card's 400px
-   inner width exactly. See src/lib/board-grid.ts. */
+   by the coupling's state. Sits INSIDE the card at the row's right edge;
+   everything wordy lives in its hover.
+   Width 30px: the output rail is exactly chip + 2px gap + this
+   (OUTPUT_RAIL_WIDTH in src/lib/board-grid.ts). Keep them in step or the
+   coupling hangs off the card's right edge. */
 .flow-plug {
   position: relative;
   z-index: 5;
@@ -2988,10 +2688,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   min-width: 2px;
 }
 
-/* Hungry and blocked are the same shortfall told from the two ends: hungry
-   means this card is the one to grow (so it wears the card's red), blocked
-   means it is short itself (so it wears the card's amber). Both read the one
-   channel, which is why the plug and the REASON word can never disagree. */
+/* Hungry and blocked are one shortfall seen from its two ends. Both read the
+   card's state channel, so the plug and the REASON word never disagree. */
 .flow-plug--hungry,
 .flow-plug--blocked,
 .flow-plug--clogged {
@@ -3034,8 +2732,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   font-weight: 800;
 }
 
-/* Inside the chip, bottom right: hanging off the top edge put it straight
-   through the name of the port above. */
+/* Inside the chip, bottom right, clear of the name of the port above. */
 .flow-port-badge {
   position: absolute;
   bottom: 1px;
@@ -3058,14 +2755,9 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   background: #cf8e00;
 }
 
-/* A port pulled into the hovered flow scope must be unmissable: the one warm
-   glow colour the whole app lights up in (see --glow-line). Works over tints
-   and semantic tones alike.
-
-   No brightness lift: a filter applies to the box-shadow too, and lifting
-   #ffd257 clips red and green to 255 while raising blue, so the ring came out
-   a flat yellow while the wires — which carry no filter — stayed gold. The
-   ring and the halo are the signal; they do not need the row brightened. */
+/* A port pulled into the hovered flow scope wears the glow colour
+   (--glow-line). No brightness filter: it would also brighten the ring,
+   clipping the gold to a flat yellow that no longer matches the wires. */
 .flow-port--flow-lit {
   position: relative;
   z-index: 15;
@@ -3075,16 +2767,13 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 }
 
 /* ===== Calm colours (the presentation toggle) ============================
-   One class on the board root and every status colour steps down to steel:
-   the words, bars, chips and badges still say bottleneck / over-asked / fed,
-   they just stop shouting it in red, amber and green. Interaction colours —
-   selection rings, flow-scope highlights, the drag drop wash — are left
-   alone; they answer to the pointer, not to the solver.
+   One class on the board root steps every STATUS colour down to steel; the
+   words and marks stay. Interaction colours (selection, flow-scope, drop
+   wash) are left alone.
 
-   The indicator variables can be overridden at the board root because they
-   resolve to :root palette constants; only the verdict inks are re-pointed
-   on the card shell, where the per-card --mc-ink (set inline by paint and
-   heatmap) is in scope. */
+   The indicator variables are overridden at the board root because they
+   resolve to :root constants; the verdict inks are re-pointed on the card
+   shell, where the per-card --mc-ink (set inline by paint) is in scope. */
 .factory-flow-board--calm {
   --rail-bar-ok: #7b8b9c;
   --rail-bar-bad: #7b8b9c;
@@ -3095,8 +2784,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   --port-fed-edge: var(--mc-47);
 }
 
-/* Every card's alert channel steps down to steel at once — the marks stay
-   exactly where they were, they just stop shouting. The REASON word and the
+/* Every card's alert channel steps down to steel. The REASON word and the
    zoomed-out percent keep their card's own ink. */
 .factory-flow-board--calm .recipe-node-shell,
 .factory-flow-board--calm .recipe-node-shell[data-verdict="starved"],
@@ -3116,9 +2804,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   --verdict-unwired-ink: var(--mc-ink);
 }
 
-/* Calming a state drops it to the card's own neutral — which on a painted
-   card is that card's --mc-71, because the ramp is declared on this very
-   element. Nothing extra to do. */
+/* On a painted card --mc-71 above is that card's own neutral, because its
+   ramp is declared on the same element. */
 
 /* The accents that don't read the channel: the default want caret and the
    ×N burst on an otherwise neutral port. */
@@ -3145,18 +2832,14 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   outline-color: #9db0c4;
 }
 
-/* Storage cards: the net line stops signing its number in red and green.
-   The role word is a constant neutral and stays put: it is centred over the
-   whole header whether or not the edit buttons are drawn, so hiding them
-   changes nothing about where the word sits. */
+/* Storage cards: the net line stops signing its number in red and green. */
 .factory-flow-board--calm .storage-net-line {
   color: #a8afbb;
 }
 
-/* Editing chrome — the delete/clone buttons on drawer, tank and trash
-   headers — has no place in a presentation. The recipe card's head buttons,
-   footer and config dials are gated in JSX instead, because their grid
-   columns and cell heights leave with them. */
+/* Editing chrome (delete/clone on drawer, tank and trash headers) hides in a
+   presentation. The recipe card's head buttons, footer and dials are gated
+   in JSX instead, because their grid columns and heights leave with them. */
 .factory-flow-board--calm .board-edit-chrome {
   display: none;
 }

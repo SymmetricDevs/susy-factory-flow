@@ -57,13 +57,9 @@ export function recipeToRenderModel(recipe: Recipe): NeiRecipeRenderModel {
 /**
  * The machines whose recipes are drawn by a handler of their own, by name.
  *
- * Only a machine's own name counts, never the recipe's, because a recipe is
- * named after what it makes and the machine that makes it is what decides the
- * layout. A Centrifuge recipe for Beeswax is still a Centrifuge recipe.
- *
- * Matching is exact for the same reason. Searching for the word "crop" would
- * still claim the Crop Breeder, and searching for "bee" would claim a Beech
- * Wood Plank, both of which are ordinary GregTech machines.
+ * Only the machine's name counts, never the recipe's (a recipe is named after
+ * what it makes), and matching is exact: a substring match on "crop" or "bee"
+ * would claim unrelated machines and recipes.
  */
 const HANDLER_KIND_BY_MACHINE: ReadonlyMap<string, NeiRecipeKind> = new Map([
   ["bee produce", "bee_produce"],

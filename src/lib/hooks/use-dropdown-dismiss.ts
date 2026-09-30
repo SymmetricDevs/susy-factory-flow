@@ -4,29 +4,24 @@ import { useEffect, useRef, type RefObject } from "react";
 import { subscribeBoardCameraMove } from "@/lib/board-camera-signal";
 
 /**
- * How every dropdown in the app closes (Jack, 2026-09-07: menus should be
- * "more prone to close"). One rule, applied to the machine menu, the config
- * tile pickers, the in-card selects, the palettes, the toolbar fold-outs and
- * the header menus alike:
+ * How every dropdown in the app closes. One rule for all menus, pickers,
+ * selects, palettes and fold-outs:
  *
  * - a press anywhere outside the panel (and its anchor) closes it;
  * - Escape closes it and is consumed, so a dropdown over a larger surface
  *   never takes that surface down with it;
- * - a wheel turn or a scroll outside the panel closes it - the hand has
- *   moved on to the page, and a fixed menu no longer points at anything;
- * - the board camera moving closes it, however the camera was moved (drag,
- *   wheel, WASD, pinch, a fly-to);
+ * - a wheel turn or a scroll outside the panel closes it;
+ * - the board camera moving closes it, however the camera was moved;
  * - a window resize closes it, except a keyboard height change while typing;
  * - with `fade`, a MOUSE drifting away dims the panel with distance and
  *   closes it past `FADE_GRACE + FADE_RANGE` px from the panel or anchor.
- *   Re-entering restores it. Fingers never fade: a touch has no hover.
- *   Distance counts from the NEAREST the mouse has come since the panel
- *   opened, so a panel that opens away from the pointer can be walked to;
- *   and a `fadeKeep` element (the card a menu hangs from) counts as over it.
+ *   Re-entering restores it. Touch never fades. Distance counts from the
+ *   NEAREST the mouse has come since the panel opened, so a panel that opens
+ *   away from the pointer can be walked to; a `fadeKeep` element (the card a
+ *   menu hangs from) counts as over it.
  *
  * Capture phase throughout: the board's pan handler and the search's panels
- * stop pointer events on their way up, and a bubbling listener never heard
- * a press that landed there.
+ * stop pointer events on their way up, so a bubbling listener would miss them.
  */
 export interface DropdownDismissOptions {
   /** The panel first, then any anchor whose own click toggles the menu. */
@@ -38,19 +33,16 @@ export interface DropdownDismissOptions {
   fade?: boolean;
   /**
    * With `fade`, start fading only once the mouse has reached the panel. For
-   * a panel that opens AWAY from the pointer (the drawer split editor opens
-   * centred on the window): measured from the moment it opened, the pointer
-   * was already "drifting away", and the first nudge closed it (Jack,
-   * 2026-09-23).
+   * a panel that opens AWAY from the pointer (e.g. centred on the window),
+   * which would otherwise close on the first nudge.
    */
   fadeAfterReach?: boolean;
   /** Skip the board-camera rule (a menu that lives off the board and follows nothing). */
   ignoreCameraMove?: boolean;
   /**
    * With `fade`, the element the panel hangs from (a card): the mouse over it
-   * counts as over the panel. A card's menu that opened BELOW the card had
-   * the whole card between the button and the menu, and crossing it read as
-   * drifting away (Jack, 2026-09-24).
+   * counts as over the panel, so crossing the card to reach a menu below it
+   * does not fade the menu.
    */
   fadeKeep?: () => Element | null | undefined;
 }
@@ -83,12 +75,9 @@ function distanceToRect(x: number, y: number, rect: DOMRect): number {
 }
 
 /**
- * Distance from a point to an element AND its children. Most callers hand
- * over a small `relative` wrapper (the button) whose menu is an `absolute`
- * child hanging under it, and a bounding box does not cover absolutely
- * positioned children - so measured against the wrapper alone, a pointer
- * walking down a tall menu read as drifting away and closed it before it
- * reached the bottom row.
+ * Distance from a point to an element AND its children. Callers often pass a
+ * small `relative` wrapper whose menu is an `absolute` child, and a bounding
+ * box does not cover absolutely positioned children.
  */
 function distanceToElement(x: number, y: number, element: Element): number {
   let nearest = distanceToRect(x, y, element.getBoundingClientRect());
@@ -126,18 +115,15 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     let closed = false;
     let reached = !fadeAfterReach;
     // The nearest the mouse has been to the panel since it opened. The fade
-    // runs from THERE, not from where the mouse stood when the panel opened:
-    // a panel that opens away from the pointer (a card's menu dropping below
-    // the card, the mob picker opened from a menu item) can be walked to,
-    // and only walking back away from it fades it (Jack, 2026-09-24).
+    // runs from THERE, so a panel that opens away from the pointer can be
+    // walked to, and only walking back away from it fades it.
     let closest = Number.POSITIVE_INFINITY;
     const close = () => {
       if (closed) return;
       closed = true;
       // The opacity is NOT restored here: onClose unmounts the menu on a
-      // later commit, so restoring it now painted one solid frame of a
-      // panel that had faded almost to nothing. The effect cleanup restores
-      // it once the menu is gone.
+      // later commit, so restoring now paints one solid frame of a faded
+      // panel. The effect cleanup restores it once the menu is gone.
       onClose();
     };
 

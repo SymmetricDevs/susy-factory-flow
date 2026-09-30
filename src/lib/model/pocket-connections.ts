@@ -15,12 +15,9 @@ import { applyMachineOutputMultipliers } from "../solver/machine-effects";
 import { getOverclockedRecipeStats } from "../solver/overclock";
 
 /**
- * A pocket card is a VIEW over hidden members — the flat graph never holds an
- * edge whose endpoint is a pocket. So a wire aimed at a pocket's port has to
- * land on real member nodes, and these helpers answer the two questions that
- * takes: which resources does a pocket expose as ports, and which members
- * stand behind one port. A port fans out: wiring redstone to a pocket whose
- * two machines both drink redstone feeds both of them.
+ * Helpers over board (pocket) membership, plus the effective recipe a card
+ * presents. A board is a VIEW over its members: the flat graph never holds an
+ * edge whose endpoint is a board.
  */
 
 /**
@@ -28,7 +25,7 @@ import { getOverclockedRecipeStats } from "../solver/overclock";
  * overrides applied, the selected machine handler folded in, and tiered
  * output multipliers taken into account. Handle ids, port lists and
  * compatibility checks must all read THIS recipe, never the raw one
- * (see AGENTS.md on effective rendered resources).
+ * (see src/lib/model/CLAUDE.md, oredict and concrete items).
  */
 export function getEffectiveNodeRecipe(recipe: Recipe, node: FactoryNode): Recipe {
   const nodeRecipe = applyRecipeInputOverrides(recipe, node);
@@ -87,13 +84,11 @@ export function collectPocketMembers(project: FactoryProject, pocketId: string):
 }
 
 /**
- * Expand a board selection through pocket membership: selecting a pocket
- * card means selecting everything inside it, transitively. Returns the
- * concrete item ids (nodes/storages/annotations) and the pocket ids.
- *
- * Every feature that acts on "what is selected" runs through here — copy,
- * blueprint capture, compact, and the selection-scoped flow panel — so a
- * pocket card always means the same thing to all of them.
+ * Expand a board selection through membership: selecting a board means
+ * selecting everything inside it, transitively. Returns the concrete item ids
+ * (nodes/storages/annotations) and the board ids. Every feature that acts on
+ * "what is selected" (copy, blueprint capture, the selection-scoped flow
+ * panel) runs through here so a board means the same thing to all of them.
  */
 export function expandPocketSelection(
   project: FactoryProject,

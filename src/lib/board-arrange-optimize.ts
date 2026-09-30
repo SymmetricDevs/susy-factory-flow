@@ -1,32 +1,22 @@
 /**
- * The arranger's judge and search: takes an island the layered pass has
- * already placed and rearranges its cards until the wires the router will
- * draw cross as little as possible, and are short after that.
+ * The arranger's proxy score and search: takes an island the layered pass
+ * has placed and rearranges its cards to lower the score the router's
+ * wires would get.
  *
- * The arranger and the router are one system (Jack, 2026-09-08): a layout
- * is only as good as the wires it makes the router draw, and the router
- * prices crossings far above length. So the arranger scores a layout the
- * way the router will see it. Every wire gets a PROXY route shaped like the
- * router's own - leave at the rim point nearest the far end, run straight
- * for the clean cells, take the shortest octilinear way with its one
- * diagonal centred, land straight - and proxy routes are scored IN THE
- * ROUTER'S OWN POINTS (Jack, 2026-09-08: "bring the points into stage
- * one"): length, bends at the turn45/turn90 dials, crossings at the
- * crossing dial weighing the heavier wire, every wire counted its
- * wireWeight (from its width) times over, plus a detour estimate for
- * every card a proxy path would have to go round.
+ * Every wire gets a PROXY route shaped like the router's (leave at the rim
+ * point facing the far card, run straight for the clean cells, shortest
+ * octilinear way with one centred diagonal, land straight), scored in the
+ * router's own points: length, bends at turn45/turn90, crossings at the
+ * crossing dial weighing the heavier wire, all times wireWeight, plus a
+ * detour estimate for each card a proxy path runs through.
  *
- * The SEARCH keeps the column discipline the layered pass gave the island:
- * a state is the order of cards in each column, each column's vertical
- * offset, the air above each card, and how far along its machine's side
- * each satellite drawer sits. Positions are DERIVED from that by a placer,
- * so every trial is a tidy layout - columns stay columns, rows stay rows.
- * Simulated annealing over swaps, hops to any column flow allows (a drawer
- * may share a column with its partners and sit in the gap between them),
- * moves to a partner's side, and offset nudges hunts the score down; the
- * real router then judges the few best candidates and the fewest actual
- * POINTS wins. The proxy knows the shape of a wire; the router knows the
- * wire.
+ * The SEARCH keeps the column discipline: a state is the card order per
+ * column, each column's vertical offset, the air above each card, and each
+ * satellite's slide along its machine's side. A placer derives positions
+ * from that, so every trial is tidy. Simulated annealing over swaps, column
+ * hops flow allows, moves to a partner's side and offset nudges lowers the
+ * proxy; the real router then judges the best few and the fewest points
+ * wins.
  *
  * Pure and deterministic: the RNG is seeded from the island's ids.
  */
@@ -53,9 +43,8 @@ export interface OptimizeCard {
   /** The feeder section the layered pass put the card in; bands keep air. */
   section?: number;
   /**
-   * A drawer pinned to one machine's side keeps to that side: supplies on
-   * the left, catches on the right - the way players park them and the way
-   * the fixed ports face. It slides along the side and stacks.
+   * A drawer pinned to one machine's side keeps to that side (supplies
+   * left, catches right). It slides along the side and stacks.
    */
   satellite?: { anchorId: string; side: "left" | "right" };
 }
@@ -68,10 +57,9 @@ export interface OptimizeWire {
   /** The stroke the wire routes at, in px: sets its weight (wireWeight). */
   width?: number;
   /**
-   * Port rows, from the card's top: where the wire leaves the source's
-   * right side and enters the target's left side when the far card is on
-   * that side. Aligned rows make a straight wire, which the router prices
-   * as the cheapest of all.
+   * Port rows, from the card's top. Carried through but not read by the
+   * proxy: docking is free, so proxy paths leave at the rim point facing
+   * the far card (see proxyPath).
    */
   sourcePortY?: number;
   targetPortY?: number;
@@ -89,19 +77,17 @@ export interface OptimizeOptions {
   /** Annealing trials; scales with the island by default. */
   trials?: number;
   /**
-   * The judge of the finalists: given every card's top-left, the POINTS
-   * the board's real wires would score there. The host supplies one built
-   * on the board's own route requests (docks, widths, ids), so the verdict
-   * is the one the player will see. `false` skips judging; absent, a
-   * stand-in routes plain rim docks with the real router.
+   * The judge of the finalists: given every card's top-left, the points the
+   * board's real wires would score there (the host builds it on the board's
+   * own route requests). `false` skips judging; absent, a stand-in routes
+   * plain rim docks with the real router.
    */
   judge?: false | ((positions: ReadonlyMap<string, { x: number; y: number }>) => number);
   /** The router's prices; read from the tuning store when absent. */
   prices?: RouterTuning;
   /**
-   * The air owed between strangers at these positions (board-arrange-air.ts):
-   * the one readability term on top of the router's points, added to the
-   * proxy score and to the finalists' judged points alike.
+   * The air owed between strangers at these positions (board-arrange-air.ts),
+   * added to the proxy score and to the finalists' judged points alike.
    */
   air?: (positions: ReadonlyMap<string, { x: number; y: number }>) => number;
   /** Where the search is, every few hundred trials, for a loader. */
@@ -132,11 +118,9 @@ export function routerPrices(): RouterTuning {
 const SPRAWL = 0.4;
 const CLEAN = 2 * BOARD_GRID;
 /**
- * A card may hop to a neighbouring column only while flow still reads left
- * to right: every feeder stays in an earlier column, every taker in a
- * later one. Hops toward partners are what shorten long wires - the
- * layered pass ranks by longest path, which spreads a board wider than a
- * hand would.
+ * Whether the search may hop cards between columns (within what flow allows,
+ * see `mayStandIn`). Hops toward partners shorten long wires: longest-path
+ * ranking spreads a board wide.
  */
 const ALLOW_COLUMN_MOVES = true;
 
@@ -179,11 +163,10 @@ function hashIds(ids: string[]): number {
 
 /**
  * The rim point of `rect` facing `other`, and the outward normal there. The
- * SIDE is the one the other card lies beyond - by the gap between the two
- * rectangles, not by where the other card's centre is: a drawer beside a
- * tall tower faces it across the gap even though the tower's centre lies
- * far below the drawer. Cards side by side on both axes (overlapping, or
- * diagonal) fall back to the centre.
+ * side is chosen by the gap between the two rectangles, not by the other
+ * card's centre (a drawer beside a tall tower faces it across the gap even
+ * though the tower's centre lies far below). With no clear gap axis it
+ * falls back to the centre.
  */
 function exitPoint(rect: Rect, other: Rect): { point: Point; nx: number; ny: number } {
   const to = centre(other);
@@ -210,17 +193,14 @@ function centre(rect: Rect): Point {
 
 /** The proxy route: clean exit, shortest octilinear way, clean landing. */
 export function proxyPath(source: Rect, target: Rect): Path {
-  // Docking is free everywhere (2026-09-08), so a wire leaves at the rim
-  // point nearest its far end - never at the fixed port row. Pinning to
-  // the port rows made the proxy draw a thirty-cell zigzag from a tall
-  // tower to the drawer beside it where the router draws five cells
-  // straight, and it scored Jack's hand layout worse than the arranger's.
+  // Docking is free, so a wire leaves at the rim point facing its far end,
+  // never at a fixed port row: pinning to port rows drew long zigzags where
+  // the router draws a short straight wire, and misranked layouts.
   const exit = exitPoint(source, target);
   const entry = exitPoint(target, source);
   // Facing sides whose dock ranges overlap line up on one row (or column):
-  // the router's straight shot. Aiming each end at the other's CENTRE put
-  // a small drawer's entry a cell off the tower's exit and drew a jog the
-  // router never draws.
+  // the router's straight shot. Aiming each end at the other's centre drew
+  // a one-cell jog the router never draws.
   if (exit.nx !== 0 && exit.nx === -entry.nx) {
     const lo = Math.max(source.top, target.top) + BOARD_GRID;
     const hi = Math.min(source.bottom, target.bottom) - BOARD_GRID;
@@ -359,10 +339,9 @@ function segmentEnters(a: Point, b: Point, rect: Rect): boolean {
 }
 
 /**
- * The detour the router will have to take round every card (not the
- * path's own two) the proxy path runs through: two corners and half the
- * card's shorter side plus the margins, per card. An estimate of the
- * real cost, where a flat fine used to stand.
+ * Estimated detour cost for every card (other than the path's own two) the
+ * proxy path runs through: two 90-degree corners plus half the card's
+ * shorter side plus the margins, per card.
  */
 export function pathBlocked(path: Path, rects: Rect[], skipA: number, skipB: number, prices: RouterTuning): number {
   let cost = 0;
@@ -735,11 +714,10 @@ export function optimizeIslandLayout(
   /**
    * May `card`, standing in `from`, stand in column `to`? A machine keeps
    * flow reading left to right: every feeder in an earlier column, every
-   * taker in a later one (a wire already running backwards - a recycle -
-   * does not constrain). A DRAWER is freer: anywhere between its first and
-   * last partner's column, the partners' own columns included, so it can
-   * sit in the gap between two machines stacked in one column - the way
-   * Jack parks a drawer two machines share.
+   * taker in a later one (a wire already running backwards does not
+   * constrain). A DRAWER may stand anywhere between its first and last
+   * partner's column, inclusive, so it can sit between two machines stacked
+   * in one column.
    */
   const mayStandIn = (card: number, from: number, to: number): boolean => {
     if (cards[card].role === "storage") {
@@ -760,11 +738,8 @@ export function optimizeIslandLayout(
       const other = link.a === card ? link.b : link.a;
       const otherLayer = layerOfCard(other);
       if (otherLayer === undefined) continue;
-      // A machine may share a column with a DRAWER it trades with (the
-      // drawer then sits above or below it, its wire running up the
-      // column) but never pass beyond it; another machine it may not even
-      // draw level with, so machine-to-machine flow keeps reading left to
-      // right.
+      // A machine may share a column with a drawer it trades with but never
+      // pass beyond it; it may not even draw level with a partner machine.
       const reach = cards[other].role === "storage" ? 0 : 1;
       if (link.a === card) {
         if (otherLayer > from && otherLayer < to + reach) return false;

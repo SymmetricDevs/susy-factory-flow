@@ -5,48 +5,36 @@ import { getCommunityDb, isCommunityConfigured } from "@/lib/server/community";
  * What the community actually builds: a per-resource popularity score
  * aggregated over every public shared setup.
  *
- * The formula, per plan (each plan votes once per resource, so one giant
- * board cannot stuff the ballot):
- *   +2  the plan MAKES it (it is an output of a recipe some card runs),
+ * The formula, per plan (each plan votes once per resource, and every plan
+ * weighs the same):
+ *   +2  the plan MAKES it (an output of a recipe some card runs),
  *   else +1 if it only USES it (an input of such a recipe, or a drawer);
  *       the stronger role wins, they do not stack
  *   +min(1, log10(1 + rate)) the plan SHIPS it (the row's denormalized
- *       boundary outputs carry real items/s / L/s). Capped at +1 so a plan's
- *       whole vote is bounded: fifty setups trickling water must always
- *       outrank one setup gushing a billion lava - popularity is how many
- *       people build it, never how much of it there is.
- * Every plan weighs the same. Weighting by votes or views would just make
- * the front page vote twice.
+ *       boundary outputs). Capped so popularity measures how many people
+ *       build it, never how much of it there is.
  *
- * Three shaping rules on top (Jack, 2026-08-31):
- * - Programmed circuits score nothing. Every other card holds one; ranking
- *   them says nothing about what people build.
- * - A filled cell IS its fluid: the cell's votes land on the fluid's key
- *   (name-tolerant, the same equivalence the recipe search uses), so only
- *   the fluid climbs the list and the two forms never split their score.
- * - Items weigh a little more than fluids: one crafted item usually stands
- *   for more work than one of the litres flanking it.
+ * Shaping rules on top:
+ * - Programmed circuits score nothing; nearly every card holds one.
+ * - A filled cell's votes land on its fluid's key, so the two forms never
+ *   split their score.
+ * - Items weigh more than fluids (see ITEM_WEIGHT).
  *
- * Keys are `${kind}:${id}`, the same shape the dataset catalog uses, so the
- * resources route can look straight up. With Supabase unconfigured (local
- * dev) the map is empty and the sort degrades to best match's order.
+ * Keys are `${kind}:${id}`, the dataset catalog's shape. With Supabase
+ * unconfigured (local dev) the map is empty.
  *
- * THE ITEM LIST NEVER WAITS FOR IT (2026-09-24). "Most popular" is the
- * items column's default sort, and the sweep reads every public plan's
- * jsonb from Supabase: when Supabase stalled, every item list request sat
- * behind the stalled sweep for ~90 s and the whole site read as broken.
- * `getResourcePopularity` answers at once with the last good map (empty
- * before the first sweep lands) and starts a sweep in the background when
- * one is due. The prewarm endpoint starts the first one at boot.
- *
- * The sweep is the heaviest read the app makes (every public plan, often
- * megabytes each), so it runs every six hours, and a failed one waits half
- * an hour before trying again rather than piling onto a struggling database.
+ * THE ITEM LIST NEVER WAITS FOR IT: "Most popular" is the items column's
+ * default sort, and the sweep reads every public plan's jsonb, so a stalled
+ * database must not hang item list requests. `getResourcePopularity` answers
+ * at once with the last good map (empty before the first sweep) and starts a
+ * background sweep when one is due; the prewarm endpoint starts the first.
+ * The sweep is the app's heaviest read, so it runs every six hours, and a
+ * failed one waits half an hour rather than piling onto a struggling database.
  */
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Small pages, ordered by the primary key: a plan jsonb can run to megabytes,
-// and 40 of them in one statement tripped Postgres's statement timeout.
+// and larger pages hit Postgres's statement timeout.
 const PAGE_SIZE = 10;
 const MAX_PLANS = 1000;
 const FAILURE_RETRY_MS = 30 * 60 * 1000;
@@ -212,8 +200,7 @@ const MADE_SCORE = 2;
 const USED_SCORE = 1;
 /**
  * Items weigh well over fluids in the final tally: every chain is flanked by
- * the same dozen process gases, and at parity they buried every crafted thing
- * (1.5 was tried and the top of the list was still all fluids).
+ * the same dozen process gases, which otherwise fill the top of the list.
  */
 const ITEM_WEIGHT = 3;
 
@@ -225,11 +212,9 @@ function resourceKey(resource: unknown): string | undefined {
 }
 
 /**
- * The key a vote actually lands on: circuits land nowhere, and a filled
- * cell's vote lands on its fluid so only the fluid shows in the ranking.
- * The fluid id is derived from the cell's name; a rare miss ("Molten Cast
- * Iron" is `molten.castiron`) scores a key no dataset resource wears, which
- * only means that cell's votes go unspent.
+ * The key a vote actually lands on: circuits and empty cells land nowhere,
+ * and a filled cell's vote lands on its fluid. The fluid id is derived from
+ * the cell's name; a rare miss just scores a key no resource wears.
  */
 function canonicalKey(kind: string, id: string, displayName: unknown): string | undefined {
   // Plumbing, not products: every card holds a programmed circuit and every

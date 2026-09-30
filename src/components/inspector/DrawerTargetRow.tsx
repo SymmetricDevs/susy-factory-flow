@@ -7,9 +7,8 @@ import { RateBox, RuleButton, useRateRule } from "../flow/rate-rule";
 
 /**
  * A source or product drawer, hung under its resource's row like a file in a
- * folder (Jack, 2026-09-23): locate, then the drawer's own rule and rate - the
- * rule button wearing its word as in Pool, and your rate in the drawer's
- * sunken box. They behave exactly as on the drawer: the same hook sets them.
+ * folder: locate, then the drawer's own rule button and rate box, driven by
+ * the same hook as on the drawer card so they behave identically.
  */
 export function DrawerTargetRow({ storage, input, isLast }: { storage: FactoryStorage; input: boolean; isLast: boolean }) {
   useRateDisplayUnits();

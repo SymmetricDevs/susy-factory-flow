@@ -6,18 +6,11 @@ import { wasRecentWireDrop } from "./connection-drag";
 import { clearHoveredPortBrowse, setHoveredPortBrowse } from "./port-browse";
 
 /**
- * What a port row does when you point at it.
- *
- * It used to be the little item icon and nothing else: a 28px square inside a
- * 40px row, carrying click-for-recipes and right-click-for-uses, while the rest
- * of the row — the name, the rate, the bar — was only a wire drag. Aiming at the
- * icon to ask "what makes this?" is a game of darts, and on a touchscreen the
- * icon has no right button to press and no hover to reveal itself.
- *
- * So the whole row answers now, and every input device gets a way in:
+ * What a port row does when you point at it. The whole row answers, not just
+ * its icon, and every input device gets a way in:
  *   click       recipes that make it
  *   right click recipes that use it
- *   drag        a wire, exactly as before
+ *   drag        a wire
  *   R / U       the same two, for the row under the pointer
  *   tap         a menu offering both, for a finger
  *   press       the same menu, early enough to slide onto one and let go

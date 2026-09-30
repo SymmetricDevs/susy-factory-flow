@@ -7,10 +7,9 @@ import { COMPACT_MAX_HEIGHT, COMPACT_MAX_WIDTH, SNUG_MAX_WIDTH } from "@/lib/vie
 /**
  * Compact mode: one column instead of three.
  *
- * Below this width the board cannot share the window with both side columns —
- * 344 + 332 leaves a phone nothing — so in compact mode the columns become
- * drawers that slide over the board, the top bar folds into one menu, and each
- * board toolbar folds into one button.
+ * Below the compact size the board cannot share the window with both side
+ * columns, so the columns become drawers that slide over the board, the top
+ * bar folds into one menu, and each board toolbar folds into one button.
  *
  * `globals.css` defines a Tailwind `compact:` variant for the style-only half
  * of the switch (heights, min-heights, font sizes). It keys on the
@@ -18,23 +17,18 @@ import { COMPACT_MAX_HEIGHT, COMPACT_MAX_WIDTH, SNUG_MAX_WIDTH } from "@/lib/vie
  * disagree; the boot script in layout.tsx stamps it before first paint.
  *
  * The numbers are SHELL pixels: the interface size (ui-scale.ts) zooms the
- * whole shell, so a 1400px window at 130% has 1077px of layout in it, and the
- * media queries are built from the live factor.
+ * whole shell, so the media queries are built from the live factor.
  */
 export { COMPACT_MAX_WIDTH, COMPACT_MAX_HEIGHT, SNUG_MAX_WIDTH };
 
 /*
- * COMPACT_MAX_HEIGHT: a short window is compact too, whatever its width. A
- * phone held sideways is 932x430 on the newest iPhones — wide enough to clear
- * the width test and nowhere near tall enough for a 720px-tall app. It used to
- * get the desktop layout, whose minimum heights then pushed the board's bottom
- * corners off the screen.
+ * COMPACT_MAX_HEIGHT: a short window is compact whatever its width. A phone
+ * held sideways (e.g. 932x430) clears the width test but the desktop
+ * layout's minimum heights would push the board's bottom off the screen.
  *
- * SNUG_MAX_WIDTH: wide enough for the full top bar, not wide enough for every
- * button to keep its word. Between the compact cutoff and here the bar's
- * labelled buttons drop to their icons; the bar used to overflow, and an
- * overflowing bar is what makes a phone browser widen its layout viewport and
- * shrink the whole page to fit (see AppMenu).
+ * SNUG_MAX_WIDTH: between the compact cutoff and here the top bar's labelled
+ * buttons drop to their icons. An overflowing bar makes a phone browser widen
+ * its layout viewport and shrink the whole page (see AppMenu).
  */
 
 /**
@@ -174,8 +168,7 @@ function getServerSnapshot(): boolean {
  * Re-renders when the window crosses the compact threshold.
  *
  * The server has no width to measure, so it renders the full three-column
- * layout and the client corrects on the first paint — the same deal the
- * workspace and board view settings make.
+ * layout and the client corrects on the first paint.
  */
 export function useIsCompactViewport(): boolean {
   return useSyncExternalStore(subscribe, isCompactViewport, getServerSnapshot);

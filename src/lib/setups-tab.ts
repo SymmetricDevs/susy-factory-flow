@@ -1,7 +1,6 @@
 /**
- * Events around the Setups list. The list itself lives in the library now
- * (the square at the head of the tab strip), so the old "open the sidebar on
- * Setups" bridge is gone; opening the list is `openLibrary({ kind: "public" })`.
+ * Events around the Setups list. The list itself lives in the library;
+ * opening it is `openLibrary({ kind: "public" })`.
  */
 
 /**

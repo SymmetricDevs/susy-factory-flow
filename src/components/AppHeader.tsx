@@ -35,13 +35,13 @@ interface AppHeaderProps {
 }
 
 /**
- * The one top bar for the whole app: title, version chip, game version, board
- * actions, account. The old Community page folded into the sidebar's Setups
- * tab, so there is no page switch up here anymore.
+ * The one top bar for the whole app: title and version chip, design tabs,
+ * plan actions, settings, links and account.
  */
 export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   // The chip wears a dot while a shipped release has notes this browser has
-  // not opened. Its own stamp, not the release notice's — see whats-new.ts.
+  // not opened. It has its own stamp, separate from the release notice's
+  // (see whats-new.ts).
   const hasUnread = useSyncExternalStore(
     subscribeToNotesRead,
     () => unseenEntries().length > 0,
@@ -106,18 +106,11 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             />
           ) : null}
         </button>
-        {/* The pack picker rides up here beside the app version rather than at
-            the head of the browser column. Two versions that are easy to
-            confuse now sit together and read as a pair, and the column below
-            gets a whole row of its height back. On a phone it moves once more,
-            into the menu: it is the widest control on the bar and the one people
-            touch least. */}
-        {/* PINNED (Jack, 2026-09-06): the pack picker is off the bar while
-            2.9 is the only pack there is. A dropdown with one option is a
-            question nobody can answer. AppIdentity and the header's
-            `onLoadDatasetVersion` prop stay wired so it can come back the
-            day a second pack ships; the compact menu's Pack section is
-            pinned the same way in AppMenu. */}
+        {/* The pack picker sits beside the app version (in the menu on a
+            phone). Hidden by SHOW_PACK_PICKER while only one pack is
+            supported; AppIdentity and `onLoadDatasetVersion` stay wired for
+            when a second ships, and AppMenu's Pack section is hidden the same
+            way. */}
         {isCompact || !SHOW_PACK_PICKER ? null : (
           <>
             <span className="ml-3 h-3.5 w-px bg-line" aria-hidden />
@@ -150,8 +143,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             onShare={() => setShareOpen(true)}
             onExportImage={() => setExportOpen(true)}
           />
-          {/* Dressed like the compass and the brand links: settings is a
-              utility square, not one of the coloured calls to action. */}
+          {/* Settings is a plain utility square, not a coloured call to action. */}
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -163,9 +155,8 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
           </button>
           <SupportButton />
           <HeaderLinks />
-          {/* No What's new button up here since 2026-09-06: the version chip
-              at the other end of the bar opens the same notes and wears the
-              unread dot, and the bar was two labelled buttons too wide. */}
+          {/* No What's new button: the version chip opens the notes and wears
+              the unread dot. */}
           <AccountMenu />
         </div>
       )}

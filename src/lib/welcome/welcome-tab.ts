@@ -7,23 +7,13 @@ import { readSharedPlanId } from "@/lib/community/shared-link";
  * The Welcome tab: whether it sits in the tab strip, and whether it is the one
  * showing.
  *
- * It is not a design. It rides at the head of the same strip because that is
- * where people already look for "what am I working on", and it covers the board
- * rather than replacing it, so nothing about the plan is unmounted while it is
- * up.
+ * It is not a design. It rides at the head of the design strip and covers the
+ * board rather than replacing it, so nothing about the plan unmounts.
  *
- * `open` and `showOnStartup` are permanent (localStorage); `active` is not.
- * Coming back to a page that had opened over your factory a week ago and
- * finding it still there reads as the app losing your work. So a fresh visit
- * starts on the Welcome tab if the checkbox says so, and stepping onto a design
- * puts it away for the rest of the session.
- *
- * "The rest of the session" includes RELOADS, which is why stepping off is
- * recorded in sessionStorage rather than only in memory: reloading while you
- * work is not a new visit, and being thrown back onto Welcome every time is
- * indistinguishable from the app forgetting where you were. sessionStorage is
- * the exact scope wanted - it survives a reload and a navigation, and a new tab
- * or a later visit starts clean.
+ * `open` and `showOnStartup` are permanent (localStorage); `active` is per
+ * browser session. A fresh visit starts on Welcome if the checkbox says so,
+ * and stepping onto a design puts it away for the rest of the session,
+ * RELOADS included, which is why stepping off is kept in sessionStorage.
  */
 export interface WelcomeTabState {
   /** The tab is in the strip. */
@@ -67,12 +57,10 @@ function rememberLeftThisSession(left: boolean) {
 }
 
 function readStored(): WelcomeTabState {
-  // A link to someone's setup is a visit that already has somewhere to be, and
-  // the greeting would land on top of the very thing the link was for. It
-  // counts as stepped off before anything renders, so there is no flash of
-  // Welcome while the setup downloads. What makes it stick across the reload
-  // after the import is `leaveWelcomeTab`, called once the plan is on the
-  // board: by then `?plan=` has been taken back out of the address bar.
+  // A visit on a shared setup link counts as stepped off before anything
+  // renders, so Welcome never flashes over it. `leaveWelcomeTab`, called once
+  // the plan is on the board, makes that stick across reloads (by then
+  // `?plan=` has left the address bar).
   const left = hasLeftThisSession() || readSharedPlanId() !== undefined;
 
   try {

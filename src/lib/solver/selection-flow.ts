@@ -30,15 +30,13 @@ export interface SelectionFlow {
  * makes internally becomes a Need when only its consumer is selected, and an
  * Output when only its maker is.
  *
- * This is a real second solve, not a re-tally of the plan's numbers, and the
- * difference shows at the boundary. A machine the board throttles to half
- * speed because its supplier is small runs at FULL speed here once that
- * supplier is outside the box - so the panel answers "what would this chunk
- * need to run properly", not "what is it managing right now". That is the same
- * question a pocket card and a saved blueprint answer about their contents
- * (see `computeBlueprintIo`), so all three agree.
+ * This is a real second solve, not a re-tally of the plan's numbers. A
+ * machine the board throttles because its supplier is small runs at FULL
+ * speed here once that supplier is outside the box, so the panel answers
+ * "what would this chunk need to run properly", the same question a saved
+ * blueprint answers (see `computeBlueprintIo`).
  *
- * Selecting a pocket card counts everything inside it. Returns undefined when
+ * Selecting a minimized board counts everything inside it. Returns undefined when
  * the selection holds no machine cards at all, which is the panel's signal to
  * keep showing the whole plan.
  */
@@ -75,13 +73,10 @@ export function calculateSelectionFlow(
     ),
   };
 
-  // Heal the cut before solving. Severing the wires is the whole mechanism
-  // here, but a plan is a closed system, so every wire cut leaves a bare slot
-  // and a bare slot stops its machine dead. Left alone, scoping ANY selection
-  // would answer zero - the exact opposite of "as if it were the whole
-  // board". Closing the boundary puts a source on what now arrives from
-  // outside and a drain on what now leaves, which is what being outside the
-  // box means. The books are untouched: those two still read as this scope's
+  // Heal the cut before solving: every severed wire leaves a bare slot, and
+  // in a closed plan a bare slot stops its machine, so any scoped solve
+  // would answer zero. Closing the boundary puts a source on what arrives
+  // from outside and a drain on what leaves; those read as this scope's
   // needs and outputs (see close-boundaries.ts).
   //
   // Not cloned: the solver only reads the project, and a selection re-solves

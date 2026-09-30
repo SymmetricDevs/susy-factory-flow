@@ -24,18 +24,15 @@ import { Face, formatEuT, type TileMarks } from "./LibraryTile";
 import { PlanComments } from "./PlanComments";
 
 /**
- * The step between a tile and the board: the grid gives way to one page
- * that fits on one screen. The board photograph in the top half, whole;
- * then the face, name, who and when, the figures, and on the right the
- * one big Open button over a short row of ICON keys (vote, link, public
- * or private, post, edit, close tab, delete); the description; needs and
- * makes as tight columns; then, for anything posted, the comments. Back
- * (or Escape) brings the grid back. Not a popup.
+ * A design's detail page, replacing the grid (not a popup): the board
+ * photograph, then face, name, author, date and figures, with the Open button
+ * over a row of icon keys (vote, link, visibility, post, edit, close tab,
+ * delete); the description; needs and makes; and comments for posted plans.
+ * Back or Escape returns to the grid.
  *
- * The SAME page whether you came from your own grid or the network: what
- * differs is only which keys you have, because you own it or you do not.
- * Edit turns the header into a form for the name, description and tags.
- * Delete asks in words, in a strip under the keys, never by arming.
+ * The same page for your designs and the network's; only the keys differ by
+ * ownership. Edit turns the header into a form for name, description and
+ * tags. Delete confirms in words, in a strip under the keys.
  */
 
 /** The board photograph a post carries, taken when it was shared. */
@@ -101,8 +98,8 @@ export function LibraryDetail({
   entry: LibraryDetailEntry;
   onClose: () => void;
 }) {
-  // The picture is probed up front: an <img> that 404s before React has
-  // attached its onError never reports, and the frame would sit dark.
+  // The picture is probed up front: an <img> that 404s before React attaches
+  // its onError never reports, leaving the frame dark.
   const [probed, setProbed] = useState<{ url: string; ok: boolean }>();
   const [confirming, setConfirming] = useState<DetailKey>();
   const [flashKey, setFlashKey] = useState<string>();

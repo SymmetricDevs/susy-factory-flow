@@ -9,13 +9,10 @@ import type { RecipeQueryRole } from "@/lib/datasets/recipe-query";
 import { ResourceIndexPane, type IndexedResource } from "./ResourceIndexPane";
 
 /**
- * The item picker behind the stencil's "+ takes" / "+ makes" keys, the
- * library's filter and Pool's product drawer button: THE ITEM PANEL
- * (ResourceIndexPane - the items column's own search, filters, sort, paged
- * grid and recent shelf), in a popover, where a click on a tile picks it. A
- * click anywhere else closes it. The recipe search opens it ABOVE the
- * stencil (the stencil sits at the bottom of the screen); the library opens
- * it BELOW its header keys. Same picker, one `placement`.
+ * THE ITEM PANEL (ResourceIndexPane) in a popover, where a tile click picks
+ * the item and a click elsewhere closes it. Used by the stencil's "+ takes" /
+ * "+ makes" keys (opens ABOVE, since the stencil is at the bottom), the
+ * library filter and Pool's product button (BELOW); see `placement`.
  */
 export function ItemPickerPopover({
   role,

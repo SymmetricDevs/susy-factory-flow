@@ -25,9 +25,9 @@ import { storageRatioEqualities } from "./storage-ratios";
  *    tower shape); the overshoot reads as spare. Either mode can opt into an exact
  *    output. Input rates can be exact, minimums, or supply ceilings. Pool also
  *    makes an exact output's receiving pool strict.
- *  - the objective is MINIMIZE TOTAL MACHINERY (sum of act x machineCount),
- *    This also settles under-determination: a chain
- *    no target needs solves to zero, which is itself the answer.
+ *  - the objective is MINIMIZE TOTAL MACHINERY (sum of act x machineCount).
+ *    This also settles under-determination: a chain no target needs solves
+ *    to zero, which is itself the answer.
  *
  * Deliberately absent from this mode: the fairness stage, the equal-fill
  * rows, and power-stall pinning. All three encode "what does this BUILD do
@@ -179,11 +179,9 @@ export function solveSolveMode(
   // Drawer-to-drawer wires get a finite roof so a teleporter chain cannot
   // read as unbounded; machine wires are bounded by their port rows. POOL
   // wires are exempt: a source-to-pool import is bounded by what the pool's
-  // takers drink and a pool-to-product line by what its feeders make, both
-  // machine rows - and every import and product in pool mode runs over one
-  // of them, so the roof capped a typed target at a million a second
-  // (Jack, 2026-09-06: 1000/t of a product read "no machine count reaches
-  // the required amount" because its import needed more than that).
+  // takers drink and a pool-to-product line by what its feeders make (machine
+  // rows), and every pool import and product runs over one of them, so the
+  // roof would cap large typed targets.
   for (const edge of usable) {
     if (!actVar.has(edge.source) && !actVar.has(edge.target) && !isPoolEdgeId(edge.id)) {
       upperBounds.push({ coefficients: new Map([[flowVar.get(edge.id)!, 1]]), rhs: 1e6 });

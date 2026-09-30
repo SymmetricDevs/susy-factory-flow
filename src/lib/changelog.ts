@@ -5,20 +5,16 @@
  * THEIR board, never how it was built. Newest first. ONE entry per release,
  * where a release is a deploy to the live site, not a commit (see version.ts).
  *
- * Default to a short headline and at most four one-sentence notes. Release
- * 3.1.4 uses eight short bullets to cover the machine audit; its full
- * engineering explanation lives behind a link after Jack found it too verbose
- * in the dialog. Keep the in-app notes scannable.
+ * Default to a short headline and at most four one-sentence notes. Put long
+ * engineering explanations behind an action link; keep the in-app notes
+ * scannable.
  *
- * The LIST, though, runs all the way back, and that is deliberate. The dialog
- * opens on the releases a given reader has not seen - usually one to four - and
- * keeps the rest behind a "full history" button, so length costs the impatient
- * reader nothing and answers "when did that change?" for everyone else. Do not
- * prune it back to a handful again; that only moved the wall from the archive
- * into the popup for anyone returning after a long break.
+ * Keep the full history; do not prune old entries. The dialog opens on the
+ * releases this reader has not seen and keeps the rest behind "Full history",
+ * so the length costs nothing and answers "when did that change?".
  *
- * An entry can also carry ACTIONS: links for anything that lives outside the
- * app, offered as a button because the reader is already right here.
+ * ACTIONS are links for anything that lives outside the app, shown as
+ * buttons.
  */
 export interface ChangelogAction {
   label: string;
@@ -32,13 +28,10 @@ export interface ChangelogEntry {
   headline: string;
   notes: string[];
   /**
-   * For a release that changed what the app MEANS rather than what it can do.
-   *
-   * Reserve it for the ones where a plan somebody saved months ago will now
-   * read differently, because that reader has no reason to suspect anything
-   * and every reason to think they have found a bug. Rendered loudly, with the
-   * entry's actions inside it, so the warning and the thing that explains it
-   * are one block instead of a sentence and a button that got separated.
+   * For a release that changed what the app MEANS rather than what it can do:
+   * reserve it for changes that make an old saved plan read differently, so
+   * the reader does not mistake it for a bug. Rendered loudly, with the
+   * entry's actions inside the same block.
    */
   warning?: string;
   /** Offered as buttons under the notes. */
@@ -923,8 +916,6 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "2.23.0",
     date: "2026-08-21",
-    // Reworded when the icon changed: the entry said "gear", and pointing
-    // archive readers at an icon the button no longer wears helps nobody.
     headline: "Setup rules, one button",
     notes: [
       "New button, top left, holding two rules for the whole setup.",
@@ -1377,8 +1368,6 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
     warning:
       "*Your saved setups will act different.* Some machines will have stopped until you say where things go.",
-    // The release that introduced the version stamp, so no browser alive has
-    // one to compare against. Without this, nobody sees these notes at all.
   },
   {
     version: "1.42.1",

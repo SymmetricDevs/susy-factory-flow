@@ -92,20 +92,10 @@ const ROLE_PRESENTATION: Record<
 
 
 /**
- * Each job's colour, borrowed from the side panel's sections so board and
- * books say the same thing in the same ink: red IN, green OUT. A source
- * wears the Inputs red, and products and byproducts both wear the Outputs
- * green - they are one section in the panel and one direction on the board,
- * and the blue products used to wear made a third colour for a distinction
- * the header word already carries. Quiet steel for the internal plumbing
- * that buffers are; idle is dimmer still - a drawer mid-drag has nothing to
- * announce.
- */
-/**
  * POWER drawers wear their own tint whatever the role: EU is not a material
- * and its tile must not read as one more green product. A somber burnt
- * amber - vibrant but deliberately NOT the bright wire amber, so the tile
- * is ground and the lightning stays the light. Paint still wins.
+ * and its tile must not read as one more green product. A burnt amber, not
+ * the bright wire amber, so the tile is ground and the lightning stays the
+ * light. Paint still wins.
  */
 const POWER_STORAGE_TINT = "#c07c17";
 
@@ -119,6 +109,12 @@ function storageTint(storage: Pick<FactoryStorage, "kind" | "colorTag" | "buffer
   return ROLE_TINTS[role];
 }
 
+/**
+ * Each job's colour, borrowed from the side panel's sections so board and
+ * books use the same ink: red IN (source), green OUT (products and
+ * byproducts: one section, one direction). Steel for buffers, the internal
+ * plumbing; idle dimmer still.
+ */
 const ROLE_TINTS: Record<StorageRole, string> = {
   source: "var(--flow-input)",
   product: "var(--flow-output)",
@@ -137,13 +133,10 @@ function isStrictBuffer(storage: FactoryStorage, solveMode: boolean): boolean {
 // Inline (not utility classes) so React Flow's own handle stylesheet can
 // never reposition or resize this: the well is the wire zone, exactly.
 //
-// ONE handle over the whole well, not two halves. A drawer holds one item, so
-// "wire this up" is one gesture and the far end decides which way it runs. The
-// card used to be split down the middle - left half asked who FEEDS it, right
-// half who it feeds - with nothing on screen saying which half you had hold
-// of, so half of all drags asked the wrong question and washed a perfectly
-// good target red. Wires still dock through both port ids; only the grab is
-// one thing now. See `bidirectional` in FactoryFlow.tsx.
+// ONE handle over the whole well, not two halves: a drawer holds one item, so
+// "wire this up" is one gesture and the far end decides which way it runs.
+// Wires still dock through both port ids. See `bidirectional` in
+// FactoryFlow.tsx.
 const WELL_HANDLE: CSSProperties = {
   position: "absolute",
   inset: 0,
@@ -241,10 +234,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     return storageRoleFor(storage, hasIn, hasOut, state.project.poolMode === true);
   });
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
-  // POOL MODE leaves some drawers with nothing to do: a SOURCE (the pool
-  // imports by itself) and a loose drawer with no side (the pool is the
-  // buffer now). They stay on the board untouched - switching modes must
-  // never delete anything - and read greyed and see-through while inert.
+  // POOL MODE leaves some drawers with nothing to do. They stay on the board
+  // untouched (switching modes must never delete anything) and read greyed
+  // and see-through while inert.
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   // Source and product drawers are live in Pool: the pool
   // banks every surplus by itself, so byproduct and trash drawers change
@@ -272,8 +264,8 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   });
   // The board-wide "where is this resource" glow, which BREATHES. It belongs to
   // the side panel (hover or click a resource row) and to a drawer the app just
-  // placed for you. Hovering a drawer on the board is a different question and
-  // no longer asks this one: see buildStorageFlowScope.
+  // placed. Hovering a drawer on the board asks a different question: see
+  // buildStorageFlowScope.
   const isHighlighted = (hoveredFlowResourceKey ?? selectedFlowResourceKey) === resourceKey;
   const isSearchHighlighted = storageMatchesSearch(storage, recipeSearch);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
@@ -292,12 +284,10 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const word = ratio ? "RATIO" : role === "buffer" && isStrictBuffer(storage, solveMode) ? "STRICT" : ROLE_PRESENTATION[role].word;
   // Solve's rule row sits on source and product drawers only.
   const ruled = solveMode && (role === "source" || role === "product");
-  // The card wears its JOB's colour, the same dialect the side panel already
-  // speaks: red is what the plan imports, mint green is what it exports
-  // (products and byproducts), and steel is internal
-  // plumbing. The item's own colour lives in its icon; painting the frame
-  // with it too said the same thing twice and left the four jobs looking
-  // alike. Paint (colorTag) still wins when the player chose one.
+  // The card wears its JOB's colour, the side panel's dialect: red is what
+  // the plan imports, green what it exports (products and byproducts), steel
+  // is internal plumbing. The item's own colour lives in its icon. Paint
+  // (colorTag) still wins when the player chose one.
   const tint = storageTint(storage, role);
   const borderColor = `color-mix(in srgb, ${tint} 55%, #262b34)`;
   const inputHandleId = makeResourceHandleId("input", {
@@ -341,11 +331,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         "group relative text-[#e8e9ee] transition-[opacity,filter] duration-500",
         (isFlowScopeLit || isFlowScopePort) && !isHighlighted ? "flow-scope-glow" : "",
         isHighlighted ? "resource-glow" : "",
-        // Inert: mostly grey with a trace of its own colour, and nothing on
-        // it takes the pointer - no port to drag off, no pill - while the
-        // card itself still drags (the events fall through to the node).
-        // Only the WIRE HANDLES go dead: the card still selects, deletes and
-        // drags. Blanking every child also swallowed the delete tool.
+        // Inert: mostly grey with a trace of its own colour. Only the WIRE
+        // HANDLES go dead; the card still selects, deletes and drags
+        // (blanking every child would also swallow the delete tool).
         inertInPool ? "opacity-40 grayscale-[0.75] [&_[data-resource-handle]]:pointer-events-none" : "",
       ].join(" ")}
       style={paintCursor ? { cursor: paintCursor } : undefined}
@@ -376,18 +364,17 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
           // wire from. The shared geometry owns this footprint.
           "storage-node-card relative flex h-[80px] w-[120px] flex-col",
           // Search has no rim of its own, so the card itself brightens to say
-          // "this one matched". The glow states deliberately do NOT: a filter
-          // here also lifts the rim and the wash drawn inside this box, and
-          // brightening #ffd257 clips it to a flat yellow that no longer
-          // matched the gold on the wires. See PLUG_GLOW_STYLE in RecipeNode.
+          // "this one matched". The glow states must not: the filter would
+          // also lift the rim, and brightening #ffd257 clips it to a flat
+          // yellow that no longer matches the wires' gold. See
+          // PLUG_GLOW_STYLE in RecipeNode.
           isSearchHighlighted ? "brightness-125 saturate-150" : "",
         ].join(" ")}
       >
-        {/* The highlight, wearing the silhouette. A slightly larger clone of
-            the shape behind the frame reads as an outline that follows the
-            cut corners, where the shared box ring drew a square around a
-            hexagon. Selection outranks the hover glow; the flow-scope rim is
-            the quiet 2px version of the same idea. */}
+        {/* The highlight, wearing the silhouette: a slightly larger clone of
+            the shape behind the frame, so the outline follows the cut
+            corners. Selection outranks the hover glow; the flow-scope rim is
+            the quiet 2px version. */}
         {selected || isHighlighted || isFlowScopePort || isFlowScopeLit ? (
           <span
             aria-hidden
@@ -403,15 +390,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             style={{ background: selected ? "var(--selection)" : "var(--glow-line)" }}
           />
         ) : null}
-        {/* The SHAPE, on its own layer rather than on the card.
-            Two reasons it cannot live on the card div. The glance icon is
-            deliberately bigger than the card and spills past the frame, and a
-            clip-path on the card would cut it off. And an octagon needs its
-            outline drawn on the diagonals, which a clipped `border` cannot do:
-            the border paints first and the clip then removes it. So the outer
-            span is the border colour, the inner one is the fill inset by 2px,
-            and both carry the same clip - which leaves a real 2px edge all the
-            way round whatever the silhouette is. */}
+        {/* The SHAPE, on its own layer rather than on the card: a clip-path
+            on the card would cut off the oversized glance icon, and a clipped
+            `border` loses its diagonals. So the outer span is the border
+            colour and the inner one the fill inset by 2px, both with the same
+            clip: a real 2px edge whatever the silhouette. */}
         <span
           aria-hidden
           data-storage-shape={role}
@@ -426,8 +409,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             }}
           />
         </span>
-        {/* The breathing wash, clipped to the same silhouette the square
-            ::after used to ignore. Same layer rules as before: above the
+        {/* The breathing wash, clipped to the same silhouette: above the
             card's surfaces, below its chrome, never a click target. */}
         {isHighlighted ? (
           <span
@@ -438,16 +420,13 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
           />
         ) : null}
         {/* No tileTint: the glance layer's box wash would paint a rectangle
-            over a card that now keeps its SILHOUETTE at glance - the shaped
+            over a card that keeps its SILHOUETTE at glance - the shaped
             fill underneath is already the role-coloured ground. */}
         <NodeGlanceIcon>
-          {/* Deliberately bigger than the card it sits on.
-              Zoomed out, WHAT is in the drawer is the only thing worth
-              reading, and a sprite confined inside the frame is a few pixels
-              on screen. Nothing clips it — the card sets no overflow — so it
-              spills a little past the frame and reads as the node's identity
-              rather than as its contents. Node SIZE is untouched, which is
-              what the router cares about. */}
+          {/* Deliberately bigger than the card: zoomed out, what is in the
+              drawer is the only thing worth reading. Nothing clips it (the
+              card sets no overflow). Node SIZE is untouched, which is what
+              the router cares about. */}
           <ResourceIcon
             resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
             showAmount={false}
@@ -530,9 +509,8 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
           {/* Colour and silhouette carry the role; the tooltip explains it.
               Keep the word available to assistive technology. */}
           <span className="storage-node-word sr-only">{word}</span>
-          {/* The TITLE BAR is what you move the drawer by, the way a machine
-              card moves by its title row (Jack, 2026-09-22). Nothing on it
-              starts a wire. */}
+          {/* The TITLE BAR is what you move the drawer by, like a machine
+              card's title row. Nothing on it starts a wire. */}
           <StorageTitleBar storage={storage} role={role} isTank={isTank} title={title} solveMode={solveMode} />
           {/* The PORT CHIP answers like a machine's port row: click for the
               recipes that make the item, right click for the ones that use
@@ -576,9 +554,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               className="nodrag"
               style={WELL_HANDLE}
             />
-            {/* The input port keeps its id for WIRES - edges dock on it, plans
-                store it - but it is no longer a place you grab. Zero-sized and
-                inert so React Flow still knows the port exists. */}
+            {/* The input port keeps its id for WIRES (edges dock on it, plans
+                store it) but is not a grab point. Zero-sized and inert so
+                React Flow still knows the port exists. */}
             <Handle
               id={inputHandleId}
               type="target"
@@ -608,7 +586,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 <>
                   {role === "buffer" && !isStrictBuffer(storage, solveMode) ? (
                     // A non-strict buffer's rate is what it banks, the surplus
-                    // leaving the setup, so it says so (Jack, 2026-09-23).
+                    // leaving the setup, so it says so.
                     <div className="storage-chip-surplus">
                       <ChipRate net={net} kind={storage.kind} role={role} size="large" />
                       <span className="storage-chip-surplus-word">(surplus)</span>
@@ -732,13 +710,10 @@ export const StorageNode = memo(
 
 /**
  * A rate that will not fit gives up SIZE, never digits and never pixels: a
- * trickle like +0.000000001/s is a real number the player dialled for, and
- * clipping it printed a confident wrong one. Stepped by string length rather
- * than measured, so the board never reads the DOM for it.
- *
- * The rate uses the full bottom row, less the clearance each silhouette
- * needs near its corners. Fit by string length rather than
- * measuring the DOM on a board full of cards.
+ * trickle like +0.000000001/s is a real number, and clipping it prints a
+ * confident wrong one. The rate uses the full bottom row, less the clearance
+ * each silhouette needs near its corners, fitted by string length so the
+ * board never reads the DOM.
  */
 const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
   product: 92,
@@ -752,10 +727,8 @@ const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
   trash: 72,
 };
 /**
- * Advance per character at each step. Measured against the rendered bold
- * pixel font, not the em size: 12px Monocraft draws its digits a full 8px
- * wide, which is how "+123k L/s" cleared the arithmetic and still lost its
- * tail to the shield.
+ * Advance per character at each step, measured against the rendered bold
+ * pixel font, not the em size: 12px Monocraft draws its digits 8px wide.
  */
 const NET_LINE_FIT_STEPS = [
   { className: "text-[12px]", perChar: 8 },
@@ -1064,12 +1037,9 @@ function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageB
 
 /**
  * The one thing about a drawer you CHOOSE. Source and buffer are read off the
- * wiring and cannot be picked; which kind of end-of-the-line this is cannot be
- * read off anything, so it gets a control.
- *
- * A three-way cycle since 2026-08-23: product, byproduct, trash. The trash
- * step is what replaced the toolbar's separate trash can node. Cycle arrows,
- * so the strict buffer's left-right arrows mean one thing only.
+ * wiring; which kind of end-of-the-line this is cannot be, so it gets a
+ * control: a three-way cycle of product, byproduct, trash. Cycle arrows, so
+ * the strict buffer's left-right arrows mean one thing only.
  */
 function DrainModeSwap({
   storageId,
@@ -1118,13 +1088,10 @@ function DrainModeSwap({
 
 /**
  * The chip's rate: what flows, in the drawer's red or green (steel on trash,
- * whose intake is voided, neither shipped nor spare). Large in Build, a step
- * smaller in Solve's reading well. The NUMBER keeps one size wherever it fits
- * and the unit rides beside it small and quiet, as in the rate box above it
- * (Jack, 2026-09-23: a long "+50k L/hr" used to drop the whole reading a
- * size, so two drawers side by side read in two sizes). Only a figure that
- * still will not fit gives up size, never digits, fitted by string length
- * so nothing is measured.
+ * whose intake is voided). Large in Build, a step smaller in Solve's reading
+ * well. The NUMBER keeps one size wherever it fits and the unit rides beside
+ * it smaller, so drawers side by side read at one size. Only a figure that
+ * still will not fit gives up size, never digits, fitted by string length.
  */
 const CHIP_RATE_ROOM: Record<StorageRole, number> = {
   product: 63,
@@ -1191,10 +1158,9 @@ function useDrawerRule(storage: FactoryStorage, role: StorageRole) {
 }
 
 /**
- * Solve's input row on a source or product drawer (Jack, 2026-09-22): a rule
- * BUTTON with a ▾ that opens the four rules in words, and your rate in a
- * sunken BOX you click and type into. The box and the arrow are the two cues
- * everyone reads without being told: type here, and there are choices.
+ * Solve's input row on a source or product drawer: a rule BUTTON with a ▾
+ * that opens the four rules in words, and your rate in a sunken BOX you
+ * click and type into.
  */
 export function RuleInput({
   storage,
@@ -1254,13 +1220,9 @@ function RuleBar({
 }
 
 /**
- * The drawer hover: which of the four jobs this card is doing, why it is that
- * one, and the three rates.
- *
- * It used to list every feeder and every drainer by name with its own rate,
- * which on a busy tank was a dozen lines of table hanging off a card whose own
- * face already carries the net. Those wires are on the board; the thing only
- * the hover can tell you is which job the drawer has and what decided it.
+ * The drawer hover: which of the four jobs this card is doing, what decided
+ * it, and the three rates. Feeders and drainers are not listed: those wires
+ * are on the board.
  */
 function renderStorageHoverContent(storage: FactoryStorage, role: StorageRole): ReactNode {
   const { project, lastResult } = useFactoryStore.getState();

@@ -5,27 +5,17 @@ import { useEffect, type RefObject } from "react";
 /**
  * Every animation on the board that BREATHES, by keyframe name.
  *
- * The board has one heartbeat, not several. Two things that pulse at different
- * moments read as unrelated faults; the same two pulsing together read as one
- * board telling you something. That takes two properties, and both are easy to
- * lose:
- *
- *  - one PERIOD, which is `--board-pulse` in globals.css. Every rule below
- *    animates for that long, so no two marks can drift apart over time.
- *  - one PHASE, which is what this module does. Period alone is not enough:
- *    a CSS animation's clock starts when it is applied to the element, so a
- *    card scrolled into view, recycled by React Flow, or pulled into a dead
- *    ring by a fresh solve each starts its own cycle wherever it happens to
- *    arrive.
+ * The board has one heartbeat: two marks pulsing at different moments read
+ * as unrelated faults, pulsing together as one message. That takes one
+ * PERIOD (`--board-pulse` in globals.css, every rule's duration) and one
+ * PHASE, which this module provides: a CSS animation's clock starts when it
+ * is applied, so a card scrolled into view, recycled by React Flow or newly
+ * lit by a solve would otherwise start its own cycle.
  *
  * Add a keyframe here when you add a breathing state, and give it
- * `--board-pulse` as its duration. A pulse missing from this list still runs;
- * it just runs alone, which is the exact bug this exists to prevent.
- *
- * One-shot flashes are deliberately absent: they fire and stop, and lining
- * one up with the board's clock would only delay its answer. (The white
- * `board-card-placed` beacon that used to be the example here was removed
- * outright in 2026-08.)
+ * `--board-pulse` as its duration. A pulse missing from this list still runs,
+ * just out of step. One-shot flashes are deliberately absent: aligning them
+ * to the clock would only delay their answer.
  */
 export const BOARD_PULSE_ANIMATIONS = [
   // Hovered/selected resource: the glow wash on cards, and the shape-clipped
@@ -78,17 +68,13 @@ function pinToDocumentTimeline(element: Element, names: ReadonlySet<string>) {
 
 /**
  * Puts every breathing mark on the board on one clock. Called once, from the
- * board root — not per card.
+ * board root, not per card.
  *
- * `animationstart` BUBBLES, so the root hears about every pulse that begins
- * anywhere beneath it: a card scrolled into view, a ring the solver just found,
- * a slot that lost its wire, a card lit by the side panel, and the board's own
- * notices, which live outside any card and were the last thing left out of step
- * when each card pinned only itself. Pinning does not restart an animation, so
- * the handler cannot feed itself, and it runs once per mark rather than per
- * frame.
- *
- * The mount sweep covers what was already running before the listener existed.
+ * `animationstart` BUBBLES, so the root hears every pulse that begins
+ * beneath it, including the board's notices, which live outside any card.
+ * Pinning does not restart an animation, so the handler cannot feed itself,
+ * and it runs once per mark rather than per frame. The mount sweep covers
+ * what was already running before the listener existed.
  */
 export function useBoardPulseSync(ref: RefObject<Element | null>) {
   useEffect(() => {

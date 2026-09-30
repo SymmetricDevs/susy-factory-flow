@@ -3,42 +3,29 @@
  * built from Web Audio oscillators and filtered noise.
  *
  * Sounds mark EVENTS THAT CHANGED THE PLAN (a card landing, a wire snapping
- * in or refusing, a knob turning), never raw UI interaction: a global
- * every-button tick was tried and rejected as noise. The vocabulary lives in
- * `playBoardSound`'s switch; who calls what is the watcher's business
- * (`use-board-sound-effects.ts`) plus the one gesture hook for refusals.
+ * in or refusing, a knob turning), never raw UI interaction such as every
+ * button press. The vocabulary lives in `playBoardSound`'s switch; callers
+ * are the watcher (`use-board-sound-effects.ts`) plus the gesture hooks.
  *
- * Three hard-won rules keep them clean:
- * - Every envelope RAMPS in over a few ms and ramps fully out. A gain that
- *   steps straight to its peak is a click stacked on the note - that was
- *   the first version's "clicky" sound.
- * - Nothing is scheduled against a suspended AudioContext. The context
- *   suspends whenever the tab loses focus or autoplay policy holds it, and
- *   notes scheduled while suspended play late, clipped, or not at all -
- *   that was the "sometimes I don't hear it" bug. `playBoardSound` resumes
- *   first and schedules in the resume callback.
+ * Rules that keep them clean:
+ * - Every envelope RAMPS in over a few ms and ramps fully out; a gain that
+ *   steps straight to its peak clicks.
+ * - Nothing is scheduled against a suspended AudioContext (it suspends on
+ *   focus loss or autoplay policy, and such notes play late, clipped or not
+ *   at all). `playBoardSound` resumes first and schedules in the callback.
  * - The output stream is KEPT HOT. Chrome (Windows especially) parks the
- *   hardware audio stream after a few seconds of silence while
- *   `currentTime` keeps running, and a 100ms note scheduled into the
- *   wake-up gap is clipped or lost entirely - which reads as "the first
- *   sound played, then nothing". An inaudible constant source holds the
- *   stream open, and every note starts a beat after "now" so it never
- *   begins mid-wakeup.
+ *   hardware stream after a few seconds of silence while `currentTime`
+ *   keeps running, clipping notes scheduled into the wake-up gap. An
+ *   inaudible constant source holds it open, and every note starts a beat
+ *   after "now".
  * - Fundamentals sit at 200Hz+ (laptop speakers roll off below), and the
  *   whole mix runs through one gentle lowpass so nothing spits.
- * - FIREFOX HANDS THE GRAPH ITS ORDERS AT THE END OF THE TASK. Gecko queues
- *   every node creation, connection and start() and flushes the queue to
- *   the audio thread only when the current task finishes; Chrome's audio
- *   thread picks them up at once. So a note scheduled 30ms ahead by a
- *   click that then solves or renders for 600ms in the same task is, in
- *   Firefox, never heard - its whole envelope is in the past by the time
- *   the graph sees it - and a 150ms hang clips its first 120ms (measured
- *   2026-09-08 with a MediaRecorder on the real output: Chrome played
- *   whole through both, Firefox lost or clipped them, and yielding one
- *   macrotask before the hang played whole). Hence `playBoardSound` on
- *   Gecko schedules from a macrotask of its own, whatever the caller does
- *   next; and callers that can, play first and mutate in a later task
- *   (the mode keys), which puts the note on time as well as whole.
+ * - Firefox (Gecko) queues every node creation, connection and start() and
+ *   flushes them to the audio thread only when the current task ends. A
+ *   note scheduled 30ms ahead by a click that then solves or renders for
+ *   hundreds of ms in the same task is clipped or lost. So on Gecko
+ *   `playBoardSound` schedules from its own macrotask, and callers that can
+ *   should play first and mutate in a later task.
  */
 
 const KEY = "gtnh-factory-flow.board-sounds.v1";
@@ -98,10 +85,9 @@ export function setBoardSoundVolume(volume: number): void {
 }
 
 /**
- * A LOADED plan is not an action. Hydration, tab switches and setup opens
- * can land a plan's content in a follow-up write that keeps the project id,
- * and the diff watcher cannot tell that arrival from a giant paste - so the
- * loading paths declare a quiet spell here and the engine sits it out.
+ * A LOADED plan is not an action. Loading paths can land a plan's content in
+ * a follow-up write that keeps the project id, which the diff watcher cannot
+ * tell from a giant paste, so they declare a quiet spell here.
  */
 let quietUntil = 0;
 
@@ -113,11 +99,10 @@ export function quietBoardSoundsFor(ms: number): void {
 }
 
 /**
- * Mute ONE kind for a moment. The gesture hooks that play their own voice
- * (the tier chips' dialPower) use this to keep the diff watcher's generic
- * adjust tap from doubling them - muting everything instead silenced the
- * very next wheel tick's own voice, which read as "fast scrolling is
- * broken".
+ * Mute ONE kind for a moment. Gesture hooks that play their own voice (the
+ * tier chips' dialPower) use this to stop the diff watcher's generic adjust
+ * tap doubling them. Muting only that kind matters: a global quiet would
+ * also swallow the next wheel tick's own voice.
  */
 const kindQuietUntil = new Map<BoardSoundKind, number>();
 
@@ -148,10 +133,10 @@ export type BoardSoundKind =
   | "drawerRatio" // ratio: three measured taps opening into a split
   | "sweep" // one sound for a bulk change (paste, arrange, import)
   | "solveOn" // the board shifts into solve mode: a relay engaging, short and dry
-  | "solveOff" // and back to plan mode: the same shimmer, settling home
+  | "solveOff" // (currently unused) a shimmer pad settling down
   | "buildOn" // back to build mode: a block set down, low and dry
   | "poolOn" // the board pools its resources: a drop into still water
-  | "poolOff" // (unused since the mode switch; kept for older callers)
+  | "poolOff" // (currently unused) a low swell settling
   // The build timelapse's family (board-timelapse.ts): the same events as
   // place/connect/open, but SLID rather than set down - mostly brush, a
   // whisper of tone - because dozens fire in a row and the thump family
@@ -160,19 +145,19 @@ export type BoardSoundKind =
   | "shuffleWire" // its wires brush in
   | "shuffleBoard" // a frame is drawn around finished cards
   | "dialRate" // the rate unit dial: one tap, pitched by the chosen step
-  | "dialEnergy" // the rate dial landing on EU per unit: a coin, not a tap
+  | "dialEnergy" // the rate dial landing on EU per unit: a soft glow, not a tap
   | "dialPower" // the power unit dial: a tap that grows with the tier
-  // The recipe search's family (Jack, 2026-09-02): the one place off the
-  // canvas that sounds, because it is a screen of its own with pages to
-  // turn. All quiet, all brush-first, none of them a thump.
+  // The recipe search's family: the one place off the canvas that sounds,
+  // because it is a screen of its own with pages to turn. All quiet, all
+  // brush-first, none of them a thump.
   | "pageOpen" // the search opens: a leaf lifted
   | "pageClose" // and closes: the leaf laid down
   | "pageTurn" // a new page while open: a chip clicked, back, forward
   | "tick" // a switch on the page: machine chip, rate pill, any/all/only
   | "stencilAdd" // a condition joins the stencil
   | "stencilRemove" // a condition leaves it
-  // The library's family (Jack, 2026-09-04): the search's two sounds were
-  // too bright for a room you live in. Lower, quieter, and its own.
+  // The library's family: lower and quieter than the search's, since it is
+  // a screen players stay on.
   | "shelfTurn" // a view or a focus page changes: a card slid along the shelf
   | "shelfTick"; // a filter or sort changes: a low key
 
@@ -183,12 +168,9 @@ const lastPlayedAt = new Map<BoardSoundKind, number>();
 
 /**
  * RETRIGGER STEALS, never stacks and never drops. Playing a kind that is
- * already sounding fades the old voice out in a few ms and starts fresh -
- * the way every game UI does it. The alternatives both failed in use: let
- * voices overlap and rapid deletes SUM their 250ms tails into a crescendo;
- * throttle repeats away and rapid deletes lose their feedback entirely
- * ("some sounds don't play"). One live voice per kind, so a burst of the
- * same action sounds like a fast drum roll at one volume.
+ * already sounding fades the old voice out in a few ms and starts fresh.
+ * Overlapping voices would sum rapid repeats into a crescendo; throttling
+ * would lose feedback. One live voice per kind.
  */
 const activeVoices = new Map<BoardSoundKind, GainNode>();
 
@@ -199,14 +181,12 @@ const DEDUPE_MS = 30;
 const STEAL_FADE = 0.015;
 
 /**
- * Fast REPEATS duck. Even with stealing, a burst of full-volume retriggers
- * (wheel-scrolling a tier chip) reads two or three times louder than one
- * note - the ear sums repeated pulses inside ~200ms. So repeats inside
- * this window play progressively quieter, like an OS scroll tick, and the
- * first note after a pause is back at full voice. The window is deliberately
- * TIGHT: wheel steps arrive every 30-80ms, but two deliberate actions in
- * quick succession can be 150ms apart, and ducking those read as broken
- * volume rather than as a scroll tick.
+ * Fast REPEATS duck: the ear sums pulses inside ~200ms, so a burst of
+ * retriggers (wheel-scrolling a tier chip) sounds louder than one note.
+ * Repeats inside this window play progressively quieter; the first note
+ * after a pause is full voice. The window is TIGHT on purpose: wheel steps
+ * arrive every 30-80ms, but two deliberate actions can be 150ms apart and
+ * must not duck.
  */
 const REPEAT_WINDOW_MS = 120;
 const REPEAT_DUCK = 0.6;
@@ -214,9 +194,8 @@ const REPEAT_DUCK_FLOOR = 3;
 const repeatStreak = new Map<BoardSoundKind, number>();
 
 /**
- * Every note fades in over this long; instant attacks click, and even a
- * clean 5ms onset reads as hard-edged - 10ms is where the notes stop
- * sounding struck and start sounding placed.
+ * Every note fades in over this long; instant attacks click, and 5ms still
+ * reads as hard-edged.
  */
 const ATTACK = 0.01;
 
@@ -254,20 +233,16 @@ function getContext(): AudioContext | undefined {
       masterGain = audioContext.createGain();
       // The one master volume. Everything below is relative to this.
       masterGain.gain.value = getBoardSoundVolume();
-      // A soft roof over the whole mix: synthesized edges high up are what
-      // makes little UI notes sound cheap and spitty. 5.5kHz keeps the
-      // presence band (1-4kHz) intact - loudness LIVES there, and an
-      // earlier 3.2kHz roof was part of why everything read as faint.
+      // A soft roof over the whole mix: high synthesized edges make little
+      // UI notes sound cheap and spitty. The cutoff must stay above the
+      // 1-4kHz presence band, where perceived loudness lives.
       const roof = audioContext.createBiquadFilter();
       roof.type = "lowpass";
       roof.frequency.value = 4500;
-      // Overload protection must be STATELESS. A DynamicsCompressor here
-      // made identical actions play at different volumes: its ~100ms
-      // release meant a sound landing shortly after another went through
-      // partially-engaged gain reduction while an isolated one did not.
-      // A tanh soft-clip shapes each sample on its own - no memory, so
-      // the same note is always the same loudness, and a rare overlap
-      // rounds off instead of clipping.
+      // Overload protection must be STATELESS. A DynamicsCompressor's
+      // release makes a sound landing just after another quieter than the
+      // same sound alone. A tanh soft-clip has no memory, so the same note
+      // is always the same loudness and a rare overlap rounds off.
       const softClip = audioContext.createWaveShaper();
       const curve = new Float32Array(1024);
       for (let i = 0; i < curve.length; i += 1) {
@@ -336,12 +311,10 @@ interface BlipOptions {
 }
 
 /**
- * One enveloped note - a ROUNDED tone, not a beep. Raw oscillator types
- * (triangle especially) all read as beeps whatever the envelope does. The
- * tone here is a sine fundamental with a quiet, slightly-detuned octave
- * partial for body, through a per-note lowpass that tracks the pitch - the
- * soft mallet-on-wood family rather than the alarm family. Pitch contours
- * stay exactly as the voice tables state them.
+ * One enveloped note - a ROUNDED tone, not a beep (raw triangle/square
+ * oscillators read as beeps whatever the envelope). A sine fundamental plus
+ * a quiet, slightly detuned octave partial, through a per-note lowpass that
+ * tracks the pitch.
  */
 function blip(ctx: AudioContext, out: AudioNode, options: BlipOptions): void {
   const t0 = ctx.currentTime + SCHEDULE_AHEAD + (options.delay ?? 0);
@@ -379,13 +352,9 @@ function blip(ctx: AudioContext, out: AudioNode, options: BlipOptions): void {
 }
 
 /**
- * The ETHEREAL material, for the two mode-shift sounds only: a slow-swelled
- * chord of detuned sines (fundamental pair, a fifth, a whisper of octave)
- * gliding as one, through the same pitch-tracking lowpass the blips use. The
- * swell is what separates it from the whole percussive vocabulary - nothing
- * else on the board fades IN - so it reads as the room changing rather than
- * a thing being placed. Deliberately soft-topped: shifting dimensions must
- * never read as an alarm.
+ * A slow-swelled chord of detuned sines (fundamental pair, a fifth, a
+ * whisper of octave) gliding as one, through a fixed lowpass. It is the only
+ * material that fades IN, which sets it apart from the percussive voices.
  */
 function shimmerPad(
   ctx: AudioContext,
@@ -456,44 +425,34 @@ function puff(
 }
 
 /**
- * The voices. Tuning lesson learned the hard way: short pure sines below
- * 300Hz are perceptually near-silent whatever their amplitude. Loudness
- * needs duration (the body stage of the envelope), harmonics (triangle
- * over sine), and some energy above 500Hz. Every voice carries all three.
+ * The voices. Short pure sines below 300Hz are near-silent whatever their
+ * amplitude; loudness needs duration (the envelope's body stage), harmonics,
+ * and some energy above 500Hz.
  */
 function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step = 0): void {
   switch (kind) {
     case "dialRate": {
-      // A ladder as a pitch ladder - one quiet PURE tap, wood not
-      // electricity, so it can never be mistaken for the voltage dial by
-      // ear. The old four-entry table (262/330/415/523) was exactly a 1.26
-      // ratio per rung; the formula keeps those notes and extends the climb
-      // to rung 10, fractional rungs included, so a counter walking up
-      // audibly walks UP instead of looping a four-note melody.
+      // One quiet PURE tap per rung (wood, not the voltage dial's spark),
+      // rising 1.26x per rung up to rung 10, fractional rungs included, so
+      // walking the dial up audibly climbs.
       const rung = Math.max(0, Math.min(10, step));
       const frequency = 262 * Math.pow(1.26, rung);
       blip(ctx, out, { from: frequency, to: frequency, duration: 0.09, peak: 0.18 });
       break;
     }
     case "dialEnergy": {
-      // GOLD. The dial has left the ladder of clocks for the one reading
-      // that is not a rate, so it does not get the next rung of the wood
-      // tap. It gets a small GLOW: the solve shimmer's pad, low and quiet,
-      // drifting up a major third and gone in under half a second, with a
-      // breath of air under it. No sparkle on top - the high notes tried
-      // here (a coin, a lone bell) all pierced - and no strike anywhere;
-      // it arrives and fades. Half the solve shimmer's level.
+      // EU per unit is not a rate, so it gets its own voice instead of the
+      // next wood rung: a quiet shimmer pad drifting up a major third with a
+      // breath of air, no strike. High sparkles pierce; keep it soft.
       shimmerPad(ctx, out, { from: 330, to: 415, duration: 0.42, peak: 0.07 });
       puff(ctx, out, { frequency: 2400, q: 0.5, duration: 0.25, peak: 0.02, delay: 0.05 });
       break;
     }
     case "dialPower": {
-      // The voltage ladder audibly CLIMBING, in the ZAP's spark material.
-      // The BITE carries the reading: a whole 1.16 ratio per rung (nearly
-      // a major second - adjacent tiers at 1.11 under the noise were
-      // indistinguishable, which read as one sound repeating), louder than
-      // the sparks, which stay for texture. Fractional rungs are real:
-      // supply steps climb in quarter-rungs inside their tier.
+      // The voltage ladder audibly CLIMBING, in the zap's spark material.
+      // The tonal bite carries the reading at 1.16x per rung (smaller steps
+      // are indistinguishable under the noise); the sparks are texture.
+      // Fractional rungs are real: supply steps climb in quarter-rungs.
       const rung = Math.max(0, Math.min(16, step));
       const bite = 175 * Math.pow(1.16, rung);
       blip(ctx, out, {
@@ -520,36 +479,30 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
     }
     case "place":
       // One FLAT rounded thump with a knock: a card set down. No pitch
-      // fall at all - any downward movement here read as the delete
-      // family, however shallow.
+      // fall: downward motion is reserved for the delete family.
       blip(ctx, out, { from: 196, to: 196, duration: 0.2, peak: 0.44 });
       puff(ctx, out, { frequency: 1400, duration: 0.05, peak: 0.18 });
       break;
     case "placeProduct":
-      // Two discrete taps stepping UP a fourth. The first assignment had
-      // this pair the other way round and the down-step read as failure;
-      // Jack's call: product rises, source settles.
+      // Two discrete taps stepping UP a fourth (a down-step reads as
+      // failure).
       blip(ctx, out, { from: 147, to: 147, duration: 0.14, peak: 0.36 });
       blip(ctx, out, { from: 196, to: 196, duration: 0.16, peak: 0.4, delay: 0.09 });
       puff(ctx, out, { frequency: 1400, duration: 0.05, peak: 0.16 });
       break;
     case "placeSource":
-      // ONE flat tap, a shade above the machine thump. The knock-knock
-      // pair kept reading wrong (and a burst could steal its second knock,
-      // so the same action sounded different run to run); the single beat
-      // is what survived the ear test. Down-motion stays reserved for
-      // delete.
+      // ONE flat tap, a shade off the machine thump. A single beat, so a
+      // retrigger steal cannot cut it in half; down-motion stays reserved
+      // for delete.
       blip(ctx, out, { from: 185, to: 185, duration: 0.16, peak: 0.4 });
       puff(ctx, out, { frequency: 1400, duration: 0.05, peak: 0.16 });
       break;
     case "delete":
-      // A small settling step down - removed, not mourned. The octave
-      // plunge this used to be made every cleanup sound like a loss.
+      // A small settling step down - removed, not mourned.
       blip(ctx, out, { from: 311, to: 233, duration: 0.18, peak: 0.34 });
       break;
     case "connect":
       // A click and a settled tone one step up: latched, not celebrated.
-      // The old wide-interval chime read as a fanfare.
       blip(ctx, out, { from: 523, to: 523, duration: 0.08, peak: 0.24 });
       blip(ctx, out, { from: 587, to: 587, duration: 0.14, peak: 0.26, delay: 0.06 });
       break;
@@ -625,16 +578,14 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
     case "solveOn":
       // SOLVE: a relay engaging. A quick upward chirp with a click on it,
       // then one clean tick a beat later - short and dry like the latch
-      // (build) and the plink (pool), so the three read as one family. The
-      // old swelling pad is gone: it was the only long sound of the three.
+      // (build) and the plink (pool), so the three read as one family.
       blip(ctx, out, { from: 1047, to: 1319, duration: 0.05, peak: 0.09 });
       puff(ctx, out, { frequency: 2400, q: 2, duration: 0.04, peak: 0.1 });
       blip(ctx, out, { from: 1568, to: 1568, duration: 0.06, peak: 0.06, delay: 0.09 });
       break;
     case "solveOff":
-      // The same shimmer settling home: the pad glides back down the fifth
-      // (the close family's motion, nothing like the delete step), sparkles
-      // descending, the air a shade lower.
+      // A shimmer pad gliding down (the close family's motion, not the
+      // delete step), sparkles descending.
       shimmerPad(ctx, out, { from: 392, to: 262, duration: 0.55, peak: 0.22 });
       blip(ctx, out, { from: 1319, to: 1319, duration: 0.12, peak: 0.05, delay: 0.16 });
       blip(ctx, out, { from: 988, to: 988, duration: 0.14, peak: 0.045, delay: 0.3 });
@@ -661,8 +612,7 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       puff(ctx, out, { frequency: 2600, q: 1.5, duration: 0.09, peak: 0.04, delay: 0.18 });
       break;
     case "poolOff":
-      // Unused since the mode switch; the pool swell settling, kept so an
-      // older caller still gets a sound.
+      // Currently unused; kept so any caller still gets a sound.
       shimmerPad(ctx, out, { from: 175, to: 131, duration: 0.55, peak: 0.2 });
       puff(ctx, out, { frequency: 600, q: 0.5, duration: 0.4, peak: 0.06, delay: 0.04 });
       break;
@@ -738,8 +688,8 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
       blip(ctx, out, { from: 587, to: 523, duration: 0.09, peak: 0.1 });
       break;
     case "shelfTurn":
-      // A card slid along the shelf: brush only, no tone at all (Jack: the
-      // tone read as a beep). One low soft brush and a fainter one trailing.
+      // A card slid along the shelf: brush only, no tone (a tone reads as a
+      // beep). One low soft brush and a fainter one trailing.
       puff(ctx, out, { frequency: 480, q: 0.7, duration: 0.11, peak: 0.07 });
       puff(ctx, out, { frequency: 360, q: 0.9, duration: 0.07, peak: 0.03, delay: 0.05 });
       break;

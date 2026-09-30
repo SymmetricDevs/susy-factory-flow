@@ -16,10 +16,10 @@ import { isHatchSupplyId } from "./hatch-supply";
 const EPSILON = 0.000001;
 
 /**
- * The resource books: what a plan makes, what it eats, and therefore what it is
- * short of or has spare. Deliberately a bag-of-cards sum rather than a walk of
- * the wires — two machines making and eating the same item balance out whether
- * or not a line runs between them.
+ * The resource books: what a plan makes, what it eats, and what it imports or
+ * ships. Made and eaten are a bag-of-cards sum (not a walk of the wires), which
+ * is what `netPerSecond` reports; imports and exports are read off the
+ * boundary drawers (applyBoundaryDrawerBalances).
  *
  * Lives apart from the solver proper because the flow panel derives the same
  * three groups from a selection's own solve (see `selection-flow.ts`), and the
@@ -94,25 +94,12 @@ function updateBalanceNet(balance: ResourceBalance): void {
 
 /**
  * How close to zero a leftover has to be before it is float dust rather than a
- * real shortfall or surplus.
- *
- * It has to SCALE with the flows, which a fixed epsilon does not. A machine
- * that is throttled has its intake recomputed as `need * (supply / need)`, and
- * in floating point that is not `supply` - it is one unit in the last place
- * away from it. Every other source of this residue is the same shape: a
- * rounding step on the rates themselves. So the leftover is proportional to
- * how big the rates are, and a flat 1e-6 tolerance quietly changed meaning
- * with the size of the plan. At 12,000/s it caught the dust; by the time a
- * line moves enough for one ULP to clear 1e-6, the same harmless rounding
- * surfaced as a resource sitting in Need at "-0.0000012/s" with nothing
- * actually wrong.
- *
- * The equation books raised the floor: an LP solve leaves dust proportional
- * to its pivot tolerance times the flow scale, observed at ~1e-6 of
- * throughput on a 12,000/s board. 1e-5 sits an order above that while any
- * imbalance a player could create on purpose - a recipe ratio being off -
- * is percents, four orders louder. Being short by one part in a hundred
- * thousand is not being short.
+ * real shortfall or surplus. It SCALES with the flows: rounding residue (e.g.
+ * `need * (supply / need)` landing one ULP off `supply`) and LP dust (pivot
+ * tolerance times flow scale, ~1e-6 of throughput) are both proportional to
+ * the rates, so a flat epsilon changes meaning with plan size. 1e-5 relative
+ * sits an order above LP dust, while a real imbalance (a recipe ratio off) is
+ * percents.
  */
 const ABSOLUTE_SETTLE_EPSILON = 0.000001;
 const RELATIVE_SETTLE_EPSILON = 1e-5;
@@ -132,12 +119,10 @@ function settleTolerance(balance: ResourceBalance): number {
  */
 function settleBalances(balances: Map<ResourceKey, ResourceBalance>): void {
   for (const balance of balances.values()) {
-    // The boundary figures are sums of real transfers rather than a difference
-    // of two large numbers, so they carry far less residue - but they are
-    // still rates, and a drawer moving a millionth of an item per second is
-    // dust. Snapped on the same scaled tolerance, each on its own, because
-    // they no longer derive from `net` and one being dust says nothing about
-    // the others.
+    // The boundary figures are sums of real transfers, so they carry less
+    // residue, but a millionth of an item per second is still dust. Each is
+    // snapped on its own: they do not derive from `net`, and one being dust
+    // says nothing about the others.
     const tolerance = settleTolerance(balance);
     if (balance.importedPerSecond !== 0 && balance.importedPerSecond <= tolerance) {
       balance.importedPerSecond = 0;
@@ -216,28 +201,12 @@ export function calculateEffectiveBalances(
 }
 
 /**
- * What the plan IMPORTS and what it SHIPS OUT, read off the boundary drawers.
- *
- * These used to be inferred by netting the machine books: produced minus
- * consumed, positive is spare, negative is short. That was right when a
- * drawer was magic and unwired surplus quietly evaporated - two machines
- * making and eating the same item did balance out whether or not a line ran
- * between them. In a closed plan it is no longer true. An unwired output
- * stops its machine and an unwired input starves one, so material only moves
- * where a wire says it does, and the boundary is a set of drawers a player
- * placed on purpose.
- *
- * The difference shows the moment one resource sits on both ends. Import 10
- * carbon at a source drawer, catch 4 spare carbon at a byproduct drawer, and
- * netting reported a single need for 6 - quietly asserting that the spare
- * feeds the need, across a gap with no wire in it. Now it reports both: bring
- * 10 in, take 4 away. Wiring them together is a thing the player can do, and
- * then the books say so because the flows actually changed.
- *
- * Products and byproducts are counted apart for the same reason. One resource
- * can have a product drawer AND a byproduct drawer - some of it is what the
- * factory is for and the rest is what it could not help making - so each gets
- * its own figure instead of a winner-takes-all label.
+ * What the plan IMPORTS and what it SHIPS OUT, read off the boundary drawers,
+ * never by netting the machine books. In a closed plan material only moves
+ * where a wire says it does, so importing 10 carbon at a source and catching
+ * 4 spare at a byproduct drawer reports both figures, not a net need of 6
+ * (which would claim the spare feeds the need across a gap with no wire).
+ * Products and byproducts of one resource are likewise counted apart.
  */
 function applyBoundaryDrawerBalances(
   project: FactoryProject,

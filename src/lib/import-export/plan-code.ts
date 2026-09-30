@@ -7,26 +7,14 @@ import { FactoryJsonError, parseFactoryProjectJson } from "./factory-json";
 
 /**
  * A PLAN CODE: the whole plan as one line of text, for sharing without an
- * account (Jack, 2026-09-23). The player never sees the word "code" (it read
- * as programming): the plan bar says "Copy plan" and puts a LINK on the
- * clipboard with the code inside, and the plan menu says "Paste a copied
- * plan". Clicked, the link opens the plan; pasted, so does the text. The
- * code rides in the address after `#p=`.
+ * account. UI copy never says "code": the plan bar's "Copy plan" puts a LINK
+ * with the code after `#p=` on the clipboard, and "Paste a copied plan"
+ * accepts the link or the bare code.
  *
- * The same trick ShadowTheAge's calculator uses for its share links: the
- * plan's JSON, deflated, in URL-safe base64. Nothing goes to a server; the
- * fragment after `#` never leaves the browser.
- *
- * Slimmer than the JSON download. A GregTech recipe carries its whole
- * overclock table (`runtimeCalculation`), about half of a typical code once
- * compressed, and every plan that lands on the board is refreshed from the
- * dataset anyway (FactoryPlannerApp), which puts the tables back. Power
- * recipes stay whole (they are made here, not by the dataset), and so do
- * the small bee and crop tables.
- *
- * Still long - thousands of characters for a small plan, tens of thousands
- * for a big one - so it suits a paste, a DM or a forum post, not a Discord
- * message, which stops at 2,000.
+ * The plan's JSON, deflated, in URL-safe base64. Nothing goes to a server;
+ * the fragment after `#` never leaves the browser. GregTech overclock tables
+ * are left out (see `withoutRuntimeTables`). Codes still run to thousands of
+ * characters, too long for a Discord message.
  */
 
 /** The code's first characters: what it is, and which way it was packed. */
@@ -40,13 +28,11 @@ export const PLAN_CODE_HASH_KEY = "p";
 
 /**
  * The plan without the GregTech overclock tables the dataset will put back
- * when it lands on a board (`recipesToRefresh`). Only those: a table is left
- * out only when this page has seen the dataset carry one for that id
- * (`isRestorableRecipe`); for a recipe the dataset no longer knows, the
- * stored table is the only copy and it travels. Power recipes stay whole
- * (made here, not by the dataset), and so do the small bee and crop tables.
- * About half of a big plan. Copied plans travel this way, and so do plans
- * synced to the account (a 3 MB cap, and every push rewrites the row).
+ * when it lands on a board (`recipesToRefresh`), about half a big plan. A
+ * table is left out only when this page has seen the dataset carry one for
+ * that id (`isRestorableRecipe`); otherwise the stored table is the only copy
+ * and it travels. Power recipes (made here, not by the dataset) and the small
+ * bee and crop tables stay whole. Used for copied plans and account sync.
  */
 export function withoutRuntimeTables(
   project: FactoryProject,

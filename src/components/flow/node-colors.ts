@@ -14,10 +14,9 @@ function relativeLuminance(hex: string): number {
 }
 
 /**
- * The ink a tinted node has to switch to. Black text on the black tag and
- * white text on the white tag were both unreadable — the paint decides the
- * ink, so every swatch stays legible. The threshold sits where white and
- * black text reach equal contrast against the panel.
+ * The ink for text on a painted panel, so every swatch stays legible (black
+ * text on black paint, white on white, would not be). The threshold sits
+ * where white and black text reach equal contrast against the panel.
  */
 export function inkFor(panel: string): { ink: string; inkMuted: string } {
   return relativeLuminance(panel) < 0.34
@@ -150,11 +149,10 @@ export const GT_NODE_COLORS: Record<
     shadow: "#1d1d21",
   },
   // The system swatches: the app's own ink offered as paint, so a note or a
-  // box can speak the same language the board already does. Scarlet is the
-  // alarm/source red, amber the warning, emerald the output/byproduct green,
-  // azure the product blue, steel the card face (--mc-78) and onyx the panel
-  // surface. Derived with the red dye's own panel/header/border transforms so
-  // they sit in the palette as equals, not stickers.
+  // box speaks the board's language. Scarlet is the alarm/source red, amber
+  // the warning, emerald the output green, azure the app blue, steel the card
+  // face (--mc-78) and onyx the panel surface. Derived with the red dye's own
+  // panel/header/border transforms so they sit in the palette as equals.
   scarlet: {
     swatch: "#ef4444",
     panel: "#d0a5a5",
@@ -200,35 +198,28 @@ export const GT_NODE_COLORS: Record<
 };
 
 /*
- * There is deliberately no per-tag ink table any more. A card's ramp below
- * keeps an unpainted card's LIGHTNESSES, so the one light ink reads at the
- * same contrast on every colour and no card has to switch to dark text.
+ * No per-tag ink table for cards: a card's ramp below keeps an unpainted
+ * card's LIGHTNESSES, so the one light ink reads at the same contrast on
+ * every colour.
  */
 
 /**
  * A painted card's own --mc-* ramp, one preset per colour tag.
  *
- * A card is built entirely out of the --mc-* tokens: the face is --mc-78, an
- * inset panel is --mc-71, a name bar --mc-61, a dropdown or a typed field
- * --mc-85, a head button --mc-49, the bevels --mc-100 and --mc-33. Painting a
- * card REDEFINES those tokens on the card itself, so every surface inside it
- * takes the colour without knowing it was painted - the port chips, the
- * plugs, the stat tiles, the config dials, the dropdowns and the little block
- * beside them, the machine tabs, the close and copy buttons. There is no list
- * of elements to keep in sync, which is the whole reason for doing it this
- * way: every previous attempt tinted the elements someone remembered.
+ * A card is built entirely out of the --mc-* tokens (face --mc-78, inset panel
+ * --mc-71, name bar --mc-61, dropdown or typed field --mc-85, head button
+ * --mc-49, bevels --mc-100 and --mc-33). Painting REDEFINES those tokens on
+ * the card, so every surface inside takes the colour with no list of
+ * elements to keep in sync.
  *
- * Each ramp is the NEUTRAL ramp's lightnesses carried onto that dye's hue, so
- * a painted card has exactly the relief and the text contrast an unpainted
- * one has. Tags that are not a hue - white, black and the two greys - are the
- * neutral ramp moved up or down instead. The values are written out rather
- * than mixed at runtime so they can be read, compared and hand-edited; they
- * were generated once from (hue, saturation, lightness shift) per tag.
+ * Each ramp is the NEUTRAL ramp's lightnesses carried onto the dye's hue, so
+ * a painted card keeps an unpainted one's relief and text contrast; white,
+ * black and the greys shift the neutral ramp instead. Values are written out
+ * (generated once from hue, saturation and lightness shift per tag) so they
+ * can be read and hand-edited.
  *
- * Semantic colour is deliberately NOT in here and never takes the paint: a
- * binding input, a fed plug, a tier badge and the delete button's red all
- * come from their own values, so what a card is telling you never depends on
- * what colour you painted it.
+ * Semantic colour (binding input, fed plug, tier badge, the delete red) never
+ * takes the paint, so what a card tells you never depends on its colour.
  */
 export const GT_NODE_RAMPS: Record<FactoryNodeColorTag, Record<string, string>> = {
   white: {
@@ -597,10 +588,7 @@ export interface NodeSurfaceColor {
   shadow: string;
 }
 
-/**
- * The custom rate card's own colour: the app's blue, not a dye off the
- * player's palette, so painting one still works and still wins.
- */
+/** The custom rate card's own colour: the app's blue. */
 export const CUSTOM_RATE_NODE_COLOR: NodeSurfaceColor = GT_NODE_COLORS.blue;
 
 /** The ramp a card wears, painted or not. Undefined means the neutral one. */
@@ -733,14 +721,11 @@ export function glanceAccentFor(surface: NodeSurfaceColor): string {
 }
 
 /**
- * The card face a glance view paints, delivered as INERT custom properties.
- *
- * They are inline on the node every render but mean nothing there: only the
- * `[data-detail-level="glance"]` rules in globals.css read them, which is what
- * makes every view LOD-only without a single React subscription to the zoom —
- * the same trick the hop map uses. The face and bevels reuse the heatmap
- * ramp's mix (the neutral grey ramp pulled 34% toward the wash) so a glance
- * card keeps exactly the relief an unpainted card has.
+ * The card face a glance view paints, delivered as INERT custom properties:
+ * only the `[data-detail-level="glance"]` rules in globals.css read them, so
+ * every view is LOD-only without a React subscription to the zoom (the hop
+ * map's trick). Face and bevels reuse the heatmap ramp's mix (neutral ramp
+ * pulled 34% toward the wash), keeping an unpainted card's relief.
  */
 export function glanceCardVars(surface: NodeSurfaceColor): Record<string, string> {
   return {

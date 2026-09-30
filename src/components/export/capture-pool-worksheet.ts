@@ -80,7 +80,7 @@ export async function capturePoolWorksheet(
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
     // scrollWidth includes any genuinely wide tables; scrollHeight includes
-    // the worksheet's 130% inner zoom and every formerly scrollable row.
+    // the worksheet's 130% inner zoom and every row of the scrollers unclipped above.
     const sourceWidth = Math.max(width, worksheet.scrollWidth);
     const sourceHeight = Math.max(worksheet.offsetHeight, worksheet.scrollHeight);
     const size = worksheetCaptureSize(sourceWidth, sourceHeight);

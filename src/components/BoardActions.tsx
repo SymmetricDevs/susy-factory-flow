@@ -61,19 +61,16 @@ import { PastePlanDialog } from "./export/PastePlanDialog";
 
 interface BoardActionsProps {
   /**
-   * `bar` is the top bar's row of icons. `list` is the compact menu: the same
-   * actions as labelled rows, with the export dropdown flattened into its three
-   * formats — a menu inside a menu is a trap on a touchscreen — and undo/redo
-   * left out, because on a phone they are two always-visible buttons on the
-   * board itself.
+   * `bar` is the top bar's icons. `list` is the compact menu: the same actions
+   * as labelled rows, with the export dropdown flattened (no nested menus on
+   * touch).
    */
   variant?: "bar" | "list";
   /** Lets the compact menu close itself once one of its rows has fired. */
   onAction?: () => void;
   /**
-   * Opens the share dialog. The dialog itself is owned by the header, not
-   * rendered here: on compact this component lives inside the menu sheet,
-   * which closes (and unmounts) the moment a row fires.
+   * Opens the share dialog, which the header owns: on compact this component
+   * lives in the menu sheet, which unmounts the moment a row fires.
    */
   onShare?: () => void;
   /** Opens the export-image dialog; owned by the header for the same reason. */
@@ -81,10 +78,8 @@ interface BoardActionsProps {
 }
 
 /**
- * Board actions - undo/redo, clean, import/export, theme.
- *
- * Lives on the right of the design tab strip: everything here acts on the plan
- * that strip is switching between, so the two belong on the same bar.
+ * Plan actions (share, clean, import, paste, export) for the header bar or
+ * the compact menu, plus the global undo/redo keyboard shortcuts.
  */
 export function BoardActions({
   variant = "bar",
@@ -136,12 +131,9 @@ export function BoardActions({
           : "Copy diagnostics (whole plan)";
 
   /**
-   * The pasteable version of what the board is showing: every selected card's
-   * machine, tier, config, overclock, rates and verdict, in JSON. Select
-   * nothing and it dumps the plan.
-   *
-   * The menu deliberately stays open - the row itself is the receipt, and
-   * closing it would take the only confirmation away with it.
+   * Copies every selected card's machine, tier, config, overclock, rates and
+   * verdict as JSON (the whole plan when nothing is selected). The menu stays
+   * open because the row itself shows the confirmation.
    */
   const copyDiagnostics = async () => {
     const text = formatBoardDump({
@@ -174,11 +166,9 @@ export function BoardActions({
 
   /**
    * An imported file opens as a NEW design tab, never over the plan on the
-   * board (a player lost a big design, 2026-09-28: they imported from the
-   * Library, which covers the board without closing the design under it, and
-   * the file replaced that design out of sight, undo history and all). Same
-   * door as Paste a copied plan and a shared link. Its post link is dropped,
-   * like any copy that arrives: a file is a plain design of your own.
+   * board: the Library can cover the board without closing its design, so an
+   * import there would silently replace it and its undo history. Same path as
+   * Paste and shared links; the post link is dropped.
    */
   const importProjectJson = async (file: File) => {
     setProjectImporting(true);
@@ -372,16 +362,9 @@ export function BoardActions({
   return (
     <div data-help-anchor="plan-actions" className="flex shrink-0 items-center gap-1">
       <div className="flex items-center gap-1">
-        {/* No undo, redo or clean-board up here. Undo and redo already sit on
-            the board's own build toolbar, an inch from the thing being undone,
-            and having them in two places at once only made the header look
-            like the authoritative pair. Clean board is a whole-plan action that
-            was one slip away from the import button; it lives in the menu. */}
-        {/* ONE plan menu since 2026-09-06: share, import and the exports
-            all live behind the one key. Share and import used to be their
-            own buttons on the bar; the bar was too wide and this is the
-            corner where a menu is expected. Share is also on the plan's own
-            identity drawer, so it is never more than a click away. */}
+        {/* No undo/redo or clean-board buttons here; undo/redo live on the
+            board's build toolbar. Share, import, paste and the exports sit
+            behind the one plan menu. */}
         <div ref={exportMenuRef} className="relative">
           <button
             type="button"
@@ -469,9 +452,8 @@ export function BoardActions({
 }
 
 /**
- * One row of the compact menu: a 40px tap target with the icon the top bar
- * would have shown on its own, and the words that icon was relying on a
- * tooltip for.
+ * One row of the compact menu: a 40px tap target with the top bar's icon and
+ * its label written out.
  */
 function MenuAction({
   icon: Icon,

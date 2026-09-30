@@ -146,8 +146,8 @@ export function isSmeltingRecipeMap(recipe: Pick<Recipe, "machineType" | "source
  * Steam singleblocks run the LV recipe on borrowed math the dataset does not
  * carry: SteamOverclockDescriber gives a bronze machine (x1 EU, x2 duration)
  * and a high pressure one (x2 EU, x1 duration). Their handlers export no
- * durationTicks of their own, so without this every steam machine showed the
- * LV duration - twice its real speed.
+ * durationTicks of their own; without this a bronze machine would run at the
+ * LV duration, twice its real speed.
  */
 function steamSingleblockDurationTicks(
   recipe: Pick<Recipe, "machineType" | "source" | "durationTicks">,

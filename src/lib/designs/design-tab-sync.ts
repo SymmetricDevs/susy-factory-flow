@@ -3,16 +3,14 @@
 import { randomUUID } from "@/lib/random-id";
 
 /**
- * Two browser tabs of the planner share one library (IndexedDB), and each
- * holds its open design in memory. Until 2026-09-23 neither knew the other
- * existed, and a player lost hours: they built a chart in one tab, and the
- * other tab, still holding the plan as it was that morning, wrote that old
- * copy back over it the next time it saved anything.
+ * Browser tabs of the planner share one library (IndexedDB), and each holds
+ * its open design in memory, so a stale tab could write an old copy over
+ * newer work saved from another tab.
  *
  * This is the wire between tabs: a tab that saves a design says so, and the
  * others showing that design load the new version (design-store.ts). The
- * store's write guard is what actually makes loss impossible; this only keeps
- * the other tabs current so the guard rarely has to act.
+ * store's write guard is what actually prevents loss; this only keeps the
+ * other tabs current so the guard rarely has to act.
  */
 
 const CHANNEL_NAME = "gtnh-factory-flow.designs";

@@ -17,9 +17,8 @@ import type { RecipeTwin } from "@/lib/datasets/recipe-twins";
  * The machine switcher: one list under the card's name bar, opened by the
  * chevron at the bar's left. Each row is the machine's icon, its name and
  * two figures at the recipe's own tier (time, EU/t). Click switches; hover
- * previews the machine on the card exactly as the old tab strip did.
- * Order is fixed - manual, steam, electric, multiblock, by tier inside each -
- * because that is the only order anyone reads a machine list in.
+ * previews the machine on the card. Order is fixed: manual, steam,
+ * electric, multiblock, by tier inside each.
  */
 
 // Rendered machine PNGs are 256px squares whose opaque block art spans
@@ -156,8 +155,8 @@ function formatCompact(value: number): string {
 /* ------------------------------------------------------------------ */
 
 /** The panel's scroll cap, and one row's height, for placing it before it exists. */
-// Sized a third up from the card's own 13px (Jack, 2026-09-07): the menu is
-// screen-fixed while the card is zoomed, and at 13px it read too small.
+// A third larger than the card's own 13px: the menu is screen-fixed while
+// the card is zoomed, so 13px reads too small.
 const MENU_MAX_HEIGHT = 520;
 const MENU_ROW_HEIGHT = 40;
 
@@ -206,8 +205,8 @@ export function MachineMenu({
   /**
    * The card's TWINS: other recipes taking and making exactly what this one
    * does, one row per machine, under the recipe's own machines. The section
-   * exists only when there are some (Jack, 2026-09-07): none, still loading
-   * or failed all read as the plain machine list.
+   * shows only when there are some; none, loading and failed all read as the
+   * plain machine list.
    */
   twins?: RecipeTwin[];
   /** Recipe map -> the map's machine, the face for a twin whose handler has no family icon. */

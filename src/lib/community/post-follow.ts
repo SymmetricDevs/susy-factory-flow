@@ -10,21 +10,14 @@ import { useCommunityAuthStore } from "@/store/community-auth-store";
  * THE POST FOLLOWS THE DESIGN. A design linked to a post you own has one
  * version: the one in your library. Every save of such a design is pushed to
  * the post a few seconds later (plan, name, description, icon; tags are the
- * post's own and are edited on the focus page). The photograph stays the
- * one taken when sharing: autosave must never invoke the live-board image
- * exporter, which temporarily changes detail, presentation and motion.
- * A timed recapture made the board flash into glance view and stall while
- * the image rendered (longer still in a hidden tab waiting for paint).
- *
- * There is no "update post" anywhere else any more, and no second version
- * to compare against. Google Docs, not WordPress.
+ * post's own). The photograph stays the one taken when sharing: autosave
+ * must never invoke the live-board image exporter, which visibly switches
+ * the board's detail, presentation and motion while it captures.
  *
  * A link the server refuses (403: not your post; 404: the post is gone) is
- * dropped from the design on the spot, so copies made before copies were
- * unlinked, and designs whose post was deleted elsewhere, quietly become
- * plain designs. A 401 (signed out) drops nothing: the push is remembered
- * and retried at the next sign-in, so edits made offline still reach the
- * post.
+ * dropped from the design on the spot, so it becomes a plain design. A 401
+ * (signed out) drops nothing: the push is remembered and retried at the next
+ * sign-in.
  */
 
 const PUSH_DELAY_MS = 6_000;

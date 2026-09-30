@@ -1,16 +1,11 @@
 /**
- * What the search box understands.
- *
- * Players type what they remember a thing being called, not what the dataset
- * calls it: plural where the game is singular, the nickname the wiki uses, a
- * letter out of place, two words run together. Everything here closes that gap
- * without inventing matches - a typed word only ever widens into spellings of
- * the SAME word (its singular, a known nickname, a likely typo), never into a
- * different word.
+ * What the search box understands. A typed word widens into weighted variants
+ * (its singular, a known nickname, a likely typo, a few related words scored
+ * well below a real match), so plurals, nicknames and typos still find things.
  *
  * Pure and dependency free on purpose: the server runs this over the dataset
- * index and the sidebar runs it over the cards already on the board, and both
- * have to agree on what "matches" means.
+ * index and the sidebar over the cards on the board, and both must agree on
+ * what "matches" means.
  */
 
 /** A spelling one typed word also stands for. Several tokens = a nickname. */
@@ -42,11 +37,8 @@ export interface SearchQuery {
 }
 
 /**
- * One thing being searched, split by where the words came from.
- *
- * A word in the display name counts for much more than the same word buried in
- * a registry id, which is how "iron" finds Iron Ingot before it finds the
- * hundred items whose id happens to contain "iron".
+ * One thing being searched, split by where the words came from. A word in the
+ * display name counts for much more than the same word in a registry id.
  */
 export interface SearchEntryFields {
   /** Normalized display name, for whole-phrase bonuses. */
@@ -80,11 +72,9 @@ export const MIN_CORRECTABLE_LENGTH = 4;
 export const MIN_INDEXABLE_LENGTH = 3;
 
 /**
- * Nicknames the community uses that the dataset never spells out.
- *
- * One direction only, and only where the short form is unambiguous: typing
- * "ebf" should find the Electric Blast Furnace, while typing "electric" must
- * not start scoring "ebf" as a match for something else.
+ * Nicknames the community uses that the dataset never spells out. One
+ * direction only ("ebf" finds Electric Blast Furnace, "electric" never
+ * expands to "ebf"), and only for unambiguous short forms.
  */
 const TERM_ALIASES: Record<string, string[]> = {
   ebf: ["electric", "blast", "furnace"],
@@ -153,11 +143,9 @@ export function splitSearchTokens(value: string): string[] {
 }
 
 /**
- * The singular of a typed word, when it looks plural.
- *
- * Only this direction needs handling: a typed "log" already matches the token
- * "logs" as a prefix, while a typed "logs" matched nothing at all, so searching
- * "oak logs" used to come back empty on a dataset full of Oak Log.
+ * The singular of a typed word, when it looks plural. Only this direction is
+ * needed: a typed "log" already prefix-matches "logs", but "logs" never
+ * matches "log".
  */
 export function singularizeSearchToken(token: string): string | undefined {
   if (token.length < 4 || !token.endsWith("s") || token.endsWith("ss")) {
@@ -205,11 +193,9 @@ function toSearchTerm(raw: string): SearchTerm {
 }
 
 /**
- * The same query, with likely spellings of a mistyped word added.
- *
- * Corrections arrive as extra variants rather than replacing what was typed, so
- * a word that is both a real word and one letter off another still finds its
- * own matches first.
+ * The same query, with likely spellings of a mistyped word added as extra
+ * variants rather than replacements, so a real word still finds its own
+ * matches first.
  */
 export function withSearchCorrections(
   query: SearchQuery,
@@ -253,9 +239,7 @@ function addVariant(variants: SearchTermVariant[], variant: SearchTermVariant) {
 export interface SearchMatchOptions {
   /**
    * Accept an entry that only answers SOME of the typed words, ranked by how
-   * many it answers. The last resort when requiring all of them found nothing:
-   * "silicon wafer" is two real words that never appear in one name, and coming
-   * back with Wafer and Silicon beats coming back with nothing.
+   * many it answers. The last resort when requiring all of them found nothing.
    */
   partial?: boolean;
 }
@@ -264,10 +248,8 @@ export interface SearchMatchOptions {
 const PARTIAL_TERM_BONUS = 1;
 
 /**
- * How well one thing answers the query, or undefined when it does not.
- *
- * Every typed word has to be found somewhere (an AND, like every other search
- * box), and the score is what decides the order of the ones that survive.
+ * How well one thing answers the query, or undefined when it does not. Every
+ * typed word must be found somewhere (AND) unless `partial` is set.
  */
 export function matchSearchEntry(
   query: SearchQuery,
@@ -325,8 +307,8 @@ export function searchQueryMatches(query: SearchQuery, entry: SearchEntryFields)
  * words per entry (which is what the recipe index stores).
  *
  * The scratch object is reused deliberately: this runs once per candidate
- * recipe, and there are 270,000 of them. Scoring is synchronous from top to
- * bottom, so nothing can observe it between calls.
+ * recipe (hundreds of thousands), and scoring is synchronous, so nothing can
+ * observe it between calls.
  */
 const flatEntry: SearchEntryFields = { name: [] };
 

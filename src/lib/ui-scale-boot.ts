@@ -10,7 +10,7 @@ export const UI_SCALE_STORAGE_KEY = "gtnh-factory-flow.ui-scale.v1";
 /** What the setting's 100% renders at, on a desktop-sized window. */
 export const UI_SCALE_BASE = 1.17;
 
-/** Phone baseline, also reduced by 10% while the setting stays at 100%. */
+/** What the setting's 100% renders at on a phone-sized window. */
 export const UI_SCALE_PHONE_BASE = 0.9;
 
 export const UI_SCALE_MIN_PERCENT = 60;
@@ -22,9 +22,8 @@ export const UI_SCALE_VAR = "--ui-scale";
 export const UI_SCALE_INVERSE_VAR = "--ui-scale-inverse";
 
 /**
- * The 1:1 compact test, for the base decision. Deliberately the raw numbers
- * from viewport-breakpoints.ts rather than an import: the boot script inlines
- * the same query, and it must read the same either way.
+ * The 1:1 compact test, for the base decision. The raw numbers must match
+ * COMPACT_MAX_WIDTH / COMPACT_MAX_HEIGHT in viewport-breakpoints.ts.
  */
 export const PHONE_MEDIA_QUERY = "(max-width: 899.98px), (max-height: 559.98px)";
 

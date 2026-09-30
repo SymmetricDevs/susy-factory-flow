@@ -61,11 +61,10 @@ export function FactoryPlannerApp() {
   const setDatasetLoading = useFactoryStore((state) => state.setDatasetLoading);
   const setDatasetError = useFactoryStore((state) => state.setDatasetError);
   const hydratedRef = useRef(false);
-  // Which stored recipes have been checked against which dataset version,
-  // so a design opened AFTER the dataset landed (a tab switch, a hydrated
-  // plan) gets the same refresh the boot load gives, exactly once each - and
-  // once more when a synced or copied plan brings one back without its
-  // runtime table (recipesToRefresh).
+  // Which stored recipes have been checked against which dataset version, so
+  // a design opened after the dataset landed (tab switch, hydrated plan) gets
+  // the boot load's refresh once, and again when a synced or copied plan
+  // brings a recipe back without its runtime table (recipesToRefresh).
   const checkedRecipesRef = useRef<Map<string, boolean>>(new Map());
   const requestedRecipesRef = useRef<WeakSet<Recipe>>(new WeakSet());
   const datasetVersionId = useFactoryStore((state) => state.dataset?.datasetVersionId);
@@ -288,18 +287,13 @@ export function FactoryPlannerApp() {
   }, [communityUser]);
 
   return (
-    // Height in --ui-dvh (dvh over the interface size, see ui-scale.ts: the
-    // shell is CSS-zoomed and viewport units are not divided by zoom), and
-    // dvh, not vh: a phone browser's address bar comes and goes, and
-    // `vh` measures the window as if it never did, so the bottom row of the
-    // board spent its life under the chrome.
+    // Height in --ui-dvh (see ui-scale.ts: the shell is CSS-zoomed and viewport
+    // units are not divided by zoom). dvh, not vh, so a phone's collapsing
+    // address bar never hides the board's bottom row.
     //
-    // And no minimum height. It used to guarantee 720px for the three columns,
-    // which on a laptop window ~660px tall meant the app was taller than the
-    // window: the page itself scrolled, the board's bottom toolbars sat below the
-    // fold, and a classic scrollbar appeared and threw off every measurement made
-    // against `window.innerWidth`. The board and the panels carry their own
-    // floors, which is where the guarantee belongs.
+    // No minimum height: a shell taller than the window scrolls the page and
+    // adds a scrollbar that skews `window.innerWidth` measurements. The board
+    // and panels carry their own floors.
     <div className="ui-scale-shell flex h-[calc(100*var(--ui-dvh))] flex-col bg-canvas text-fg">
       <RecipeBookOpener />
       <PlacementRevealer />
@@ -326,17 +320,10 @@ interface WorkspaceProps {
 }
 
 /**
- * Asking what makes a resource has to bring its own window with it.
- *
- * The recipe book lives in the left column, and every way of asking — a click or
- * R on a port row, a storage drawer, a slot in the book itself — only wrote the
- * question into the store. With that column folded away (a rail on the desktop, a
- * closed drawer on a phone) the answer was rendering into nothing, so clicking a
- * slot appeared to do nothing at all. The column is the answer's window; opening
- * it is part of answering.
- *
- * The resource is a fresh object on every ask, so asking the same one twice opens
- * the column twice.
+ * Opens the left column whenever a resource is browsed: the recipe book
+ * renders there, so with the column folded (a desktop rail or a closed phone
+ * drawer) the answer would render into nothing. The resource is a fresh
+ * object on every ask, so asking the same one twice opens the column twice.
  */
 function RecipeBookOpener() {
   const browsedResource = useFactoryStore((state) => state.recipeBrowserResource);
@@ -356,15 +343,9 @@ function RecipeBookOpener() {
 }
 
 /**
- * The other half of that bargain: once something has actually been placed, the
- * drawer that placed it gets out of the way.
- *
- * Only on a phone, where a drawer covers the board it just added a card to — the
- * card lands, and you are looking at the panel you added it from. On a desktop the
- * columns sit beside the board and there is nothing to move out of.
- *
- * The board flashes the new card at the same moment (see FactoryFlow), which is
- * what makes the two read as one event rather than the panel simply vanishing.
+ * On a phone, closes the drawer once something has been placed, since the
+ * drawer covers the board the card landed on. The board flashes the new card
+ * at the same moment (see FactoryFlow).
  */
 function PlacementRevealer() {
   const placedBoardToken = useFactoryStore((state) => state.placedBoardToken);
@@ -392,10 +373,8 @@ function BoardColumn() {
         {covering ? null : <TabConflictNotice />}
       </div>
       {/*
-        Welcome COVERS the board rather than replacing it. Unmounting the board
-        would throw away the camera, the routed wires and the solve, and put
-        them all back a moment later for a page that is only ever a click from
-        being stepped off.
+        Welcome COVERS the board rather than replacing it: unmounting the board
+        would throw away the camera, routed wires and solve.
       */}
       <div className="relative min-h-0">
         <FactoryFlow />
@@ -414,11 +393,9 @@ function BoardColumn() {
 }
 
 /**
- * Which page, if any, is covering the board. Welcome and the shelf never
- * show together (opening one steps the other down), and with NO design open
- * at all the shelf is shown whatever its own flag says: an empty strip has
- * nothing else to stand on, and a board with no design behind it could not
- * save an edit anywhere.
+ * Which page, if any, is covering the board. Welcome and the shelf never show
+ * together. With NO design open the shelf is shown regardless of its flag,
+ * because a board with no design behind it could not save an edit.
  */
 function useCoveringPage(): "welcome" | "shelf" | undefined {
   const welcome = useWelcomeTab();
@@ -435,11 +412,9 @@ function useCoveringPage(): "welcome" | "shelf" | undefined {
 }
 
 function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
-  // The resource column reads the board's solve, and while Welcome covers the
-  // board those figures belong to whichever tab is hidden underneath — numbers
-  // about a plan you are not looking at. It folds to a blank strip for the
-  // duration, WITHOUT writing the workspace view, so stepping off Welcome
-  // brings it back exactly as it was left.
+  // While Welcome covers the board, the resource column (which reads the
+  // hidden board's solve) folds to a blank strip WITHOUT writing the workspace
+  // view, so it returns as it was.
   const covering = useCoveringPage();
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   const worksheet = poolMode;
@@ -467,10 +442,8 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
           ].join(" "),
         } as CSSProperties}
       >
-        {/* Each column carries its own header row, all the same height, so the
-            three line up where the full-width bar used to be. */}
-        {/* The browser owns its own header row, so no wrapper here — it stays a
-            direct grid item at exactly the column width, as it was before. */}
+        {/* Each column carries its own same-height header row. The browser
+            owns its header, so it stays a direct grid item with no wrapper. */}
         {workspace.leftPanelOpen ? (
           <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
         ) : (
@@ -488,10 +461,8 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
 }
 
 /**
- * One column: the board, with the other two as drawers over it.
- *
- * Only one drawer at a time — two of them on a 390px screen is a stack of
- * panels with no board left to point at — so opening either closes the other.
+ * One column: the board, with the other two as drawers over it. Only one
+ * drawer at a time, so opening either closes the other.
  */
 function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
   // The resource drawer reads the board's books; under a covering page it
@@ -533,13 +504,9 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
 const RAIL_WIDTH = 26;
 
 /**
- * What a closed side column leaves behind: a rail carrying the button that
- * opens it again, plus the column's name set sideways.
- *
- * A rail rather than a hover-to-peek edge. Peeking hands the column back for
- * as long as the pointer stays put, which makes it useless for anything you
- * want to read while working on the board, and it fires by accident every time
- * the mouse crosses the edge. A rail costs 26px and is never ambiguous.
+ * What a closed side column leaves behind: a 26px rail with the button that
+ * reopens it and the column's name set sideways. A rail, not a hover-to-peek
+ * edge, which fires by accident whenever the mouse crosses it.
  */
 function PanelRail({ side, label }: { side: "left" | "right"; label: string }) {
   const open = () =>

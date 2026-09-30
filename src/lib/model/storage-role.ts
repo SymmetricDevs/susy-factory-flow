@@ -1,34 +1,21 @@
 import type { FactoryProject, FactoryStorage, StorageBufferMode } from "./types";
 
 /**
- * What a drawer IS. Four jobs that happen to share one card, and they mean
- * such different things that the board draws each as a different shape.
+ * What a drawer IS. The board draws each role as a different shape.
  *
- * Three are read off the WIRING and cannot be chosen:
+ * Read off the WIRING (not chosen):
+ * - `source`  nothing feeds it, so it invents its resource: the plan's
+ *             declared import.
+ * - `buffer`  fed and drawn from: the one role INSIDE the system. How it
+ *             treats a surplus is its StorageBufferMode.
+ * - `idle`    unwired. Rare (`pruneOrphanStorages` sweeps a drawer when its
+ *             last wire goes), but a drawer mid-drag needs a name.
  *
- * - `source`  nothing feeds it, so it invents its resource. The plan's
- *             declared import, and one of the two cards still allowed to
- *             break conservation.
- * - `buffer`  fed and drawn from, so it is neither end of anything. The only
- *             one of the four that lives INSIDE the system: it passes on what
- *             its takers pull and not one item more, so a producer cannot use
- *             it as a quiet dump.
- * - `idle`    unwired. Barely exists in practice - `pruneOrphanStorages`
- *             sweeps a drawer the moment its last wire goes - but a drawer
- *             mid-drag has to be called something.
- *
- * The fourth is a CHOICE, and it only exists once nothing draws from the
- * drawer (see StorageDrainMode):
- *
- * - `product`    pulls its feeder flat out. The thing the factory is for.
+ * A CHOICE once nothing draws from the drawer (see StorageDrainMode):
+ * - `product`    pulls its feeder flat out.
  * - `byproduct`  asks for nothing and catches what is left over.
- * - `trash`      asks for nothing and VOIDS what arrives. The drawer as a
- *                bin: it un-clogs its feeder exactly like the old trash can
- *                node, and what it eats never appears in the books.
- *
- * Product vs byproduct is the difference between "make as much of this as
- * you can" and "the extra has to go somewhere"; trash is "the extra stops
- * existing", which is what every overflow-into-a-void setup really is.
+ * - `trash`      asks for nothing and VOIDS what arrives: un-clogs its
+ *                feeder, and what it eats never appears in the books.
  */
 export type StorageRole = "source" | "buffer" | "product" | "byproduct" | "trash" | "idle";
 
@@ -43,11 +30,9 @@ export function isDrainRole(role: StorageRole): boolean {
 }
 
 /**
- * Every drawer's role in one pass over the edges.
- *
- * Built whole rather than per-drawer because both callers (the solver's edge
- * preparation and the board's cards) need most of the map at once, and the
- * per-drawer version would have been O(storages x edges) on the hot path.
+ * Every drawer's role in one pass over the edges. Built whole because callers
+ * need most of the map at once; per drawer it would be O(storages x edges)
+ * on the hot path.
  */
 export function getStorageRoles(project: FactoryProject): Map<string, StorageRole> {
   const roles = new Map<string, StorageRole>();
@@ -112,11 +97,11 @@ export function storageRoleFor(
 }
 
 /**
- * Which side of the POOL a drawer sits on. Wires do not exist in pool mode,
- * but the ones the player drew before switching still say what the drawer
- * was FOR: fed only, it was a drain (a product); drawn only, a source. A
- * declared `poolSide` wins. A buffer (both) or a drawer with neither has no
- * side - the pool is the buffer now - and stays idle.
+ * Which side of the POOL a drawer sits on. Pool mode ignores wires, but saved
+ * wires still say what the drawer was FOR: fed only, a drain (product); drawn
+ * only, a source. A negative target or declared `poolSide` wins. A buffer
+ * (both) or a drawer with neither has no side (the pool is the buffer) and
+ * stays idle.
  */
 export function poolSideOf(
   storage: Pick<FactoryStorage, "poolSide" | "targetPerSecond">,
@@ -137,13 +122,8 @@ export function poolSideOf(
 }
 
 /**
- * A drawer's name as the rest of the UI should say it: the item, then which
- * of the four jobs it is doing.
- *
- * Everything used to append a flat "(buffer)", which is now wrong three times
- * out of four - a SOURCE is the opposite of a buffer, and calling it one in a
- * tooltip teaches the reader the wrong word for the thing they are about to
- * go and look at.
+ * A drawer's name as the rest of the UI should say it: the item, then its
+ * role. Never a flat "(buffer)": a source is the opposite of a buffer.
  */
 export function describeStorage(
   storage: { displayName?: string; resourceId: string },

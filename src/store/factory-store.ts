@@ -118,21 +118,9 @@ const RESOURCE_HISTORY_LIMIT = 30;
 const PROJECT_HISTORY_LIMIT = 100;
 
 /**
- * A move the board's camera has been asked to make from outside the canvas.
- *
- * `centre` lands on a single card at 1:1 - reading one machine. `fit` zooms
- * out until every named card is on screen at once, and an empty `nodeIds`
- * under `fit` means the whole board. `viewport` names the pan and zoom
- * outright, which is how a tab comes back up where you left it.
- */
-/**
- * How hard a `fit` is allowed to push, when the default framing is wrong for
- * the caller.
- *
- * The board's own framing is deliberately timid: it never magnifies past 1:1,
- * because arriving at a plan blown up reads as a bug. A caller that wants
- * "look at THIS card" to actually fill the eye says so rather than every
- * caller inheriting one compromise.
+ * How hard a `fit` may push. The default framing never magnifies past 1:1
+ * (a plan arriving blown up reads as a bug); a caller that wants one card to
+ * fill the view overrides it here.
  */
 export interface BoardFraming {
   /** How far in the fit may zoom. Defaults to BOARD_CAMERA_MAX_ZOOM. */
@@ -147,6 +135,12 @@ export interface BoardFraming {
   insetRight?: number;
 }
 
+/**
+ * A camera move requested from outside the canvas. `centre` lands on one card
+ * at 1:1; `fit` zooms out until every named card is visible (empty `nodeIds`
+ * means the whole board); `viewport` sets pan and zoom exactly, which is how
+ * a tab comes back where it was left.
+ */
 export interface BoardCameraRequest {
   mode: "centre" | "fit" | "viewport";
   nodeIds: string[];
@@ -234,9 +228,8 @@ interface FactoryStore {
   selectedFlowResourceKey?: string;
   /**
    * The flow neighbourhood under the cursor: hovering a port lights every
-   * edge on it plus their far-end ports; hovering an edge label lights that
-   * line and both endpoints. Maps give O(1) membership for per-element
-   * selectors.
+   * edge on it plus their far-end ports (see flow-scope.ts). Maps give O(1)
+   * membership for per-element selectors.
    */
   hoveredFlowScope?: {
     edges: Record<string, true>;
@@ -421,7 +414,7 @@ interface FactoryStore {
     resource: Pick<ResourceAmount, "kind" | "id" | "displayName">,
   ) => void;
   /**
-   * A loose cell wire (SetupRules.looseCellWires): a filled cell landing
+   * A loose cell wire: a filled cell landing
    * straight on its fluid's input, or a fluid landing straight on its cell's
    * input. The edge carries the SOURCE's own resource, the far form's input
    * handle as its target, and the Canner ratio the gesture fetched; the
@@ -568,11 +561,10 @@ interface FactoryStore {
   ) => void;
   /**
    * Land an auto-arrange as ONE undo entry: every card's new position; a
-   * reset of hand-pinned waypoints and dragged rate labels on the wires the
-   * rearranged level shows (steering aimed at the old positions would only
-   * fight the router on the new ones); fresh waypoint lanes for the wires
-   * the arrange chose to steer itself; and the island boxes it draws,
-   * replacing any it drew before. Undo restores all of it together.
+   * reset of hand-pinned waypoints on the wires the rearranged level shows
+   * (steering aimed at the old positions would only fight the router on the
+   * new ones); fresh waypoint lanes for the wires the arrange steers itself;
+   * and any island boxes it draws, replacing earlier ones.
    */
   applyBoardArrangement: (arrangement: {
     moves: Array<{ id: string; position: FactoryNode["position"] }>;
@@ -612,15 +604,10 @@ interface FactoryStore {
    */
   pasteBoardItems: (payload: BoardClipboardPayload, offset: { x: number; y: number }) => string[];
   /**
-   * Wrap a selection in a new OPEN board fitted around it: members keep
-   * their screen positions and every wire, the frame simply appears around
-   * them. Selected boards nest whole. Returns the new board id, or
-   * undefined when the selection held nothing.
-   */
-  /**
-   * Wrap a root selection in a new open board. Refused - and returns
-   * undefined - when anything selected already belongs to a board or IS
-   * one: nothing may sit in two boards at once.
+   * Wrap a root selection in a new OPEN board fitted around it: members keep
+   * their screen positions and every wire. Returns the new board id, or
+   * undefined when the selection is empty or anything selected already
+   * belongs to a board or IS one (nothing may sit in two boards at once).
    */
   wrapSelectionInBoard: (ids: string[], name?: string) => string | undefined;
   /**
@@ -653,10 +640,9 @@ interface FactoryStore {
   }) => string | undefined;
   /**
    * Open a collapsed board. Members of a board that has never stood open
-   * (a legacy pocket) are rebased to fit inside the frame — their old
-   * dive-in coordinates were their own space — and hand-pinned waypoints on
-   * wires touching them are dropped: they steered through a space the wires
-   * no longer travel.
+   * (a legacy pocket, whose coordinates are its own space) are rebased to fit
+   * inside the frame, and hand-pinned waypoints on wires touching them are
+   * dropped: they steered through a space the wires no longer travel.
    */
   expandPocket: (pocketId: string) => void;
   /**
@@ -708,12 +694,9 @@ interface FactoryStore {
   focusBoardNode: (nodeId: string) => void;
   /**
    * Frame `nodeIds`, or everything on the board when they are omitted: the
-   * board zooms out as far as it has to for the lot to fit.
-   *
-   * This is how a plan that arrives from somewhere else lands on screen. A
-   * shared setup carries its author's positions and nothing about where their
-   * camera was, so opening one built thousands of cells from the origin used
-   * to leave the viewer looking at blank canvas.
+   * board zooms out as far as it has to for the lot to fit. This is how an
+   * arriving plan lands on screen: a shared setup carries positions but no
+   * camera, and its cards may sit far from the origin.
    */
   frameBoardNodes: (nodeIds?: string[], framing?: BoardFraming) => void;
   /**
@@ -734,10 +717,10 @@ interface FactoryStore {
     },
   ) => void;
   /**
-   * Several source→target wires as ONE undo entry with one solve — how a
-   * wire dropped on a pocket card fans out to every member that takes the
-   * resource. Each pair keeps connectNodes' semantics: an identical existing
-   * wire toggles off, storage conflicts are skipped.
+   * Several source→target wires as ONE undo entry with one solve, for a
+   * gesture that lays more than one wire. Each pair keeps connectNodes'
+   * semantics: an identical existing wire toggles off, storage conflicts are
+   * skipped.
    */
   connectNodesBatch: (
     connections: Array<{
@@ -781,8 +764,8 @@ const initialProject = createEmptyProject();
  * What Ctrl+C lifts off the board: the selected items verbatim, the wires
  * that run between two selected items, and the recipes those items lean on -
  * carried along so a paste into another design (or after the originals were
- * deleted) still has everything it needs. Selecting a pocket card lifts the
- * whole pocket: the pocket itself, every member, and every nested pocket.
+ * deleted) still has everything it needs. Selecting a board lifts the whole
+ * board: the board itself, every member, and every nested board.
  * Blueprints save exactly this payload.
  */
 export interface BoardClipboardPayload {
@@ -796,7 +779,7 @@ export interface BoardClipboardPayload {
 }
 
 /**
- * Snapshot a board selection as a clipboard/blueprint payload. Pocket cards
+ * Snapshot a board selection as a clipboard/blueprint payload. Boards
  * expand to their full contents; wires survive only when both feet stand
  * inside the capture. Returns undefined when the selection holds nothing.
  */
@@ -1103,8 +1086,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
     // A VIEW change: the books are per-second and stay exactly as they are.
     // The formatters read a module singleton, and every surface that prints
     // a rate also subscribes to the dial (useRateDisplayUnits) so it
-    // re-renders. This used to re-solve the whole plan just to hand every
-    // surface a fresh result identity, which froze big boards on a unit
+    // re-renders. Do not re-solve here: that freezes big boards on a unit
     // switch.
     setActiveRateUnit(unit);
     set({ rateUnit: unit });
@@ -1418,9 +1400,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         }
       }
       for (const output of effectiveRecipe.outputs) {
-        // The EU output slot (power became a resource in v2.45) is the
-        // generator's product, and the EU condition below already asks for
-        // it: pushing the slot too showed "EU" and "Power (EU)" side by side.
+        // The EU output slot is the generator's product, and the EU condition
+        // below already asks for it; pushing the slot too would show the
+        // condition twice.
         if (output.kind === "power") {
           continue;
         }
@@ -2174,15 +2156,11 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
               (entry) => entry.source !== customNodeId && entry.target !== customNodeId,
             )
           : state.project.edges;
-      // One line per port the card is wired to, like the trash can below. This
-      // is the only adopt-on-wire card whose resource can be re-offered
-      // unchanged - drag the same port onto it again and nothing about the card
-      // moves, so without this the wire was simply appended again and the drag
-      // stacked copies on the same pixels, each carrying a share of the dial.
-      //
-      // Nothing to unwire on a repeat, either: a card holds its resource only
-      // while something is wired to it, so toggling the line off would hand back
-      // an empty card in answer to being asked to wire it.
+      // One line per port the card is wired to. Dragging the same port onto
+      // this card again changes nothing about it, so a repeat is ignored
+      // rather than stacking duplicate wires that each take a share of the
+      // dial. A repeat does not toggle the wire off either: the card holds its
+      // resource only while something is wired to it.
       if (findDuplicateEdge(keptEdges, edge)) {
         return state;
       }
@@ -2386,8 +2364,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         }
       }
       // Whatever came out of the slot is what the buffer holds. A filled cell
-      // makes a drawer of cells, counted in cells; it used to be rewritten into
-      // its fluid, which is why an item output reported litres.
+      // makes a drawer of cells, counted in cells, never one of its fluid.
       const storageResource = resource;
       // The drawer joins the board of the port it came off: a port you can
       // drag from belongs to a visible card, and a drawer spawned beside a
@@ -2496,10 +2473,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       return withProjectHistory(state, {
         project: finalProject,
         selectedNodeId: undefined,
-        // The new drawer announces itself with the placed flash below, which
-        // ends on its own. It used to ALSO switch on the board-wide glow for
-        // its resource, and nothing switched that off until you happened to
-        // hover a drawer or start a wire.
+        // The new drawer announces itself with the self-ending placed flash,
+        // not the board-wide resource glow (nothing would switch that off).
         // Only if the sweep above kept it: a drawer nothing reached is gone, and
         // flashing where it briefly was would point at empty canvas.
         ...(placed
@@ -3300,8 +3275,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
   },
   deleteBoardSelection: ({ nodeIds = [], edgeIds = [] }) => {
     set((state) => {
-      // Deleting a pocket card deletes the dimension AND everything in it,
-      // the way deleting a folder deletes its files.
+      // Deleting a board deletes everything in it, the way deleting a folder
+      // deletes its files.
       const { itemIds: doomedItems, pocketIds: doomedPockets } = expandPocketSelection(
         state.project,
         nodeIds,
@@ -3615,12 +3590,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         return state;
       }
 
-      // NOTHING IS IN TWO BOARDS AT ONCE. A card already living on a
-      // board cannot be wrapped in a second one, and a board cannot be
-      // wrapped either - that is nesting, which is its own decision and
-      // not one to make by accident from a marquee. The board refuses
-      // the gesture rather than building a frame whose members belong
-      // to somebody else.
+      // NOTHING IS IN TWO BOARDS AT ONCE. A card already on a board cannot
+      // be wrapped in a second one, and a board cannot be wrapped either:
+      // nesting must not happen by accident from a marquee.
       const alreadyHoused =
         memberPockets.length > 0 ||
         memberNodes.some((node) => node.pocketId !== undefined) ||
@@ -3756,8 +3728,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       // fitted (it carries a `size`) holds frame-relative member positions,
       // so the frame's own corner is added back and everything stays put on
       // screen while the frame vanishes around it. A legacy pocket that
-      // never stood open kept its members' old dive-in coordinates, which
-      // surface verbatim — exactly what unpacking always did.
+      // never stood open kept its members' own coordinates, which surface
+      // verbatim.
       const fitted = pocket.size !== undefined;
       const surface = <T extends { pocketId?: string; position: { x: number; y: number } }>(
         items: T[],
@@ -3982,7 +3954,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         (entry) => entry.parentPocketId === pocketId,
       );
 
-      // The dive view never rendered while collapsed, so there are no
+      // Members of a collapsed board were never rendered, so there are no
       // measured member sizes to read; footprints are estimated, and
       // overshooting only makes the frame roomy.
       const footprints = [
@@ -4008,8 +3980,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         })),
       ];
 
-      // Members are rebased into the frame: their old coordinates were the
-      // dive view's own space, which nothing outside ever referenced. The
+      // Members are rebased into the frame: a legacy pocket's coordinates
+      // are its own space, which nothing outside references. The
       // frame fits itself around them; a hand-picked size survives while
       // everything still fits inside it.
       let shiftBy = { x: 0, y: 0 };
@@ -5088,14 +5060,6 @@ function withSectionInputOverrides(
 }
 
 /**
- * The refactor's landing. The pick replaces the card IN PLACE when at least
- * one of its wires still has a matching port on the new recipe - a card with
- * no wires replaces trivially - and the surviving wires re-dock onto the new
- * recipe's slots while the rest are dropped. When every wire would be lost,
- * the old card is left standing and the pick lands beside it instead: a
- * replace that severs everything is not a refactor.
- */
-/**
  * The wires on a card's first recipe, and which of them the new recipe can
  * still serve, re-docked onto its matching slot. A shared machine's other
  * sections and their wires are not touched.
@@ -5179,6 +5143,13 @@ function swapMachineRecipeToState(
   });
 }
 
+/**
+ * The refactor's landing. The pick replaces the card IN PLACE when at least
+ * one of its wires still has a matching port on the new recipe (a card with
+ * no wires replaces trivially); surviving wires re-dock onto the new
+ * recipe's slots and the rest drop. When every wire would be lost, the old
+ * card stays and the pick lands beside it instead.
+ */
 function refactorNodeToState(
   state: FactoryStore,
   nodeId: string,
@@ -5439,27 +5410,16 @@ function applyEdgeInputOverrides(project: FactoryProject, edges: FactoryEdge[]):
 }
 
 /**
- * A deleted drawer's wires HEAL (Jack, 2026-09-08: "it's two edges going
- * in and out, it should just become one ... you scrubbed it away"): the
- * cards the drawer stood between are wired straight to each other, which
- * is exactly the undo of the board menu's "Add a drawer here". Its mode
- * (buffer, strict, product, trash) makes no difference.
- *
- * Who gets rewired, and nothing more:
- * - ONE feeder or ONE taker: every feeder wires to every taker, so a
- *   pass-through becomes one wire and a drawer splitting one output to
- *   three machines leaves those three fed. At most max(feeders, takers)
- *   wires, never a cross product of both.
- * - several of each, but all from one card and all to one card: the
- *   wires pair off in order. That is a drawn channel split through a
- *   drawer, put back as it was.
- * - anything else (a real junction, several feeders AND several takers)
- *   heals nothing: there is no one wire that says what it meant.
- *
- * A wire is only added if the board would accept it anyway
- * (`buildEdgeBetweenNodes` refuses a slot that does not take the
- * resource), so a drawer bridging two things that cannot meet directly
- * just goes.
+ * A deleted drawer's wires HEAL: the cards it stood between are wired
+ * straight to each other, the undo of the board menu's "Add a drawer here".
+ * The drawer's mode makes no difference.
+ * - ONE feeder or ONE taker: every feeder wires to every taker (at most
+ *   max(feeders, takers) wires, never a cross product).
+ * - several of each, but all from one card to one card: the wires pair off
+ *   in order (a drawn channel split through a drawer, put back).
+ * - anything else is a real junction and heals nothing.
+ * A wire is only added if `buildEdgeBetweenNodes` accepts it, so a drawer
+ * bridging two things that cannot meet directly just goes.
  */
 function removeStorageAndHeal(project: FactoryProject, storageId: string): FactoryProject {
   const storage = (project.storages ?? []).find((entry) => entry.id === storageId);

@@ -42,8 +42,7 @@ import {
   type StencilClause,
 } from "./RecipeSearchOverlay";
 
-// The preview helpers used to live here; they moved out with the overlay and
-// keep their old import path for everyone already using it.
+// Re-exported so existing imports of the preview helpers from here keep working.
 export {
   contextualizePreviewRecipe,
   summaryToPreviewRecipe,
@@ -98,10 +97,9 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   const failRecipeAdd = useFactoryStore((state) => state.failRecipeAdd);
   const [recipePage, setRecipePage] = useState(0);
   // The query key of the page whose answer is on screen. More is asked for
-  // only on top of a page that has landed, and always as that page + 1, so
-  // however many scroll events fire before the next page arrives they all
-  // ask for the same one. `page => page + 1` skipped a page whenever two
-  // beat the loading flag, and a skipped page is a hole in the sections.
+  // only on top of a page that has landed, always as that page + 1, so a
+  // burst of scroll events all ask for the same page. A bare
+  // `page => page + 1` can skip a page when two events beat the loading flag.
   const landedRecipePageKeyRef = useRef<string | undefined>(undefined);
   const [recipeBookSearch, setRecipeBookSearch] = useState("");
   const [filteredRecipes, setFilteredRecipes] = useState<RecipeSummary[]>([]);
@@ -119,13 +117,10 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
     () => (machinePin ? { mode: "include", maps: machinePin.recipeMaps } : mapSelection),
     [machinePin, mapSelection],
   );
-  // The master switch: what the whole left panel is FOR right now — finding
-  // items to build with, stamping saved blueprints, or browsing the network's
-  // shared setups. One at a time, full column each; the old bottom-strip
-  // library never had room to breathe.
-  // A request that arrived before this column was mounted (a phone's drawer is
-  // unmounted while closed) is waiting in module state, so the tab it asked for
-  // is collected here as well as by the listener below.
+  // Which mode the left panel is in (items, saved blueprints or shared
+  // setups), one at a time. A request made before this column mounted (a
+  // phone's drawer is unmounted while closed) waits in module state, so it is
+  // collected here as well as by the listener below.
   const [sidebarMode, setSidebarMode] = useState<"items">(
     () => takePendingSidebarTab() ?? "items",
   );
@@ -142,13 +137,11 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
     }
     setPendingSearchFocus(false);
     setSearchFlashing(true);
-    // A freshly mounted column paints its search box a few frames in, so
-    // the focus keeps trying for up to a second rather than firing once
-    // into an empty ref. The loop is deliberately NOT cancelled by the
-    // cleanup: the setPendingSearchFocus above re-runs this effect at once,
-    // and a cleanup that cancelled the frame killed the focus before it
-    // could land. After an unmount the ref is empty and the loop just runs
-    // out.
+    // A freshly mounted column paints its search box a few frames in, so the
+    // focus retries for up to a second. The loop is deliberately NOT cancelled
+    // by the cleanup: setPendingSearchFocus above re-runs this effect at once,
+    // and cancelling would kill the focus before it lands. After an unmount
+    // the ref is empty and the loop runs out.
     let tries = 0;
     const tryFocus = () => {
       const input = searchInputRef.current;
@@ -170,10 +163,9 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   );
   const [recipeMapCounts, setRecipeMapCounts] = useState<Record<string, number>>({});
   // The stencil's edits, keyed by the browse that seeded them: a NEW browse
-  // (different item or direction) starts the stencil over, while edits made on
-  // the open search survive its own refetches. Held as edits-plus-key rather
-  // than plain state so a fresh browse can never fire a query against the
-  // previous item's conditions.
+  // starts the stencil over, while edits survive the open search's refetches.
+  // Held as edits-plus-key so a fresh browse never queries with the previous
+  // item's conditions.
   const [stencilEdits, setStencilEdits] = useState<
     | {
         key: string;
@@ -552,12 +544,9 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       const currentMode = currentState.recipeBrowserResource
         ? currentState.recipeBrowserMode
         : browserMode;
-      // A pick made while Welcome covers the board would land on whatever tab
-      // is hidden underneath it, unseen. It gets a fresh blank tab instead, so
-      // the card arrives on a board the player is actually looking at. Anchor
-      // and refactor targets are cards of the covered plan, so they are
-      // dropped along with it - on a blank board there is nothing to wire to
-      // or replace.
+      // A pick made while Welcome covers the board goes to a fresh blank tab
+      // rather than the hidden one. Anchor and refactor targets belong to the
+      // covered plan, so they are dropped.
       const welcomeCovered = readWelcomeTabState().active;
       if (welcomeCovered) {
         await useDesignStore.getState().addDesign();
@@ -808,17 +797,13 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       >
         {(
           // The wheel pages the list from anywhere in the column, including over
-          // the controls and the recent shelf: nothing here scrolls, so a wheel
-          // that did nothing was just a panel that felt broken.
+          // the controls and the recent shelf, since nothing here scrolls.
           <div className="flex min-h-0 flex-1 flex-col">
-        {/* The cards that are not recipes - generator, custom rate, crop
-            farm - above the search, since this column is where things get
-            added from. They came off the board's build tray (2026-09-06). */}
+        {/* Spawners for the non-recipe cards (generator, custom rate, crop
+            farm), above the search. */}
         <SpawnKeys
           leading={
-            /* The way to fold this column away, at the start of the top row
-               (it used to sit in the search box). On a phone it closes the
-               drawer. */
+            /* Folds this column away; on a phone it closes the drawer. */
             <button
               type="button"
               onClick={() => writeWorkspaceView({ leftPanelOpen: false })}
@@ -1096,9 +1081,9 @@ function isMapSelectedIn(selection: RecipeMapSelection | undefined, recipeMap: s
 
 /**
  * One chip's toggle. Exclusions and inclusions are edited in place so a map
- * unselected on an earlier search survives this one; the only normalisations
- * are back to "all" - an emptied exclusion list, or an include list that has
- * grown to cover every chip on screen.
+ * unselected on an earlier search survives this one. It normalises back to
+ * "all" only for an empty exclusion list or an include list covering every
+ * chip on screen.
  */
 function toggledMapSelection(
   selection: RecipeMapSelection | undefined,

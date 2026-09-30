@@ -76,10 +76,9 @@ const CHECKER_STYLE: React.CSSProperties = {
 };
 
 /**
- * Export the board as a picture, dressed for sharing: a live preview, the
- * paper colour of your choice, and a summary bar that says what the plan
- * needs and makes so the image answers questions on its own. PNG and SVG
- * carry the plan itself; a GIF carries the motion.
+ * Export the board as a picture: a live preview, a chosen paper colour and a
+ * summary bar of what the plan needs and makes. PNG and SVG embed the plan
+ * itself; a GIF carries the motion.
  */
 export function ExportImageDialog({ onClose }: { onClose: () => void }) {
   const project = useFactoryStore((state) => state.project);
@@ -412,8 +411,7 @@ export function ExportImageDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Preview: the real capture over the real bar, the WHOLE image
-            contain-fit in a fixed window - never a scrollbar between a
-            player and what their export looks like. */}
+            contain-fit in a fixed window with no scrollbar. */}
         <div
           ref={previewShellRef}
           className="relative grid h-[calc(52*var(--ui-vh))] place-items-center overflow-hidden rounded border border-line bg-surface-sunken"
@@ -711,10 +709,8 @@ function toggleKey(current: ReadonlySet<string>, key: string): ReadonlySet<strin
 
 /**
  * The curation row: every boundary resource as a chip, lit when it will be
- * on the bar. Unchecking noise (that one stray dust) is the whole feature,
- * so each chip wears an eye - the universal "this is a visibility toggle" -
- * rather than relying on anyone guessing that a chip is clickable. Plans
- * with hundreds of boundary resources scroll inside the row.
+ * on the bar. Each chip wears an eye so it reads as a visibility toggle.
+ * Plans with hundreds of boundary resources scroll inside the row.
  */
 function ResourceChipRow({
   label,

@@ -6,20 +6,14 @@ import type { ResourceBalance, ThroughputResult } from "./model/types";
 /**
  * How every resource's balance has moved across your recent edits.
  *
- * The x axis is EDITS, not time. One edit can move fifty numbers at once, and
- * the question worth answering afterwards is "which of them got better and
- * which got worse" - a clock cannot answer that, and a plan sitting untouched
- * for an hour has no story to tell.
+ * The x axis is EDITS, not time: the question is which numbers an edit made
+ * better or worse, and an untouched plan has nothing to record.
  *
- * The recorded number is `netPerSecond`: produced minus consumed. It is the
- * one figure whose meaning survives a resource changing groups, and it reads
- * the same way everywhere - up is always better. Negative is a shortfall,
- * positive is spare, and zero is the line a resource crosses when a plan
- * starts covering its own demand.
+ * The recorded number is `netPerSecond` (produced minus consumed): its
+ * meaning survives a resource changing groups, and up is always better.
  *
  * Every resource is recorded, not only the starred ones, so starring
- * something mid-session shows the history it already has rather than starting
- * from a blank chart.
+ * something mid-session shows the history it already has.
  */
 
 /** One edit's worth of balances: ResourceKey to netPerSecond. */
@@ -46,10 +40,9 @@ function sampleOf(resources: Record<string, ResourceBalance>): TrendSample {
 }
 
 /**
- * True when two samples say the same thing. Recomputes happen for reasons that
- * are not edits at all (switching the rate unit re-solves purely to refresh
- * formatting), and plenty of real edits - dragging a card, renaming it - move
- * no numbers. Neither deserves a point on the chart.
+ * True when two samples say the same thing. Solves that move no numbers
+ * (dragging or renaming a card, a recompute that is not an edit) add no
+ * point to the chart.
  */
 function sameSample(left: TrendSample, right: TrendSample): boolean {
   const leftKeys = Object.keys(left);
@@ -60,8 +53,7 @@ function sameSample(left: TrendSample, right: TrendSample): boolean {
     const a = left[key];
     const b = right[key];
     // Absolute epsilon rather than relative: these are rates per second, and
-    // float dust from the equilibrium solver is orders of magnitude below
-    // anything a player changed on purpose.
+    // solver float dust is orders of magnitude below any deliberate change.
     if (b === undefined || Math.abs(a - b) > 0.000001) {
       return false;
     }
@@ -119,9 +111,8 @@ export function useResourceTrends(): TrendSample[] {
 /**
  * One resource's line, as far back as the record goes.
  *
- * A resource absent from a sample reads as 0 rather than as a gap: it genuinely
- * was not in the plan at that edit, and a line dropping to zero is the honest
- * picture of deleting the machine that made it.
+ * A resource absent from a sample reads as 0 rather than as a gap: it was
+ * not in the plan at that edit.
  */
 export function selectTrendSeries(history: TrendSample[], resourceKey: string): number[] {
   return history.map((sample) => sample[resourceKey] ?? 0);

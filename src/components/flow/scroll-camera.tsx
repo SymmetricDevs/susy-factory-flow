@@ -7,39 +7,32 @@ import { useEffect, type RefObject } from "react";
  * THE CAMERA PANS BY SCROLLING, NOT BY TRANSFORM.
  *
  * React Flow moves the board by writing `translate(x, y) scale(z)` onto
- * `.react-flow__viewport` every frame. Chrome keeps the board's raster in GPU
- * tiles and just moves them, but Firefox re-rasterizes everything under a
- * changing transform - cards, text, shadows, wires - on every frame, at
- * screen resolution. Measured 2026-09-07 on a 42-card plan at 4K: 71 fps
- * panning by transform, 165 fps (the display cap, 7 ms worst frame) when
- * the SAME motion is carried by a scroll offset, because scrolled content is
- * what every engine caches best. Chrome is at the cap either way.
+ * `.react-flow__viewport` every frame. Firefox re-rasterizes everything under
+ * a changing transform on every frame, while scrolled content is what every
+ * engine caches best, so a scroll-offset pan is far smoother there (Chrome
+ * is fast either way).
  *
- * So the viewport is PINNED: CSS (scroll-camera.css, `!important` so it wins
- * over the inline transform React Flow keeps writing) fixes it at
+ * So the viewport is PINNED: CSS (scroll-camera.css, `!important` to beat the
+ * inline transform React Flow keeps writing) fixes it at
  * `translate(OFFSET, OFFSET) scale(var(--camera-zoom))`, the `.react-flow`
- * wrapper is the scroll container (the pane inside it is sized to
- * `2 * OFFSET` square; not the renderer, whose offset size React Flow reads
- * as the board's width and height), and this component mirrors the store's camera into
- * the wrapper's `scrollLeft/Top = OFFSET - x/y` and `--camera-zoom = z` on
- * every transform change. The store, every gesture, `screenToFlowPosition`,
- * fit, drag and hit testing are untouched: they read the store and the
- * wrapper's rect, and the screen result is identical.
+ * wrapper is the scroll container (the pane inside it is `2 * OFFSET` square;
+ * not the renderer, whose offset size React Flow reads as the board's size),
+ * and this component mirrors the store's camera into the wrapper's
+ * `scrollLeft/Top = OFFSET - x/y` and `--camera-zoom = z` on every transform
+ * change. The store, gestures, `screenToFlowPosition`, fit, drag and hit
+ * testing are untouched: they read the store and the wrapper's rect.
  *
- * The wrapper is overflow: hidden (React Flow's own style), so the user can
- * never scroll it: no wheel, no keyboard, no middle-click autoscroll, no bar.
- * React Flow guards that box against accidental scrolls (a `focus()` or a
- * `scrollIntoView()` inside it) with an onScroll handler that calls
- * `scrollTo(0, 0)` on it; that handler is neutralised here by shadowing
- * `scrollTo` on the element with a no-op for as long as the camera runs, and
- * the same accidents are put back by this component's own scroll listener.
+ * The wrapper is overflow: hidden, so the user can never scroll it. React
+ * Flow's onScroll guard calls `scrollTo(0, 0)` on it; that is shadowed with a
+ * no-op while the camera runs, and this component's own scroll listener puts
+ * back accidental scrolls (a `focus()` or `scrollIntoView()` inside it).
  *
- * Two things read the viewport's DOM transform and are corrected for the
- * scroll: `getViewportTransform` in FactoryFlow.tsx and the PerfHud's centre
- * line. React Flow's NodeToolbar is a third: use CameraNodeToolbar below.
- * Image export is unaffected: html-to-image clones the viewport and is
- * handed its own transform. The board patterns (board-pattern.tsx) live in
- * flow space inside the viewport, so they ride the scroll for free.
+ * Readers of the viewport's DOM transform must correct for the scroll:
+ * `getViewportTransform` in FactoryFlow.tsx, the PerfHud's centre line, and
+ * React Flow's NodeToolbar (use CameraNodeToolbar below). Image export is
+ * unaffected (html-to-image clones the viewport with its own transform), and
+ * the board patterns (board-pattern.tsx) live in flow space inside the
+ * viewport, so they ride the scroll for free.
  */
 
 /** Where the viewport is pinned inside the scroll area. Half the area. */
@@ -47,10 +40,8 @@ export const SCROLL_CAMERA_OFFSET = 500_000;
 
 /**
  * The board ATTRIBUTE the CSS hangs off. An attribute, not a class: React
- * owns the board's className and rebuilds the whole string on every render,
- * so a class added here was wiped the first time the board re-rendered (a
- * mode switch did it), the pin CSS fell away and the camera came apart.
- * React never touches an attribute it was not given.
+ * owns the board's className and rebuilds it on every render, which would
+ * drop the pin CSS; React never touches an attribute it was not given.
  */
 export const SCROLL_CAMERA_ATTRIBUTE = "data-scroll-camera";
 
@@ -74,13 +65,11 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
 
     // THE RENDERER REPORTS THE WRAPPER'S RECT. d3-zoom measures the pointer
     // against the element its listeners sit on, the renderer, and React Flow
-    // assumes that box IS the wrapper's (the renderer normally fills it at
-    // 0,0: every other conversion uses the wrapper's rect and the store).
-    // Scrolled by the wrapper, the renderer's real box moves with every
-    // camera step, so a drag pan read its own motion back as pointer travel
-    // and oscillated between the two positions. Handing d3 the wrapper's
-    // rect restores the assumption; nothing else reads the renderer's box
-    // (getViewportTransform in FactoryFlow.tsx reads it through this too).
+    // assumes that box IS the wrapper's. Scrolled by the wrapper, the
+    // renderer's real box moves with every camera step, so a drag pan would
+    // read its own motion back as pointer travel and oscillate. Handing d3
+    // the wrapper's rect restores the assumption (getViewportTransform in
+    // FactoryFlow.tsx reads it through this too).
     const rendererRect = () => wrapper.getBoundingClientRect();
     Object.defineProperty(renderer, "getBoundingClientRect", {
       configurable: true,
@@ -99,13 +88,11 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
     };
     wrapper.addEventListener("mousedown", onMouseDown, { capture: true });
 
-    // NO CUSTOM PROPERTY IS WRITTEN PER FRAME. One written on the board, or on
-    // the pane (which WRAPS the viewport in React Flow's tree), made Chrome
-    // recalculate style for every element under it on every frame - 4,245
-    // elements, 700 ms of recalc a second, a 165 fps pan cut to 42 (traced
-    // 2026-09-07). The zoom is written on the viewport itself and only when
-    // it changes; the marquee's shift is written on the marquee element
-    // directly, and only while one exists.
+    // NO CUSTOM PROPERTY IS WRITTEN PER FRAME on the board or the pane (which
+    // WRAPS the viewport): Chrome would recalculate style for every element
+    // under it on every frame, crippling the pan. The zoom is written on the
+    // viewport itself and only when it changes; the marquee's shift goes on
+    // the marquee element directly, and only while one exists.
     let expectedLeft = 0;
     let expectedTop = 0;
     let writtenZoom: number | undefined;
@@ -189,19 +176,14 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
 }
 
 /**
- * React Flow's NodeToolbar, put back where it belongs under the scroll camera.
- *
- * The library portals a toolbar into the RENDERER and places it at the
- * node's screen position from the store's pan. The renderer sits inside the
- * scrolled wrapper, so the scroll moved it by the pan a second time: every
- * toolbar stood about 500,000px off screen, and a board's paper button and
- * an annotation's style panel opened nothing you could see (Jack,
- * 2026-09-23: "the paper button doesn't work at all"). Shifted back by the
- * scroll offset, the correction the marquee gets; `translate` composes with
- * the transform the library writes, so its own placement stands.
- *
- * Mounted only while visible, so a hidden toolbar costs nothing per camera
- * frame.
+ * React Flow's NodeToolbar, corrected for the scroll camera. The library
+ * portals a toolbar into the RENDERER and places it at the node's screen
+ * position from the store's pan; the renderer sits inside the scrolled
+ * wrapper, so the scroll would move it by the pan a second time (about
+ * 500,000px off screen). Shifted back by the scroll offset, like the marquee;
+ * `translate` composes with the library's transform, so its own placement
+ * stands. Mounted only while visible, so a hidden toolbar costs nothing per
+ * camera frame.
  */
 export function CameraNodeToolbar({
   isVisible,

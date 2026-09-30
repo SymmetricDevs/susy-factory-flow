@@ -31,13 +31,11 @@ export function capturePlanView(): PlanViewState {
   return {
     canvasPattern: board.canvasPattern,
     canvasTheme: board.canvasTheme,
-    // No `lineHeatMode` any more: line colour rides the status glance mode,
-    // which the snapshot already carries.
     fixedEdgeWidth: board.fixedEdgeWidth,
     linePulseMode: board.linePulseMode,
-    // The smart view (bottom-right tray) is deliberately NOT captured: it is
-    // a personal reading of the board, not part of its dress, and a saved
-    // setup always opens on the default identity view.
+    // The smart view (glanceMode) is deliberately NOT captured: it is a
+    // personal reading of the board, and a saved setup always opens on the
+    // default identity view.
     rateUnit: getActiveRateUnit(),
     leftPanelOpen: workspace.leftPanelOpen,
     rightPanelOpen: workspace.rightPanelOpen,
@@ -56,12 +54,8 @@ export function capturePlanView(): PlanViewState {
  * author left it, columns and resource marks included.
  *
  * `board` is switching between your own tabs. The board's own look belongs to
- * the plan - a build you dressed in rate labels and thick lines should still be
- * wearing them when you come back to it - but the COLUMNS do not. Those are
- * where you are working, not what you are working on, and having them slide
- * open and shut every time you touch a tab is the kind of help nobody asked
- * for. Hidden and starred resources stay out for the same reason: someone who
- * never wants to see Water never wants to see it on any board.
+ * the plan, but the side COLUMNS and the hidden/starred resource marks belong
+ * to the person, so a tab switch leaves them alone.
  */
 export type PlanViewScope = "all" | "board";
 
@@ -85,10 +79,8 @@ export function applyPlanView(
     return;
   }
 
-  // A shared plan carries its author's card positions and nothing at all about
-  // where their camera was, and plenty of factories are built thousands of
-  // cells from the origin. Opening one used to drop the viewer wherever they
-  // happened to be looking, with the whole build off the edge of the board.
+  // A shared plan carries card positions but no camera, and factories can sit
+  // thousands of cells from the origin, so frame the cards.
   useFactoryStore.getState().frameBoardNodes();
 }
 
@@ -99,10 +91,9 @@ export function applyPlanView(
  * fields leave the viewer's own setting alone.
  */
 function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope): void {
-  // The smart view is never taken from a plan — not even from an older one
-  // that recorded it. Opening a setup lands on the default identity view
-  // (the cube button) whether or not the plan carries a view at all;
-  // switching your own tabs leaves your choice alone.
+  // The smart view is never taken from a plan, even one that recorded it.
+  // Opening a setup lands on the default identity view; switching your own
+  // tabs leaves your choice alone.
   if (scope === "all") {
     writeBoardView({ glanceMode: "identity" });
   }
@@ -120,17 +111,10 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   if (isCanvasThemeId(view.canvasTheme)) {
     boardPatch.canvasTheme = view.canvasTheme;
   }
-  // `glanceMode` from an older plan is skipped for the same reason the reset
-  // above exists; `lineHeatMode` is deliberately NOT applied either: line
-  // colour rides the status glance mode now, and the old flag would arrive
-  // with no control that turns it off. `linePulseMode` is skipped since the
-  // dashes were retired (board-view.ts): a plan saved with them on must not
-  // switch on a layer that no longer exists.
-  // `lineLabelsMode` is not applied either: the rate pills on wires are
-  // gone (2026-09-08), so a plan saved with them on changes nothing. Nor is
-  // `calmMode`: the board's switch for it went the same day (it is the
-  // export dialog's "presentation" tick now), so a plan saved with it on
-  // would leave a viewer in softened colours with nothing to turn them off.
+  // Deliberately NOT applied from a plan: `glanceMode` (see the reset above),
+  // `lineHeatMode`, `linePulseMode` and `lineLabelsMode` (retired features
+  // that would arrive with no control to turn them off), and `calmMode` (session-only: a stored value would strand the
+  // viewer in softened colours with no control to turn it off).
   if (Object.keys(boardPatch).length > 0) {
     writeBoardView(boardPatch);
   }
@@ -145,9 +129,8 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   }
 
   const workspacePatch: Parameters<typeof writeWorkspaceView>[0] = {};
-  // Which columns the author had open is advice for a window with columns. On a
-  // phone they are drawers over the board, one at a time, so a plan that carries
-  // both would land the reader under two stacked panels with nothing to look at.
+  // On compact windows the columns are drawers over the board, so the
+  // author's open columns would bury the board; skip them there.
   const panelKeys = isCompactViewport() ? [] : (["leftPanelOpen", "rightPanelOpen"] as const);
   for (const key of [
     ...panelKeys,
@@ -164,9 +147,8 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
     workspacePatch.favouriteResourceKeys = [...view.favouriteResourceKeys];
   }
   if (view.hiddenResourceKeys) {
-    // Starred always wins over hidden - the same rule the marks are written
-    // under - so a plan that somehow carries a key in both cannot land the
-    // viewer in a state the UI has no button for.
+    // Starred always wins over hidden (the rule the marks are written under),
+    // so a key in both cannot reach a state the UI has no button for.
     const starred = new Set(workspacePatch.favouriteResourceKeys ?? []);
     workspacePatch.hiddenResourceKeys = view.hiddenResourceKeys.filter(
       (key) => !starred.has(key),
@@ -177,8 +159,8 @@ function applyViewSettings(view: PlanViewState | undefined, scope: PlanViewScope
   }
 
   if (view.rateUnit) {
-    // Through the store, not the module singleton: flipping the unit also
-    // re-solves, which is what gives every rate on screen a fresh identity.
+    // Through the store, not the module singleton, so the store's rateUnit
+    // and the formatters' singleton stay in step.
     useFactoryStore.getState().setRateUnit(view.rateUnit);
   }
 }

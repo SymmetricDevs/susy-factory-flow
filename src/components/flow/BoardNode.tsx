@@ -231,8 +231,8 @@ function BoardNodeComponent({
   const { getZoom, getNodes, getInternalNode } = useReactFlow();
   const [draftName, setDraftName] = useState<string | undefined>(undefined);
   const [isPaletteOpen, setPaletteOpen] = useState(false);
-  // The palette used to close only on a pick; now it follows the one
-  // dropdown rule (use-dropdown-dismiss.ts). Its own key is "inside".
+  // The palette follows the shared dropdown rule (use-dropdown-dismiss.ts);
+  // its own key counts as "inside".
   const paletteRef = useRef<HTMLDivElement>(null);
   useDropdownDismiss(isPaletteOpen, {
     refs: [paletteRef],
@@ -745,20 +745,17 @@ function BoardNodeComponent({
 
 /**
  * One board's paper, painted by the floor LAYER rather than by the board's
- * own node.
- *
- * The layer is a viewport portal parked under the wires (see BoardFloors in
- * FactoryFlow): a board's chrome has to sit OVER the wires that cross it
- * while its floor sits UNDER them, and a node cannot be in two places in the
- * stack — React Flow also pins every child node above its parent, so the
- * floor cannot simply be a child either. Pure decoration: no pointer events,
- * no geometry, invisible to routing, drop targeting and the camera.
+ * own node: the chrome must sit OVER the wires crossing it while the floor
+ * sits UNDER them, and React Flow pins every child node above its parent,
+ * so neither the node nor a child can do both. The layer is a viewport
+ * portal under the wires (BoardFloors in FactoryFlow). Pure decoration: no
+ * pointer events, no geometry, invisible to routing, drop targeting and the
+ * camera.
  */
 /**
  * The CSS for one board's ruling: the same six the canvas offers, drawn on
- * the board's own paper in its own ink. The canvas draws these as SVG
- * layers that pan with the viewport; a board is a plain element that pans
- * with it already, so background images are all it takes.
+ * the board's own paper in its own ink. A board is a plain element that
+ * already pans with the viewport, so background images are all it takes.
  */
 function boardRuling(
   pattern: string | undefined,

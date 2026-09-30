@@ -8,10 +8,10 @@ import { noteRestorableRecipes } from "./restorable-recipes";
 /**
  * Which of a plan's recipes to fetch fresh from the dataset: each id once per
  * dataset version, and AGAIN when a recipe whose dataset body carries a
- * runtime table arrives without one. Plans synced through the account and
- * copied plans travel without their GregTech tables (`withoutRuntimeTables`),
- * and a synced plan can land recipes this page already refreshed for another
- * plan; keyed on the id alone, those stayed bare and solved on fallback math.
+ * runtime table arrives without one. Synced and copied plans travel without
+ * their GregTech tables (`withoutRuntimeTables`), and may bring recipes this
+ * page already refreshed for another plan; keying on the id alone would leave
+ * those bare, solving on fallback math.
  *
  * `checked` maps `version|id` to whether the dataset's body had a table;
  * `requested` holds recipe objects already sent, so none is fetched twice.
@@ -61,13 +61,11 @@ export function noteRecipesRefreshed(
 /**
  * The dataset's current bodies for a plan's stored recipes.
  *
- * By id first. A stored id the dataset no longer has (recipe ids were
- * re-keyed when the pipeline moved to content ids, and every rebuild can
- * re-key again) is matched by what it takes and makes, the way import does,
- * and comes back with a `migration` entry from the stored id to the id that
- * now stands for it - so a card placed before a rebuild still picks up the
- * dataset's handlers (a tier cap, a new face) instead of keeping a stale
- * body forever. Power cards are synthesized on the way in and are skipped.
+ * By id first. A stored id the dataset no longer has (a rebuild can re-key
+ * recipes) is matched by what it takes and makes, the way import does, and
+ * comes back with a `migration` entry from the stored id to the current one,
+ * so old cards still pick up the dataset's current handlers. Power cards are
+ * synthesized on the way in and are skipped.
  */
 export async function resolveProjectRecipes(
   manifestUrl: string,

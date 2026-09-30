@@ -54,21 +54,19 @@ import {
  *   costs one small row.
  *
  * WHEN: on sign-in, on load, when the tab comes back to the front, every
- * half minute while the tab is in view, and a few seconds after changes to
- * the library stop (which is how autosave reaches the account) - at most
- * half a minute behind during nonstop editing, and at once when the tab
- * goes into the background. One run at a time; a request during a run
- * queues one more.
+ * half minute while the tab is in view, and a few seconds after library
+ * changes stop (how autosave reaches the account; at most half a minute
+ * behind during nonstop editing, at once when the tab is hidden). One run at
+ * a time; a request during a run queues one more.
  *
  * WHEN NOT: signed out. Database and network failures stay visible and retry
  * on the next poll, focus or connection recovery. A design the account
  * REFUSED (too large, not valid, library full) is not sent again until it
  * changes.
  *
- * WHY SO CAREFUL (2026-09-24): every push carries the WHOLE plan. Pushing
- * half a second after every autosave, and resending refused plans on every
- * poll, put ~500 MB an hour of plan writes and ~500 MB an hour of refused
- * uploads on the Supabase instance, which then stopped answering for hours.
+ * WHY SO CAREFUL: every push rewrites the WHOLE plan on a small Supabase
+ * instance. Pushing after every autosave, or resending refused plans on
+ * every poll, is enough load to stall the database.
  */
 
 export interface LibrarySyncStatus {
@@ -202,10 +200,8 @@ export function reconcileFolders(local: LocalFolder[], remote: RemoteFolder[]): 
  * What counts as a change HERE, worth a push: a design or folder added,
  * removed or restamped. Sync's own bookkeeping (the `remoteUpdatedAt` it
  * stamps) is not in it, and neither is a relist that changed nothing, so a
- * sync run cannot schedule the next one by itself. A refused design used to
- * do exactly that: every run relisted the library, the relist looked like an
- * edit, and the next run came five seconds later, forever (2026-09-25: one
- * player's browser listed their library every 6 s for hours).
+ * sync run can never schedule the next one by itself (an endless loop, e.g.
+ * around a refused design).
  */
 export function libraryChangeSignature(
   designs: Pick<DesignSummary, "id" | "updatedAt" | "metaUpdatedAt">[],
@@ -462,9 +458,8 @@ async function applyDesignAction(action: DesignAction): Promise<boolean> {
         return false;
       }
       // The LATER of the two stamps, the same one `reconcileDesigns` calls
-      // the local change time. Sending the metadata stamp alone when the
-      // plan's was newer stored an older `updatedAt` than the edit, and the
-      // design read as unsaved again on every poll: pushed forever.
+      // the local change time. An older stamp than the edit would make the
+      // design read as unsaved on every poll and be pushed forever.
       const updatedAt = latestStamp(record.metaUpdatedAt, record.updatedAt);
       if (refusedPushes.get(record.id)?.stamp === updatedAt) {
         return false;
@@ -472,8 +467,7 @@ async function applyDesignAction(action: DesignAction): Promise<boolean> {
       let result: Awaited<ReturnType<typeof pushRemoteDesign>>;
       try {
         result = await pushRemoteDesign(record.id, {
-          // The account takes 80 characters; a longer local name (old
-          // stacked conflict copies) used to be refused on every edit.
+          // The account refuses longer names, so clip to its limit.
           name: record.name.trim().slice(0, LIBRARY_DESIGN_NAME_MAX_LENGTH),
           icon: record.icon ?? null,
           folderId: record.folderId ?? null,

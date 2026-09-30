@@ -70,16 +70,12 @@ function dialTooltip(field: RouterTuningField): string {
 }
 
 /**
- * The dev menu, behind a shift-click on the version chip.
+ * The dev menu, behind a shift-click on the version chip: the one home for
+ * dev tools, deliberately undocumented in the UI.
  *
- * One home for the dev tools, so new ones do not each claim a secret click
- * of their own. Deliberately undocumented in the UI - it is a workbench, not
- * a feature.
- *
- * A floating PALETTE, not a modal: no backdrop, no dim, no blur, dragged
- * around by its header. The tools in here act on the board live - the tilt
- * sliders especially - so the board has to stay visible and the panel has
- * to get out of the way of whatever it is adjusting.
+ * A floating PALETTE, not a modal (no backdrop, dim or blur), dragged by its
+ * header, because its tools act on the board live and the board must stay
+ * visible.
  */
 export function DevMenu({ onClose }: { onClose: () => void }) {
   const [perfHud, setPerfHud] = useState<boolean>(() => isPerfHudEnabled());

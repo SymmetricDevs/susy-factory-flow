@@ -111,11 +111,9 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
         description,
         gameVersion: datasetVersion?.gtnhVersion ?? "",
         datasetVersionId: selectedDatasetVersionId ?? "",
-        // The workspace goes with the plan: the author arranged the board and
-        // the resource panel to make this build readable, and that arrangement
-        // is part of what they are sharing. Captured at the moment of sharing
-        // rather than carried on the project, so it can never leak into the
-        // designs they are only working on.
+        // The author's workspace view (board and resource panel arrangement)
+        // is shared with the plan. Captured at share time rather than stored
+        // on the project, so it never leaks into unshared designs.
         plan: JSON.parse(
           serializeFactoryProject({ ...project, view: capturePlanView() }),
         ) as unknown,

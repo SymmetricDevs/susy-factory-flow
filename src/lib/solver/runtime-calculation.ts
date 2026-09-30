@@ -22,15 +22,12 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
  * `GTParallelHelper`, so every variant in the dataset reports `parallel: 1`,
  * and its duration bottoms out at a single tick.
  *
- * For a singleblock that is the whole truth. For a multiblock it is most of
- * the answer missing its most important half: a Boldarnator's exported ladder
- * runs 16, 8, 4, 2, 1, 1, 1 ticks, so the planner showed cobble stalling at
- * 20/s from IV upward while the parallel count on the card kept climbing.
- *
- * So a machine we have verified in the curated table is calculated by our own
- * engine instead, which knows its parallels, spends the voltage on them before
- * overclocking, and banks sub-tick speed the way the machine does. Everything
- * else still uses the runtime data, which remains the best source we have.
+ * For a singleblock that is the whole truth. For a multiblock it misses the
+ * parallels (an exported ladder flatlines at one tick while real throughput
+ * keeps climbing). So a machine verified in the curated table is calculated
+ * by our own engine instead, which knows its parallels, spends the voltage on
+ * them before overclocking, and banks sub-tick speed the way the machine
+ * does. Everything else still uses the runtime data.
  */
 export function prefersCuratedMachineMath(recipe: { machineType?: string }): boolean {
   return isFusionRecipe(recipe) || getMachineBehaviour(recipe.machineType) !== undefined;

@@ -39,9 +39,8 @@ export function MinecraftTooltip({
   label?: string | string[];
   /**
    * Rich panel body; wins over `label` and brings its own typography. Pass a
-   * THUNK when the body is expensive to build: it is invoked only while the
-   * tooltip is actually open, so a card with eight port tooltips does not
-   * build eight discarded panels on every render.
+   * THUNK when the body is expensive: it is invoked only while the tooltip is
+   * open.
    */
   content?: ReactNode | (() => ReactNode);
   /** A separate controls legend beside the rich panel, wrapping on narrow screens. */
@@ -85,11 +84,9 @@ export function MinecraftTooltip({
     [],
   );
 
-  // A press on one of the hover surface's OWN controls (the tier chip, the
-  // hatch counter) is the tooltip's subject being used, not the pointer
-  // leaving: the panel stays up and re-reads itself, so clicking through
-  // tiers shows each result without re-hovering. Presses anywhere else —
-  // panning, dragging, other cards — still clear.
+  // A press on the hover surface's OWN controls (tier chip, hatch counter)
+  // keeps the panel up and re-reads it, so clicking through tiers shows each
+  // result. Presses anywhere else clear it.
   const pressKeepsTooltip = useCallback(
     (target: EventTarget | null) =>
       target instanceof Element &&
@@ -142,12 +139,10 @@ export function MinecraftTooltip({
     [hasContent, placement, companion],
   );
 
-  // The first placement of a fresh tooltip clamps against an ESTIMATED panel
-  // size, and near a screen edge the estimate lands the panel a hundred-odd
-  // pixels from where the measured clamp will. Re-clamping here, before the
-  // browser paints, means nobody ever sees the estimate's position - which
-  // used to read as the tooltip jittering sideways while the pointer crossed
-  // list rows, each row remounting the panel at the estimate first.
+  // A fresh tooltip's first placement clamps against an ESTIMATED size, which
+  // near a screen edge can be far off. Re-clamping against the measured size
+  // before paint means the estimate's position is never seen (no sideways
+  // jitter as rows remount the panel).
   useLayoutEffect(() => {
     const pointer = pointerRef.current;
     if (!position || !pointer || !panelRef.current) {
@@ -230,11 +225,9 @@ export function MinecraftTooltip({
       frameRef.current = undefined;
     }
     // A functional update, never a closure check: the tip opens on an
-    // animation frame, and a fast pointer has often LEFT before React has
-    // re-rendered with the open position. The leave handler that fires then
-    // still holds the closed state, and guarding on it skipped the hide -
-    // the panel committed open with nobody left to close it, and a quick
-    // sweep across a board left hundreds standing until the next click.
+    // animation frame, and a fast pointer often leaves before React
+    // re-renders. That leave handler still holds the closed state, so guarding
+    // on it would skip the hide and strand the panel open.
     setPosition((current) => (current === undefined ? current : undefined));
   }, []);
 
@@ -250,25 +243,19 @@ export function MinecraftTooltip({
       }
       clearTooltip();
     };
-    // Capture-phase "blur" sees every ELEMENT losing focus, and clicking the
-    // chip under the tooltip blurs whatever held focus before it — only the
-    // window itself going unfocused means the pointer story ended. Told apart
-    // by the target's kind, not identity: an element's blur names the element,
-    // the window's names the window.
+    // Capture-phase "blur" sees every ELEMENT losing focus (clicking the chip
+    // under the tooltip blurs the previous focus); only the WINDOW blurring
+    // should close. Told apart by the target's kind.
     const clearOnWindowBlur = (event: Event) => {
       if (event.target instanceof Element) {
         return;
       }
       clearTooltip();
     };
-    // A wheel or scroll NEVER clears a tooltip by itself (Jack, 2026-09-07):
-    // zooming the board keeps the card under the pointer, a slot that eats
-    // the wheel to step through its items never moves, a setting tile steps
-    // its count in place - and in every one of those the tip blinking out
-    // read as broken. So the question is asked a frame later, once the
-    // page has settled: is the hovered thing STILL under the pointer? It
-    // stays while the answer is yes and goes only when something else has
-    // scrolled in. Where the document cannot answer, the tip stays.
+    // A wheel or scroll NEVER clears a tooltip by itself: board zoom, wheel
+    // stepping on a slot and setting tiles all keep the subject in place. A
+    // frame later, once settled, the tip closes only if the hovered element
+    // is no longer under the pointer. Where the document cannot answer, it stays.
     let settleFrame: number | undefined;
     const recheckAfterScroll = () => {
       if (settleFrame !== undefined) {
@@ -355,13 +342,10 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip="true"
-                // w-max, and 420 rather than 340: a fixed panel with no width
-                // of its own is squeezed by whatever room is left to the
-                // viewport's edge, so a one-line label near the right side of
-                // the screen shrink-wrapped and broke its last word onto a line
-                // of its own. Asking for max-content makes the panel state its
-                // real width; the pointer clamp above reads that width back and
-                // walks it inside the edge.
+                // w-max: a fixed panel with no width of its own is squeezed by
+                // the room left to the viewport edge and wraps its last word.
+                // With max-content the panel states its real width and the
+                // clamp above moves it inside the edge.
                 className={`${TOOLTIP_PANEL_CLASS} ui-zoom w-max max-w-[420px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
                 style={{ left: position.x, top: position.y }}
               >

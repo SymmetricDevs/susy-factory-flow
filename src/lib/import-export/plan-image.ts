@@ -7,10 +7,9 @@ export const FLOW_IMAGE_EXPORT_COMPLETE_EVENT = "gtnh-flow-export-image-complete
 /**
  * What the board is asked for over FLOW_IMAGE_EXPORT_EVENT.
  *
- * The classic shape downloads a finished file: `fileName` plus `projectJson`
- * to embed. `capture: true` instead hands the raw render back through the
- * complete event, so the export dialog can composite a summary bar, swap the
- * background, or animate it — the board only knows how to photograph itself.
+ * By default it downloads a finished file (`fileName` plus `projectJson` to
+ * embed). `capture: true` instead hands the raw render back through the
+ * complete event, so the export dialog can composite, recolour or animate it.
  */
 export interface FlowExportRequest {
   format: "svg" | "png";
@@ -32,9 +31,8 @@ export interface FlowExportRequest {
    */
   cardDetail?: "full" | "glance" | "status" | "usage" | "power";
   /**
-   * Leave the notes, arrows and backdrops out of the photograph - only the
-   * working board. The frame tightens to the remaining cards too, so a
-   * hidden backdrop does not leave its empty acreage behind.
+   * Leave the notes, arrows and backdrops out of the photograph; the frame
+   * tightens to the remaining cards.
    */
   hideAnnotations?: boolean;
 }

@@ -1,19 +1,9 @@
 /**
- * The marching dashes, moved off SVG.
- *
- * Pulse mode used to draw one extra `<path>` per edge with a CSS animation on
- * `stroke-dashoffset`. That property is a PAINT property: it cannot be
- * composited, so every frame of the animation invalidated the whole edge layer
- * and Chrome re-rastered every line on the board — 616 edges cost ~90ms a
- * frame with the board otherwise completely still. It was the single most
- * expensive thing the board did, and it did it forever, whether or not anyone
- * was looking.
- *
- * The dashes now live on one canvas sitting directly above the edge layer.
- * Geometry is the edges' own path strings handed to `Path2D`, and stroke
- * widths, dash lengths and speeds are the same numbers the SVG used, so what
- * is drawn is what was drawn before — one raster of the visible rectangle
- * instead of a repaint of the entire board.
+ * The marching dashes, drawn on one canvas above the edge layer instead of
+ * as per-edge SVG paths: an animated `stroke-dashoffset` is a paint property
+ * that cannot be composited, so it re-rasters every line on the board every
+ * frame. Geometry is the edges' own path strings handed to `Path2D`; stroke
+ * widths, dash lengths and speeds are the SVG's numbers.
  *
  * Everything here is pure module state in FLOW coordinates, the same
  * discipline the routing caches follow: nothing depends on zoom or pan.
@@ -49,13 +39,9 @@ export interface EdgePulseSpec {
 interface CompiledPulse extends EdgePulseSpec {
   path2d: Path2D | undefined;
   /**
-   * A fixed head start, so lines do not all march in lockstep.
-   *
-   * Per-edge CSS animations each began whenever their element was created, so
-   * the board's dashes were naturally scattered in phase. One shared clock
-   * would snap every line of the same speed into a single marching column,
-   * which reads as a synchronised light show rather than as flow. Derived from
-   * the edge id, so a line's phase is stable across rerenders and reloads.
+   * A fixed phase offset derived from the edge id, so lines of the same speed
+   * do not march in lockstep (one marching column reads as a light show, not
+   * flow). Stable across rerenders and reloads.
    */
   phase: number;
   /**
@@ -66,10 +52,9 @@ interface CompiledPulse extends EdgePulseSpec {
    */
   liveVelocity: number;
   /**
-   * Distance marched so far, in flow px. The offset used to be derived from
-   * absolute time × velocity, which is only continuous while velocity never
-   * changes — the integral is what lets the speed move without the dashes
-   * teleporting.
+   * Distance marched so far, in flow px. Integrating it (rather than deriving
+   * it from absolute time x velocity) keeps the dashes continuous when the
+   * speed changes.
    */
   travel: number;
 }
@@ -188,12 +173,11 @@ export function snapshotEdgeWaypointDots(): ExportOcclusionDot[] {
 /**
  * Where each edge's rate chip sits, in flow units.
  *
- * The canvas has to sit at the very TOP of the paint order — anything drawn
- * above a composited layer has to be composited too, and letting 300 nodes and
- * 600 labels each become their own layer cost ~140ms of Layerize per frame. So
- * instead of relying on stacking to keep the dashes underneath the chips and
- * the cards, the canvas punches those rectangles back out after drawing. The
- * result on screen is the same; the layer tree stays at a handful.
+ * The canvas sits at the very TOP of the paint order, because anything drawn
+ * above a composited layer must be composited too, and hundreds of node and
+ * label layers are expensive to layerize every frame. So instead of stacking
+ * the dashes under the chips and cards, the canvas punches those rectangles
+ * back out after drawing, keeping the layer tree to a handful.
  */
 export interface EdgeLabelBox {
   left: number;
@@ -325,15 +309,13 @@ let lastDrawTimeSeconds: number | undefined;
 /**
  * Draws every pulse whose route intersects the visible flow rect.
  *
- * The context is expected to be in FLOW coordinates already (the caller
- * applies device pixel ratio and the viewport transform), so widths and dash
- * lengths are the same flow-space numbers the SVG used and scale with zoom the
- * same way.
+ * The context must already be in FLOW coordinates (the caller applies device
+ * pixel ratio and the viewport transform), so widths and dash lengths scale
+ * with zoom exactly as the SVG's did.
  *
  * `smoothSpeedChanges` is the board's value-motion switch: on, each line's
- * dash speed chases its target exponentially; off, it snaps as it always did.
- * Either way the offset is integrated travel, so no speed change ever makes
- * the dashes jump.
+ * dash speed chases its target exponentially; off, it snaps. Either way the
+ * offset is integrated travel, so a speed change never makes dashes jump.
  */
 export function drawEdgePulses(
   context: CanvasRenderingContext2D,

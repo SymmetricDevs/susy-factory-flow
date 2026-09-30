@@ -185,12 +185,9 @@ interface RecipeShardPayload {
 const CROP_FARM_RECIPE_MAP = "Crop Farm";
 
 /**
- * The recipe maps that are things growing rather than machines running.
- *
- * A crop farm is a real way to get an item, so it belongs in the recipe book
- * next to the machines that make the same thing: looking up Oak Log should show
- * that a crop can grow one. These sets are also what the "grown" and "bees"
- * filters in the item list mean.
+ * The recipe maps that are things growing rather than machines running. They
+ * appear in the recipe book like any machine, and define the item list's
+ * "grown" and "bees" filters.
  */
 const PLANT_RECIPE_MAPS = new Set([CROP_FARM_RECIPE_MAP, "IC2 Crop", "Tree Growth Simulator"]);
 const BEE_RECIPE_MAPS = new Set(["Bee Produce"]);
@@ -233,13 +230,11 @@ export async function getDatasetCatalog(versionId: string) {
 }
 
 /**
- * Handlers synthesized client-side (the Auto Workbench for the crafting maps
- * in recipe-rules.ts, the two crop harvesters in passive-production.ts) never
- * had an exported handler family mint their icon. Each machine is a real
- * dataset item; hand its lowest-tier face to the synthesized family here so
- * their cards draw a machine chip like everything else. Names are candidates
- * in order because datasets disagree (2.8.4 says "Crop Manager (LV)" and has
- * no Industrial Farm); a family with no match simply keeps its letter chip.
+ * Handlers synthesized client-side (the Auto Workbench in recipe-rules.ts, the
+ * two crop harvesters in passive-production.ts) have no exported icon. Each
+ * machine is a real dataset item, so its lowest-tier face is handed to the
+ * synthesized family here. Names are tried in order because datasets name them
+ * differently; a family with no match keeps its letter chip.
  */
 const SYNTHESIZED_HANDLER_FACES: Array<{
   familyId: string;
@@ -257,12 +252,10 @@ const SYNTHESIZED_HANDLER_FACES: Array<{
 ];
 
 /**
- * The Tank map (the planner's free canner, synthesized by the pipeline) used
- * to wear the plain empty cell as its face, and a card names itself after its
- * map's machine, so every Tank card read "Empty Cell". Published datasets
- * still carry that face; swap in the Low Voltage Fluid Tank, called simply
- * "Fluid Tank" (Jack, 2026-09-07), at load so the card, its picture and the
- * search chip all agree without a dataset rebuild.
+ * The Tank map (the planner's free canner, synthesized by the pipeline) ships
+ * with the empty cell as its face, and a card names itself after its map's
+ * machine. Swap in the Low Voltage Fluid Tank, displayed as "Fluid Tank", at
+ * load so the card, its picture and the search chip agree.
  */
 const TANK_RECIPE_MAP = "Tank";
 const TANK_MAP_FACE_ITEM_NAMES = ["Low Voltage Fluid Tank"];
@@ -393,17 +386,13 @@ export async function getDatasetRecipeIds(versionId: string): Promise<string[]> 
  * Finds the dataset's recipe behind each imported one whose id it no longer
  * lists.
  *
- * Recipe ids are minted per dataset build (and until 2026-09 from a JVM
- * identity hash, so every rebuild changed all of them), so a plan exported
- * one week and imported the next finds none of its ids. What survives a
- * rebuild is the recipe's content, so each ref carries its slots, ticks and
- * EU, and the candidates - every recipe in the ref's map that makes its
- * first output, read off the lookup index - are scored on that
- * (`pickRecipeRefMatch`). Only a candidate with the same resources in and
- * out is offered; a weaker likeness is not, and the importer keeps the
- * plan's own embedded body instead. A rawRecipeId hit is still consulted
- * for refs the content scan could not settle, since it can bridge dataset
- * versions when the raw ids are stable.
+ * Recipe ids are minted per dataset build and are not stable across
+ * rebuilds; the recipe's content is. Each ref carries its slots, ticks and
+ * EU, and the candidates (every recipe in the ref's map that makes its first
+ * output, from the lookup index) are scored by `pickRecipeRefMatch`. Only a
+ * candidate with the same resources in and out is offered; otherwise the
+ * importer keeps the plan's embedded body. A rawRecipeId hit is consulted for
+ * refs the content scan could not settle.
  */
 export async function resolveDatasetRecipeRefs(
   versionId: string,
@@ -974,9 +963,8 @@ interface RankedRecipe {
 /**
  * The order cards come out in.
  *
- * Recipes whose icons render stay ahead of ones that would draw as empty slots,
- * which is a rule the book has always had. Inside that, the closest match to
- * what was typed comes first.
+ * Recipes whose icons render stay ahead of ones that would draw as empty
+ * slots. Inside that, the closest match to what was typed comes first.
  */
 function rankRecipes(matches: RankedRecipe[]): RankedRecipe[] {
   return [...matches].sort(
@@ -993,11 +981,9 @@ function rankRecipes(matches: RankedRecipe[]): RankedRecipe[] {
 /**
  * An all-maps answer pages through the maps in the order it lists them
  * (`recipeMaps`), best match first inside each. The search shows one section
- * per machine in that order, so pages must fill the sections top-down: ranked
- * across every map, the first page scattered over all the sections and left
- * whole machines empty until a later page (player report: Vacuum Furnace said
- * 1 antimony dust recipe and showed none; Bricked Blast Furnace said 26
- * antimony ingot recipes and showed 8, the Blast Furnace's one nowhere).
+ * per machine in that order, so pages must fill the sections top-down; ranked
+ * across every map, early pages scatter over all sections and leave whole
+ * machines showing a count but no cards.
  */
 export function orderByRecipeMap<T extends { recipeIndex: number }>(
   ranked: T[],
@@ -1141,11 +1127,6 @@ function scoreRecipeIndexes(
 }
 
 /**
- * All crop source "recipes", for the crop picker on a crop farm card. They also
- * appear in the recipe book like any other recipe; this is the flat catalogue
- * the card's own dropdown searches.
- */
-/**
  * Every recipe of one map, as summaries sorted by name: the list a card's own
  * picker offers (a crop farm's crops, an EEC's mobs). Only for small maps that
  * are one choice each - the whole map ships in one response.
@@ -1174,6 +1155,7 @@ async function listDatasetMapRecipes(versionId: string, recipeMap: string) {
   return recipes;
 }
 
+/** All crop source "recipes", for the crop picker on a crop farm card. */
 export async function listDatasetCropFarmRecipes(versionId: string) {
   return { crops: await listDatasetMapRecipes(versionId, CROP_FARM_RECIPE_MAP) };
 }
@@ -1313,9 +1295,8 @@ async function queryDatasetRecipesFromLookup(
 }
 
 /**
- * The conditions a request actually asks, whichever wire form it spoke.
- * Every pre-existing caller still sends one resource and a mode; that is
- * exactly a one-clause query.
+ * The conditions a request actually asks, whichever wire form it spoke. The
+ * legacy one-resource-and-a-mode form is exactly a one-clause query.
  */
 function normalizedRecipeQueryClauses(request: DatasetRecipeQueryRequest): RecipeQueryClause[] {
   if (request.clauses?.length) {
@@ -1513,7 +1494,7 @@ function intersectRecipesByMap(
 /**
  * Every clause resource is a concrete context for the returned summaries, so
  * an oredict slot a Spruce Log satisfies renders as the Spruce Log that was
- * asked about, exactly as a single-resource browse always has.
+ * asked about, as in a single-resource browse.
  */
 function applyClauseResourceContexts<T extends RecipeSummary>(
   recipe: T,
@@ -1911,11 +1892,9 @@ async function loadShard(version: DatasetVersion, shard: RecipeIndexShard): Prom
 /**
  * rawRecipeId -> recipe indexes, built once per loaded dataset.
  *
- * This map holds ids and numbers only. It used to hold every recipe BODY,
- * which pinned the whole corpus (hundreds of MB) in the heap forever the
- * first time anyone imported a plan carrying rawRecipeIds - the single
- * biggest driver of the production server's heap-exhaustion crashes. The
- * scan reads shards a few at a time and keeps none of them.
+ * Holds ids and numbers only, never recipe BODIES: caching bodies pins the
+ * whole corpus (hundreds of MB) in the server heap. The scan reads shards a
+ * few at a time and keeps none of them.
  */
 async function getRecipeIndexesByRawRecipeId(
   catalog: LoadedRecipeIndex,
@@ -2240,9 +2219,9 @@ function getCachedHydratedSummary(
 }
 
 /**
- * Hydrated summaries are cheap to rebuild and were cached forever, which let
- * hours of recipe-book browsing walk the heap into the limit. Same LRU shape
- * as the shard cache: recently used stays, the tail falls off.
+ * Hydrated summaries are cheap to rebuild, so they live in a bounded LRU (same
+ * shape as the shard cache); an unbounded cache grows the heap to its limit
+ * over long browsing sessions.
  */
 function setCachedHydratedSummary(
   catalog: LoadedRecipeIndex,
@@ -2269,12 +2248,8 @@ function toRecipeSummary(
   return {
     id: enrichedRecipe.id,
     name: enrichedRecipe.name,
-    // What the recipe IS, which decides how the recipe book draws it. Leaving
-    // it off made the renderer fall back to guessing from the recipe's name,
-    // and the guess reads substrings: "miCROProcessor" contains "crop", so the
-    // Circuit Assembler recipe for one was drawn on a farm scene. The recipe
-    // index built by the pipeline has always carried this; only this
-    // server-side projection dropped it.
+    // Decides how the recipe book draws it. Without it the renderer guesses
+    // from name substrings ("miCROProcessor" contains "crop").
     kind: enrichedRecipe.kind,
     category: enrichedRecipe.category,
     recipeMap: enrichedRecipe.source?.recipeMap ?? enrichedRecipe.machineType,
@@ -2347,25 +2322,15 @@ function getCatalogResourcesByKey(
 /**
  * What each "any of these" placeholder actually stands for.
  *
- * GTNH ships real items whose whole job is to mean a set: "Any LV Circuit" is a
- * placeholder, not something you hold. Recipes reference those directly, and
- * the exported resource for one carries no member list, so a slot demanding
- * "Any LV Circuit" could not say which circuits it would take.
- *
- * The membership already exists in the other direction: each `oredict:` group
- * lists its members, and the placeholder is one of them. This inverts that once
+ * GTNH ships placeholder items whose job is to mean a set ("Any LV Circuit").
+ * Their exported resource carries no member list, but each `oredict:` group
+ * lists its members and the placeholder is one of them; this inverts that once
  * per catalog so a placeholder can be expanded back into its group.
  *
- * Deliberately restricted to placeholders, which is a narrower rule than it
- * first looks like it should be. Ore dictionary membership is NOT the same
- * thing as what a recipe accepts: the Circuit Assembler recipe for an
- * Electronic Circuit names a Vacuum Tube and takes only that, even though the
- * vacuum tube shares the `circuitPrimitive` group with the NAND chip. Offering
- * the group there invents a recipe that does not exist.
- *
- * A placeholder is different in kind. "Any LV Circuit" is not an item anyone
- * can hold; standing for its group is the entire reason it exists, so
- * expanding it reports what the recipe already meant.
+ * Deliberately restricted to placeholders. Ore dictionary membership is NOT
+ * what a recipe accepts: a recipe naming a Vacuum Tube takes only that, even
+ * though it shares `circuitPrimitive` with the NAND chip, so expanding real
+ * items would invent recipes.
  */
 export function getChoiceAlternativesByKey(
   catalog: LoadedRecipeIndex,

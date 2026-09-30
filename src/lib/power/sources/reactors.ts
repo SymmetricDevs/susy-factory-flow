@@ -2,7 +2,7 @@
  * Reactors and free-energy machines: THTR, HTGR, LFTR, the IC2 fluid
  * reactor presets, DEHP and the Solar Tower. Formulas from
  * docs/power-planner-math.md; where the workbook leaves a cost out (IC2
- * rods), the card says so instead of pretending.
+ * rods), the card says so.
  */
 import { powerPlannerData } from "../planner-data";
 import type { PowerModel, PowerSourceDefinition } from "../types";
@@ -179,7 +179,8 @@ const lftr: PowerSourceDefinition = {
       powerPlannerData.lftrFuels[0];
     // RecipeLoaderLFTR burns 100 L in 100 seconds (1 L/s). Its output
     // metadata x4 in MTENuclearReactor agrees with EU/L divided by 20.
-    // Use that numeric value: parsing the display label missed mixed-case LuV.
+    // Use that numeric value, not the display label (mixed-case LuV breaks
+    // label parsing).
     const euPerTick = fuel.euPerLiter / 20;
     const inputs = [liters(fuel.name, 1), liters("Li2BeF4", 2)];
     const outputs = [
@@ -250,22 +251,19 @@ const ic2FluidReactor: PowerSourceDefinition = {
 
 /**
  * The Vacuum Reactor: the workbook's `4. Vac Nuke` sheet, an EU-mode IC2
- * reactor on its one fixed layout - 40 fuel rods and 14 coolant cells in
- * the 6x9 chamber - whose cells are swapped out and recooled instead of
- * melting. The card does only what the reactor does: it burns rods to
- * their depleted forms, and it turns cold coolant cells into hot ones at
- * the rate the layout heats them. Recooling is the Vacuum Freezer's own
- * recipe in the dataset (hot cell in, cold cell out, 120 EU/t), so the
- * freezer is a machine you place and wire back into the reactor, exactly
- * the block the sheet draws beside it.
+ * reactor on its one fixed layout (40 fuel rods and 14 coolant cells in the
+ * 6x9 chamber) whose cells are swapped out and recooled instead of melting.
+ * The card burns rods to their depleted forms and turns cold coolant cells
+ * hot at the rate the layout heats them. Recooling is not part of the card:
+ * it is the dataset's Vacuum Freezer recipe (hot cell in, cold cell out,
+ * 120 EU/t), a machine placed and wired back into the reactor.
  *
- * Every rod stat below is transcribed from GT5U LoaderGTBlockFluid
- * (ItemRadioactiveCellIC: cells, durability, sEnergy, sHeat, mox, heat
- * bonus) and the maths from ItemRadioactiveCellIC.processChamber; the
- * sheet agrees with the source on all of it except the MOX bonus, which it
- * flattens to x2.475 for every MOX-type rod while the game multiplies by
- * `1 + heatBonus x heat%` with a per-rod bonus (MOX 1.5, HD Plutonium 6,
- * Excited Plutonium 2, Naquadria 1.5). The source wins there.
+ * Rod stats are transcribed from GT5U LoaderGTBlockFluid (ItemRadioactiveCellIC:
+ * cells, durability, sEnergy, sHeat, mox, heat bonus) and the maths from
+ * ItemRadioactiveCellIC.processChamber. The sheet agrees except for the MOX
+ * bonus: it flattens it to x2.475 for every MOX-type rod, while the game
+ * multiplies by `1 + heatBonus x heat%` with a per-rod bonus (MOX 1.5, HD
+ * Plutonium 6, Excited Plutonium 2, Naquadria 1.5). The source wins.
  *
  * Per rod: pulses p = 1 + cells/2 (single 1, dual 2, quad 3, Core 17).
  * With n rod neighbours it pulses p + n times per cell, each pulse worth

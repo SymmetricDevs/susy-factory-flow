@@ -1,15 +1,11 @@
 /**
- * The indexes that keep search instant on a dataset this size.
+ * The indexes that keep search instant on a dataset this size:
  *
- * Two of them, doing different jobs:
- *
- * - A trigram index over every entry, which answers "which of the 270,000
- *   recipes could possibly contain this word" without reading any of them. It
- *   narrows, it never decides: the match itself is `matchSearchEntry`.
- * - A vocabulary of the words items are actually called, which is what a typo
- *   gets corrected against. Correcting against the whole corpus would offer
- *   registry ids and NBT fragments as spellings; correcting against display
- *   names offers real names, which is what the player meant.
+ * - A trigram index over every entry, which answers "which entries could
+ *   possibly contain this word" without reading them. It narrows, it never
+ *   decides: the match itself is `matchSearchEntry`.
+ * - A vocabulary of display-name words that typos are corrected against. The
+ *   whole corpus would offer registry ids and NBT fragments as spellings.
  */
 
 import {
@@ -46,10 +42,8 @@ function maxCorrectionDistance(token: string): number {
 
 /**
  * How much of the word's shape has to survive for a candidate to be worth an
- * edit-distance check. Deliberately low: one letter wrong in the middle of a
- * six-letter word ("vaccum") leaves only a quarter of its trigrams standing, so
- * a stricter bar here throws away exactly the typos worth catching. The edit
- * distance below is what actually decides.
+ * edit-distance check. Deliberately low: one wrong letter mid-word ("vaccum")
+ * leaves only a quarter of its trigrams. The edit distance is what decides.
  */
 const CORRECTION_TRIGRAM_OVERLAP = 0.2;
 const MAX_CORRECTION_CANDIDATES = 3;
@@ -98,11 +92,9 @@ export function buildTokenSearchIndex(
 }
 
 /**
- * Which entries could match, or undefined when the index cannot say.
- *
- * A word shorter than a trigram, or one standing in for a nickname we have no
- * trigrams for, means every entry stays a candidate: narrowing is an
- * optimisation and is never allowed to drop a real match.
+ * Which entries could match, or undefined when the index cannot say (e.g. a
+ * word shorter than a trigram). Narrowing is an optimisation and must never
+ * drop a real match.
  */
 export function queryTextSearchIndex(
   index: TextSearchIndex,
@@ -256,12 +248,9 @@ export function buildSearchVocabulary(displayNames: Iterable<string>): SearchVoc
 }
 
 /**
- * Spellings a mistyped word probably meant.
- *
- * Nothing is suggested for a word that is already real, or that is the start of
- * a real one: someone halfway through typing "creo" is not making a mistake.
- * Two words run together are offered as the pair they split into, which is the
- * other half of how people mistype ("oaklog", "steelplate").
+ * Spellings a mistyped word probably meant. Nothing is suggested for a real
+ * word or the start of one (a half-typed "creo"). Two words run together
+ * ("oaklog") are offered as the pair they split into.
  */
 export function suggestSearchCorrections(
   vocabulary: SearchVocabulary,
@@ -322,14 +311,10 @@ export function searchCorrector(vocabulary: SearchVocabulary) {
 export type SearchPhase = "exact" | "corrected" | "partial";
 
 /**
- * Ask three times, each looser than the last, and stop as soon as something
- * answers.
- *
- * What the player typed comes first and is never diluted: corrections and
- * part-matches only run when the strict reading of the query found nothing at
- * all. So "steel" is never polluted by things that merely look like "steel",
- * while "distiled watr" and "silicon wafer" - two real words that never share a
- * name - still come back with something useful instead of an empty panel.
+ * Ask up to three times, each looser than the last, and stop as soon as
+ * something answers. Corrections run only when the strict reading found fewer
+ * than MIN_CONFIDENT_MATCHES hits, and part-matches only when it found none,
+ * so a real word is never diluted by look-alikes.
  */
 export function resolveSearchPhases<T>(
   query: SearchQuery,
@@ -337,9 +322,8 @@ export function resolveSearchPhases<T>(
   run: (query: SearchQuery, options: { partial?: boolean }) => T[],
 ): { results: T[]; query: SearchQuery; phase: SearchPhase } {
   const exact = run(query, {});
-  // A single stray hit is not an answer. "oaklog" matches one block whose
-  // registry id happens to contain it, while what the player wanted was Oak Log,
-  // which only the next phase can reach.
+  // A single stray hit is not an answer: "oaklog" matches one registry id,
+  // while Oak Log is only reachable by the next phase.
   if (exact.length >= MIN_CONFIDENT_MATCHES || query.terms.length === 0) {
     return { results: exact, query, phase: "exact" };
   }
@@ -402,9 +386,7 @@ function splitJoinedWords(vocabulary: SearchVocabulary, token: string): string[]
 
 /**
  * Damerau-Levenshtein distance, abandoned once it passes the limit.
- *
- * Transpositions count as one edit because that is what fast typing produces:
- * "steal" for "steel" is the same class of mistake as "setel".
+ * Transpositions ("setel") count as one edit, as fast typing produces them.
  */
 export function boundedEditDistance(left: string, right: string, limit: number): number {
   if (left === right) {

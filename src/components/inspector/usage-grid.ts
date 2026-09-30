@@ -24,13 +24,9 @@ export interface UsageCell {
 }
 
 /**
- * One cell per node on the board — not per machine type: the grid's job is to
- * point back at a specific node on the canvas, and two Chemical Reactors doing
- * different jobs are two different answers to "what is idle?".
- *
- * Sorted busiest first so overdemanded nodes lead and dead weight sinks to the
- * end of the grid. Disabled and broken nodes are skipped — they have no usage
- * to report.
+ * One cell per board node, not per machine type, so each cell points at a
+ * specific card. Sorted busiest first; disabled and broken nodes are skipped
+ * because they have no usage to report.
  */
 export function buildUsageCells(
   project: Pick<FactoryProject, "nodes" | "recipes">,

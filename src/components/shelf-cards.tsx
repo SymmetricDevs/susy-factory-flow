@@ -8,9 +8,8 @@ import { GT_TIER_COLORS } from "@/components/flow/tier-colors";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
 
 /**
- * Everything the Setups and Pockets shelves render the same way: tag
- * chips, tier badges, the Needs/Makes stat sections, and the one hover
- * card a whole row reveals.
+ * Shared pieces for plan listings (library, share and export surfaces): tag
+ * chips, tier badges, the Needs/Makes stat sections, and a row's hover card.
  */
 
 export function formatRelativeDate(iso: string): string {
@@ -69,9 +68,8 @@ export function TagChips({
 export type VoltageTier = Exclude<MachineTier, "DEMO">;
 
 /**
- * The GT voltage badge, worn exactly like the tier button on a card — and a
- * fixed column: every badge is as wide as the widest tier label, so the
- * text after them all starts on the same line.
+ * The GT voltage badge, styled like a card's tier button, at a fixed width
+ * (the widest tier label) so the text after it aligns.
  */
 export const TIER_BADGE_WIDTH = "w-8";
 
@@ -181,9 +179,9 @@ export function renderIoStats(
 }
 
 /**
- * The whole story a hovered row tells: icon and full title (names truncate
- * in a 344px column), who made it and when, the headline numbers with the
- * tier in its GT colour, the description, then Needs/Makes.
+ * A hovered row's full card: icon and full title (rows truncate names),
+ * author and date, headline numbers with the tier in its GT colour, the
+ * description, then Needs/Makes.
  */
 export function renderEntryHoverCard(entry: {
   icon?: EntryIcon;
@@ -199,8 +197,7 @@ export function renderEntryHoverCard(entry: {
   outputs?: PlanResourceStat[];
 }): ReactNode {
   return (
-    // Wide enough that each of the two resource columns gets the room the
-    // old single stacked column had, so nothing wraps or truncates.
+    // Wide enough that neither resource column wraps or truncates.
     <div className="w-[34rem]">
       <div className="flex items-center gap-2">
         {entry.icon ? (

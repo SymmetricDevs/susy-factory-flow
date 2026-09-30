@@ -1,10 +1,10 @@
 /**
  * The planner's font, as a setting.
  *
- * Everything renders in Inter by default (Monocraft, the pixel font, until
- * 2026-09-07). This module owns the choice of something else: the option list the settings dialog shows, the localStorage
- * key it persists to, and the `data-app-font` attribute on <html> that
- * globals.css keys its `--app-font` overrides on.
+ * Everything renders in Inter by default. This module owns the choice of
+ * something else: the option list the settings dialog shows, the
+ * localStorage key it persists to, and the `data-app-font` attribute on
+ * <html> that globals.css keys its `--app-font` overrides on.
  *
  * Two places must stay in step with `APP_FONTS`:
  * - the `html[data-app-font="..."]` rules in globals.css (each option's

@@ -20,7 +20,7 @@ import {
 type VoltageTier = Exclude<MachineTier, "DEMO">;
 
 /**
- * EVERY HATCH IS AN EU/t FIGURE (Jack, 2026-09-07): a regular hatch of tier
+ * EVERY HATCH IS AN EU/t FIGURE: a regular hatch of tier
  * T carries 2 amps of T's voltage, an exotic hatch its whole rating of
  * them. The calculator adds and subtracts these from the card's number and
  * remembers nothing.

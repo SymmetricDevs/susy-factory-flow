@@ -91,14 +91,14 @@ export function normalizeHatchInput(
 }
 
 /**
- * Switching a card to another machine keeps the voltage it ran at
- * (community report, 2026-09-23: an EV Forge Hammer switched to the
- * Industrial Sledgehammer came up 63A EV, the full-parallel seed chasing
- * parallels that grow with voltage). A singleblock becoming a multiblock
- * gets ONE hatch of its own tier - 1A, what the singleblock ran on - and a
- * multiblock becoming a singleblock takes its hatch tier. Multiblock to
- * multiblock keeps its hatches through the edit funnel, and singleblock to
- * singleblock keeps the caller's reset, so both answer with nothing.
+ * Switching a card to another machine keeps the voltage it ran at. Never run
+ * the full-parallel seed on a switch: voltage-scaled parallels chase it up
+ * the tiers (an EV singleblock would become a many-amp EV multiblock). A
+ * singleblock becoming a multiblock gets ONE hatch of its own tier (1A, what
+ * the singleblock ran on); a multiblock becoming a singleblock takes its
+ * hatch tier. Multiblock to multiblock keeps its hatches through the edit
+ * funnel, and singleblock to singleblock keeps the caller's reset, so both
+ * answer with nothing.
  */
 export function carryMachineVoltage(
   from: { recipe: Recipe; node: FactoryNode },
@@ -128,11 +128,11 @@ export function carryMachineVoltage(
 }
 
 /**
- * A new tier keeps the amps, except that anything under one amp becomes one:
- * a card seeded at 0.94A LV and moved to HV read 0.94A HV, just under the
- * tier's own voltage, and ran like an MV machine. A lone hatch is 1A. Zero
- * stays zero, and typed decimals of one amp or more (a mixed build written
- * in one tier's terms) stay as typed.
+ * A new tier keeps the amps, except that anything under one amp becomes one
+ * (0.94A carried to a higher tier would sit just under that tier's voltage
+ * and run a tier low). A lone hatch is 1A. Zero stays zero, and typed
+ * decimals of one amp or more (a mixed build written in one tier's terms)
+ * stay as typed.
  */
 export function ampsForNewTier(amps: number): number {
   return amps > 0 && amps < 1 ? 1 : amps;

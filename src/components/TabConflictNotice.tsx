@@ -4,10 +4,9 @@ import { CopyCheck, X } from "lucide-react";
 import { useDesignStore } from "@/store/design-store";
 
 /**
- * Said once, when this browser tab held edits to a design another tab had
- * already saved a newer version of (design-store.ts, persistCanvas): the newer
- * version stayed, and this tab's edits became a copy. Nothing was lost, and
- * the player needs to know where each half went.
+ * Shown once when this tab's edits collided with a newer save from another
+ * tab (design-store.ts, persistCanvas): the newer version stayed and this
+ * tab's edits became a copy, so the notice says where each went.
  */
 export function TabConflictNotice() {
   const conflict = useDesignStore((state) => state.tabConflict);

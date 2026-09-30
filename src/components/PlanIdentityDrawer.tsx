@@ -24,18 +24,15 @@ import { EntryIconSlot, IconPicker, iconSuggestionsFromStats } from "@/component
 import { formatRelativeDate } from "@/components/shelf-cards";
 
 /**
- * The plan bar: one permanent slim row above the board carrying the plan's
- * face - icon, name, blurb - and, when the plan is linked to a community
- * post, that post's life: author, dates, votes, and the way back to the
- * posted version.
+ * The plan bar: a slim row above the board with the plan's icon, name and
+ * blurb, plus, for a plan linked to a community post, the post's author,
+ * dates, votes and link.
  *
- * Everything edits IN PLACE and edits YOUR copy, whoever wrote the original:
- * the icon is a button, the name is an inline field (it is the tab's name -
- * every save stamps the tab's name over the plan, so renaming here IS a tab
- * rename), and the blurb sits behind the one chevron because a textarea is
- * the only thing that cannot live on a 36px bar. Post actions ride the right
- * end: vote, link, share. There is no save-to-post and no reset: a posted
- * design IS its post, and every save reaches it (post-follow.ts).
+ * Everything edits YOUR copy in place: the icon is a button, the name is an
+ * inline field (it is the tab's name, which every save stamps over the plan,
+ * so this IS a tab rename), and the blurb sits behind the chevron. Post
+ * actions (vote, link, share) sit at the right end. No save-to-post: a
+ * posted design IS its post, and every save reaches it (post-follow.ts).
  */
 
 const OPEN_STORAGE_KEY = "gtnh-factory-flow.plan-card-open.v1";
@@ -217,9 +214,9 @@ export function PlanIdentityDrawer() {
 }
 
 /**
- * The post's life on the right end of the bar: quiet meta, then the action
- * buttons. Mounted only while the plan carries a link, keyed by it, so the
- * summary fetch and the fingerprint math track the link and nothing else.
+ * The post's meta and action buttons at the bar's right end. Mounted only
+ * while the plan carries a link, keyed by it, so the summary fetch and
+ * fingerprint math track the link alone.
  */
 function LinkedPostStrip({ planId }: { planId: string }) {
   const project = useFactoryStore((state) => state.project);
@@ -284,10 +281,9 @@ function LinkedPostStrip({ planId }: { planId: string }) {
     // The plan's own fields win once they exist; this only fills silence.
   }, [post, project.description, project.icon, setProjectIdentity]);
 
-  // A link to a post that is not yours is a leftover from when copies kept
-  // one. A copy is a plain design now, so the link is dropped the moment the
-  // server says so - only while signed in, since signed out EVERY post reads
-  // as someone else's.
+  // A design linked to a post that is not yours is stale (copies are plain
+  // designs), so the link is dropped once the server says so. Only while
+  // signed in: signed out, EVERY post reads as someone else's.
   useEffect(() => {
     if (post && signedIn && post.isMine === false) {
       clearProjectCommunityLink();

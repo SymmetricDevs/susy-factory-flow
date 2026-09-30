@@ -9,12 +9,10 @@ import { useFactoryStore } from "@/store/factory-store";
 type CopyState = "idle" | "working" | "copied" | "failed";
 
 /**
- * Copy the plan to the clipboard, for sharing without an account (Jack,
- * 2026-09-23). What lands there is a link with the whole plan packed inside
- * it (plan-code.ts): click it and the planner opens the plan, or paste it
- * into the plan menu's "Paste a copied plan". Beside the screenshot button,
- * on every plan bar. Worded like ShadowTheAge's "Copy shareable link to
- * clipboard", never as a "code": players read that as programming.
+ * Copies a link with the whole plan packed inside it (plan-code.ts), for
+ * sharing without an account: opening it loads the plan, or it can be pasted
+ * into the plan menu's "Paste a copied plan". Never call it a "code" in UI
+ * copy; players read that as programming.
  */
 export function CopyPlanButton() {
   const isEmpty = useFactoryStore((state) => state.project.nodes.length === 0);

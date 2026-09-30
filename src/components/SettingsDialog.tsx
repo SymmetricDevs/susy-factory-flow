@@ -30,14 +30,10 @@ import {
 } from "@/lib/board-sounds";
 
 /**
- * The planner's settings, in one small sheet.
- *
- * One row per setting, its name and its control and nothing else (Jack,
- * 2026-09-07). Every change applies immediately, to the page behind the
- * dialog included, so choosing is looking rather than committing.
- *
- * Owned by AppHeader the same way the share dialog is, so the compact menu can
- * close behind it without unmounting it.
+ * The planner's settings in one small sheet: one row per setting, name and
+ * control only. Changes apply immediately, including to the page behind.
+ * Owned by AppHeader (like the share dialog) so the compact menu can close
+ * without unmounting it.
  */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [font, setFont] = useState<AppFontId>(() => getStoredAppFont());
@@ -46,10 +42,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const canPlayTimelapse = useFactoryStore(
     (state) => state.project.nodes.length + (state.project.storages?.length ?? 0) >= 2,
   );
-  // The preview thump fires when the drag SETTLES, not per input event: a
-  // slider emits dozens of changes a second, and previewing each one had
-  // the notes stealing each other into fragments while the repeat duck
-  // faded the pile down.
+  // The preview sound fires when the drag SETTLES, not per input event: a
+  // slider emits dozens of changes a second, which would chop the previews
+  // into fragments.
   const previewTimerRef = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(previewTimerRef.current), []);
 
@@ -102,8 +97,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* One plate per setting: its name on the left, its control on the
-            right, nothing else (Jack, 2026-09-07: no subtext anywhere). */}
+        {/* One plate per setting: name left, control right, no subtext. */}
         <div className="flex min-h-0 flex-1 flex-col divide-y divide-[var(--mc-36)] overflow-y-auto px-4">
           <Row label="Font">
             <select
@@ -176,10 +170,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </span>
           </Row>
 
-          {/* The build timelapse's door, here since 2026-09-06 (it was a key
-              beside the view options). Each preset applies its whole look for
-              the run and hands your settings back when it ends. The dialog
-              closes first so the board has the screen. */}
+          {/* The build timelapse. Each preset applies its whole look for the
+              run and restores your settings when it ends. The dialog closes
+              first so the board has the screen. */}
           <Row label="Animation" dim={!canPlayTimelapse}>
             {BOARD_TIMELAPSE_PRESETS.map((preset) => (
               <button
@@ -226,8 +219,7 @@ function Row({
   );
 }
 
-/* A flat row with a pill switch: the arrange sheet's ON/OFF plates read as
-   too much here (Jack, 2026-09-07). */
+/* A flat row with a pill switch. */
 function ToggleRow({
   label,
   on,

@@ -139,7 +139,7 @@ export function RecipeListPicker({
     fadeKeep: () => anchorRef.current?.closest("[data-node-glance-root]"),
   });
 
-  // The menu PORTALS to the body: inside the card it lived in the node
+  // The menu PORTALS to the body: inside the card it would sit in the node
   // layer's stacking context, under the marching-dash canvas and every
   // higher card. Measured once from the opener on open; a board pan
   // closes it anyway through the click-away.

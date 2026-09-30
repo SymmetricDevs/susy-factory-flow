@@ -7,15 +7,12 @@
  * board. Which wires a line hops over (the ones behind it, see
  * compareEdgeDepth) is decided there; this only draws the bumps.
  *
- * A hop is measured ALONG THE WHOLE WIRE, not along one straight run. It
- * used to be built run by run, so a crossing within a bump's reach of a
- * bend - common, since the router bends wherever it likes - was squeezed
- * onto the run it happened to fall on: the bump started at the corner and
- * met the next run at a right-angle kink, and a bend sitting exactly on the
- * other wire got no hop at all (Jack, 2026-09-23: "this is looking broken").
- * Now a hop starts where the wire first comes within clearance of the line it
- * crosses and ends where it is clear again, whichever runs those points are
- * on, and the bump is drawn across the chord between them.
+ * A hop is measured ALONG THE WHOLE WIRE, not along one straight run: it
+ * starts where the wire first comes within clearance of the line it crosses
+ * and ends where it is clear again, whichever runs those points are on, and
+ * the bump is drawn across the chord between them. Built run by run, a
+ * crossing near a bend would kink at the corner, and a bend exactly on the
+ * other wire would get no hop.
  */
 
 export interface HopPoint {

@@ -306,10 +306,9 @@ function TotalLine({ label, peak, average }: { label: string; peak: Figure; aver
 }
 
 /**
- * EU/t and L/s sit a few pixels apart in this list and read alike at a
- * glance, so each figure wears its energy's mark: a bolt for EU, steam for
- * litres. The units themselves stay as they are - power is a per-tick fact,
- * steam a per-second one.
+ * Each figure wears its energy's mark (a bolt for EU, steam for litres) so
+ * EU/t and L/s are not confused. Units stay per tick for power and per
+ * second for steam.
  */
 function EuMark() {
   return <Zap aria-hidden className="mr-0.5 inline h-2.5 w-2.5 -translate-y-px text-amber-400" />;
@@ -467,12 +466,11 @@ function ListLine({
       >
         <span className="flex min-w-0 flex-1 items-center gap-1">
           {indent ? (
-            /* The branch: a vertical line dropping from under the parent's
-             icon, elbowing out to this build's count. Anchored to the
-             BUTTON's box (inset-y-0), not the flex row - the row's box
-             stops at the padding, and the 4px of it between rows is
-             exactly the gap that used to chop the stem into dashes. The
-             last build stops at its elbow, closing the stem in an L. */
+            /* The branch: a vertical line from under the parent's icon,
+             elbowing out to this build's count. Anchored to the BUTTON's box
+             (inset-y-0), not the flex row, whose box stops at the padding
+             and would break the stem between rows. The last build ends at
+             its elbow, closing the stem in an L. */
             <>
               <span aria-hidden className="absolute bottom-0 left-2 top-0 w-[24px] opacity-60">
                 <span
@@ -494,10 +492,9 @@ function ListLine({
                   showAmount={false}
                   bare
                   tooltip={false}
-                  // Machine renders are 256px squares whose art fills barely
-                  // half the frame; asked for raw, the row showed a 12px
-                  // machine swimming in margin. machineArtPixels crops the
-                  // transparent frame exactly, so the art fills the box.
+                  // Machine renders are 256px squares whose art fills about
+                  // half the frame; machineArtPixels crops the transparent
+                  // margin so the art fills the box.
                   iconPixelSize={machineArtPixels(24)}
                   className="!h-full !w-full"
                 />

@@ -51,8 +51,8 @@ interface ResourceIconProps {
   itemZoom?: number;
   showConsumedState?: boolean;
   /**
-   * Set on slots that rotate through an oredict's members. `locked` means a
-   * player scrolled the slot and it has stopped on one item.
+   * Set on slots that rotate through an oredict's members. `locked` means the
+   * slot was scrolled and has stopped on one item.
    */
   alternativeState?: "cycling" | "locked";
 }
@@ -111,9 +111,7 @@ function ResourceIconComponent({
 
       {resource && showAmount ? <AmountLabel resource={resource} /> : null}
 
-      {/* A circuit is the setting the recipe runs on, not an ingredient. It is
-          never consumed, so "NC" says nothing a player does not already know
-          and only crowds a slot that is small to begin with. */}
+      {/* Circuits get no "NC" marker: they are a machine setting, never consumed. */}
       {showConsumedState && resource?.consumed === false && !isProgrammedCircuitResource(resource) ? (
         <span
           title="Not consumed"
@@ -143,9 +141,8 @@ function ResourceIconComponent({
     return icon;
   }
 
-  // Built only on the tooltip path. It used to run for every icon regardless,
-  // including the hundreds rendered with `tooltip={false}`, which threw away a
-  // multi-pass string build per icon per render.
+  // Built only on the tooltip path: icons rendered with `tooltip={false}`
+  // number in the hundreds and must skip this string build.
   return (
     <MinecraftTooltip label={buildTooltipLabel(resource, alternativeState)}>{icon}</MinecraftTooltip>
   );
@@ -197,14 +194,10 @@ function displayResourceEquals(
 }
 
 /**
- * Memoised because the canvas and recipe book mount these by the hundred, and a
- * single parent re-render otherwise re-runs every icon's label regexes, class
- * joins and inline style objects.
- *
- * With a field-wise resource comparison, because nearly every call site builds
- * its resource fresh (`{...port.resource, amount: 1}`): the default shallow
- * compare saw a new identity each time and the memo never hit exactly where it
- * was written to.
+ * Memoised because the canvas and recipe book mount these by the hundred.
+ * The resource is compared field by field because nearly every call site
+ * builds it fresh (`{...port.resource, amount: 1}`), which defeats a
+ * shallow compare.
  */
 export const ResourceIcon = memo(
   ResourceIconComponent,
@@ -223,10 +216,9 @@ export const ResourceIcon = memo(
 );
 
 /**
- * A slot never accepts the other form, so a fluid listed on a cell (or the
- * reverse) must not be advertised as a substitute, marker included. Saying so
- * would promise a wire the board refuses to draw; crossing the two forms takes a
- * Canner, like it does in game.
+ * A slot never accepts the other form (fluid vs filled cell), so a cross-form
+ * alternative must not be advertised as a substitute, marker included: the
+ * board would refuse the wire. Crossing forms takes a Canner, as in game.
  */
 function shouldShowAlternativeMarker(resource: DisplayResourceAmount): boolean {
   return Boolean(
@@ -288,14 +280,9 @@ function buildTooltipLabel(
 }
 
 /**
- * Ore dictionary bookkeeping, which is not what you asked about.
- *
- * Hovering a slot that rotates through what it accepts used to answer with the
- * group's name and then every member of it, twice: once from the dataset's own
- * tooltip and once built here. On a group like `logWood` that is eight wrapped
- * lines of names covering the card, in front of the one thing you pointed at.
- * The wheel shows alternatives one at a time, so the tip only names what is
- * on the slot right now.
+ * Ore dictionary bookkeeping lines, left out of a rotating slot's tooltip:
+ * listing every group member (e.g. `logWood`) covers the card. The wheel
+ * shows alternatives one at a time, so the tip names only the current one.
  */
 function isOreDictionaryNoiseLine(line: string): boolean {
   const normalized = line.trim().toLowerCase();
@@ -506,10 +493,9 @@ function IconImage({
 }
 
 /**
- * EU's face: a chunky pixel-family lightning bolt in the power gold, drawn
- * rather than fetched - power is synthesized by the app and has no sprite in
- * any dataset. Crisp edges (no anti-aliased curves) so it sits beside the
- * item pixel art without looking imported from another game.
+ * EU's icon: a pixel-art lightning bolt in power gold, drawn inline because
+ * power is synthesized by the app and has no dataset sprite. Crisp edges to
+ * match the item pixel art.
  */
 function PowerIconGlyph({ iconPixelSize }: { iconPixelSize?: number }) {
   const size = iconPixelSize ?? 32;
@@ -529,18 +515,12 @@ function PowerIconGlyph({ iconPixelSize }: { iconPixelSize?: number }) {
 }
 
 /**
- * One item's sprite, and what stands in for it until it arrives.
+ * One item's sprite, and its placeholder until it arrives.
  *
- * A plain `<img>` paints its ALT TEXT while it loads, so a panel of icons filled
- * itself with item names in a 16px font, sized for a box a fraction of their
- * width, for as long as the sprites took to arrive. The image is therefore held
- * hidden until it has actually decoded - `visibility` hides alt text where
- * `opacity` would not - and an outline waits in its place.
- *
- * The outline only becomes visible after a beat (see SPRITE_PULSE_DELAY_MS). A
- * sprite that was already cached arrives inside that beat and the placeholder is
- * never seen at all, which is the whole point: the flash it replaces was the
- * complaint, so it must not become a flash of its own.
+ * A plain `<img>` paints its ALT TEXT while loading, so the image is held
+ * hidden until decoded (`visibility`, because `opacity` does not hide alt
+ * text) with an outline in its place. The outline appears only after
+ * SPRITE_PULSE_DELAY_MS, so a cached sprite never flashes a placeholder.
  */
 function SpriteImage({
   resource,
@@ -683,12 +663,9 @@ function AspectIconImage({
 }
 
 /**
- * Fraction of the cell the fluid swatch occupies.
- *
- * Item sprites carry their own transparent margin, so a full-bleed colour block
- * would read as much heavier than the items beside it. Insetting the swatch puts
- * it on the same visual footing. Exported so storage cards can invert it when
- * they want the swatch itself, not the cell, at a target size.
+ * Fraction of the cell the fluid swatch occupies. Item sprites carry a
+ * transparent margin, so a full-bleed swatch would read much heavier.
+ * Exported so storage cards can invert it to size the swatch itself.
  */
 export const FLUID_ICON_SCALE = 0.56;
 
@@ -731,12 +708,9 @@ function FluidIconImage({
 }
 
 /**
- * Deterministic colour for a fluid with no dataset art.
- *
- * Well-known fluids are named so they look right; everything else is hashed from
- * its id, which keeps a given fluid the same colour everywhere in the app and
- * across reloads. Exported so tank cards can tint themselves the same colour
- * their fluid renders in.
+ * Deterministic colour for a fluid with no dataset art: well-known fluids by
+ * name, everything else hashed from its id so it is stable everywhere.
+ * Exported so tank cards can tint themselves to match.
  */
 export function getFallbackFluidColor(id: string): string {
   const normalized = id.toLowerCase();
@@ -834,14 +808,9 @@ const ASPECT_COLORS: Record<string, string> = {
 };
 
 /**
- * True when this fluid has no sprite and draws the flat colour swatch.
- *
- * The distinction the sizing call sites need: a fluid WITH rendered art
- * carries a baked-in transparent margin like every rendered sprite, so it
- * must be drawn oversized and cropped; only the artless swatch draws
- * edge-to-edge. The old rule "fluids are solid squares" dates from datasets
- * that shipped no fluid art at all, and kept sprite fluids at half the size
- * of their item neighbours.
+ * True when this fluid has no sprite and draws the flat colour swatch. A
+ * fluid WITH rendered art has a baked-in transparent margin like any sprite,
+ * so it must be drawn oversized and cropped; only the swatch is edge-to-edge.
  */
 export function isSwatchFluid(
   resource: Pick<ResourceAmount, "kind" | "iconPath" | "iconAtlas">,
@@ -851,11 +820,9 @@ export function isSwatchFluid(
 
 /**
  * The iconPixelSize that makes a rendered sprite's ART fill a box of the
- * given size, minus a small breathing margin.
- *
- * Most rendered art occupies the middle half of its canvas. Keep that generous
- * size; the renderer measures each item's opaque bounds and caps only artwork
- * that would cross the slot's margin. Fluids have their own sizing helper.
+ * given size, minus a small margin. Most rendered art occupies the middle
+ * half of its canvas; the renderer caps only artwork whose opaque bounds
+ * would cross the slot's margin. Fluids have their own helper.
  */
 export function spriteArtPixels(box: number): number {
   const margin = Math.max(2, Math.round(box * 0.055));
@@ -863,11 +830,8 @@ export function spriteArtPixels(box: number): number {
 }
 
 /**
- * The iconPixelSize that draws a FLUID sprite's square at a comfortable
- * fraction of its box. A fluid square covers every pixel of its bounds where
- * item art is sparse and irregular, so at equal bounds the fluid reads
- * heavier; it sits at 78% of the box instead - between the classic swatch's
- * 56% inset and the edge-to-edge fill that crowded its neighbours. The
+ * The iconPixelSize that draws a FLUID sprite's square at 78% of its box:
+ * a solid square reads heavier than sparse item art at equal bounds. The
  * canvas is twice its art, so the image doubles the wanted art size.
  */
 export function fluidArtPixels(box: number): number {

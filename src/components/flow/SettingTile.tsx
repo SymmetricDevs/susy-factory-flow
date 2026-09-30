@@ -14,7 +14,7 @@ import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 
 /**
- * ONE TILE GRAMMAR for a card's machine settings (docs/config-tiles-prd.md).
+ * ONE TILE GRAMMAR for a card's machine settings.
  *
  * A setting is a captioned tile with a value and one gesture. A SHORT
  * ladder (six rungs or fewer: pressure, a casing mark, on/off) is stepped
@@ -60,7 +60,7 @@ export const STEPPER_MAX_RUNGS = 6;
  */
 const CAPTIONS: Record<string, string> = {
   heatingCoil: "Coil",
-  // Two different blocks: a lathe player was misled by a bare "Casing".
+  // Two different blocks, so neither is a bare "Casing".
   pipeCasing: "Fluid pipe",
   itemPipeCasing: "Item pipe",
   solenoidCoil: "Solenoid",
@@ -112,7 +112,7 @@ export function controlHasFaces(control: MachineConfigTierControl): boolean {
 function Face({ resource }: { resource: ResourceAmount }) {
   return (
     // Same whole-item fit as a port chip. No `alternatives`: the blue plus that marks an
-    // oredict slot means nothing on a coil (Jack, 2026-09-06).
+    // oredict slot means nothing on a coil.
     <span className="relative flex h-[18px] w-[18px] shrink-0 items-center justify-center overflow-hidden">
       <ResourceIcon
 
@@ -128,11 +128,10 @@ function Face({ resource }: { resource: ResourceAmount }) {
   );
 }
 
-// No native `title` anywhere on a tile (Jack, 2026-09-07): the global title
-// tooltip turns a titled element inside a rich area into a STOP, so hovering
-// the value well swapped the setting's whole story for the bare number. One
-// setting, one hover, everywhere on the tile - the rich panel already names
-// the current value in its subtitle.
+// No native `title` anywhere on a tile: the global title tooltip turns a
+// titled element inside a rich area into a STOP, replacing the setting's
+// whole story with the bare number. One setting, one hover, everywhere on
+// the tile; the rich panel already names the current value.
 export function SettingTile({
   caption,
   value,

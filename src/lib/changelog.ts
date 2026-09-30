@@ -40,6 +40,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.9.5",
+    date: "2026-09-30",
+    headline: "Behind-the-scenes cleanup",
+    notes: [
+      "Unused code was removed. Plans, results and controls work exactly as before.",
+    ],
+  },
+  {
     version: "3.9.4",
     date: "2026-09-29",
     headline: "Every machine in the recipe search shows its recipes",

@@ -9,6 +9,7 @@ import {
 import { getPowerSource, POWER_SOURCES } from "./registry";
 import { buildPowerSettingsReader } from "./types";
 import { resolvePowerResource } from "./planner-data";
+import { htgrOperation } from "./sources/reactors";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 
 /**
@@ -218,6 +219,22 @@ describe("turbines", () => {
     expect(model.outputs[0].perSecond).toBe(model.inputs[0].perSecond);
   });
 
+  it("runs SC steam at the rotor's own steam flow, like HP", () => {
+    const rotor = { rotor: "MAR-Ce-M200 Steel", size: "Large", fitting: "tight", flowMode: "optimal" };
+    const sc = compute("large-sc-steam-turbine", rotor);
+    const hp = compute("large-hp-steam-turbine", rotor);
+    // Workbook and MTELargeTurbineSCSteam: 22,500 L/t at 1 EU/L x 145%.
+    expect(sc.inputs[0]).toMatchObject({ name: "SC Steam", perSecond: 22_500 * 20 });
+    expect(sc.euPerTick).toBe(32_625);
+    expect(sc.inputs[0].perSecond).toBe(hp.inputs[0].perSecond);
+    // The XL is sixteen rotors, nothing more; dense steam divides by 1000.
+    const xl = { rotor: "Duranium", size: "Large", grade: "Dense SC Steam", flowMode: "optimal" };
+    const tight = compute("xl-turbo-sc-steam-turbine", { ...xl, fitting: "tight" });
+    const loose = compute("xl-turbo-sc-steam-turbine", { ...xl, fitting: "loose" });
+    expect(tight.inputs[0].perSecond).toBe(1_228 * 20);
+    expect(loose.inputs[0].perSecond).toBe(48_328 * 20);
+  });
+
   it("penalizes over-optimal flow but caps at max", () => {
     const source = getPowerSource("large-steam-turbine");
     const atOptimal = compute("large-steam-turbine", {
@@ -354,6 +371,37 @@ describe("reactors and endgame", () => {
     expect(model.outputs[0].perSecond).toBe(4800 * 20);
   });
 
+  it("burns THTR pebbles and hands them back burned, a ball per 64", () => {
+    // 675,000 x 0.5% = 3,375 pebbles per 9-hour operation: 52 balls + 47 loose.
+    const model = compute("thtr", { fill: "675000" });
+    const perOperation = (perSecond: number) => Math.round(perSecond * 32_400);
+    expect(perOperation(model.inputs.find((flow) => flow.name === "TRISO pebble")!.perSecond)).toBe(3375);
+    expect(perOperation(model.outputs.find((flow) => flow.name === "Burned Out TRISO pebble ball")!.perSecond)).toBe(52);
+    expect(perOperation(model.outputs.find((flow) => flow.name === "Burned Out TRISO pebble")!.perSecond)).toBe(47);
+    expect(resolvePowerResource("TRISO pebble")).toMatchObject({ kind: "item", id: "bartworks:bw.thtrmaterials@4" });
+    // The helium is a one-time charge the reactor keeps, not a flow.
+    expect(model.inputs.some((flow) => flow.name === "Helium")).toBe(false);
+  });
+
+  it("runs an HTGR operation the way kubatech does: fuel, helium, burned fuel", () => {
+    // Glowstone at a full 10,000 balls: exponent 1.1 gives 16,528 ticks of
+    // progress, and full coolant + water add 57 + 24 a tick, so 202 ticks.
+    const pebble = { base: 2, mult: 1.2, exp: 1.1 };
+    const run = htgrOperation(pebble, 10_000);
+    expect(run.cycleTicks).toBe(202);
+    expect(run.burned).toBeCloseTo(14.159265, 5);
+    expect(run.heliumLost).toBe(256);
+    const model = compute("htgr", { pebble: "Glowstone", fill: "10000" });
+    const cycleSeconds = 202 / 20;
+    expect(model.inputs.find((flow) => flow.name === "TRISO Fuel (Glowstone)")!.perSecond).toBeCloseTo(run.burned / cycleSeconds, 9);
+    expect(model.outputs.find((flow) => flow.name === "Burned Out TRISO Fuel (Glowstone)")!.perSecond).toBeCloseTo(run.burned / cycleSeconds, 9);
+    expect(model.inputs.find((flow) => flow.name === "Helium")!.perSecond).toBeCloseTo(256 / cycleSeconds, 9);
+    expect(resolvePowerResource("TRISO Fuel (Uranium 235)")?.id).toBe("kubatech:htgr_item_triso_fuel@1");
+    // A half-full reactor keeps its fuel base: the ball count alone scales the draw.
+    const half = htgrOperation(pebble, 5_000);
+    expect(half.energyMultiplier).toBeCloseTo(2 * Math.pow(1.1, 1.05), 9);
+  });
+
   it("computes the HTGR glowstone multiplier (2.444)", () => {
     // COOLANT_PER_BALL is a per-tick figure; hot coolant out = 0.5 x fill x
     // multiplier L/t, and the steam line is the water line x160.
@@ -379,7 +427,8 @@ describe("reactors and endgame", () => {
       { name: "Li2BeF4", perSecond: 2, unit: "L" },
     ]);
     expect((model.euPerTick * 20) / model.inputs[0].perSecond).toBe(euPerLiter);
-    expect(model.outputs.some((flow) => flow.name === "Uranium-233")).toBe(true);
+    // A 1-in-300 chance every tick of 1-10 L.
+    expect(model.outputs.find((flow) => flow.name === "Uranium-233")?.perSecond).toBeCloseTo(0.36667, 5);
     const recipe = buildPowerRecipe("lftr", { fuel }, "lftr-test");
     expect(recipe?.power?.euPerTick).toBe(euPerTick);
     expect(recipe?.outputs.find((slot) => slot.kind === "power")?.amount).toBe(euPerTick * 20);

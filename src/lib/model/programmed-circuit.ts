@@ -27,10 +27,9 @@ export interface RecipeProgrammedCircuit {
  * The circuit slot a recipe runs on, or undefined for a recipe that has no
  * such slot at all.
  *
- * Every GregTech machine has the slot, so a GregTech recipe always answers -
- * with a number, or with the empty slot that means it runs on whatever the
- * circuit happens to be set to. Those two cases look identical when the slot
- * is left off entirely, which is the whole reason to draw it.
+ * Every GregTech machine has the slot, so a GregTech recipe always answers:
+ * with a number, or with an empty slot meaning any setting. The card draws
+ * the slot so those two cases look different.
  */
 export function getRecipeProgrammedCircuit(
   recipe: Pick<Recipe, "kind" | "inputs" | "programmedCircuit">,
@@ -40,8 +39,7 @@ export function getRecipeProgrammedCircuit(
   }
 
   // A circuit setting is a small number. Older datasets put a whole item name
-  // in this field, and a card drawn from one would try to wear "Circuit Board
-  // (configuration 32100)" as a setting.
+  // in this field ("Circuit Board (configuration 32100)"); ignore those.
   const raw = recipe.programmedCircuit;
   const setting = raw && /^\d{1,2}$/.test(raw) ? raw : undefined;
 

@@ -3,7 +3,7 @@
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
 import { Menu, Settings, X } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { AccountMenu } from "./community/AccountMenu";
 import { SHOW_PACK_PICKER } from "./AppHeader";
 import { AppIdentity } from "./AppIdentity";
@@ -12,12 +12,20 @@ import { MenuLinks } from "./HeaderLinks";
 
 interface AppMenuProps {
   onLoadDatasetVersion: (versionId: string) => void;
+  /** Opens the share dialog, which the header owns; see AppHeader. */
   onShare: () => void;
+  /** Opens the export-image dialog, also owned by the header. */
   onExportImage: () => void;
+  /** Opens the settings dialog, also owned by the header. */
   onOpenSettings: () => void;
 }
 
-/** The compact version of the planner's top bar. */
+/**
+ * The whole top bar folded into one button, for compact windows. An
+ * overflowing bar makes a mobile browser widen the layout viewport and shrink
+ * the page, so the bar keeps only the name and version chip and everything
+ * else moves here: a sheet under the header, dismissed by a tap elsewhere.
+ */
 export function AppMenu({
   onLoadDatasetVersion,
   onShare,
@@ -45,15 +53,19 @@ export function AppMenu({
       {isOpen ? (
         <div
           ref={sheetRef}
+          // Anchored to the header (the app's one `relative` bar). `text-sm`
+          // here because the global font reset outranks text-* on buttons,
+          // which inherit this size instead.
           className="absolute right-2 top-full z-[90] mt-1 flex w-[min(320px,calc(100*var(--ui-vw)-16px))] flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.5)]"
         >
-          {SHOW_PACK_PICKER && (
+          {/* Pinned with the header's pack picker: see SHOW_PACK_PICKER. */}
+          {SHOW_PACK_PICKER ? (
             <MenuSection label="Pack">
               <div className="px-2 py-1">
                 <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
               </div>
             </MenuSection>
-          )}
+          ) : null}
           <MenuSection label="This plan">
             <BoardActions
               variant="list"
@@ -87,7 +99,7 @@ export function AppMenu({
   );
 }
 
-function MenuSection({ label, children }: { label: string; children: ReactNode }) {
+function MenuSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section className="border-t border-line pt-1 first:border-t-0 first:pt-0">
       <h2 className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-fg-muted">

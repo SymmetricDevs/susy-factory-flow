@@ -16,9 +16,9 @@ export const dynamic = "force-dynamic";
 
 /**
  * Casts, switches, or (when re-sending the same value) retracts a vote on a
- * PUBLIC blueprint. Keyed by hashed IP + device id, exactly like plan votes:
- * anonymous but deduplicated. Counts are recounted rather than incremented —
- * idempotent under races and self-healing.
+ * PUBLIC blueprint. Keyed like plan votes (`makeVoterKey`: the signed-in
+ * user, else the device id), rate-limited by the actor key. Counts are
+ * recounted rather than incremented, so they are idempotent under races.
  */
 export async function POST(
   request: Request,

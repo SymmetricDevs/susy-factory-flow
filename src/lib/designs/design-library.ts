@@ -21,8 +21,7 @@ export interface DesignSummary {
   /**
    * Off the tab strip, on the shelf only. A closed design is not deleted:
    * closing a tab puts the design back on the shelf, opening it from the
-   * shelf clears the flag. Absent means open, which is what every design was
-   * before the shelf existed.
+   * shelf clears the flag. Absent means open.
    */
   closed?: boolean;
   /** The shelf folder this design is filed in; absent means unfiled. */
@@ -77,21 +76,16 @@ export function createDesignId(): string {
 }
 
 /**
- * Trims a user-typed name, falling back rather than allowing a blank tab.
- *
- * A tab with an empty label is unclickable in practice — there is nothing to aim
- * at — so an empty rename resolves to the placeholder instead of being rejected
- * with an error the user then has to dismiss.
+ * Trims a user-typed name. An empty name resolves to the placeholder rather
+ * than an error, because a tab with an empty label has nothing to click.
  */
 export function normalizeDesignName(name: string): string {
   return name.trim() || UNTITLED_DESIGN_NAME;
 }
 
 /**
- * First free name in the `base`, `base (2)`, `base (3)`… sequence.
- *
- * Duplicating twice has to produce two distinct tabs, and names are the only
- * thing distinguishing them on screen.
+ * First free name in the `base`, `base (2)`, `base (3)`… sequence, since names
+ * are the only thing distinguishing tabs on screen.
  */
 export function makeUniqueDesignName(base: string, taken: Iterable<string>): string {
   const normalizedBase = normalizeDesignName(base);
@@ -106,6 +100,58 @@ export function makeUniqueDesignName(base: string, taken: Iterable<string>): str
       return candidate;
     }
   }
+}
+
+/** The longest design name the account accepts (library sync refuses more). */
+const DESIGN_NAME_MAX_LENGTH = 80;
+const CONFLICT_COPY_SUFFIX = " (conflict copy)";
+
+/**
+ * The name for a tab's edits kept aside because another tab saved first.
+ *
+ * A copy of a conflict copy counts on ("(2)") rather than stacking the words,
+ * and the name is clipped to the account's limit, or sync refuses it.
+ */
+export function conflictCopyName(name: string, taken: Iterable<string>): string {
+  const base = name.replace(/(\s*\(conflict copy\)(\s*\(\d+\))?)+$/i, "").trim() || name.trim();
+  // Room for the suffix and for makeUniqueDesignName's " (NN)".
+  const room = DESIGN_NAME_MAX_LENGTH - CONFLICT_COPY_SUFFIX.length - 5;
+  const clipped = base.length > room ? base.slice(0, room).trimEnd() : base;
+  return makeUniqueDesignName(`${clipped}${CONFLICT_COPY_SUFFIX}`, taken);
+}
+
+/**
+ * A metadata-only write (rename, star, folder, sync's stamp) as it should
+ * land over the summary already `stored`.
+ *
+ * `updatedAt` is the PLAN's stamp, and a write that does not carry the plan
+ * must never move it: if a save lands between a writer's read and write,
+ * writing the old summary back puts the stamp behind the plan, and the saving
+ * tab then reads its own next save as another tab's (a spurious conflict
+ * copy). The marks read off the plan (icon, stat row, post link) stay the
+ * stored plan's for the same reason.
+ */
+export function keepStoredPlanMarks(
+  summary: DesignSummary,
+  stored: DesignSummary | undefined,
+): DesignSummary {
+  if (!stored || stored.updatedAt === summary.updatedAt) {
+    return summary;
+  }
+  const kept: DesignSummary = { ...summary, updatedAt: stored.updatedAt };
+  delete kept.icon;
+  delete kept.stats;
+  delete kept.communityPlanId;
+  if (stored.icon) {
+    kept.icon = stored.icon;
+  }
+  if (stored.stats) {
+    kept.stats = stored.stats;
+  }
+  if (stored.communityPlanId) {
+    kept.communityPlanId = stored.communityPlanId;
+  }
+  return kept;
 }
 
 export function createDesign(
@@ -183,12 +229,8 @@ export function touchDesignMeta<T extends DesignSummary>(
 
 /**
  * Tab order is the hand-picked `order` where one has been stamped, and
- * creation order (oldest first) everywhere else.
- *
- * Ordering by recency would reshuffle the strip under the pointer every time a
- * plan is edited, so tabs would never be where they were a moment ago. A tab
- * without an `order` sorts after every tab with one, which puts new designs at
- * the end of a strip that has been rearranged.
+ * creation order (oldest first) everywhere else. Never recency, which would
+ * reshuffle the strip on every edit. Tabs without an `order` sort last.
  */
 export function sortDesigns<T extends DesignSummary>(records: T[]): T[] {
   return [...records].sort((left, right) => {
@@ -289,8 +331,8 @@ export function sortFolders<T extends DesignFolder>(folders: T[]): T[] {
 /**
  * Which design to show after `removedId` goes away.
  *
- * Falls to the neighbour on the left, matching how tab strips everywhere behave,
- * and returns undefined only when the last design was closed.
+ * Falls to the neighbour on the left, and returns undefined only when the last
+ * design was closed.
  */
 export function pickDesignAfterDelete(
   ordered: DesignSummary[],

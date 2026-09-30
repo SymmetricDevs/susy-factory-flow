@@ -22,10 +22,8 @@ import type { EntryIcon } from "@/lib/community/types";
 import type { BoardClipboardPayload } from "@/store/factory-store";
 
 /**
- * One dialog for every way a pocket becomes a blueprint: the pocket card's
- * save button, the shelf's share-a-pocket flow (create), and the shelf's
- * overwrite flow (blueprintId set). Opened from the board or the panel,
- * rendered once at app level.
+ * A request for the one blueprint save dialog (rendered once at app level):
+ * a new shelf row, or an overwrite when `blueprintId` is set.
  */
 export interface BlueprintSaveRequest {
   payload: BoardClipboardPayload;

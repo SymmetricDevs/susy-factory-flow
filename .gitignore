@@ -22,6 +22,20 @@
 /temp
 /.opencode
 
+# agent scratch: screenshots, probes, captures, logs (local only, see AGENTS.md)
+/scratch/
+/.worktrees/
+/.claude/settings.local.json
+/.claude/scheduled_tasks.lock
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.svg
+/*.local.*
+!/vitest.local.config.ts
+
 # next.js
 /.next/
 /out/

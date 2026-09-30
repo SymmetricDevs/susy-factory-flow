@@ -8,12 +8,10 @@ import { useFactoryStore } from "@/store/factory-store";
 const ERROR_LINGER_MS = 6000;
 
 /**
- * The recipe book closes the instant its plus button is pressed, so while the
- * full recipe is still on the wire these chips are the only sign anything is
- * happening. They ride the board's bottom-centre notice column, hold back for
- * a beat so an add answered from cache never flashes one, and carry the
- * apology when a fetch fails, because the book that would have shown it is
- * gone.
+ * Progress chips for a recipe add: the recipe book closes on its plus button,
+ * so these show the full recipe is still loading. They sit in the board's
+ * bottom-centre notice column, wait a beat so a cached add never flashes one,
+ * and report a failed fetch.
  */
 export function RecipeAddChips() {
   const pending = useFactoryStore((state) => state.pendingRecipeAdds);

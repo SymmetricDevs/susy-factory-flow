@@ -18,6 +18,18 @@ describe("MinecraftTooltip", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
   });
 
+  it("opens opted-in information on focus and closes on Escape or blur", () => {
+    render(<MinecraftTooltip openOnFocus placement="below" content={<div>Full status explanation</div>}><span tabIndex={0}>Status</span></MinecraftTooltip>);
+    const status = screen.getByText("Status");
+    fireEvent.focus(status);
+    expect(screen.getByText("Full status explanation")).toBeTruthy();
+    fireEvent.keyDown(status, { key: "Escape" });
+    expect(screen.queryByText("Full status explanation")).toBeNull();
+    fireEvent.focus(status);
+    fireEvent.blur(status);
+    expect(screen.queryByText("Full status explanation")).toBeNull();
+  });
+
   it.each([
     [40, 180, "below", "items-start"],
     [550, 680, "above", "items-end"],
@@ -40,6 +52,52 @@ describe("MinecraftTooltip", () => {
     expect(panel.getAttribute("data-card-placement")).toBe(side);
     expect(panel.classList.contains(alignment)).toBe(true);
     expect(Number.parseFloat((panel as HTMLElement).style.maxHeight)).toBeGreaterThanOrEqual(240);
+  });
+
+  it.each([40, 340, 700])("keeps a large power tooltip clear of its worksheet control at y=%s", async (top) => {
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(500);
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(500);
+    render(
+      <MinecraftTooltip placement="above-card" content={<div>Power details</div>} companion={<div>Controls guide</div>}>
+        <button>Power</button>
+      </MinecraftTooltip>,
+    );
+    const target = screen.getByRole("button", { name: "Power" });
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top, bottom: top + 24, left: 200, right: 300, width: 100, height: 24, x: 200, y: top, toJSON: () => ({}),
+    });
+    (document as Document & { elementFromPoint: (x: number, y: number) => Element | null }).elementFromPoint = () => target;
+    fireEvent.mouseEnter(target, { clientX: 250, clientY: top + 12 });
+    await screen.findByText("Power details");
+    const expectClearOfControl = () => {
+      const panel = document.querySelector<HTMLElement>("[data-card-placement]")!;
+      const panelTop = Number.parseFloat(panel.style.top);
+      const panelHeight = Math.min(500, Number.parseFloat(panel.style.maxHeight));
+      expect(panelTop >= top + 24 || panelTop + panelHeight <= top).toBe(true);
+    };
+    expectClearOfControl();
+    fireEvent.wheel(target);
+    expect(screen.getByText("Power details")).toBeTruthy();
+    expectClearOfControl();
+  });
+
+  it("closes a power tooltip immediately when leaving its control toward the panel", async () => {
+    render(
+      <MinecraftTooltip placement="above-card" content={<div>Power details</div>} companion={<div>Controls guide</div>}>
+        <button>Power</button>
+      </MinecraftTooltip>,
+    );
+    const target = screen.getByRole("button", { name: "Power" });
+    fireEvent.mouseEnter(target, { clientX: 250, clientY: 200 });
+    await screen.findByText("Power details");
+    const panel = document.querySelector<HTMLElement>("[data-card-placement]")!;
+    expect(panel.classList.contains("pointer-events-none")).toBe(true);
+    expect(panel.style.pointerEvents).not.toBe("auto");
+    // The panel is hit-test transparent, so moving over its painted area
+    // leaves for the page beneath it rather than for the portal itself.
+    fireEvent.mouseLeave(target, { relatedTarget: document.body });
+    expect(screen.queryByText("Power details")).toBeNull();
+    expect(screen.queryByText("Controls guide")).toBeNull();
   });
 
   it("clears an open tooltip when a scroll puts something else under the pointer", async () => {
@@ -115,7 +173,7 @@ describe("MinecraftTooltip", () => {
     // click's result is readable without re-hovering.
     render(
       <MinecraftTooltip label="Power story">
-        <button type="button">Raise tier</button>
+        <button type="button">Raise tier<svg data-testid="tier-icon"><path d="M0 0h10" /></svg></button>
       </MinecraftTooltip>,
     );
 
@@ -126,7 +184,7 @@ describe("MinecraftTooltip", () => {
     // pointerType matters: the pointer-kind singleton reads it, and an
     // unlabelled pointerdown registers as a finger and mutes hover for the
     // rest of the suite.
-    fireEvent.pointerDown(target, { pointerType: "mouse" });
+    fireEvent.pointerDown(screen.getByTestId("tier-icon").firstElementChild!, { pointerType: "mouse" });
     expect(screen.getByText("Power story")).toBeTruthy();
 
     // The click's own micro-drag: a mousemove with the button still down on

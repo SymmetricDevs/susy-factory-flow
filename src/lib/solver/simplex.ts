@@ -1,11 +1,9 @@
 /**
  * A small, dense, two-phase simplex solver: maximize c.x subject to equality
- * and less-or-equal rows, x >= 0. Written for the equations rebuild's lab
- * work - boards are a few hundred variables, so a dense tableau with Bland's
- * rule (no cycling, deterministic pivots) is plenty, and having our own
- * engine keeps the prototype dependency-free while the model design settles.
- * If numerics ever bite on a real board, the model builder stays and this
- * file is swapped for a WASM LP behind the same interface.
+ * and less-or-equal rows, x >= 0. Boards are a few hundred variables, so a
+ * dense tableau is enough; pivots are deterministic (see `runSimplex`). This is
+ * the synchronous engine for the main thread, SSR and tests; lp-engine.ts
+ * swaps in HiGHS behind the same interface where it is loaded.
  */
 
 export interface LinearProgram {
@@ -27,13 +25,11 @@ const EPS = 1e-9;
 
 export function solveLp(lp: LinearProgram): LpSolution {
   // A tableau walk through tiny pivots can leave float wreckage large enough
-  // to hand back an "optimal" point that violates the model's own equalities
-  // (a real board lost 1.84 units of biodiesel to one such walk). Every
-  // answer is therefore verified against the ORIGINAL rows; a corrupt one is
-  // retried once with Bland's rule from the first pivot (a different walk,
-  // same optimum), and if that also comes back corrupt the solve reports
-  // infeasible - callers already degrade gracefully on that answer, which
-  // beats standing books on flows that break conservation.
+  // to hand back an "optimal" point that violates the model's own equalities.
+  // Every answer is therefore verified against the ORIGINAL rows; a corrupt
+  // one is retried once with Bland's rule from the first pivot (a different
+  // walk, same optimum), and if that is also corrupt the solve reports
+  // infeasible, which callers degrade on gracefully.
   const first = solveLpOnce(lp, false);
   if (first.status !== "optimal" || solutionHolds(lp, first.x)) {
     return first;
@@ -107,8 +103,7 @@ function solveLpOnce(lp: LinearProgram, blandFromStart: boolean): LpSolution {
   // cannot fix a variable that is 1 in one row and 1e9 in another (a flow
   // in litres per second against an act in [0, 1]): dividing the port row
   // by 1e9 leaves the flow's entry at 1e-9, under the pivot epsilon, and
-  // the walk then "cannot move" that column and hands back a clean zero as
-  // the optimum - which is how a UIV supply once zeroed a running reactor.
+  // the walk then "cannot move" that column and hands back a false zero.
   // A column scale is a change of units on the variable: the objective is
   // divided by it and the answer multiplied back.
   const columnScale = new Array<number>(n).fill(1);
@@ -207,10 +202,9 @@ function solveLpOnce(lp: LinearProgram, blandFromStart: boolean): LpSolution {
       return { status: "infeasible", x: [], objective: Number.NaN };
     }
     // Drive lingering degenerate artificials out of the basis through ANY
-    // non-artificial column - slack and surplus columns included. Trying only
-    // structural columns once left an artificial basic whose row had gone
-    // structurally zero; phase 2 then regrew it from 0 and silently violated
-    // the row it stood for. A row with no non-artificial column at all is
+    // non-artificial column, slack and surplus columns included: an artificial
+    // left basic on a structurally zero row can regrow in phase 2 and silently
+    // violate the row it stands for. A row with no non-artificial column at all is
     // redundant, and phase 2 can never touch it, so it may stay.
     for (let r = 0; r < m; r += 1) {
       if (basis[r]! < artificialStart) {
@@ -286,8 +280,8 @@ function runSimplex(
   let blandMode = blandFromStart;
   let stalled = 0;
   let previousValue = Number.NEGATIVE_INFINITY;
-  // Reduced costs live in their own row, rebuilt from the basis each pivot -
-  // simple and O(mn), fine at lab sizes.
+  // Reduced costs live in their own row, rebuilt from the basis each pivot:
+  // simple and O(mn), fine at board sizes.
   for (let iteration = 0; iteration < 100000; iteration += 1) {
     const reduced = new Array<number>(columns).fill(0);
     for (let c = 0; c < columns; c += 1) {
@@ -331,10 +325,8 @@ function runSimplex(
     // Ratio test, two passes. Pass 1 finds the minimum ratio; pass 2 picks
     // the winner among near-ties by the LARGEST pivot element (Bland mode:
     // the lowest basis index, which its anti-cycling proof needs). Taking the
-    // first past-EPS pivot regardless of size once let a chain of 1e-6-scale
-    // pivots inflate the tableau until a later subtraction cancelled
-    // catastrophically - the walk ended "optimal" on a point that broke the
-    // conservation rows it was solving.
+    // first past-EPS pivot regardless of size lets a chain of tiny pivots
+    // inflate the tableau until a later subtraction cancels catastrophically.
     let best = Number.POSITIVE_INFINITY;
     for (let r = 0; r < m; r += 1) {
       const a = tableau[r]![entering]!;

@@ -6,21 +6,16 @@ import { TierBadge } from "@/components/shelf-cards";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
 
 /**
- * The trim under an exported board image: the plan's face (icon, name,
- * headline numbers) and its boundary in resources - what goes in, what comes
- * out - so a screenshot dropped in a chat answers the questions a plan link
- * would. Rendered as ordinary DOM at a design width, photographed with the
- * same pipeline as the board, then scaled to the board's width; on a huge
- * zoomed-out factory the bar therefore grows with the image instead of
- * shrinking into an unreadable strip.
+ * The trim under an exported board image: the plan's icon, name, headline
+ * numbers and resource boundary (what goes in and out). Rendered as DOM at a
+ * design width, captured with the board's pipeline, then scaled to the
+ * board's width so it grows with a huge image instead of becoming unreadable.
  */
 
 /**
- * Below this the bar's columns collide; above it, rows spread too thin. The
- * ceiling is deliberately low: the bar is scaled UP to the board's width, so
- * a small design width is what makes the lettering a large fraction of the
- * final image - the difference between readable and a hairline once Discord
- * fits a 3000px export into a chat column.
+ * Below this the bar's columns collide. Kept low on purpose: the bar is
+ * scaled UP to the board's width, so a small design width keeps the lettering
+ * readable when a chat client shrinks a wide export.
  */
 export const EXPORT_FOOTER_MIN_WIDTH = 640;
 export const EXPORT_FOOTER_MAX_WIDTH = 960;
@@ -37,10 +32,8 @@ export function resolveExportFooterWidth(boardWidth: number): number {
 export type ExportTone = "dark" | "light";
 
 /**
- * Which face the bar wears, decided by the paper behind the board: a light
- * theme (Parchment, Paper) gets ink on cream, everything else - including a
- * transparent export, which lands who-knows-where but usually on Discord's
- * dark chat - gets the dark plate.
+ * Which face the bar wears: a light theme (Parchment, Paper) gets ink on
+ * cream; everything else, including a transparent export, gets the dark plate.
  */
 export function resolveExportTone(background?: string): ExportTone {
   const hex = background?.trim().match(/^#([0-9a-f]{6})$/i)?.[1];
@@ -105,7 +98,6 @@ export interface ExportFooterProps {
   planName: string;
   icon?: EntryIcon;
   stats: CommunityPlanStats;
-  gameVersion?: string;
   tone: ExportTone;
   width: number;
   showTitle: boolean;
@@ -120,7 +112,6 @@ export function ExportFooter({
   planName,
   icon,
   stats,
-  gameVersion,
   tone,
   width,
   showTitle,
@@ -138,7 +129,7 @@ export function ExportFooter({
         borderTop: `2px solid ${palette.edge}`,
         color: palette.text,
       }}
-      className="px-6 py-5"
+      className="px-4 py-3"
     >
       {showTitle ? (
         // The name owns the whole top line: setups are christened things
@@ -147,13 +138,13 @@ export function ExportFooter({
         // the right.
         <div
           className={[
-            "flex items-start justify-between gap-8",
-            showIo ? "mb-4" : "",
+            "flex items-start justify-between gap-4",
+            showIo ? "mb-2" : "",
           ].join(" ")}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {icon ? (
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
                 <ResourceIcon
                   resource={{
                     id: icon.resourceId,
@@ -171,7 +162,7 @@ export function ExportFooter({
                 />
               </span>
             ) : null}
-            <div className="min-w-0 break-words text-[22px] font-bold leading-7">{planName}</div>
+            <div className="min-w-0 break-words text-[18px] font-bold leading-6">{planName}</div>
           </div>
           <div className="shrink-0 pt-0.5 text-right">
             <div
@@ -183,13 +174,10 @@ export function ExportFooter({
               <span>{stats.nodeCount} cards</span>
               {stats.highestTier ? <TierBadge tier={stats.highestTier} /> : null}
             </div>
-            <div className="mt-1.5 text-[13px]">
+            <div className="mt-0.5 text-[12px]">
               <span style={{ color: palette.brand }} className="font-semibold">
-                susyplanner.local
+                gtnhplanner.com
               </span>
-              {gameVersion ? (
-                <span style={{ color: palette.muted }}> · SUSY {gameVersion}</span>
-              ) : null}
             </div>
           </div>
         </div>
@@ -197,7 +185,7 @@ export function ExportFooter({
       {/* "Inputs" and "Outputs", the same words the panel on the right of
           the app uses for the same numbers. */}
       {showIo ? (
-        <div className="flex items-start gap-5">
+        <div className="flex items-start gap-3">
         <IoColumn
           label="Inputs"
           accent={palette.needs}
@@ -221,9 +209,8 @@ export function ExportFooter({
 }
 
 /**
- * One side of the boundary as its own tinted panel: the wash of the
- * section's colour behind its rows is what lets a reader split needs from
- * makes at arm's length, before any label is legible.
+ * One side of the boundary as its own tinted panel, so needs and makes read
+ * apart before any label is legible.
  */
 function IoColumn({
   label,
@@ -242,7 +229,7 @@ function IoColumn({
 }) {
   return (
     <div
-      className="min-w-0 flex-1 rounded-md px-3.5 py-3"
+      className="min-w-0 flex-1 rounded px-2.5 py-2"
       style={{ backgroundColor: panel, border: `1px solid ${panelEdge}` }}
     >
       <div style={{ color: accent }} className="text-[12px] font-bold uppercase tracking-[0.14em]">
@@ -254,7 +241,7 @@ function IoColumn({
         </div>
       ) : (
         <div
-          className="mt-1.5 grid gap-x-5"
+          className="mt-1 grid gap-x-3"
           // A plan can have hundreds of boundary resources; the grid packs
           // them into as many columns as the panel affords and the bar
           // simply grows downward.
@@ -263,7 +250,7 @@ function IoColumn({
           {stats.map((stat) => (
             <div
               key={`${stat.kind}:${stat.resourceId}`}
-              className="flex items-center gap-2 py-[3px]"
+              className="flex items-center gap-1.5 py-px"
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden">
                 <ResourceIcon

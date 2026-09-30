@@ -6,24 +6,10 @@ import { CHANGELOG, type ChangelogEntry } from "@/lib/changelog";
 import { APP_VERSION } from "@/lib/version";
 
 /**
- * What's new: what THIS reader missed, and the rest of the history behind a
- * button.
- *
- * The whole list used to render at once. That is fine at four entries and
- * hostile at eighty: someone who last opened the planner in the spring came
- * back to a wall and closed it, which loses exactly the person the popup
- * exists for. So the sheet opens on the releases they have not seen - usually
- * one to four - and the archive is one click below, for the reader who came
- * looking for it rather than the one who was handed it.
- *
- * The VERSION leads each entry. It is the thing a reader arrives holding - the
- * chip in the header told them theirs, a bug report asks for it - so entries
- * are anchored on the number and date in a rail down the left.
- *
- * Opened ON REQUEST only, from the version chip or the Welcome tab. It used
- * to arrive by itself after a release carrying a warning, dressed as an
- * interruption, with a second box guarding its close until the warning was
- * read; both were removed (Jack, 2026-09-08). A warning still renders as an
+ * What's new: the releases THIS reader has not seen, with the rest of the
+ * history behind a "Full history" button. Each entry is anchored on its
+ * version and date in a rail down the left. Opened ON REQUEST only (version
+ * chip or Welcome tab), never automatically; a release warning renders as an
  * amber block inside its entry.
  */
 export function ChangelogDialog({
@@ -41,10 +27,7 @@ export function ChangelogDialog({
   const unseen = useMemo(() => unseenVersions ?? new Set<string>(), [unseenVersions]);
 
   /**
-   * What the sheet opens on. Unseen releases if there are any; otherwise the
-   * newest few, because someone who pressed the button with nothing unread
-   * still wants to land on something rather than on a button that says the
-   * rest is elsewhere.
+   * What the sheet opens on: unseen releases if any, otherwise the newest few.
    */
   const headline = useMemo(() => {
     const missed = entries.filter((entry) => unseen.has(entry.version));
@@ -73,16 +56,9 @@ export function ChangelogDialog({
     <div
       className={[
         "fixed inset-0 z-[120] grid place-items-center p-4",
-        // NO BACKDROP FILTER ON A PHONE. A full-viewport backdrop-filter forces
-        // everything under it into a composited layer and repaints that layer
-        // whenever anything beneath moves - and beneath this sits the board,
-        // plus the pulsing that marks unwired
-        // slots. Desktop absorbs it. A phone does not: it is the heaviest first
-        // paint the app can produce, and the tab dying and being restored by
-        // the browser looks exactly like a reload loop.
-        //
-        // Compact gets opacity instead, turned up to compensate. The job here
-        // is taking the board away, and a darker sheet does that for free.
+        // NO BACKDROP FILTER ON A PHONE: a full-viewport backdrop-filter
+        // composites and repaints everything beneath (the animated board) and
+        // can crash a phone tab. Compact gets a darker opaque sheet instead.
         "bg-neutral-950/75 backdrop-blur-sm compact:bg-neutral-950/92 compact:[backdrop-filter:none]",
       ].join(" ")}
       onClick={onClose}
@@ -146,12 +122,7 @@ export function ChangelogDialog({
   );
 }
 
-/**
- * The top of the sheet, branded.
- *
- * The app's own name and colour up front is the difference between "the
- * planner is telling me something" and "a box appeared".
- */
+/** The top of the sheet, branded with the app's name and colour. */
 function Masthead({
   missedCount,
   oldestMissed,
@@ -196,8 +167,7 @@ function Masthead({
               `${missedCount} releases since you were last here${
                 oldestMissed ? ` (v${oldestMissed} onwards)` : ""
               }. Here they are.`
-            : // Not "you are up to date": nobody opened this to be told nothing
-              // happened, and it reads as a dead end rather than a document.
+            : // Not "you are up to date": the sheet still shows the recent notes.
               "Everything that has changed, newest first."}
       </p>
     </div>
@@ -241,9 +211,7 @@ function EntryRow({ entry }: { entry: ChangelogEntry }) {
             </li>
           ))}
         </ul>
-        {/* A release that also carries a WARNING puts it and its actions in
-            one block: a caution the reader believes and a button that answers
-            it, rather than a worrying sentence and a stray link. */}
+        {/* A release WARNING and its actions render as one block. */}
         {entry.warning || (entry.actions && entry.actions.length > 0) ? (
           <div
             className={[
@@ -258,10 +226,8 @@ function EntryRow({ entry }: { entry: ChangelogEntry }) {
                   <p className="text-xs font-black uppercase tracking-wide text-amber-300">
                     Heads up
                   </p>
-                  {/* Lit in the callout's OWN colour: the cyan the notes use is
-                      this app's "all fine" colour, and inside an amber warning
-                      it read as a different message sitting in the middle of
-                      this one. */}
+                  {/* Lit in the callout's OWN colour: the notes' cyan means
+                      "all fine" and would clash inside an amber warning. */}
                   <p className="mt-1 text-sm leading-relaxed text-amber-100/90">
                     {renderEmphasis(entry.warning, "text-amber-200")}
                   </p>
@@ -289,12 +255,8 @@ function EntryRow({ entry }: { entry: ChangelogEntry }) {
 }
 
 /**
- * `*asterisks*` come out lit, the same convention the help cards use.
- *
- * Release notes are one paragraph after another of even grey, and a reader
- * skimming for the thing that affects them has nothing to catch on. Marking
- * the two or three words that carry each line turns a wall into something
- * scannable, without pulling in a markdown renderer for one piece of syntax.
+ * `*asterisks*` come out lit, the same convention the help cards use, so
+ * notes are skimmable without a markdown renderer.
  */
 function renderEmphasis(text: string, litClass = "text-cyan-200"): React.ReactNode[] {
   return text.split(/\*([^*]+)\*/g).map((part, index) =>

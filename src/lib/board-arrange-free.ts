@@ -1,69 +1,36 @@
 /**
- * FREE PLACEMENT: the arranger's third candidate, with no columns, rows,
- * layers or bands (Jack, 2026-09-08: "get rid of the grid thinking ...
- * a lot of considerations when we place a thing").
+ * FREE PLACEMENT: the arranger's third candidate, with no layers or bands.
+ * Deterministic, in three stages:
  *
- * Three stages, all deterministic:
+ * 1. STRESS. Every pair of cards gets an ideal distance (shortest wire path,
+ *    each hop worth the two cards' sizes plus a gap), and stress SGD (Zheng,
+ *    Pawar and Goodman, 2018) finds continuous positions matching them:
+ *    partners touch, cards ten hops apart stand ten cards apart.
+ * 2. THE GRID. Overlaps are pushed apart along least penetration, then cards
+ *    are set on the cell grid one at a time, nearest the centre first, each
+ *    on the free spot closest to its stress position.
+ * 3. THE SEARCH. Simulated annealing over free moves (beside a partner with
+ *    port rows aligned, nudge, swap, a machine with its drawers, a whole
+ *    side of a bridge wire), scored in the router's points
+ *    (board-arrange-optimize.ts) plus stranger air (board-arrange-air.ts)
+ *    and the FREE_DIALS terms. Scoring is incremental: a trial re-prices
+ *    only wires the moved cards touch or cross.
  *
- * 1. RELEVANCE. Every pair of cards gets an ideal distance: the length of
- *    the shortest wire path between them, each hop worth the two cards'
- *    sizes plus a gap. Stress SGD (Zheng, Pawar and Goodman, 2018) then
- *    finds continuous positions whose distances match those ideals as
- *    closely as they can: partners touch, cards two hops apart stand a
- *    card away, a card ten hops away is ten cards away. This is the
- *    whole of "near what is relevant to me, far from what is not", and
- *    it is global - every card's place is settled against every other.
+ * MACHINES STAND IN COLUMNS at a pitch of one machine width plus a drawer
+ * corridor; rows are any cell. The search runs twice, like a chip placer:
+ * free to any cell first (finds the structure), then machines are legalised
+ * onto columns and a cooler search repairs the damage. Annealing on the
+ * lattice from the start does worse: a column hop is too big a step.
  *
- * 2. THE GRID. Continuous positions overlap; cards are pushed apart along
- *    their least penetration until none do, then set on the cell grid one
- *    at a time, nearest the centre first, each on the free spot closest
- *    to where the stress put it.
- *
- * 3. THE SEARCH. Simulated annealing over FREE moves - a card beside a
- *    partner on any side (port rows aligned for the straight shot), a
- *    nudge, a swap, a machine with its own drawers moved as one, a whole
- *    neighbourhood shifted - every trial scored in the router's own
- *    points (board-arrange-optimize.ts: length, bends, detours,
- *    crossings, each wire weighed by its flow) plus the air strangers owe
- *    each other (board-arrange-air.ts) and a little sprawl. The score is
- *    kept INCREMENTALLY: a trial re-prices only the wires the moved cards
- *    touch and the wires whose path the cards moved across, so a board of
- *    eighty cards affords tens of thousands of trials. Each trial is
- *    every consideration Jack listed - how many wires this placement
- *    makes, how long, how each scores, who is near - and the annealing
- *    is the "future thinking": nothing is final until everything has been
- *    re-judged against everything else many times over.
- *
- * MACHINES STAND IN COLUMNS (the one lattice kept, because it is what a
- * hand draws): a machine's left edge sits on a column pitch of one machine
- * width plus a corridor wide enough for a drawer with a cell of air each
- * side, so drawers live in the corridors between machine columns, where
- * Jack's own boards put them. Rows are free: any cell. The search runs
- * TWICE, the way chip placers do: first with every card free to any cell
- * (the global placement, which finds the structure), then the machines
- * are LEGALISED onto their columns and a shorter, cooler search over
- * column moves repairs what the snap disturbed. Searching on the lattice
- * from the start found layouts a fifth worse under the same score - a
- * column hop is too big a step for the annealing to feel its way with.
- *
- * DRAWERS ARE PLACED BY PATTERN, NOT SEARCHED (Jack, 2026-09-08, holding
- * his own oil board against the arranger's: "shouldn't all the products
- * just be in a row next to each other ... one grid away from the machine
- * ... optimise patterns"): a drawer wired to ONE machine is that
- * machine's bud and stands in a touching LINE on its side - supplies on
- * the left, products on the right, in port order, the line centred on
- * the ports it serves; a drawer wired to exactly TWO machines is a shared
- * drawer and stands in a line BETWEEN them - in the corridor when they
- * are side by side, in a row in the gap when one is above the other. The
- * search moves machines (and the few drawers wired to three or more)
- * and every drawer line follows, so a machine feeding fifty products
- * gets fifty drawers in a column, not fifty spots each at its own port
- * row. The wires are a cell or two longer for it and the board reads.
+ * DRAWERS ARE PLACED BY PATTERN, NOT SEARCHED: a drawer wired to ONE machine
+ * is its bud and stands in a touching line on its side (supplies left,
+ * products right, port order, centred on the ports); a drawer wired to
+ * exactly TWO machines stands in a line between them (the corridor when
+ * side by side, a row in the gap when stacked). The search moves machines
+ * (and drawers with three or more partners) and the lines follow.
  *
  * Wired components are laid out one at a time and packed side by side;
- * cards with no wires go on a shelf underneath. The real router judges
- * the result against the column candidates in board-arrange.ts and the
- * fewest points wins, so this can only ever improve what the player sees.
+ * unwired cards go on a shelf underneath.
  */
 
 import { BOARD_GRID } from "./board-grid";
@@ -131,15 +98,24 @@ const COMPONENT_GAP_CELLS = 8;
 /** Stress SGD iterations. */
 const STRESS_ITERATIONS = 40;
 /**
- * TIDINESS: points per pixel a card's edge misses lining up with a
- * neighbour's - a card stacked near another wants a shared left or right
- * edge, a card beside another a shared top or bottom (or a shared port
- * row, the straight shot). Capped per axis, so a card with nothing to
- * line up with pays nothing and a card wildly off pays no more than a
- * few cells' worth. This is how rows and columns HAPPEN without a column
- * system: neighbours agree on edges because it is cheaper.
+ * The readability terms the router does not price, in one object so a
+ * harness can sweep them.
+ *
+ * TIDY: points per pixel a card's edge misses lining up with a neighbour's
+ * (stacked cards want a shared left/right edge, side-by-side cards a shared
+ * top/bottom or port row), capped per axis at `tidyCapCells`. Rows and
+ * columns emerge because agreeing on edges is cheaper.
+ *
+ * FLOW: points per pixel a wire's target centre falls short of one card
+ * width right of its source's (outputs leave right, inputs enter left). A
+ * backward wire also pays a flat price (`flowFlat`, `flowFlatColumns` when
+ * both ends are column cards): without it a chain folded into a triangle
+ * and a fan-out ringed its hub because those wires were shorter. A wire
+ * inside a cycle (both ends in one strongly connected component) pays only
+ * `flowFlatCycle`, since a recycle loop must run backwards somewhere.
+ *
+ * SPRAWL: points per pixel of the layout's bounding-box perimeter.
  */
-/** The three, in one object so a harness can sweep them (FREE_DIALS). */
 export const FREE_DIALS = {
   tidy: 1,
   tidyCapCells: 4,
@@ -151,26 +127,6 @@ export const FREE_DIALS = {
 };
 /** How far a neighbour may be, beyond the edges, and still be aligned with. */
 const TIDY_REACH = cells(12);
-/**
- * FLOW: points per pixel a wire falls short of running forwards - its
- * target's centre less than a card's width to the right of its source's.
- * Outputs leave a card's right side and inputs enter its left, so a board
- * that flows left to right reads at a glance, a chain lays out as a row
- * instead of a stack, and a supply drawer stands on the left of its
- * machine, a catch drawer on the right. A return wire in a loop still
- * pays, and stays short for it. A backward wire also pays a FLAT price
- * (`flowFlat`, a crossing's worth, and `flowFlatColumns`, nearly four,
- * when both ends are column cards): the direction of flow is a reading, not
- * a distance, and without the flat price a chain of three folded into a
- * triangle and a fan-out ringed its hub, because those wires were shorter.
- * Machines pay most because their ports face sideways: a machine fed from
- * the right reads as backwards, a drawer above its machine does not. A
- * wire INSIDE A CYCLE (both ends in one strongly connected component of
- * the directed wire graph) pays only `flowFlatCycle`: a recycle loop must
- * run backwards somewhere, and an oil board is mostly loops, so the full
- * price there was the largest term on the board and bent everything else
- * around it (measured 2026-09-08: 38k of 94k points).
- */
 
 function rng(seed: number): () => number {
   let state = seed | 0;

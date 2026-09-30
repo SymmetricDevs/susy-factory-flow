@@ -10,19 +10,15 @@ import {
 /**
  * THE FLOW NEIGHBOURHOOD a hover lights up: the wires on the thing you are
  * pointing at, the far-end port of each, and the cards involved. One module
- * so a port row and a drawer answer the same question the same way.
- *
- * Two rules the first version missed, both Jack's (2026-09-08):
+ * so a port row and a drawer answer the same question the same way. Rules:
  *
  * - A SHARED MACHINE'S CARD holds several recipes, and a wire belongs to the
- *   SECTION its handle names (`r<n>:`, shared-machine.ts). Matching on the
- *   card and the resource alone lit every section's wires from any one of
- *   them, and lit them back.
- * - A BUFFER PASSES IT ALONG. A drawer is a junction, not a destination:
- *   pointing at an output that fills one wants the drawer, everything it
- *   feeds, and anything those feed through further drawers. The walk follows
- *   the direction the hover asked about and stops at the first machine, so a
- *   chain of drawers reads as one hop.
+ *   SECTION its handle names (`r<n>:`, shared-machine.ts); matching on card
+ *   and resource alone would light every section's wires from any one.
+ * - A BUFFER PASSES IT ALONG: a drawer is a junction, not a destination.
+ *   The walk carries on through drawers in the direction the hover asked
+ *   about and stops at the first machine, so a chain of drawers reads as
+ *   one hop.
  */
 export interface FlowScope {
   edges: Record<string, true>;
@@ -130,11 +126,8 @@ export function buildPortFlowScope(
 
 /**
  * What a drawer's hover lights: every wire on it, and on through the drawers
- * those reach, both ways - a drawer IS a port, so the card is the row.
- *
- * It used to light every wire and card on the board carrying the drawer's
- * resource, wired to this drawer or not. Asking "where does THIS drawer's
- * copper go" is not asking where copper appears.
+ * those reach, both ways (a drawer IS a port, so the card is the row). Only
+ * wires connected to THIS drawer, not everything carrying its resource.
  */
 export function buildStorageFlowScope(
   project: FactoryProject,

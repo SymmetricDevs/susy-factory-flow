@@ -5,33 +5,38 @@ import crypto from "node:crypto";
 import { PNG } from "pngjs";
 
 /**
- * Make ghost fluids visible: turn translucent fluid icons into solid chips
+ * Make ghost fluids visible: turn nearly invisible fluid icons into solid chips
  * of their own colour.
  *
  * The oracle exporter captures fluid icons exactly as the game draws them,
  * and the game draws gases at 10-30% opacity riding a dim noise texture. The
  * hue in those pixels is the fluid's real tint - oxygen teal, hydrogen red -
  * but at that alpha and brightness the capture simply vanishes on the
- * planner's dark board. This pass rebuilds every translucent FLUID icon as
+ * planner's dark board. This pass rebuilds only nearly invisible FLUID icons as
  * an opaque chip: the capture's average colour lifted to a readable
  * luminance, shaded by the original alpha pattern so it still reads as a
- * liquid. Item icons are never touched: some are legitimately translucent,
+ * liquid. Readable translucent fluids such as water retain their exact pixels.
+ * Item icons are never touched: some are legitimately translucent,
  * and none of them hide behind a fluid's render alpha.
  *
  * Two modes:
  *
  * - In-place (default), for a dataset BUILD. Nothing has shipped yet, and a
  *   new dataset version gets fresh texture URLs anyway, so the files can be
- *   rewritten under their own names. generate-dataset.mjs runs this after the
- *   indexes are built and before recipes.json is compressed.
+ *   rewritten under their own names. Use only for an unpublished version.
+ *   generate-dataset.mjs uses --rename even during builds, because a version
+ *   may be rebuilt and its URLs may already be cached.
  *
- * - `--rename`, for a dataset that is ALREADY PUBLISHED. Textures are served
+ * - `--rename`, for a dataset that may ALREADY BE PUBLISHED. Textures are served
  *   `immutable, max-age=1yr`, so a browser that has seen the ghost keeps it
  *   for a year no matter what the file says now. The fixed icon therefore
  *   gets a NEW name (content-hash suffix, same length as the old one), the
  *   old file stays behind for stale caches, and every reference in the
  *   compressed artifacts is patched byte-for-byte - same-length names make
  *   that safe without parsing half a gigabyte of JSON.
+ *   Already-opaque icons also get content-hashed names: an earlier in-place
+ *   repair may have fixed the local pixels while the old URL still serves a
+ *   faint capture from another server or a browser cache.
  *
  * Usage: normalize-fluid-icon-alpha.mjs <dataset-dir> [--rename]
  */
@@ -45,10 +50,10 @@ if (!datasetDir || !fs.existsSync(datasetDir)) {
 }
 
 /**
- * Icons whose average visible pixel is at least this opaque (0.95) carry
- * their own look and are left alone - milk and lava already read fine.
+ * Only fix captures below 20% mean opacity. Ordinary translucency is part
+ * of the artwork: water is about 50% opaque and must remain unchanged.
  */
-const MIN_MEAN_ALPHA = 242;
+const MIN_MEAN_ALPHA = 51;
 /**
  * Where a translucent fluid's colour is lifted to. The capture's hue is the
  * game's real tint - oxygen teal, hydrogen red - but it rides a dim noise
@@ -101,19 +106,21 @@ for (const basename of [...fluidIconBasenames].sort()) {
     continue;
   }
 
-  const png = PNG.sync.read(fs.readFileSync(filePath));
+  const originalBuffer = fs.readFileSync(filePath);
+  const png = PNG.sync.read(originalBuffer);
   const applied = normalizeFluidPng(png);
   if (!applied) {
     alreadyVisible += 1;
-    continue;
+    if (!rename) continue;
+  } else {
+    normalized += 1;
+    report.push(`${basename}: ${applied}`);
   }
 
-  const buffer = PNG.sync.write(png);
-  report.push(`${basename}: ${applied}`);
+  const buffer = applied ? PNG.sync.write(png) : originalBuffer;
 
   if (!rename) {
     fs.writeFileSync(filePath, buffer);
-    normalized += 1;
     continue;
   }
 
@@ -121,9 +128,10 @@ for (const basename of [...fluidIconBasenames].sort()) {
   if (!suffixMatch) {
     // Without the hash suffix there is no same-length name to swap in, so the
     // byte patch cannot carry it. Fix the pixels anyway for uncached readers.
-    console.warn(`No hash suffix on ${basename}; normalized in place instead of renaming.`);
-    fs.writeFileSync(filePath, buffer);
-    normalized += 1;
+    if (applied) {
+      console.warn(`No hash suffix on ${basename}; normalized in place instead of renaming.`);
+      fs.writeFileSync(filePath, buffer);
+    }
     continue;
   }
 
@@ -132,16 +140,16 @@ for (const basename of [...fluidIconBasenames].sort()) {
     .update(buffer)
     .digest("hex")
     .slice(0, 12)}.png`;
+  if (newBasename === basename) continue;
   // The ghost file stays: a browser holding a cached recipe response may still
   // ask for the old name, and a missing icon is worse than a faint one.
   fs.writeFileSync(path.join(renderedDir, newBasename), buffer);
   renames.set(basename, newBasename);
-  normalized += 1;
 }
 
 console.log(
   `Normalized ${normalized} fluid icons ` +
-    `(${alreadyVisible} already visible, ${missing} missing files).`,
+    `(${alreadyVisible} already visible, ${missing} missing files; ${renames.size} URLs refreshed).`,
 );
 for (const line of report) {
   console.log(`  ${line}`);

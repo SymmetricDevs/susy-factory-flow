@@ -1,0 +1,160 @@
+type Point = { x: number; y: number };
+export type RatioLabelWire = {
+  id: string;
+  points: readonly Point[];
+  input?: string;
+  output?: string;
+};
+export type RatioWireLabel = { key: string; text: string; ratio: number };
+
+export function ratioLabelBounds(text: string, point: Point) {
+  const lines = text.split("\n");
+  return {
+    ...point,
+    width: Math.max(...lines.map((line) => line.length)) * 8 + 16,
+    height: lines.length * 12 + 12,
+  };
+}
+
+/** Keep the existing triangle style; grow only a labelled head enough to contain its text. */
+export function fitRatioArrow(arrow: string, text: string, side = "output") {
+  const vertices = arrow
+    .trim()
+    .split(/\s+/)
+    .map((point) => point.split(",").map(Number));
+  const [tip, wingA, wingB] = vertices;
+  const base = { x: (wingA[0] + wingB[0]) / 2, y: (wingA[1] + wingB[1]) / 2 };
+  const length = Math.hypot(tip[0] - base.x, tip[1] - base.y);
+  const halfWing = Math.hypot(wingA[0] - wingB[0], wingA[1] - wingB[1]) / 2;
+  const dx = (tip[0] - base.x) / length,
+    dy = (tip[1] - base.y) / length;
+  const lines = text.split("\n");
+  // Conservative bounds for bold 10px tabular text, independent of the DOM/zoom.
+  const halfWidth = (Math.max(...lines.map((line) => line.length)) * 7) / 2;
+  const halfHeight = (lines.length * 10) / 2;
+  const inset = 2;
+  const requiredLength = 2 * (halfWidth + inset) + ((halfHeight + inset) * length) / halfWing;
+  const scale = Math.max(1, requiredLength / length);
+  // Grow away from the drawer: keep the incoming tip or outgoing base in place.
+  const anchor = side === "input" ? { x: tip[0], y: tip[1] } : base;
+  const grownBase = {
+    x: anchor.x + (base.x - anchor.x) * scale,
+    y: anchor.y + (base.y - anchor.y) * scale,
+  };
+  const textOffset = halfWidth + inset + (length * scale - requiredLength) / 2;
+  let rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+  if (rotation > 90) rotation -= 180;
+  if (rotation < -90) rotation += 180;
+  return {
+    point: { x: grownBase.x + dx * textOffset, y: grownBase.y + dy * textOffset },
+    rotation,
+    polygon: vertices
+      .map(([x, y]) => `${anchor.x + (x - anchor.x) * scale},${anchor.y + (y - anchor.y) * scale}`)
+      .join(" "),
+  };
+}
+
+/** Put each percentage on the triangle nearest its drawer. */
+export function labelRatioArrows(
+  arrows: readonly string[],
+  labels: readonly (RatioWireLabel & { point: Point })[],
+) {
+  if (!arrows.length || !labels.length) return [];
+  const centers = arrows.map((arrow) => {
+    const vertices = arrow
+      .trim()
+      .split(/\s+/)
+      .map((point) => point.split(",").map(Number));
+    return {
+      x: vertices.reduce((sum, [x]) => sum + x, 0) / vertices.length,
+      y: vertices.reduce((sum, [, y]) => sum + y, 0) / vertices.length,
+    };
+  });
+  const placed = new Map<number, RatioWireLabel & { point: Point; arrowIndex: number }>();
+  for (const label of labels) {
+    let nearest = 0;
+    for (let i = 1; i < centers.length; i++)
+      if (
+        Math.hypot(centers[i].x - label.point.x, centers[i].y - label.point.y) <
+        Math.hypot(centers[nearest].x - label.point.x, centers[nearest].y - label.point.y)
+      )
+        nearest = i;
+    const previous = placed.get(nearest);
+    placed.set(nearest, {
+      ...label,
+      point: centers[nearest],
+      arrowIndex: nearest,
+      ...(previous ? { key: "both", text: `${previous.text}\n${label.text}` } : {}),
+    });
+  }
+  return [...placed.values()].map((label) => ({
+    ...label,
+    ...fitRatioArrow(
+      arrows[label.arrowIndex],
+      label.text,
+      arrows.length > 1 && label.arrowIndex === arrows.length - 1 ? "input" : label.key,
+    ),
+  }));
+}
+
+/** One layout per published route/configuration change. No DOM or viewport inputs.
+ * Move only colliding labels along their own wires; never alter the routes. */
+export function layoutRatioLabels(wires: readonly RatioLabelWire[]): Map<string, RatioWireLabel[]> {
+  const result = new Map<string, RatioWireLabel[]>();
+  const occupied: { x: number; y: number; width: number; height: number }[] = [];
+  for (const wire of wires) {
+    const segments = wire.points.slice(1).map((end, i) => ({
+      start: wire.points[i],
+      end,
+      length: Math.hypot(end.x - wire.points[i].x, end.y - wire.points[i].y),
+    }));
+    const length = segments.reduce((sum, segment) => sum + segment.length, 0);
+    if (!length) continue;
+    const pointAt = (ratio: number) => {
+      let remaining = ratio * length;
+      for (const segment of segments) {
+        if (remaining <= segment.length && segment.length) {
+          const t = remaining / segment.length;
+          return {
+            x: segment.start.x + (segment.end.x - segment.start.x) * t,
+            y: segment.start.y + (segment.end.y - segment.start.y) * t,
+          };
+        }
+        remaining -= segment.length;
+      }
+      return wire.points[wire.points.length - 1];
+    };
+    const both = wire.input !== undefined && wire.output !== undefined;
+    const candidates =
+      both && length < 160
+        ? [{ key: "both", text: `Out ${wire.output}\nIn ${wire.input}` }]
+        : (["output", "input"] as const).flatMap((key) =>
+            wire[key] === undefined
+              ? []
+              : [{ key, text: `${both ? (key === "output" ? "Out " : "In ") : ""}${wire[key]}` }],
+          );
+    const placed: RatioWireLabel[] = [];
+    for (const label of candidates) {
+      const { width, height } = ratioLabelBounds(label.text, { x: 0, y: 0 });
+      let chosen = { ratio: 0.5, overlap: Infinity };
+      for (const distance of label.key === "both"
+        ? [length / 2]
+        : [60, 36, 84, 108, 132, 156, 180]) {
+        const near = Math.min(distance / length, 0.5);
+        const ratio = label.key === "input" ? 1 - near : near;
+        const point = pointAt(ratio);
+        const overlap = occupied.reduce((sum, rect) => {
+          const dx = Math.max(0, (width + rect.width) / 2 + 4 - Math.abs(point.x - rect.x));
+          const dy = Math.max(0, (height + rect.height) / 2 + 4 - Math.abs(point.y - rect.y));
+          return sum + dx * dy;
+        }, 0);
+        if (overlap < chosen.overlap) chosen = { ratio, overlap };
+        if (!overlap) break;
+      }
+      occupied.push({ ...pointAt(chosen.ratio), width, height });
+      placed.push({ ...label, ratio: chosen.ratio });
+    }
+    result.set(wire.id, placed);
+  }
+  return result;
+}

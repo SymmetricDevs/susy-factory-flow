@@ -5,20 +5,14 @@ import { getUiScale } from "@/lib/ui-scale";
 
 /**
  * The Welcome page's backdrop: the pack's most-used items drifting through
- * the corners over a field of ASCII texture, with the middle, where the
- * words are, left clear.
+ * the corners over a field of ASCII texture, leaving the middle clear.
  *
- * Two layers on one canvas. Underneath, a grid of monospace glyphs, denser
- * towards the corners (a vignette in reverse), a few cells re-rolling each
- * tick so it shimmers like a terminal at rest. On top, item sprites from the
- * game, TINTED to the board's palette so they read as one texture rather
- * than a pile of pictures, rising slowly at three depths (small, dim and
- * slow at the back), swaying a little, fading in at the bottom and out at
- * the top. Now and then one wakes up: it swells slightly and shows its true
- * colours for a couple of seconds before sinking back into the tint.
- *
- * Everything is scaled by the vignette weight, so nothing crosses the words.
- * One still frame under reduced motion; stops while the tab is hidden.
+ * Two layers on one canvas: a grid of monospace glyphs, denser towards the
+ * corners, a few cells re-rolling each tick; and item sprites TINTED to the
+ * board palette, rising at three depths, occasionally showing their true
+ * colours for a moment. Everything is scaled by the vignette weight so
+ * nothing crosses the words. One still frame under reduced motion; stops
+ * while the tab is hidden.
  */
 
 const CELL_W = 11;
@@ -75,7 +69,7 @@ function rand(min: number, max: number): number {
 
 function rollGlyph(weight: number): string {
   // Density follows the vignette: the middle is almost all blank, and the
-  // field is sparser than it was on its own now that the items are over it.
+  // field stays sparse because the items drift over it.
   if (Math.random() > weight * 0.5) {
     return " ";
   }

@@ -7,15 +7,14 @@ import { Bug, ChevronDown, Compass, Heart, Library } from "lucide-react";
 import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
 import { openWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { APP_VERSION } from "@/lib/version";
-import { DONATIONS_ENABLED } from "@/lib/feature-toggles";
 
 const GITHUB_URL = "https://github.com/jackwrichards/gtnh-factory-flow";
 
 /**
- * The Supersymmetry community Discord. A server INVITE (the pack's own), so it
- * works for anyone who opens it, whether or not they are already a member.
+ * The planner's thread in the GTNH Discord. A thread, not a server invite,
+ * so it only opens for people already in the server.
  */
-const DISCORD_INVITE_URL = "https://discord.gg/BNbbK98rh6";
+const DISCORD_THREAD_URL = "https://discord.com/channels/181078474394566657/1531402304530682036";
 
 /**
  * The tip jar. Clicks are counted through Umami's `data-umami-event`
@@ -25,88 +24,41 @@ const DISCORD_INVITE_URL = "https://discord.gg/BNbbK98rh6";
 const KOFI_URL = "https://ko-fi.com/gtnhplanner";
 
 /**
- * Straight into the bug report form rather than a blank issue box, with the
- * version chip's value already filled in: the first thing anyone triaging a
- * report needs is which build it happened on, and that is the detail players
- * are least likely to think of.
+ * The bug report form with the app version pre-filled, since reporters rarely
+ * think to include the build.
  */
 const BUG_REPORT_URL = `${GITHUB_URL}/issues/new?template=bug_report.yml&version=${encodeURIComponent(
   APP_VERSION,
 )}`;
 
-/**
- * Source and chat, sitting in the header beside the board actions. The bug
- * report is not one of these squares: it sits at the far right in its own
- * red so it is still the one thing on the bar that stands out.
- */
+/** The header's "Help" dropdown: the auxiliary set of MenuLinks. */
 export function HeaderLinks() {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useDropdownDismiss(open, { refs: [root], onClose: () => setOpen(false) });
   return (
     <div ref={root} className="relative shrink-0">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-label="Help and links"
+      <button type="button" aria-expanded={open} aria-label="Help and links"
         onClick={() => setOpen(!open)}
-        className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-raised hover:text-fg"
-      >
+        className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-raised hover:text-fg">
         Help <ChevronDown className="h-3 w-3" />
       </button>
-      {open ? (
-        <div className="absolute right-0 top-full z-[100] mt-1 w-52 rounded border border-line-strong bg-surface p-1 text-sm shadow-xl">
-          <MenuLinks auxiliary onAction={() => setOpen(false)} />
-        </div>
-      ) : null}
-      <HeaderLink href={GITHUB_URL} label="Source on GitHub">
-        <GithubMark />
-      </HeaderLink>
-      <HeaderLink href={DISCORD_INVITE_URL} label="Supersymmetry Discord">
-        <DiscordMark />
-      </HeaderLink>
+      {open ? <div className="absolute right-0 top-full z-[100] mt-1 w-52 rounded border border-line-strong bg-surface p-1 text-sm shadow-xl">
+        <MenuLinks auxiliary onAction={() => setOpen(false)} />
+      </div> : null}
     </div>
   );
 }
 
-/**
- * Reporting a bug keeps its red so it is still the one control that stands
- * out, but it lost its word (Jack, 2026-09-06): the bar was too wide, and the
- * tooltip says the rest.
- */
-export function ReportBugButton() {
-  return (
-    <a
-      href={BUG_REPORT_URL}
-      target="_blank"
-      rel="noreferrer noopener"
-      title="Report a bug"
-      aria-label="Report a bug"
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-red-800 bg-red-950 text-red-300 hover:border-red-600 hover:bg-red-900 hover:text-red-200"
-    >
-      <Bug className="h-3.5 w-3.5" aria-hidden />
-    </a>
-  );
-}
-
-/**
- * The donation link, dressed like its two labelled neighbours but in its own
- * colour. The word on the bar is just "Support": the app's name is already the
- * first thing on the same line, and this is the button that has to survive the
- * snug squeeze down to its heart.
- */
+/** The donation link: a heart in its own colour, labelled for screen readers. */
 export function SupportButton() {
-  // Temporarily disabled for this fork (see feature-toggles.ts).
-  if (!DONATIONS_ENABLED) {
-    return null;
-  }
   return (
     <a
       href={KOFI_URL}
       target="_blank"
       rel="noreferrer noopener"
       title="Support on Ko-fi"
-      aria-label="Support SuSy Planner on Ko-fi"
+      aria-label="Support GTNH Planner on Ko-fi"
       data-umami-event="support-kofi"
       data-umami-event-source="header"
       className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-pink-800 bg-pink-950 px-2 text-xs font-semibold text-pink-300 hover:border-pink-600 hover:bg-pink-900 hover:text-pink-200 snug:w-5 snug:justify-center snug:px-0"
@@ -118,17 +70,11 @@ export function SupportButton() {
 }
 
 /**
- * The same three links as labelled rows, for the compact menu. Two brand marks
- * a phone can read at a glance are still two brand marks nobody can hover for a
- * tooltip, so up here they carry their names.
+ * The app's links as labelled rows (touch has no hover tooltips), for the
+ * compact menu. `auxiliary` (the header's Help dropdown) leaves out Library
+ * and Support.
  */
-export function MenuLinks({
-  onAction,
-  auxiliary = false,
-}: {
-  onAction?: () => void;
-  auxiliary?: boolean;
-}) {
+export function MenuLinks({ onAction, auxiliary = false }: { onAction?: () => void; auxiliary?: boolean }) {
   return (
     <div className="flex flex-col">
       <button
@@ -145,38 +91,34 @@ export function MenuLinks({
         </span>
         <span className="truncate">Welcome</span>
       </button>
-      {!auxiliary ? (
-        <button
-          type="button"
-          onClick={() => {
-            openLibrary();
-            onAction?.();
-          }}
-          className="flex h-10 items-center gap-2.5 rounded px-2 text-left text-sm text-fg-subtle hover:bg-surface-sunken"
-        >
-          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-            <Library className="h-3.5 w-3.5" aria-hidden />
-          </span>
-          <span className="truncate">Library</span>
-        </button>
-      ) : null}
+      {!auxiliary ? <button
+        type="button"
+        onClick={() => {
+          openLibrary();
+          onAction?.();
+        }}
+        className="flex h-10 items-center gap-2.5 rounded px-2 text-left text-sm text-fg-subtle hover:bg-surface-sunken"
+      >
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+          <Library className="h-3.5 w-3.5" aria-hidden />
+        </span>
+        <span className="truncate">Library</span>
+      </button> : null}
       <MenuLink href={GITHUB_URL} label="Source on GitHub">
         <GithubMark />
       </MenuLink>
-      <MenuLink href={DISCORD_INVITE_URL} label="Supersymmetry Discord">
+      <MenuLink href={DISCORD_THREAD_URL} label="Discord thread">
         <DiscordMark />
       </MenuLink>
-      {DONATIONS_ENABLED ? (
-        <MenuLink
-          href={KOFI_URL}
-          label="Support SuSy Planner"
-          tone="support"
-          umamiEvent="support-kofi"
-        >
-          <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
-        </MenuLink>
-      ) : null}
-      <MenuLink href={BUG_REPORT_URL} label="Report a bug" tone="danger">
+      {!auxiliary ? <MenuLink
+        href={KOFI_URL}
+        label="Support GTNH Planner"
+        tone="support"
+        umamiEvent="support-kofi"
+      >
+        <Heart className="h-3.5 w-3.5 fill-current" aria-hidden />
+      </MenuLink> : null}
+      <MenuLink href={BUG_REPORT_URL} label="Report a bug">
         <Bug className="h-3.5 w-3.5" aria-hidden />
       </MenuLink>
     </div>
@@ -206,38 +148,11 @@ function MenuLink({
       data-umami-event-source={umamiEvent ? "menu" : undefined}
       className={[
         "flex h-10 items-center gap-2.5 rounded px-2 text-sm hover:bg-surface-sunken",
-        tone === "danger"
-          ? "text-red-300"
-          : tone === "support"
-            ? "text-pink-300"
-            : "text-fg-subtle",
+        tone === "danger" ? "text-red-300" : tone === "support" ? "text-pink-300" : "text-fg-subtle",
       ].join(" ")}
     >
       <span className="flex h-4 w-4 shrink-0 items-center justify-center">{children}</span>
       <span className="truncate">{label}</span>
-    </a>
-  );
-}
-
-function HeaderLink({
-  href,
-  label,
-  children,
-}: {
-  href: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      title={label}
-      aria-label={label}
-      className="inline-flex h-5 w-5 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised hover:text-fg"
-    >
-      {children}
     </a>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import type { FactoryProject } from "@/lib/model/types";
+import type { FactoryProject, StorageBufferMode } from "@/lib/model/types";
 import { playBoardSound, primeBoardSounds } from "@/lib/board-sounds";
 import { useFactoryStore } from "@/store/factory-store";
 
@@ -9,24 +9,22 @@ import { useFactoryStore } from "@/store/factory-store";
  * Plays the board's interface sounds by WATCHING the project rather than by
  * instrumenting call sites. Every way a card can land (recipe book add,
  * drawer drag, paste, refactor, undo) funnels through the store, so a diff
- * of ids between one project and the next catches all of them - including
- * paths added later, which is the point.
+ * of ids between one project and the next catches all of them, including
+ * paths added later.
  *
- * SOUNDS ARE FOR THE CANVAS ONLY (Jack, 2026-08-28): cards landing and
- * leaving, wires connecting and cutting, boards folding and unfolding,
- * card settings changing, bulk changes. Navigation and chrome are silent -
- * no tab sounds, no button sounds. Two guards enforce that beyond the
- * id-diff itself:
+ * SOUNDS ARE FOR THE CANVAS ONLY: cards landing and leaving, wires
+ * connecting and cutting, boards folding and unfolding, card settings
+ * changing, bulk changes. Navigation and chrome are silent. Two guards
+ * enforce that beyond the id-diff itself:
  * - A project id change is navigation and plays nothing, and it opens a
  *   short QUIET WINDOW: loading machinery (migrations, icon refreshes,
- *   dataset touch-ups) often rewrites the plan right after a switch, and
- *   none of that is the player's hand.
+ *   dataset touch-ups) often rewrites the plan right after a switch.
  * - The config signature ignores cosmetic fields (positions, icons,
  *   colors, tooltips, names), so a refresh that re-resolves art can never
  *   fake a settings change.
  *
- * Undo and redo are deliberately NOT special-cased: undoing a delete diffs
- * as an add and thumps like one, which is what the hand just did.
+ * Undo and redo are not special-cased: undoing a delete diffs as an add and
+ * sounds like one, which is what the hand just did.
  */
 
 interface ProjectSoundSnapshot {
@@ -37,6 +35,7 @@ interface ProjectSoundSnapshot {
   openPocketIds: Set<string>;
   /** Drawer ids, to tell a supply spawn from a catch spawn. */
   storageIds: Set<string>;
+  storageModes: Map<string, StorageBufferMode>;
   /** Edge endpoints, to see which way a freshly spawned drawer faces. */
   edgeEnds: Map<string, { source: string; target: string }>;
   /** POWER wires, for the zap: connecting electricity sounds electric. */
@@ -77,9 +76,11 @@ export function snapshotProject(project: FactoryProject): ProjectSoundSnapshot {
     signatureParts.push(JSON.stringify(node, signatureReplacer));
   }
   const storageIds = new Set<string>();
+  const storageModes = new Map<string, StorageBufferMode>();
   for (const storage of project.storages ?? []) {
     nodeIds.add(storage.id);
     storageIds.add(storage.id);
+    storageModes.set(storage.id, storage.bufferMode ?? "overflow");
     signatureParts.push(JSON.stringify(storage, signatureReplacer));
   }
   const edgeIds = new Set<string>();
@@ -104,6 +105,7 @@ export function snapshotProject(project: FactoryProject): ProjectSoundSnapshot {
     edgeIds,
     openPocketIds,
     storageIds,
+    storageModes,
     edgeEnds,
     powerEdgeIds,
     configSignature: signatureParts.join("\n"),
@@ -114,8 +116,7 @@ export function snapshotProject(project: FactoryProject): ProjectSoundSnapshot {
  * What the ear would consider "the plan changed", as one comparable string.
  * The gesture failure-check needs this instead of a reference compare: a
  * refused drawer spawn (storage endpoint conflict) COMMITS a rebuilt,
- * content-identical project - reference-new, nothing actually different -
- * and reading that as success silenced the exact failure it was.
+ * content-identical project, which a reference compare would read as success.
  */
 export function projectSoundFingerprint(project: FactoryProject): string {
   const snap = snapshotProject(project);
@@ -194,18 +195,21 @@ export function playProjectDiff(prev: ProjectSoundSnapshot, next: ProjectSoundSn
     } else if (countMissing(prev.openPocketIds, next.openPocketIds) > 0) {
       playBoardSound("close");
     } else if (next.configSignature !== prev.configSignature) {
-      playBoardSound("adjust");
+      const modes = [...next.storageModes].filter(([id, mode]) => prev.storageModes.get(id) !== mode);
+      if (modes.length === 1) {
+        const sound = { overflow: "drawerOverflow", strict: "drawerStrict", ratio: "drawerRatio" } as const;
+        playBoardSound(sound[modes[0][1]]);
+      } else {
+        playBoardSound(modes.length > 1 ? "sweep" : "adjust");
+      }
     }
     return;
   }
 
-  // ONE sound per transaction. A refactor adds and removes in the same
-  // step, and playing place AND delete together came out twice as loud as
-  // either action alone - which read as broken volume, not as two events.
-  // Priority: what arrived beats what left, cards beat wires.
-  // Except ELECTRICITY: a gesture that lands a power wire zaps, whatever
-  // else came with it - the EU drag that spawns a drawer is still, to the
-  // hand, "I connected power to something".
+  // ONE sound per transaction: a refactor adds and removes in the same step,
+  // and two sounds together read as broken volume. Priority: what arrived
+  // beats what left, cards beat wires. Except ELECTRICITY: a gesture that
+  // lands a power wire zaps, whatever else came with it.
   let addedPowerEdge = false;
   for (const edgeId of next.powerEdgeIds) {
     if (!prev.edgeIds.has(edgeId)) {

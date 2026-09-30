@@ -58,11 +58,12 @@ export function getVoltageTierIndex(tier: Exclude<MachineTier, "DEMO">): number 
   return index === -1 ? GT_VOLTAGE_TIERS.length - 1 : index;
 }
 
-export function isVoltageTierAbove(
-  tier: Exclude<MachineTier, "DEMO">,
-  maxTier: Exclude<MachineTier, "DEMO">,
-): boolean {
-  return getVoltageTierIndex(tier) > getVoltageTierIndex(maxTier);
+/**
+ * Whether a stored string names a real voltage tier. getVoltageTierIndex cannot
+ * answer that: it maps anything it does not know to the top tier.
+ */
+export function isVoltageTierName(value: unknown): value is Exclude<MachineTier, "DEMO"> {
+  return GT_VOLTAGE_TIERS.some((entry) => entry.tier === value);
 }
 
 /** EU/t a single energy hatch of this tier delivers - the machine's power budget. */
@@ -108,11 +109,19 @@ export function getRecipeMinimumVoltageTier(
  * which honours an under-tiered hatch choice and lets power-report call it.
  */
 export function getRunVoltageTier(
-  recipe: Pick<Recipe, "eut" | "minimumTier"> & Partial<Pick<Recipe, "maximumTier">>,
+  recipe: Pick<Recipe, "eut" | "minimumTier"> & Partial<Pick<Recipe, "maximumTier" | "availableTiers">>,
   requestedTier: string | undefined,
 ): Exclude<MachineTier, "DEMO"> {
   const minimumTier = getRecipeMinimumVoltageTier(recipe);
   const requested = resolveVoltageTier(requestedTier, minimumTier);
+  const available = getRecipeAvailableVoltageTiers(recipe);
+  if (available) {
+    const eligible = available.filter((tier) => getVoltageTierIndex(tier) >= getVoltageTierIndex(minimumTier));
+    // A saved tier in a gap falls back to the real machine below it. If that
+    // cannot run the recipe, choose the first registered machine that can.
+    return eligible.findLast((tier) => getVoltageTierIndex(tier) <= getVoltageTierIndex(requested))
+      ?? eligible[0] ?? available[available.length - 1];
+  }
   if (getVoltageTierIndex(requested) < getVoltageTierIndex(minimumTier)) {
     return minimumTier;
   }
@@ -120,6 +129,15 @@ export function getRunVoltageTier(
   // tier runs the highest block that exists.
   const maximum = getRecipeMaximumVoltageTier(recipe);
   return maximum && getVoltageTierIndex(requested) > getVoltageTierIndex(maximum) ? maximum : requested;
+}
+
+/** The registered singleblock ladder, in voltage order; absent on legacy data. */
+export function getRecipeAvailableVoltageTiers(
+  recipe: Partial<Pick<Recipe, "availableTiers">>,
+): Exclude<MachineTier, "DEMO">[] | undefined {
+  const tiers = GT_VOLTAGE_TIERS.filter((entry) => recipe.availableTiers?.includes(entry.tier))
+    .map((entry) => entry.tier);
+  return tiers.length ? tiers : undefined;
 }
 
 /** The family's highest real machine, when the recipe's handler names one. */

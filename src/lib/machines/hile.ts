@@ -46,13 +46,14 @@ export function hileSourceAt(index: number) {
   return HILE_SOURCES[index] ?? HILE_SOURCES[0];
 }
 
-/** Old cards had an amperage-only source and a second, conflicting count knob. */
+/**
+ * Migrates legacy settings: an amperage-only source (`a<amps>`) or the
+ * separate `laserAmperage` count knob. A saved named source always wins.
+ */
 export function normalizeHileSettings(settings: Record<string, string>): Record<string, string> {
   if (HILE_SOURCES.some((source) => source.key === settings.laserSource)) return settings;
-  // The named source is the actual hatch the player chose. Only use the old
-  // count knob when no named source was saved. Impossible counts round up to
-  // the next real hatch; legacy cards never recorded a source voltage, so
-  // select the lowest registered tier carrying that amperage.
+  // Legacy amps round up to the next real hatch. They carry no voltage, so
+  // take the lowest registered tier with that amperage.
   const oldSource = /^a(\d+)$/.exec(settings.laserSource ?? "");
   const amps = Number(oldSource?.[1] ?? settings.laserAmperage ?? 256);
   const source = HILE_SOURCES.find((entry) => entry.amps >= amps) ?? HILE_SOURCES[0];

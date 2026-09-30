@@ -10,9 +10,10 @@ export const isHatchSupplyId = (id: string) => id.startsWith(HATCH_SUPPLY_PREFIX
 const cache = new WeakMap<FactoryProject, FactoryProject>();
 
 /** Run AFTER shared-machine/pool expansion. A private source supplies only
- * the selected card's input. Existing wires remain saved, but do not feed a
- * hatch-satisfied slot until it is switched off. No supply leaks into a pool.
- * Jack explicitly requested full satisfaction, abstracting counts and rates.
+ * the selected card's input (a Reservoir or Air Intake Hatch), fully
+ * satisfying it: hatch counts and rates are abstracted away on purpose.
+ * Existing wires remain saved, but do not feed a hatch-satisfied slot until
+ * it is switched off. No supply leaks into a pool.
  */
 export function expandHatchSupplies(project: FactoryProject): FactoryProject {
   const cached = cache.get(project);

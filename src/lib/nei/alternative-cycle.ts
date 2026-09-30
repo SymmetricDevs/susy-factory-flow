@@ -32,14 +32,9 @@ type CycleResource = Pick<
 >;
 
 /**
- * ONE interval for the whole app, not one per slot.
- *
- * The recipe browser mounts these by the hundred. A timer and a piece of React
- * state per slot would mean hundreds of independent re-render storms; instead
- * every cycling slot derives its face from this single counter, so the cost is
- * one timer plus a re-render of only the slots that actually have alternatives.
- * The interval exists only while something is subscribed, so closing the browser
- * stops the clock rather than leaving it ticking behind a closed panel.
+ * ONE interval for the whole app, not one per slot: slots mount by the
+ * hundred, so each derives its face from this shared counter. The interval
+ * runs only while something is subscribed.
  */
 let tick = 0;
 let timer: ReturnType<typeof setInterval> | undefined;

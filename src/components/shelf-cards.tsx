@@ -1,16 +1,15 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { EntryIcon, PlanResourceStat } from "@/lib/community/types";
+import type { PlanResourceStat } from "@/lib/community/types";
 import type { MachineTier } from "@/lib/model/types";
 import { formatSlotRate } from "@/components/flow/flow-explainers";
 import { GT_TIER_COLORS } from "@/components/flow/tier-colors";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
 
 /**
- * Everything the Setups and Pockets shelves render the same way: tag
- * chips, tier badges, the Needs/Makes stat sections, and the one hover
- * card a whole row reveals.
+ * Shared pieces for plan listings (library, share and export surfaces): tag
+ * chips, tier badges, the Needs/Makes stat sections, and a row's hover card.
  */
 
 export function formatRelativeDate(iso: string): string {
@@ -34,44 +33,11 @@ export function formatRelativeDate(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-/** A row's tags as small chips; clicking one searches for it (`#tag`).
-    They opt out of the row's hover card — a chip is its own control. */
-export function TagChips({
-  tags,
-  onTag,
-  className,
-}: {
-  tags: string[];
-  onTag: (tag: string) => void;
-  className?: string;
-}) {
-  if (tags.length === 0) {
-    return null;
-  }
-  return (
-    <div className={["mt-0.5 flex flex-wrap gap-1", className ?? ""].join(" ")}>
-      {tags.map((tag) => (
-        <button
-          key={tag}
-          type="button"
-          data-tooltip-stop=""
-          onClick={() => onTag(tag)}
-          title={`Search #${tag}`}
-          className="rounded-[3px] border border-neutral-700 bg-[#17191d] px-1 py-px text-[9px] leading-3 text-neutral-400 hover:border-cyan-600 hover:text-cyan-300"
-        >
-          #{tag}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export type VoltageTier = Exclude<MachineTier, "DEMO">;
 
 /**
- * The GT voltage badge, worn exactly like the tier button on a card — and a
- * fixed column: every badge is as wide as the widest tier label, so the
- * text after them all starts on the same line.
+ * The GT voltage badge, styled like a card's tier button, at a fixed width
+ * (the widest tier label) so the text after it aligns.
  */
 export const TIER_BADGE_WIDTH = "w-8";
 
@@ -180,13 +146,13 @@ export function renderIoStats(
   );
 }
 
+
 /**
- * The whole story a hovered row tells: icon and full title (names truncate
- * in a 344px column), who made it and when, the headline numbers with the
- * tier in its GT colour, the description, then Needs/Makes.
+ * A plan row's detail card: identity, author/date, headline counts, version,
+ * description and its Needs/Makes summary.
  */
 export function renderEntryHoverCard(entry: {
-  icon?: EntryIcon;
+  icon?: import("@/lib/community/types").EntryIcon;
   name: string;
   authorName?: string;
   createdAt?: string;
@@ -199,8 +165,6 @@ export function renderEntryHoverCard(entry: {
   outputs?: PlanResourceStat[];
 }): ReactNode {
   return (
-    // Wide enough that each of the two resource columns gets the room the
-    // old single stacked column had, so nothing wraps or truncates.
     <div className="w-[34rem]">
       <div className="flex items-center gap-2">
         {entry.icon ? (
@@ -237,9 +201,7 @@ export function renderEntryHoverCard(entry: {
         <span>{entry.cardCount} cards</span>
         <span>{entry.machineCount} machines</span>
         {entry.tier ? <TierBadge tier={entry.tier} /> : null}
-        {entry.gameVersion ? (
-          <span className="ml-auto shrink-0 truncate">SUSY {entry.gameVersion}</span>
-        ) : null}
+        {entry.gameVersion ? <span className="ml-auto shrink-0 truncate">GTNH {entry.gameVersion}</span> : null}
       </div>
       {entry.description ? (
         <p className="mt-1.5 max-h-28 overflow-hidden whitespace-pre-wrap text-[11px] leading-4 text-slate-300">

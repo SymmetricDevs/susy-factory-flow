@@ -23,9 +23,8 @@ self.onmessage = async (event: MessageEvent<{ key: string; project: FactoryProje
     const started = performance.now();
     const result = calculateThroughput(project);
     // The clog-lock proof is a second LP over the same board, and on a plan
-    // with many stopped machines a harder one than the books (18 s against
-    // 11 s on a 236-card plan, homegrown): it runs here, on HiGHS, and rides
-    // back on the books so the board never proves it on the main thread.
+    // with many stopped machines a harder one than the books: it runs here,
+    // on HiGHS, and rides back on the books so the main thread never runs it.
     attachClogLocks(project, result);
     // The solve's own cost rides back so the router can learn whether this
     // board is one that must stay off the main thread - the diagnosis

@@ -1,9 +1,9 @@
-﻿import {
+import { hasStorageTarget, isInputRate, storageTargetMode } from "../model/storage-target";
+import {
   getChanceMultiplier,
   isRecipeInputConsumed,
   makeResourceKey,
   primaryOutput,
-  resourceLabel,
 } from "../model/resources";
 import type {
   BottleneckReport,
@@ -72,13 +72,10 @@ export function calculateThroughput(
   project: FactoryProject,
   options: SolverOptions = {},
 ): ThroughputResult {
-  // BOARD RULES: the player asked the plan to feed its own inputs, or to let
-  // its spare output leave, or both. Each is a virtual drawer on every slot
-  // of that side - wired ones included, so a half-fed input tops up and a
-  // surplus output spills instead of holding its machine back. The drawers
-  // exist only inside this result and never reach the board, and the LP
-  // spends a free source only after every real wire (its recycle-before-
-  // importing stage), so nothing the player drew is bypassed.
+  // SETUP RULES (model/setup-rules.ts). getSetupRules answers every plan
+  // with closed boundaries and loose cell wires on. A free side would add a
+  // virtual drawer on every slot of that side, never reaching the board and
+  // spent by the LP only after every real wire.
   const rules = getSetupRules(project);
   // SHARED MACHINES (shared-machine.ts): a card running several recipes is
   // solved as one hidden node per recipe, coupled by one time row in the
@@ -101,10 +98,8 @@ export function calculateThroughput(
     });
   }
   project = getPoolProject(project);
-  // With the rule OFF the conversion does not exist: a cross-form wire left
-  // on the board carries nothing (its far end reads NO SUPPLY), and the
-  // board raises a notice naming it. Anything else would let a disabled
-  // rule keep converting.
+  // With the rule off a cross-form wire would carry nothing (its far end
+  // reads NO SUPPLY).
   const crossFormEdges = rules.looseCellWires
     ? expandCrossFormEdges(project)
     : { project, hiddenNodeIds: [], hiddenEdgeIds: [] };
@@ -242,19 +237,12 @@ export function calculateThroughput(
   }
 
   // SOLVE MODE: the product drawers' typed amounts are the question and the
-  // machine counts are the answer. The nameplate reports above (built at the
-  // player's counts) supply the per-card rates; solve-mode.ts scales them.
-  // None of the plan-mode storytelling below runs - usage, verdicts, clogs
-  // and fairness all describe a FIXED build, and the build is what is being
-  // solved for here.
-  //
-  // With no number typed anywhere the honest answer IS zero machines
-  // everywhere: nothing asks, nothing runs. This used to fall back to the
-  // plan books instead - but that showed the other mode's figures inside
-  // this one, and machines "running for no reason" read as a lie. The
-  // board can afford the honesty now: a zero card keeps its ports and its
-  // wires, the verdicts stay quiet, and the needs-a-number notice says
-  // what is missing.
+  // machine counts are the answer. The nameplate reports above supply the
+  // per-card rates; solve-mode.ts scales them. None of the plan-mode
+  // storytelling below runs: it describes a FIXED build. With no number
+  // typed anywhere the answer is zero machines everywhere (never the plan
+  // books); a zero card keeps its ports and wires, and the needs-a-number
+  // notice says what is missing.
   if (project.solveMode) {
     return finalizeSolveModeResult(
       project,
@@ -274,12 +262,10 @@ export function calculateThroughput(
   const equilibrium = solveEquilibrium(project, nodes, storagesById);
 
   // THE BOOKS COME FROM THE EQUATIONS. The iterative engine above keeps the
-  // diagnosis - capability, demand, disposal, the clog names, "one wire
-  // fixes it" - but the actual levels and wire flows are a direct solve of
-  // the conservation constraints (equations-core.ts): nothing from nowhere,
-  // nothing into nowhere, except at the player's drawers. If the solve does
-  // not come back optimal (two known heavy boards strain the simplex), the
-  // iterative books above stand - yesterday's behavior as the safety net.
+  // diagnosis (capability, demand, disposal, clog names), but the actual
+  // levels and wire flows are a direct solve of the conservation
+  // constraints (equations-core.ts). If that solve is not optimal, the
+  // iterative books stand as the safety net.
   if (EQUATION_BOOKS) {
     const equationBooks = solveEquationsCore(project, nodes, undefined, {
       disposalByNode: equilibrium.disposalByNode,
@@ -382,21 +368,18 @@ export function calculateThroughput(
 }
 
 /**
- * LOOSE CELL WIRES (SetupRules.looseCellWires): a wire whose resource is one
- * form and whose target handle names the other - a cell landing on a fluid
- * input, or a fluid landing on a cell input. No wire crosses kinds on its
- * own - inside the solve each such edge runs through a hidden free Tank
- * converting at the Canner ratio stored on the edge (cell in, litres out; or
- * litres in, cell out), zero EU, one tick, and a machine count high enough
- * that only its neighbours can ever bind. The hidden node and the synthetic
- * far half of the wire are stripped from the returned result; the visible
- * edge keeps its own id, so its figures land on the wire the player drew (in
- * its own resource).
+ * LOOSE CELL WIRES: a wire whose resource is one form and whose target
+ * handle names the other (a cell landing on a fluid input, or a fluid on a
+ * cell input). Inside the solve each such edge runs through a hidden free
+ * Tank converting at the Canner ratio stored on the edge, zero EU, one tick,
+ * and a machine count high enough that only its neighbours can bind. The
+ * hidden node and the synthetic far half of the wire are stripped from the
+ * result; the visible edge keeps its id, so its figures land on the wire
+ * the player drew (in its own resource).
  *
- * Known blind spot: the clog-lock detector solves over the UNexpanded
- * project, so a dead board's vent analysis does not see through these wires.
- * The rule is off by default and the wires themselves keep the board running,
- * so the detector's trigger (a dead machine) rarely coincides.
+ * Known blind spot: the clog-lock detector (components/flow/clog-lock.ts)
+ * solves over the UNexpanded project, so its vent analysis does not see
+ * through these wires.
  */
 function expandCrossFormEdges(project: FactoryProject): {
   project: FactoryProject;
@@ -494,7 +477,7 @@ export function hasAnySolveNumbers(project: FactoryProject): boolean {
   return (
     (project.storages ?? []).some(
       (storage) =>
-        (storage.targetPerSecond ?? 0) > 0 &&
+        hasStorageTarget(storage) &&
         // A byproduct or trash drawer's number is DORMANT (typed while it
         // was a product, kept for the flip back): it asks nothing, so it
         // must not silence the needs-a-number notice.
@@ -524,14 +507,18 @@ function finalizeSolveModeResult(
 ): ThroughputResult {
   const roles = getStorageRoles(project);
   const targets = projectStorages
-    .filter(
-      (storage) =>
-        roles.get(storage.id) === "product" && (storage.targetPerSecond ?? 0) > 0,
-    )
-    .map((storage) => ({
-      storageId: storage.id,
-      amountPerSecond: storage.targetPerSecond!,
-    }));
+    .filter((storage) => {
+      const role = roles.get(storage.id);
+      return (role === "source" || role === "product") && hasStorageTarget(storage, role);
+    })
+    .map((storage) => {
+      const role = roles.get(storage.id);
+      const mode = storageTargetMode(storage, role);
+      const input = isInputRate(storage, role);
+      return { storageId: storage.id, input,
+        amountPerSecond: (input ? -1 : 1) * Math.abs(storage.targetPerSecond!),
+        exact: mode === "exact", atMost: mode === "at-most" };
+    });
 
   const pins = project.nodes
     .filter((node) => node.enabled && (node.solvePin ?? 0) > 0)
@@ -543,7 +530,9 @@ function finalizeSolveModeResult(
       id: "solve-pins",
       kind: "resource-deficit",
       severity: "critical",
-      message: "The pinned machine counts cannot run together. Check their outputs have somewhere to go.",
+      message: targets.some((target) => target.exact || target.atMost)
+        ? "The pinned machine counts conflict with each other or a rate limit. Check the target rates and pinned counts."
+        : "The pinned machine counts cannot run together. Check their outputs have somewhere to go.",
     });
   }
 
@@ -557,13 +546,10 @@ function finalizeSolveModeResult(
     nodeResult.theoreticalMachinesRequired = act * (countByNode.get(nodeResult.nodeId) ?? 1);
     nodeResult.disposalUtilization = 1;
     if (act <= EPSILON) {
-      // ZERO IS NOT SELF-DESTRUCTION. A machine no target needs keeps its
-      // NAMEPLATE rates - the same convention a power-stalled card follows
-      // in plan mode - because the port rows and their React Flow handles
-      // are built from these flows: zero them and the ports vanish, and
-      // with the handles gone every wire on the card silently stops
-      // drawing. Utilization 0 is what says nothing runs; the wires stay,
-      // carrying nothing.
+      // A machine no target needs keeps its NAMEPLATE rates (as a
+      // power-stalled card does): port rows and their React Flow handles are
+      // built from these flows, and zeroing them would make every wire on
+      // the card stop drawing. Utilization 0 says nothing runs.
       nodeResult.utilization = 0;
       nodeResult.capableUtilization = 0;
       nodeResult.demandUtilization = 0;
@@ -607,7 +593,7 @@ function finalizeSolveModeResult(
 
   for (const storage of projectStorages) {
     const result = storages[storage.id];
-    if (!result || roles.get(storage.id) !== "product") {
+    if (!result || (roles.get(storage.id) !== "product" && roles.get(storage.id) !== "source")) {
       continue;
     }
     result.targetPerSecond = storage.targetPerSecond;
@@ -617,7 +603,7 @@ function finalizeSolveModeResult(
         id: `solve-target:${storage.id}`,
         kind: "resource-deficit",
         severity: "critical",
-        message: `${storage.displayName ?? storage.resourceId}: no chain can make ${storage.targetPerSecond?.toFixed(2)}/s.`,
+        message: `${storage.displayName ?? storage.resourceId}: no chain can ${isInputRate(storage, roles.get(storage.id)) ? "use" : "make"} ${Math.abs(storage.targetPerSecond ?? 0).toFixed(2)}/s at these targets.`,
       });
     }
   }
@@ -811,12 +797,8 @@ function refreshStorageResultsFromEdges(
     }
   }
 
-  // Each drawer reports ITS OWN wires. This used to sum every drawer holding
-  // the same item and stamp the total back onto all of them, so two carbon
-  // source drawers both showed the combined figure and a source parked near an
-  // unrelated product drawer of the same item quoted that chain's throughput as
-  // its own. Project-wide totals are a real question, but they are answered by
-  // `balances.ts` for the sidebar, not by making every card lie about itself.
+  // Each drawer reports ITS OWN wires, never a total over every drawer of the
+  // same item. Project-wide totals are `balances.ts`'s job.
   for (const storageResult of Object.values(storages)) {
     finalizeStorageFlow(storageResult);
   }
@@ -832,9 +814,8 @@ function calculateConnectedInputSupply(
   const storageRoles = getStorageRoles(project);
 
   // Seed every consumed input at zero, so an ingredient with no feeder is a
-  // real supply limit rather than an absent one. The old convention read a
-  // bare input as hand-stocked and infinite; a closed plan has to name the
-  // source. Edges below add to these.
+  // real supply limit (a closed plan must name its source), never infinite.
+  // Edges below add to these.
   for (const node of project.nodes) {
     const nodeResult = nodes[node.id];
     if (!nodeResult || !nodeResult.enabled || nodeResult.status === "missing-recipe") {
@@ -855,15 +836,11 @@ function calculateConnectedInputSupply(
     const targetDemandKey =
       getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
     const edgeResult = edgeResults[edge.id];
-    // A SOURCE drawer is infinite BY CONSTRUCTION - nothing feeds it, so it
-    // is the plan's declared import and can never be a ceiling. Its line only
-    // ever carries what was asked of it, and reading that back as
-    // availability would cap the consumer at exactly 1, erasing every "you
-    // would need 2x the machines" reading, which is the whole point of an
-    // unclamped utilization.
-    //
-    // Only a SOURCE. A buffer is capped by its own inflow and a dry one is a
-    // real ceiling, so it has to keep reporting what it can actually deliver.
+    // A SOURCE drawer is infinite BY CONSTRUCTION (the plan's declared
+    // import). Its line carries only what was asked, and reading that back as
+    // availability would cap the consumer at exactly 1, erasing the
+    // unclamped "you would need 2x the machines" reading. Only a SOURCE: a
+    // buffer is capped by its own inflow, and a dry one is a real ceiling.
     const available =
       storageRoles.get(edge.source) === "source"
         ? Number.POSITIVE_INFINITY
@@ -947,12 +924,10 @@ function finalizeNodeReports(
     storagesById,
   );
   // HONEST per-input deliverability, for REPORTING the bottleneck only. The
-  // allocation figures set the actual utilization (that stays), but the ask
-  // coupling drags innocent inputs' allocations down to the binder's level —
-  // crowning from them misleads the UI and the honest-ask gate (apples get
-  // blamed for an orange shortage). Honest = source capacity when this line
-  // is the producer's sole outlet, Infinity for a non-dry buffer, allocation
-  // otherwise.
+  // allocation figures set utilization, but the ask coupling drags innocent
+  // inputs' allocations down to the binder's level, which would blame the
+  // wrong input. Honest = source capacity when this line is the producer's
+  // sole outlet, Infinity for a non-dry buffer, allocation otherwise.
   const outletCounts = new Map<string, number>();
   for (const edge of project.edges) {
     const outletKey = `${edge.source}|${edge.resourceKind}|${edge.resourceId}`;
@@ -983,7 +958,7 @@ function finalizeNodeReports(
   }
   // Sink edges carry their demand (absorption plus the tank's unmet pull)
   // in demandPerSecond just like machine edges, so one uniform sum covers
-  // both - the old leftover-echo special case is gone with the engine.
+  // both.
   for (const edge of project.edges) {
     if (storagesById.has(edge.source)) {
       continue;
@@ -1056,12 +1031,9 @@ function finalizeNodeReports(
       utilizationReport.utilization = 1;
       utilizationReport.theoreticalMachinesRequired = node.machineCount;
     }
-    // CONSERVATION, before anything else looks at the number. The report picks
-    // the output that needs the machine FASTEST; disposal is the output that
-    // can shift the least, and a machine cannot outrun the slowest way it has
-    // of getting rid of what it makes. Applied here as well as in the engine
-    // because this pass re-derives utilization from scratch, and the two must
-    // never print different percentages for the same card.
+    // CONSERVATION first: a machine cannot outrun the output that can shift
+    // the least. Applied here as well as in the engine because this pass
+    // re-derives utilization from scratch, and the two must agree.
     const disposalLimit = equilibrium.disposalByNode.get(node.id);
     if (disposalLimit !== undefined && disposalLimit < utilizationReport.utilization) {
       utilizationReport.utilization = disposalLimit;
@@ -1092,8 +1064,7 @@ function finalizeNodeReports(
 
     // THE SETTLEMENT's bound (see equilibrium.ts): what the wires really
     // delivered. The clamps above read wants and clog-blind capability, so a
-    // consumer of a merely-CLOGGED (not small) supplier passed them at 100%
-    // while its wire carried a trickle, and every book multiplied off that.
+    // consumer of a clogged supplier can pass them at 100% on a trickle.
     // Applied against the CLAMPED reading so an over-asked node keeps its
     // >100% bottleneck figure when it really does run flat out.
     const actualLimit = equilibrium.actualByNode.get(node.id);
@@ -1108,12 +1079,10 @@ function finalizeNodeReports(
       actualLimit !== undefined &&
       utilizationReport.utilization <= 1 + EPSILON &&
       actualLimit > utilizationReport.utilization + EPSILON;
-    // A node the equation books solved takes its act outright - including
-    // over a legacy >100% over-asked figure, which the equations never emit
-    // (a machine cannot physically run past nameplate; "wants more" lives in
-    // demandUtilization and the diagnosis, not the run level). The one
-    // survivor is a TARGET dial's over-ask: "you owe the dial 5x" is display
-    // arithmetic the player set, not a claim about the machine.
+    // A node the equation books solved takes its act outright, even over a
+    // >100% over-asked figure (a machine cannot run past nameplate; "wants
+    // more" lives in demandUtilization). The one exception is a TARGET dial's
+    // over-ask, which is display arithmetic the player set.
     const targetOverAsk =
       utilizationReport.utilization > 1 + EPSILON &&
       (node.targetOutput !== undefined || planTargetNodes.has(node.id));
@@ -1163,8 +1132,7 @@ function finalizeNodeReports(
           continue;
         }
         // No honest entry at all means no incoming wire: a bare input delivers
-        // nothing, so it ranks bottom and gets the blame it deserves. It used
-        // to rank top (Infinity, hand-fed) and could never be crowned.
+        // nothing, so it ranks bottom and takes the blame.
         const honest = honestMap?.get(key);
         const ratio = honest === undefined ? 0 : honest / flow.amountPerSecond;
         if (ratio < bestRatio) {
@@ -1335,12 +1303,10 @@ function applyProjectTarget(
   const targetShare = project.targetRate.amountPerSecond / targetNodes.length;
 
   for (const node of targetNodes) {
-    // MAX, not sum. "Make at least this much", never "this much on top of
-    // what the lines already take" - the same reading the engine's target
-    // floors use, and the same one `node.targetOutput` gets a few lines
-    // below. Summing is what made a target look doubled once its output was
-    // routed anywhere, which the old rule worked around by exempting those
-    // nodes from the target altogether.
+    // MAX, not sum: "make at least this much", never "this much on top of
+    // what the lines already take" (the engine's target floors and
+    // `node.targetOutput` read it the same way). Summing doubles a target
+    // whose output is also wired.
     const byResource = requiredByNodeAndResource.get(node.id);
     if (byResource) {
       byResource.set(targetKey, Math.max(byResource.get(targetKey) ?? 0, targetShare));
@@ -1484,22 +1450,5 @@ function calculateFuelEstimate(
   }
 
   return undefined;
-}
-
-export function getResourceDisplayName(
-  kind: ResourceKind,
-  resourceId: string,
-  project: FactoryProject,
-): string {
-  for (const recipe of project.recipes) {
-    const resource = [...recipe.inputs, ...recipe.outputs].find(
-      (entry) => entry.kind === kind && entry.id === resourceId,
-    );
-    if (resource) {
-      return resourceLabel(resource);
-    }
-  }
-
-  return resourceId;
 }
 

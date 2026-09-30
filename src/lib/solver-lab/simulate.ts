@@ -7,20 +7,19 @@ import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "@/lib/solver/eq
 
 /**
  * The truth machine: a tick simulation of the board with virtual machines and
- * finite virtual buffers, run until the rates stop moving. It exists to
- * answer one question for tests and design work - "what does the game
- * literally do with this board?" - so correctness stops being hand-derived.
+ * finite virtual buffers, run until the rates stop moving. It answers "what
+ * does the game literally do with this board?" for tests, independently of
+ * the solver.
  *
- * It deliberately reuses the app's own machine math: nameplate op rates and
- * per-op amounts are read off `calculateThroughput`'s node results, so
- * overclocks, parallels, machine effects and chanced outputs (as expected
- * values) all match the planner. What the simulator adds is the one thing
- * the iterative solver never had: buffers. A machine here crafts in WHOLE
- * operations, holds a small input hopper and a small output hopper, stalls
- * when the output hopper is full, and starves when the input hopper is
- * empty - which is precisely how clogs and shortages propagate in game.
+ * It reuses the app's machine math (nameplate op rates and per-op amounts
+ * from `calculateThroughput`'s node results), so overclocks, parallels,
+ * machine effects and chanced outputs (as expected values) match the planner.
+ * What it adds is buffers: a machine crafts in WHOLE operations, holds small
+ * input and output hoppers, stalls when the output hopper is full and starves
+ * when the input hopper is empty, which is how clogs and shortages propagate
+ * in game.
  *
- * Doctrine choices, in the open:
+ * Modelling choices:
  * - Every input hopper starts PRIMED with one craft's worth, the simulator's
  *   version of the player kick-starting a loop. A loop that conserves its
  *   goods keeps circulating them; a lossy loop burns the prime and dies.

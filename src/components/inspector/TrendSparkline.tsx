@@ -5,26 +5,14 @@ import { formatCompact } from "@/lib/model";
 import { useBoardMotion, useMotionPoints, useMotionValue } from "@/components/flow/board-motion";
 
 /**
- * One resource's balance across recent edits.
+ * One resource's balance across recent edits. The zero line is drawn and
+ * always inside the band; pointing snaps a crosshair to the nearest edit and
+ * reads out its value. Colour follows the LATEST value (green spare, red
+ * short), not the trend.
  *
- * Small, but not a bare squiggle: the zero line is drawn, and pointing at the
- * chart snaps a crosshair to the nearest edit and reads out what the figure was
- * there. Zero is always inside the band even when every point sits on one side
- * of it - a surplus chart that never shows the line it would have to cross to
- * become a shortfall is telling half the story.
- *
- * Colour follows the LATEST value rather than the trend: green means the plan
- * currently has this spare, red means it is currently short. Whether that is an
- * improvement is what the shape is for.
- *
- * Width comes from the box it is given rather than a prop: it lives in a column
- * that changes width when the side panels open and close, and a viewBox with
- * `preserveAspectRatio="none"` rescales without measuring anything.
- *
- * The redraw is ANIMATED on the board's value-motion clock: an edit appends a
- * point and rescales the whole band, and the line glides from its old shape to
- * the new one (with the zero line and the resting dot easing on the same
- * clock) instead of snapping. The crosshair, being a pointer, always snaps.
+ * Width comes from the containing box: a viewBox with
+ * `preserveAspectRatio="none"` rescales without measuring. Redraws animate on
+ * the board's value-motion clock; the crosshair always snaps.
  */
 const VIEW_WIDTH = 100;
 
@@ -172,12 +160,9 @@ export function TrendSparkline({
       </svg>
 
       {/*
-        The marker is an HTML dot, not an SVG circle. `preserveAspectRatio`
-        is "none" so the viewBox stretches horizontally to whatever width the
-        column happens to be, and a circle drawn inside it stretches with
-        everything else into an egg. Positioned out here it stays round at any
-        width: x is a percentage of the same 0-100 viewBox, y is already in
-        real pixels because the viewBox height matches the element height.
+        The marker is an HTML dot, not an SVG circle, which the stretched
+        viewBox would squash into an egg. x is a percentage of the 0-100
+        viewBox; y is already in pixels (viewBox height = element height).
       */}
       <span
         className="pointer-events-none absolute h-[5px] w-[5px] rounded-full"
@@ -190,10 +175,8 @@ export function TrendSparkline({
       />
 
       {/*
-        The readout appears only while a past point is being pointed at. Left
-        up all the time it just restated the row above it: at rest the chart's
-        last point IS the resource's current rate, so the number was always the
-        same one, twice.
+        The readout shows only while a point is pointed at: at rest the last
+        point is the row's current rate, already shown above.
       */}
       {hoverIndex === undefined ? (
         <span className="pointer-events-none absolute left-0 top-0 text-[10px] tabular-nums text-fg-muted">

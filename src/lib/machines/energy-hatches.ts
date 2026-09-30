@@ -159,7 +159,7 @@ export const ENERGY_HATCH_TYPES: EnergyHatchType[] = [
 
 const BY_ID = new Map(ENERGY_HATCH_TYPES.map((type) => [type.id, type]));
 
-/** An unknown or absent id is the plain hatch pair every plan started with. */
+/** An unknown or absent id is the plain hatch pair, the default. */
 export function getEnergyHatchType(id: string | undefined): EnergyHatchType {
   return (id && BY_ID.get(id)) || ENERGY_HATCH_TYPES[0];
 }

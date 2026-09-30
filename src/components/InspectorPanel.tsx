@@ -14,10 +14,11 @@ import {
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
 import "./inspector/panel.css";
-import { ProductTargetRow } from "./inspector/ProductTargetRow";
+import { DrawerTargetRow } from "./inspector/DrawerTargetRow";
 import { MachineShoppingList } from "./MachineShoppingList";
-import { formatCompact } from "@/lib/model";
-import { makeResourceKey, formatPowerValue } from "@/lib/model/resources";
+import { makeResourceKey, resourceLabel } from "@/lib/model/resources";
+import { getCategoryPresentation } from "@/lib/model/category-presentation";
+import { formatSignedRate } from "./inspector/flow-rate";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import {
   energyPerUnit,
@@ -52,6 +53,7 @@ import {
   findRowIndexAtOffset,
   getFlowRowValue,
   measureFlowRows,
+  type BoundaryDrawers,
   type FlowRow,
   type FlowSection,
   type FlowSectionId,
@@ -67,7 +69,7 @@ const SELECTION_DEBOUNCE_MS = 100;
 
 // One ledger row: icon, resource, Raw and Net. Keep the virtual list
 // height in sync with inspector/panel.css.
-const ROW_HEIGHTS = { header: 22, item: 24, empty: 22, chart: 60, product: 28 };
+const ROW_HEIGHTS = { header: 22, item: 24, empty: 22, chart: 60, drawer: 28 };
 const ICON_COLUMN = "20px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
@@ -78,16 +80,6 @@ const EMPTY_KEYS: ReadonlySet<string> = new Set();
  * Formatters read the unit singleton; rows subscribe to the display dials
  * and repaint without solving again.
  */
-function formatRateValue(perSecond: number, kind: string = "item"): string {
-  const value = perSecond * rateMultiplierForKind(kind);
-  return kind === "power" ? formatPowerValue(value) : formatCompact(value);
-}
-
-function formatSignedRate(perSecond: number, kind: string, sign: number): string {
-  const text = formatRateValue(Math.abs(perSecond), kind);
-  return text === "0" ? text : (sign < 0 ? "−" : sign > 0 ? "+" : "") + text;
-}
-
 function rateUnitFor(kind: ResourceBalance["kind"]): string {
   return rateSuffixForKind(kind).trim();
 }
@@ -95,9 +87,8 @@ function rateUnitFor(kind: ResourceBalance["kind"]): string {
 /** How long a row takes to grow into the list or fold out of it. */
 const PRESENCE_MS = 240;
 /**
- * Past this many rows changing at once (a tab switch, a filter keystroke, a
- * RAW/NET flip) the list snaps: forty rows folding in a wave is churn, not
- * information.
+ * Past this many rows changing at once (tab switch, filter keystroke, RAW/NET
+ * flip) the list snaps instead of animating.
  */
 const PRESENCE_BULK_CAP = 16;
 
@@ -111,16 +102,13 @@ interface RowPresence {
 }
 
 /**
- * List membership, animated: a row that joins the list grows from nothing
- * and a row that leaves folds away instead of popping, on the same
- * value-motion clock as the numbers. The windowing stays exact throughout
- * because measureFlowRows reads the animated heights through `factorFor`.
+ * List membership, animated: joining rows grow from zero height and leaving
+ * rows fold away, on the value-motion clock. Windowing stays exact because
+ * measureFlowRows reads the animated heights through `factorFor`.
  *
- * Rows are reconciled by KEY in the render phase (idempotent for a repeated
- * target), so the first frame after a change already shows arrivals at
- * height zero — an effect-only start would flash them full-size first. The
- * tweens themselves start from an effect; a render React throws away starts
- * nothing.
+ * Rows are reconciled by KEY in the render phase (idempotent), so the first
+ * frame after a change already shows arrivals at height zero. The tweens
+ * start from an effect, so a render React discards starts nothing.
  */
 function useRowPresence(targetRows: FlowRow[], enabled: boolean): RowPresence {
   const [, force] = useReducer((count: number) => count + 1, 0);
@@ -336,14 +324,10 @@ function FlowIOPanel() {
   // filter. The input stays on the raw value and remains instant.
   const debouncedFilter = useDebouncedValue(filter, FLOW_FILTER_DEBOUNCE_MS);
 
-  // Selecting cards narrows the whole panel to those cards, solved as their
-  // own little plan. Selecting nothing (or nothing but drawers) shows the
-  // board.
-  //
-  // Debounced because this is a real solve, and dragging a selection box over
-  // a large board changes the membership many times on the way. The lag is
-  // imperceptible on a click and keeps a box drag from re-solving per frame.
-  // Keyed on the joined ids so a re-selection of the same cards is free.
+  // Selecting cards narrows the panel to those cards, solved as their own
+  // small plan; selecting nothing (or only drawers) shows the whole board.
+  // Debounced because this is a real solve and a selection-box drag changes
+  // membership many times. Keyed on the joined ids so reselecting is free.
   const selectionKey = selectedBoardIds.join("\0");
   const debouncedSelectionKey = useDebouncedValue(selectionKey, SELECTION_DEBOUNCE_MS);
   const selection = useMemo(
@@ -379,28 +363,9 @@ function FlowIOPanel() {
     ],
   );
 
-  // Charted resources come from the plan's own books, so a starred resource
-  // that has left the board stops being charted rather than lingering at a
-  // stale value.
-  const favourites = useMemo(() => {
-    const byKey = new Map<string, ResourceBalance>();
-    for (const balance of Object.values(scope.resources)) {
-      if (marks.favourites.has(balance.key)) {
-        byKey.set(balance.key, balance);
-      }
-    }
-    // Ordered by the saved list so the charts hold still as values move.
-    return workspace.favouriteResourceKeys
-      .map((key) => byKey.get(key))
-      .filter((balance): balance is ResourceBalance => balance !== undefined);
-  }, [marks.favourites, scope.resources, workspace.favouriteResourceKeys]);
-
-  // Declared boundary: which resources have a drawer whose JOB is importing
-  // or exporting. A source, product or byproduct drawer is the plan saying
-  // "this comes in" / "this goes out", and that statement does not stop being
-  // true when the rate hits zero — so those rows stay listed at 0/s instead
-  // of vanishing, and only the number moves. Internal rows keep coming and
-  // going with the wiring, which is what the presence animation is for.
+  // Declared boundary: resources with a source, product or byproduct drawer.
+  // Those rows stay listed at 0/s instead of vanishing; internal rows come
+  // and go with the wiring.
   const boundaryStorageKeys = useMemo(() => {
     const roles = getStorageRoles(project);
     const sources = new Set<ResourceKey>();
@@ -438,10 +403,6 @@ function FlowIOPanel() {
       };
     };
 
-    // The headings carry no explanatory line beside them. Three words the user
-    // reads once and then knows; the glosses were permanent lines of text
-    // earning nothing after the first day.
-    //
     // Raw lists preserve both boundary sides; Net files each resource by sign.
     let boundary = { needs: scope.externalInputs, outputs: scope.unconsumedOutputs };
     // The declared boundary (see boundaryStorageKeys): rows the drawers vouch
@@ -495,10 +456,9 @@ function FlowIOPanel() {
   }, []);
 
   /**
-   * Double-click flies the board to a card that uses this resource, and doing
-   * it again steps to the next one. The step counter is per resource and lives
-   * in a ref rather than state: advancing it must not re-render the list, and
-   * it is read only at the moment of the click.
+   * Double-click flies the board to a card that uses this resource; repeating
+   * steps to the next one. The per-resource counter lives in a ref so
+   * advancing it does not re-render the list.
    */
   const focusStepRef = useRef(new Map<string, number>());
   const focusBoardOnResource = useCallback(
@@ -525,22 +485,26 @@ function FlowIOPanel() {
     [marks.hidden, scope.resources],
   );
 
-  const canEditProducts = useFactoryStore((state) => !state.isReadOnly && (state.project.solveMode === true || state.project.poolMode === true));
-  const products = useMemo(() => {
+  // Rates are set here in Solve: sources behind Inputs rows, products
+  // behind Outputs rows. Build and viewers only mark the products.
+  const canEditRates = useFactoryStore((state) => !state.isReadOnly && (state.project.solveMode === true || state.project.poolMode === true));
+  const drawers = useMemo<BoundaryDrawers>(() => {
     const roles = getStorageRoles(project);
     const selected = selection ? new Set(debouncedSelectionKey.split("\0")) : undefined;
-    const result = new Map<string, FactoryStorage[]>();
+    const need = new Map<string, FactoryStorage[]>();
+    const output = new Map<string, FactoryStorage[]>();
     for (const storage of project.storages ?? []) {
-      if (roles.get(storage.id) !== "product" || (selected && !selected.has(storage.id))) continue;
+      const role = roles.get(storage.id);
+      const list = role === "source" ? need : role === "product" ? output : undefined;
+      if (!list || (selected && !selected.has(storage.id))) continue;
       const key = makeResourceKey(storage.kind, storage.resourceId);
-      result.set(key, [...(result.get(key) ?? []), storage]);
+      list.set(key, [...(list.get(key) ?? []), storage]);
     }
-    return result;
+    return { need, output };
   }, [project, selection, debouncedSelectionKey]);
-  const visibleProducts = useMemo(() => canEditProducts ? new Set(products.keys()) : EMPTY_KEYS, [canEditProducts, products]);
 
   const contentHeight = 78 + (selection ? 28 : 0) + measureFlowRows(
-    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS, products, visibleProducts),
+    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS, canEditRates ? drawers : undefined),
     ROW_HEIGHTS,
   ).totalHeight;
 
@@ -548,11 +512,9 @@ function FlowIOPanel() {
     <section
       style={{ flex: "0 1 auto", height: contentHeight, maxHeight: "var(--inspector-resource-max, 100%)", minHeight: "min(190px, 45%)" }}
       className={[
-        // The ring wraps the WHOLE panel, not just the strip: the point is
-        // that everything below is about the selection, so the mode has to be
-        // readable from anywhere in the list rather than only at the top.
-        // Like the items column: only the controls sit on a card; the list
-        // sits on the column itself.
+        // The ring wraps the WHOLE panel so the selection mode reads from
+        // anywhere in the list. Only the controls sit on a card; the list sits
+        // on the column itself.
         "relative isolate flex min-h-0 flex-1 flex-col",
         selection ? "inspector-selection-scope" : "",
       ].join(" ")}
@@ -583,13 +545,7 @@ function FlowIOPanel() {
             {workspace.showHiddenResources ? <EyeIcon /> : <EyeOffIcon />}
           </ToolbarToggle>
 
-          {/*
-            Charts are whole-plan only, so they go away while a selection is
-            scoping the panel. There is no such thing as this resource's
-            history "within the selection" - the record is one running story of
-            the board, and re-cutting it per selection would mean keeping a
-            separate history for every subset anyone might ever pick.
-          */}
+          {/* Charts record the whole plan's history, so they hide while a selection scopes the panel. */}
           {selection ? null : (
             <ToolbarToggle
               on={workspace.trendsOpen}
@@ -664,8 +620,8 @@ function FlowIOPanel() {
       <FlowVirtualList
         rateColumn={rateColumn}
         onRateColumnChange={setRateColumn}
-        products={products}
-        expandedProducts={visibleProducts}
+        drawers={drawers}
+        editRates={canEditRates}
         sections={sections}
         collapsed={collapsed}
         isFiltered={isFiltered}
@@ -752,10 +708,9 @@ function EyeOffIcon() {
 }
 
 /**
- * Names the mode the purple ring is announcing. Without it the numbers change
- * under the user with no explanation the moment they drag a selection box.
- * There is no way out of the mode here on purpose: the selection belongs to
- * the board, and clicking the canvas is already how you drop it.
+ * Names the mode the purple ring announces, so the numbers never change
+ * unexplained. No exit control on purpose: the selection belongs to the
+ * board, and clicking the canvas drops it.
  */
 function ScopeStrip({
   machineCount,
@@ -782,18 +737,15 @@ function ScopeStrip({
 }
 
 /**
- * Windowed list over all three sections at once.
- *
- * Rendering is windowed rather than paged so a plan with hundreds of resources
- * costs the same as one with ten, while still scrolling as a single continuous
- * list. Rows stay in normal flow between two spacers — that is what lets the
- * section headers use real CSS stickiness instead of hand-positioned overlays.
+ * Windowed list over all three sections at once, so hundreds of resources
+ * cost the same as ten. Rows stay in normal flow between two spacers, which
+ * lets the section headers use real CSS stickiness.
  */
 function FlowVirtualList({
   rateColumn,
   onRateColumnChange,
-  products,
-  expandedProducts,
+  drawers,
+  editRates,
   sections,
   collapsed,
   isFiltered,
@@ -810,8 +762,9 @@ function FlowVirtualList({
 }: {
   rateColumn: "raw" | "net";
   onRateColumnChange: (value: "raw" | "net") => void;
-  products: ReadonlyMap<string, FactoryStorage[]>;
-  expandedProducts: ReadonlySet<string>;
+  drawers: BoundaryDrawers;
+  /** Solve, not a viewer: the drawers' rules and rates can be set here. */
+  editRates: boolean;
   sections: FlowSection[];
   collapsed: Record<FlowSectionId, boolean>;
   isFiltered: boolean;
@@ -834,8 +787,8 @@ function FlowVirtualList({
   // No chart rows at all when charts are off, so the list closes up rather
   // than leaving gaps where they were.
   const targetRows = useMemo(
-    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS, products, expandedProducts),
-    [collapsed, favourites, sections, showCharts, products, expandedProducts],
+    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS, editRates ? drawers : undefined),
+    [collapsed, favourites, sections, showCharts, drawers, editRates],
   );
   // Membership rides the value-motion clock: rows grow in and fold out, and
   // `rows` below may briefly hold departed rows mid-fold.
@@ -859,12 +812,9 @@ function FlowVirtualList({
     [],
   );
   /**
-   * Starring or hiding from the wide copy has to close it.
-   *
-   * Both marks change what the row is: a star adds a chart under it, a hide
-   * can drop it from the list entirely. Leaving the copy up meant it re-rendered
-   * around a pointer that had not moved, so the button under the cursor became
-   * a different button - unstar, and the pointer was suddenly over Hide.
+   * Starring or hiding from the wide copy closes it. Both change the row (a
+   * star adds a chart, a hide can drop it), and a lingering copy re-renders so
+   * a different button lands under the unmoved pointer.
    */
   const dismissExpanded = useCallback(() => setExpandedState(undefined), []);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -897,23 +847,16 @@ function FlowVirtualList({
   );
 
   /**
-   * Glue the wide copy to the row it covers.
-   *
-   * The numbers captured when the pointer arrived are right for that instant and
-   * for nothing after it: the list scrolls, the window scrolls (the app shell
-   * carries a minimum height, so a short window scrolls the whole page), a resize
-   * moves the panel. The copy is `position: fixed` and stays where it was put, so
-   * every one of those left it sitting beside its row instead of over it. This
-   * re-measures the real row and writes the position straight to the element —
-   * imperatively, so a scroll costs one measurement rather than a re-render.
+   * Keeps the wide copy glued to the row it covers. The copy is
+   * `position: fixed`, so list scroll, page scroll (the shell has a minimum
+   * height) and resizes would strand it. This re-measures the real row and
+   * writes the position straight to the element: one measurement per scroll,
+   * no re-render.
    */
   const expandedKey = expandedRow?.balance.key;
   /**
-   * The real row behind the copy.
-   *
-   * Walked rather than selected by attribute value: a resource key is full of
-   * colons and the odd `@`, and only some of the list is rendered at a time, so
-   * this is a handful of nodes either way.
+   * The real row behind the copy. Walked rather than queried by attribute
+   * value: resource keys contain colons and `@`, and few rows are rendered.
    */
   const findExpandedRow = useCallback(() => {
     const rendered = scrollRef.current?.querySelectorAll<HTMLElement>("[data-resource-row]");
@@ -944,25 +887,18 @@ function FlowVirtualList({
     // pixels, the row's rect and the document width real pixels.
     const scale = getUiScale();
     overlay.style.top = `${box.top / scale}px`;
-    // clientWidth, not innerWidth: innerWidth counts the width of a classic
-    // scrollbar and the `right` of a fixed element is measured from the initial
-    // containing block, which does not. That difference is what let the row
-    // underneath peek out down one side of its own copy. Flush with the row on
-    // purpose: an inset "for the scrollbar" left the row's lit edge showing
-    // beside its own copy, which read as a second row. The scrollbar problem
-    // is solved by the copy being a pointer GHOST instead — see the wrapper.
+    // clientWidth, not innerWidth: innerWidth includes a classic scrollbar,
+    // but a fixed element's `right` is measured from the initial containing
+    // block, which does not. Flush with the row on purpose; the scrollbar is
+    // handled by the copy being a pointer GHOST (see the wrapper).
     overlay.style.right = `${(document.documentElement.clientWidth - box.right) / scale}px`;
   }, [expandedKey, findExpandedRow]);
 
   /**
-   * How wide the copy needs to be: enough for the whole name, the rate, and the
-   * room the mark buttons open in front of the rate — and never narrower than the
-   * row it covers, nor wider than the window has left.
-   *
-   * Every copy used to be 420px, so every row slid the same distance sideways
-   * whether it needed one pixel or a hundred. `max-content` asks the row itself,
-   * which counts the untruncated name and the buttons' gap; a name that already
-   * fits comes back no wider than its row and nothing moves.
+   * The copy's width: enough for the whole name, the rate and the mark
+   * buttons' gap, never narrower than the row it covers nor wider than the
+   * window has left. `max-content` asks the row itself, so a name that
+   * already fits comes back no wider than its row.
    */
   const sizeExpanded = useCallback(() => {
     const overlay = overlayRef.current;
@@ -972,18 +908,15 @@ function FlowVirtualList({
     }
 
     const box = row.getBoundingClientRect();
-    // Measured with the arrival animations frozen. The gap the buttons slide into
-    // animates up from zero width, and a measurement taken mid-flight comes back
-    // short by exactly the room they are going to need. Lifting the freeze starts
-    // both animations over, which is what should happen: they belong to the copy
-    // arriving, and it has not been painted yet.
+    // Measured with the arrival animations frozen: the buttons' gap animates up
+    // from zero width, so a mid-flight measurement comes back short. Unfreezing
+    // restarts them, which is right because the copy has not been painted yet.
     overlay.classList.add("resource-row-measuring");
     overlay.style.width = "max-content";
-    // Fractional measurement plus slack, never offsetWidth: that rounds to
-    // whole pixels, and a round-down of a fractional max-content re-trims
-    // the name to "…" — the whole point of the copy is that it never does.
-    // Rects are real pixels and the copy's width is a shell-pixel style
-    // (it is a body portal wearing .ui-zoom): everything is brought across.
+    // Fractional measurement plus slack, never offsetWidth: rounding a
+    // fractional max-content down re-truncates the name. Rects are real px and
+    // the copy's width is a shell-px style (a body portal wearing .ui-zoom),
+    // so everything is converted.
     const scale = getUiScale();
     const natural = Math.ceil(overlay.getBoundingClientRect().width / scale) + 2;
     const rowWidth = box.width / scale;
@@ -1011,14 +944,11 @@ function FlowVirtualList({
   }, [expandedKey, positionExpanded, sizeExpanded]);
 
   /**
-   * Dismissal, watched from the document: the copy is pointer-transparent,
-   * so it cannot see the pointer leave it. While one is up, the pointer is
-   * either on a list row (rows keep or replace the copy themselves), on the
-   * copy's own box (reading the overhang, or on its mark buttons), or it has
-   * moved on — board, headers, filter box — and the copy folds. There is
-   * deliberately NO carve-out near the scrollbar: the ghost already lets the
-   * bar be grabbed through it, and an early fold there dropped the copy
-   * exactly while the pointer travelled toward the star and eye.
+   * Dismissal is watched from the document because the copy is
+   * pointer-transparent. It stays while the pointer is on a list row (rows
+   * keep or replace it) or on the copy's own box; anywhere else it folds.
+   * No carve-out near the scrollbar: the ghost already lets the bar be grabbed,
+   * and folding there dropped the copy on the way to the star and eye.
    */
   useEffect(() => {
     if (!expandedKey) {
@@ -1163,8 +1093,8 @@ function FlowVirtualList({
           );
         }
 
-        if (row.type === "product") {
-          return shell(<ProductTargetRow storage={row.storage} isLast={row.index === (products.get(makeResourceKey(row.storage.kind, row.storage.resourceId))?.length ?? 0) - 1} />);
+        if (row.type === "drawer") {
+          return shell(<DrawerTargetRow storage={row.storage} input={row.section.id === "need"} isLast={row.last} />);
         }
 
         if (row.type === "chart") {
@@ -1186,7 +1116,7 @@ function FlowVirtualList({
         return shell(
           <FlowResourceRow
             rateColumn={rateColumn}
-            productMarker={row.section.id === "output" && products.has(row.balance.key) && !expandedProducts.has(row.balance.key)}
+            productMarker={!editRates && row.section.id === "output" && drawers.output.has(row.balance.key)}
             balance={row.balance}
             sectionId={row.section.id}
             tone={row.section.tone}
@@ -1207,51 +1137,39 @@ function FlowVirtualList({
       <div style={{ height: bottomSpacer }} />
 
       {/*
-        The pointed-at row, redrawn wide, in a portal to <body>.
-
-        `position: fixed` is only fixed to the WINDOW while no ancestor claims it:
-        a transform, a filter, a backdrop-filter, `contain` or a `will-change`
-        anywhere up the chain makes that ancestor the containing block instead, and
-        then the copy is measured from the panel rather than the viewport AND
-        clipped by it — it lands low and stops dead at the panel's edge instead of
-        reaching over the board. Rendered from <body> there is no chain to claim
-        it, whatever the panels above it are doing. The board help sheet portals
-        for the same reason.
+        The pointed-at row, redrawn wide, portaled to <body>: a transform,
+        filter, backdrop-filter, `contain` or `will-change` on any ancestor
+        would become the containing block for `position: fixed`, so the copy
+        would be mispositioned and clipped at the panel edge.
       */}
       {expandedRow && typeof document !== "undefined"
         ? createPortal(
         <div
-          // The row's own width is the animation's starting point, measured
-          // when the pointer arrived, so the panel can be any width and the
-          // grow still begins exactly where the real row ends.
+          // The row's own width, measured on pointer arrival, is where the
+          // grow animation starts.
           key={expandedRow.balance.key}
           ref={overlayRef}
           style={
             {
-              // Where the row was when the pointer reached it, so the first
-              // frame is drawn in the right place. From then on the layout
-              // effect above owns these two, measured off the row itself.
-              // Reported in real pixels by the row; this portal positions in
-              // shell pixels (see positionExpanded).
+              // The row's position on pointer arrival, for the first frame;
+              // the layout effect above owns these afterwards. Reported in real
+              // px by the row; this portal positions in shell px (see
+              // positionExpanded).
               top: expandedRow.top / getUiScale(),
               right: expandedRow.right / getUiScale(),
               "--row-start-width": `${expandedRow.startWidth / getUiScale()}px`,
             } as React.CSSProperties
           }
-          // One ring around the pair, so the row and its chart read as a
-          // single lit block instead of two separately outlined things.
-          // A pointer GHOST: every event falls through to the real list
-          // underneath, so the wheel scrolls it, the scrollbar stays
-          // grabbable through the copy, and a double-click still flies the
-          // board — while the copy itself just SHOWS the full name. Only the
-          // mark buttons opt back into the pointer (pointer-events-auto on
-          // themselves). Hover and dismissal are the underlying rows' and the
-          // document watcher's job now, not this element's.
+          // One ring around the row and its chart. A pointer GHOST: every
+          // event falls through to the real list, so the wheel scrolls it, the
+          // scrollbar stays grabbable and double-click still flies the board.
+          // Only the mark buttons opt back in (pointer-events-auto). Hover and
+          // dismissal belong to the underlying rows and the document watcher.
           className="resource-row-expand ui-zoom pointer-events-none fixed z-[60] overflow-hidden rounded bg-[#2a2d33] shadow-xl ring-1 ring-cyan-500/60"
         >
           <FlowResourceRow
             rateColumn={rateColumn}
-            productMarker={expandedRow.section.id === "output" && products.has(expandedRow.balance.key) && !expandedProducts.has(expandedRow.balance.key)}
+            productMarker={!editRates && expandedRow.section.id === "output" && drawers.output.has(expandedRow.balance.key)}
             balance={expandedRow.balance}
             sectionId={expandedRow.section.id}
             tone={expandedRow.section.tone}
@@ -1289,11 +1207,8 @@ function FlowVirtualList({
 }
 
 /**
- * The chart that sits under a starred resource, two rows tall.
- *
- * It shares the row above's hover: pointing anywhere at the pair lights the
- * same machines on the board, so a resource and its history behave as one
- * block rather than two things that happen to be adjacent.
+ * The chart under a starred resource, two rows tall. It shares the row
+ * above's hover, so the pair lights the same machines as one block.
  */
 const FlowChartRow = memo(function FlowChartRow({
   balance,
@@ -1337,10 +1252,9 @@ const FlowChartRow = memo(function FlowChartRow({
       // Same gesture as the row above it, so the pair behaves as one thing.
       onDoubleClick={() => onFocusBoard(balance.key)}
     >
-      {/* Deliberately one look, hovered or not. Tinting it on hover made the
-          chart change colour as it widened, which read as the DATA changing
-          rather than the pointer moving. Inside the wide copy it drops its own
-          frame, because the wrapper already rings the whole pair. */}
+      {/* One look, hovered or not: a hover tint would read as the data
+          changing. Inside the wide copy it drops its own frame, because the
+          wrapper already rings the pair. */}
       <div
         className={[
           "h-full rounded px-1",
@@ -1460,7 +1374,10 @@ const FlowResourceRow = memo(function FlowResourceRow({
   const netEnergy = energyEuT !== undefined && balance.kind !== "power"
     ? energyPerUnit(energyEuT, Math.abs(netValue)) : undefined;
   const unit = rateUnitFor(balance.kind);
-  const name = balance.displayName ?? balance.resourceId;
+  const category = useFactoryStore((state) =>
+    getCategoryPresentation(state.project.recipes, balance.kind, balance.resourceId),
+  );
+  const name = resourceLabel(category ?? { id: balance.resourceId, displayName: balance.displayName });
 
   return (
     // The row is a group, not one button: the star and the eye are their own
@@ -1485,13 +1402,10 @@ const FlowResourceRow = memo(function FlowResourceRow({
       ].join(" ")}
       onMouseEnter={(event) => {
         onHover(balance.key);
-        // The pointed-at row is re-drawn wider, out over the board, so a long
-        // name can be read in full without the column being sized for the
-        // worst case at all times. It has to be a separate fixed-position
-        // layer: this row lives in an `overflow-y: auto` box, which clips
-        // anything reaching past its left edge, so widening in place would
-        // just truncate somewhere else. The copy is pointer-transparent, so
-        // this enter keeps firing through it and keeps the expansion fresh.
+        // The pointed-at row is redrawn wider over the board so a long name
+        // reads in full. It must be a separate fixed layer: this row lives in
+        // an `overflow-y: auto` box that clips anything past its edge. The copy
+        // is pointer-transparent, so this enter keeps firing through it.
         const box = event.currentTarget.getBoundingClientRect();
         onExpand(
           balance.key,
@@ -1506,24 +1420,17 @@ const FlowResourceRow = memo(function FlowResourceRow({
         type="button"
         onFocus={() => onHover(balance.key)}
         onBlur={() => onHover(undefined)}
-        // No click-to-lock. Pointing at a row lights its machines and looking
-        // away puts them out; a single click used to leave the board blinking
-        // at you until you found the row again to switch it off.
+        // Hover only, no click-to-lock: pointing at a row lights its machines
+        // and leaving puts them out.
         onDoubleClick={() => onFocusBoard(balance.key)}
-        // No `title`. The browser's own tooltip fired on every row the pointer
-        // crossed, which on a list this dense meant a yellow box trailing the
-        // cursor the whole way down. The row already widens on hover to show
-        // the full name, which is what the tooltip was carrying.
+        // No `title`: a tooltip would trail the cursor down this dense list,
+        // and the row already widens on hover to show the full name.
         style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 89px auto` }}
         className={[
-          // The highlight is a ring rather than a border: a border would take a
-          // pixel off the top and bottom of the content box, leaving the icon
-          // short of the row edges and reopening the band between rows.
-          //
-          // Spacing is per cell, not a grid `gap`. A gap also applies BETWEEN
-          // the rate and the collapsed columns after it, so every ordinary row
-          // paid for two gaps it could not use and the rates sat well short of
-          // the panel edge.
+          // A ring, not a border: a border takes a pixel off the content box
+          // and reopens a band between rows. Spacing is per cell, not a grid
+          // `gap`, which would also apply between the rate and the collapsed
+          // columns after it.
           "inspector-resource-button grid h-full w-full items-center rounded pr-1 text-left",
           // The wide copy carries no highlight of its own: its wrapper rings
           // the row and the chart together as one block.
@@ -1544,7 +1451,8 @@ const FlowResourceRow = memo(function FlowResourceRow({
               kind: balance.kind,
               id: balance.resourceId,
               amount: 1,
-              displayName: balance.displayName,
+              displayName: name,
+              alternatives: category?.alternatives,
               iconPath: resource?.iconPath,
               iconAtlas: resource?.iconAtlas,
               // Needed for the fluid fallback, which has no art to fall back on.
@@ -1574,10 +1482,9 @@ const FlowResourceRow = memo(function FlowResourceRow({
         >
           <span className="text-base font-bold tabular-nums">
             {euEach !== undefined ? (
-              // The chain's cost per unit, in the gold every energy reading
-              // wears, the unit a small grey tail. Not eased: it is a
-              // quotient of two moving figures and tweening it read as the
-              // cost drifting on its own.
+              // The chain's cost per unit, in energy gold with a small grey
+              // unit. Not eased: it is a quotient of two moving figures, and
+              // tweening it would show the cost drifting on its own.
               <>
                 {formatEnergyPerUnitParts(euEach, balance.kind).value}
                 <span className="inspector-unit">
@@ -1598,14 +1505,9 @@ const FlowResourceRow = memo(function FlowResourceRow({
           </span>
 
           {/*
-            The star sits past the rate, at the far right. Anchored there it
-            holds still when the row widens on hover - beside the name it slid
-            along with the text.
-
-            It fades out exactly when the mark buttons slide in, because the
-            favourite button is itself a filled star: with both up the row
-            showed two stars side by side. Only a starred row spends any width
-            on it, so an ordinary rate runs right up to the panel edge.
+            The star sits past the rate at the far right, so it holds still when
+            the row widens on hover. It fades out as the mark buttons slide in,
+            since the favourite button is also a filled star.
           */}
           {isFavourite ? (
             <span
@@ -1636,15 +1538,10 @@ const FlowResourceRow = memo(function FlowResourceRow({
           </>}
         </span>}
         {/*
-          The room the mark buttons slide into, on the right where they belong.
-          A real grid column rather than a layer on top of the rate: as an
-          overlay the hide button sat exactly where the number was, so aiming
-          at a rate and clicking hid the resource. Zero-wide until the row is
-          pointed at, so no width is spent on rows nobody is looking at.
-
-          Class names are written out in full rather than composed: Tailwind
-          scans the source for literals, so an interpolated one is never
-          generated.
+          The room the mark buttons slide into: a real grid column, not an
+          overlay, so the hide button never covers the rate. Zero-wide until
+          the row is pointed at. Class names are written in full because
+          Tailwind only generates literal class names it finds in source.
         */}
         <span
           className={[
@@ -1664,13 +1561,9 @@ const FlowResourceRow = memo(function FlowResourceRow({
       </button>
 
       {/*
-        The buttons themselves. Absolute so they never affect the row's height,
-        and `pointer-events-none` on the bar so only the button squares are
-        clickable - the gaps around them fall through to the row.
-
-        Manage mode holds the gap open on every row at once: with the eye
-        switched on the user is here to sort out what is hidden, and the
-        controls should not have to be hunted for one row at a time.
+        The buttons: absolute so they never affect row height, with
+        `pointer-events-none` on the bar so only the squares are clickable.
+        Manage mode shows them on every row at once.
       */}
       <div
         hidden={readOnly}
@@ -1692,9 +1585,8 @@ const FlowResourceRow = memo(function FlowResourceRow({
         >
           {isFavourite ? "★" : "☆"}
         </RowMarkButton>
-        {/* A starred resource has no hide button: you asked to watch it, so
-            hiding it is not a thing you can then ask for. Starring a hidden
-            one unhides it, which is why this can never strand a row. */}
+        {/* A starred resource has no hide button. Starring a hidden one
+            unhides it, so this can never strand a row. */}
         {isFavourite ? null : (
           <RowMarkButton
             onClick={() => {
@@ -1749,9 +1641,7 @@ function RowMarkButton({
 
 /**
  * `tint` is the section's colour at 5%, carried by every row under the header
- * so a group reads as one band rather than a coloured bar with grey underneath
- * it. Faint on purpose: it has to survive behind icons and rates and lose to
- * the cyan hover, so it is doing the job of a margin rather than a highlight.
+ * so a group reads as one band. Faint so it loses to the cyan hover.
  */
 const TONE_STYLES: Record<
   FlowSectionTone,
@@ -1764,10 +1654,7 @@ const TONE_STYLES: Record<
     value: "text-[var(--flow-input)]",
     tint: "bg-[var(--flow-input)]/5",
   },
-  /*
-   * One Outputs section, one colour: green, the Output colour this panel has
-   * had since before the one-day product/byproduct split. Red in, green out.
-   */
+  /* One Outputs section, one colour: red in, green out. */
   output: {
     header: "border-[var(--flow-output)]/40 bg-emerald-950/85 text-[var(--flow-output)] hover:bg-emerald-900/60",
     badge: "bg-[var(--flow-output)]/30 text-[var(--flow-output)]",

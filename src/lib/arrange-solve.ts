@@ -1,12 +1,11 @@
 /**
  * The arrange, off the main thread.
  *
- * A judged arrange is dozens of route solves - half a minute on a busy
- * board - and half a minute on the main thread is a frozen tab. So the
- * board posts the job to a worker (`arrange.worker.ts`), shows its
- * progress, and applies the layout when it lands. One job at a time; a
- * second click while one runs is ignored by the caller. No Worker (SSR,
- * tests, a worker that cannot start): the same pure function runs here.
+ * A judged arrange is dozens of route solves, easily tens of seconds on a
+ * busy board, so the job runs in a worker (`arrange.worker.ts`) that
+ * reports progress. One job at a time; the caller ignores a second click
+ * while one runs. Without a Worker (SSR, tests, a worker that cannot
+ * start) the same pure function runs here.
  */
 import {
   runArrangeJob,
@@ -33,11 +32,10 @@ export class ArrangeCancelled extends Error {
 }
 
 /**
- * Ends the arrange in flight (Jack, 2026-09-08: "I need a way to cancel it
- * as well"). The worker runs the job synchronously and cannot hear a
- * message mid-job, so cancelling TERMINATES it; the next arrange starts a
- * fresh one. On the main-thread fallback the job cannot be stopped, so
- * its result is dropped when it lands.
+ * Ends the arrange in flight. The worker runs the job synchronously and
+ * cannot hear a message mid-job, so cancelling TERMINATES it; the next
+ * arrange starts a fresh one. On the main-thread fallback the job cannot
+ * be stopped, so its result is dropped when it lands.
  */
 export function cancelArrange(): void {
   pending?.cancel();

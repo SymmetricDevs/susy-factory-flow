@@ -13,13 +13,20 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   ReactNode,
-  UIEvent,
 } from "react";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
 import type { RecipeQueryRole, RecipeQuerySideOp } from "@/lib/datasets/recipe-query";
@@ -28,6 +35,7 @@ import {
   GT_VOLTAGE_TIERS,
   formatRate,
   getRecipeMachineHandlers,
+  isControllerSlotInput,
   isFreeRecipeInput,
   isOreDictionaryResource,
   isRecipeInputConsumed,
@@ -35,7 +43,7 @@ import {
 import type { MachineTier, ResourceAmount } from "@/lib/model/types";
 import { getVoltageTierIndex } from "@/lib/model/tiers";
 import { energyPerUnitSuffix, type TimeRateUnit } from "@/lib/model/rate-unit";
-import { formatCompact } from "@/lib/model/resources";
+import { formatCompact, resourceLabel } from "@/lib/model/resources";
 import { playBoardSound } from "@/lib/board-sounds";
 import { ENERGY_READING_TEXT } from "./flow/flow-explainers";
 import { GT_TIER_COLORS } from "./flow/tier-colors";
@@ -80,14 +88,12 @@ export interface StencilClause
 
 /**
  * How the result cards read their numbers: the recipe as written (amounts per
- * craft), or as rates over the recipe's own duration - one machine, full
- * speed, no overclock, exactly the nameplate figures a card gets on the board.
+ * craft), or as rates over the recipe's own duration (one machine, full
+ * speed, no overclock: the nameplate figures a board card gets).
  */
-// "eu" is the board's gold reading brought here: each OUTPUT chip reads the
-// EU one machine spends per unit of it at the recipe's own tier (no
-// overclock) - the number to compare two recipes for the same thing by.
-// Input chips read the same energy per unit EATEN, in the board's muted
-// gold, so the two sides never look like two costs to add up.
+// "eu": each OUTPUT chip reads the EU one machine spends per unit of it at
+// the recipe's own tier (no overclock). Input chips read energy per unit
+// EATEN in muted gold, so the two sides never look like costs to add up.
 type RateView = "recipe" | TimeRateUnit | "ratio" | "eu";
 
 const RATE_VIEW_UNITS: Record<TimeRateUnit, { multiplier: number; per: string }> = {
@@ -161,9 +167,8 @@ interface StencilDrag {
   /** Index into `clauses` of the row being moved, or -1 for a new one. */
   index: number;
   /**
-   * A condition NOT yet in the stencil: a slot chip lifted off a result card
-   * and carried down. It lands only when let go over a side; anywhere else
-   * it just vanishes, so a drag that changes its mind costs nothing.
+   * A condition NOT yet in the stencil: a slot chip lifted off a result card.
+   * It lands only when released over a side; anywhere else it vanishes.
    */
   source?: StencilClause;
   width: number;
@@ -192,13 +197,10 @@ export interface RecipeMapChip {
 }
 
 /**
- * The recipe search: one screen, no browse step.
- *
- * The screen is a letter T: the answers fill the top, and the STENCIL of the
- * recipe being looked for sits on its own card at the bottom middle - what it
- * takes on the left, what it makes on the right, exactly the way a machine
- * card reads. Each side combines its items with ANY (either of these) or ALL
- * (every one of them); a recipe must satisfy both sides.
+ * The recipe search: one screen, no browse step. Results fill the top; the
+ * STENCIL of the wanted recipe sits on its own card at the bottom middle,
+ * takes on the left and makes on the right like a machine card. Each side
+ * combines its items with ANY, ALL or ONLY; a recipe must satisfy both sides.
  */
 export function RecipeSearchOverlay({
   clauses,
@@ -350,12 +352,9 @@ export function RecipeSearchOverlay({
   // what to do with THIS machine's recipes - hide them, keep only them.
   const [cardMenu, setCardMenu] = useState<CardMenu | undefined>(undefined);
 
-  // The search has a voice (Jack, 2026-09-02): the open is a leaf lifted,
-  // every page after it a page turned, and the close the leaf laid down.
-  // The turn keys on the browse key, which is exactly "a different page"
-  // - a chip click, a refactor press, back or forward. An add closes the
-  // search too, but that path plays nothing here: the card landing on the
-  // board is the sound of it.
+  // Sounds: open on mount, a page turn on every browse-key change (chip,
+  // refactor, back, forward), close on the close paths. An add closes
+  // silently here because the card landing on the board makes its own sound.
   const openedRef = useRef(false);
   useEffect(() => {
     if (!openedRef.current) {
@@ -372,9 +371,8 @@ export function RecipeSearchOverlay({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      // The browser's own history keys walk the search's pages, and so
-      // does a bare Backspace - the old web's back key - as long as it is
-      // not deleting text in a box.
+      // The browser's history keys walk the search's pages, and so does a
+      // bare Backspace when it is not deleting text in a box.
       const inTextField =
         event.target instanceof HTMLElement &&
         (event.target.tagName === "INPUT" ||
@@ -406,14 +404,11 @@ export function RecipeSearchOverlay({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [canGoBack, canGoForward, cardMenu, chipMenu, closeSearch, onBack, onForward]);
 
-  // Any press outside a menu dismisses it, and so does a wheel turn (the
-  // menu is pinned to the screen, and the card it came from scrolls away
-  // under it). CAPTURE phase, on purpose: the search's panels stop
-  // pointer events from bubbling (that is what keeps a press inside them
-  // from closing the search), and a bubbling window listener never heard
-  // a press that landed there - so the menu only went on Escape. Presses
-  // inside the menu itself are told apart by containment, not by the
-  // menu stopping propagation.
+  // Any press outside a menu dismisses it, and so does a wheel turn (the menu
+  // is pinned to the screen while its card scrolls away). CAPTURE phase on
+  // purpose: the search's panels stop pointer events from bubbling, so a
+  // bubbling listener would never hear presses there. Presses inside the
+  // menu are told apart by containment.
   const menuRef = useRef<HTMLDivElement | null>(null);
   useDropdownDismiss(Boolean(chipMenu || cardMenu), {
     refs: [menuRef],
@@ -849,23 +844,33 @@ export function RecipeSearchOverlay({
     return sections;
   }, [recipeMapChips, recipes]);
 
-  // Loading more when the bottom of the list scrolls near, so the grid reads
-  // as one endless list rather than ending on a button.
-  const handleResultsScroll = (event: UIEvent<HTMLDivElement>) => {
-    const scroller = event.currentTarget;
-    if (!hasMore || isLoading) {
+  // Infinite scroll. Pages arrive in section order (the server walks the maps
+  // in chip order), so the first skeleton of an open section short of its
+  // count is where the next page lands. It asks for that page when it nears
+  // the viewport or is already above it, and asks again after every page.
+  const resultsScrollRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreIfAwaitedNear = () => {
+    const scroller = resultsScrollRef.current;
+    if (!scroller || !hasMore || isLoading) {
       return;
     }
-    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 480) {
+    const awaited = scroller.querySelector("[data-awaiting-page] .recipe-search-skeleton");
+    const awaitedNear =
+      awaited !== null &&
+      awaited.getBoundingClientRect().top - scroller.getBoundingClientRect().bottom < 480;
+    if (awaitedNear || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 480) {
       onLoadMore();
     }
   };
+  const loadMoreIfAwaitedNearAfterPage = useEffectEvent(loadMoreIfAwaitedNear);
+  useEffect(() => {
+    loadMoreIfAwaitedNearAfterPage();
+  }, [recipes, hasMore, isLoading]);
+  const handleResultsScroll = () => loadMoreIfAwaitedNear();
 
-  // The same controls wear different clothes on the two layouts, so they are
-  // built once and placed twice.
-  // The chips are a multi-select: each one toggles its machine's recipes in
-  // or out of the results, and All is select-all / select-none. Unselecting
-  // a chip while All is lit keeps everything else selected.
+  // Controls are built once and placed in both layouts.
+  // The chips are a multi-select: each toggles its machine's recipes, and
+  // All is select-all / select-none. Unselecting one chip keeps the rest.
   const machineChipRow = (
     <>
       <MachineChip
@@ -1114,6 +1119,7 @@ export function RecipeSearchOverlay({
               "recipe-search-scroll min-h-0 flex-1 overflow-y-auto",
               sheet ? "px-1.5" : "px-3",
             ].join(" ")}
+            ref={resultsScrollRef}
             onScroll={handleResultsScroll}
           >
             {queryError ? (
@@ -1200,95 +1206,84 @@ export function RecipeSearchOverlay({
                   )
                 ) : (
                   <>
-                    {/* One section per machine, in chip order, ALWAYS - a
-                        folded machine stays in the list as a quiet title, so
-                        every machine that answered is one click from open
-                        and nothing ever says "no machines are selected".
-                        The header is the same key as the chip up top. The
-                        list is built from the chips, not from the recipes,
-                        so a refetch (which empties the recipes for a moment)
-                        never reorders or blanks the titles: an open section
-                        whose cards are still travelling shows skeletons in
-                        their place. */}
-                    {machineSections.map((section) => (
-                      <section key={section.id} className="mb-3">
-                        <MachineSectionHeader
-                          label={section.label}
-                          count={section.count}
-                          icon={section.icon}
-                          open={section.open}
-                          onToggle={() => hideRecipeMap(section.id)}
-                          onHover={() => onRecipeMapHover(section.id)}
-                        />
-                        {section.open && section.recipes.length > 0 ? (
-                          <div
-                            className="grid items-start gap-2"
-                            style={{
-                              gridTemplateColumns: sheet
-                                ? "minmax(0, 1fr)"
-                                : "repeat(auto-fill, minmax(480px, 1fr))",
-                            }}
-                          >
-                            {section.recipes.map((recipe) => (
-                              <CompactRecipeCard
-                                key={recipe.id}
-                                recipe={recipe}
-                                contextResource={contextResource}
-                                selected={selectedRecipeId === recipe.id}
-                                onSelectRecipe={onSelectRecipe}
-                                onAdd={onAdd}
-                                onPrefetch={onPrefetch}
-                                onBrowseResource={onBrowseResource}
-                                onChipMenu={openChipMenu}
-                                onChipDragStart={beginChipDrag}
-                                rateView={rateView}
-                                onCardMenu={(event, machineLabel, add) =>
-                                  openCardMenu(event, {
-                                    label: recipe.name,
-                                    machineLabel,
-                                    add,
-                                    hide: () => hideRecipeMap(recipe.recipeMap),
-                                    only: () => onlyRecipeMap(recipe.recipeMap),
-                                  })
-                                }
-                              />
-                            ))}
-                          </div>
-                        ) : section.open && isLoading ? (
-                          <div
-                            className="grid items-start gap-2"
-                            style={{
-                              gridTemplateColumns: sheet
-                                ? "minmax(0, 1fr)"
-                                : "repeat(auto-fill, minmax(480px, 1fr))",
-                            }}
-                            role="status"
-                            aria-label={`Loading ${section.label} recipes`}
-                          >
-                            {Array.from(
-                              { length: Math.min(sheet ? 2 : 3, Math.max(1, section.count ?? 3)) },
-                              (_, index) => <SkeletonResultCard key={index} delay={index * 110} />,
-                            )}
-                          </div>
-                        ) : null}
-                      </section>
-                    ))}
-                    {isLoading && recipes.length > 0 ? (
-                      <div
-                        className="mt-2 grid items-start gap-2"
-                        style={{
-                          gridTemplateColumns: sheet
-                            ? "minmax(0, 1fr)"
-                            : "repeat(auto-fill, minmax(480px, 1fr))",
-                        }}
-                        role="status"
-                        aria-label="Loading more recipes"
-                      >
-                        {Array.from({ length: sheet ? 1 : 3 }, (_, index) => (
-                          <SkeletonResultCard key={index} delay={index * 110} />
-                        ))}
-                      </div>
-                    ) : null}
+                    {/* One section per machine, in chip order, always: a
+                        folded machine stays as a quiet title. Built from the
+                        chips, not the recipes, so a refetch (which briefly
+                        empties the recipes) never reorders or blanks titles;
+                        an open section still loading shows skeletons. */}
+                    {machineSections.map((section) => {
+                      // Cards this open section counts but no page has brought
+                      // yet: skeletons, the first of which asks for the next page.
+                      const awaited =
+                        section.open && (hasMore || isLoading) && section.count !== undefined
+                          ? Math.max(0, section.count - section.recipes.length)
+                          : 0;
+                      return (
+                        <section
+                          key={section.id}
+                          className="mb-3"
+                          data-awaiting-page={awaited > 0 ? "" : undefined}
+                        >
+                          <MachineSectionHeader
+                            label={section.label}
+                            count={section.count}
+                            icon={section.icon}
+                            open={section.open}
+                            onToggle={() => hideRecipeMap(section.id)}
+                            onHover={() => onRecipeMapHover(section.id)}
+                          />
+                          {section.open && (section.recipes.length > 0 || awaited > 0) ? (
+                            <div
+                              className="grid items-start gap-2"
+                              style={{
+                                gridTemplateColumns: sheet
+                                  ? "minmax(0, 1fr)"
+                                  : "repeat(auto-fill, minmax(480px, 1fr))",
+                              }}
+                            >
+                              {section.recipes.map((recipe) => (
+                                <CompactRecipeCard
+                                  key={recipe.id}
+                                  recipe={recipe}
+                                  contextResource={contextResource}
+                                  selected={selectedRecipeId === recipe.id}
+                                  onSelectRecipe={onSelectRecipe}
+                                  onAdd={onAdd}
+                                  onPrefetch={onPrefetch}
+                                  onBrowseResource={onBrowseResource}
+                                  onChipMenu={openChipMenu}
+                                  onChipDragStart={beginChipDrag}
+                                  rateView={rateView}
+                                  onCardMenu={(event, machineLabel, add) =>
+                                    openCardMenu(event, {
+                                      label: recipe.name,
+                                      machineLabel,
+                                      add,
+                                      hide: () => hideRecipeMap(recipe.recipeMap),
+                                      only: () => onlyRecipeMap(recipe.recipeMap),
+                                    })
+                                  }
+                                />
+                              ))}
+                              {awaited > 0 ? (
+                                <div
+                                  className="contents"
+                                  role="status"
+                                  aria-label={`Loading ${section.label} recipes`}
+                                >
+                                  {Array.from(
+                                    { length: Math.min(sheet ? 2 : 3, awaited) },
+                                    (_, index) => (
+                                      <SkeletonResultCard key={index} delay={index * 110} />
+                                    ),
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </section>
+                      );
+                    })}
                   </>
                 )}
               </>
@@ -1477,7 +1472,7 @@ export function RecipeSearchOverlay({
               onPointerDown={(event) => event.stopPropagation()}
             >
               <div className="truncate px-2 py-1 text-[11px] font-bold text-[var(--mc-ink-muted)]">
-                {chipMenu.resource.displayName ?? chipMenu.resource.id}
+                {resourceLabel(chipMenu.resource)}
               </div>
               {(
                 [
@@ -1568,12 +1563,11 @@ export function RecipeSearchOverlay({
 }
 
 /**
- * One column of the stencil card: the side's name and its ANY/ALL/ONLY
- * switch on top, then a stack of condition rows, then the add slot. The
- * stack scrolls inside a FIXED height, so removing a condition never moves
- * the card and the next X stays under the pointer. Rows drag by hand: while
- * one is in flight this column hides it, and the rows below the landing spot
- * slide down to hold it open.
+ * One column of the stencil card: the side's name and ANY/ALL/ONLY switch,
+ * the condition rows, then the add slot. The stack scrolls inside a FIXED
+ * height, so removing a condition never moves the card and the next X stays
+ * under the pointer. While a row is dragged this column hides it and the rows
+ * below the landing spot slide down to make room.
  */
 function StencilSide({
   label,
@@ -1737,10 +1731,8 @@ function OpPill({
 /** The searchable item drop-down the stencil's add slots open. */
 
 /**
- * A machine's title line over its recipes: the machine art large, its name,
- * how many recipes it answers with, and a fold. Folded it stays in the list
- * as a quiet line so the machine is one click from coming back, exactly
- * what its dark chip up top means.
+ * A machine's title line over its recipes: art, name, recipe count and a
+ * fold. Folded, it stays as a quiet line, matching its dark chip up top.
  */
 function MachineSectionHeader({
   label,
@@ -1760,11 +1752,9 @@ function MachineSectionHeader({
   onToggle: () => void;
   onHover?: () => void;
 }) {
-  // STICKY: a long section's title rides the top of the scroll until the
-  // next title pushes it off, so you always know whose recipes you are in.
-  // It wears the panel's own ground so the cards pass underneath it. One
-  // height open or folded - only the ink fades and the chevron turns - so
-  // a fold never shifts the titles below it.
+  // STICKY: the title rides the top of the scroll until the next pushes it
+  // off, on the panel's ground so cards pass underneath. Same height open or
+  // folded, so a fold never shifts the titles below.
   return (
     <button
       type="button"
@@ -1930,11 +1920,9 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
   const powerText = eut > 0 ? `${eut.toLocaleString()} EU/t` : "no power";
   const tierColor =
     eut > 0 ? GT_TIER_COLORS[minimumTier as Exclude<MachineTier, "DEMO">] : undefined;
-  // Crafting-grid recipes arrive one slot at a time (nine separate Iron
-  // Plates), and oredict slots arrive wearing their oredict name. The chips
-  // read as a shopping list instead: same items merged with their amounts
-  // summed, many-form slots wearing a face - the first by default, or the
-  // one PICKED here. Picks ride onto the board with the add.
+  // Crafting-grid recipes arrive one slot at a time, so identical items merge
+  // with their amounts summed. Dictionary groups keep their identity while
+  // their icons cycle; explicit concrete picks still ride onto the board.
   const [inputPicks, setInputPicks] = useState<RecipeInputPicks>({});
   const inputChips = useMemo(() => {
     const merged = new Map<string, { raw: (typeof preview.inputs)[number]; indexes: number[] }>();
@@ -1949,7 +1937,9 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
       }
     });
     return [...merged.values()].map(({ raw, indexes }) => {
-      const faces = getAlternativeCycleFaces(raw);
+      // Dictionary members preview interchangeably; concrete substitutes keep
+      // their picker because their quantities can differ.
+      const faces = isOreDictionaryResource(raw) ? [] : getAlternativeCycleFaces(raw);
       const face = inputPicks[indexes[0]] ?? faces[0];
       return {
         raw,
@@ -2040,10 +2030,9 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
       ].join(" ")}
       style={{ contentVisibility: "auto", containIntrinsicSize: "auto 196px" }}
     >
-      {/* The machine is the section title now, so the header is the
-          recipe's own three facts at a size worth reading: its tier in the
-          board's chip paint, its time, its draw. Hold it for the card's
-          menu on a finger. */}
+      {/* The machine is the section title, so the header shows the recipe's
+          tier (in the board's chip paint), time and draw. Hold it for the
+          card's menu on a finger. */}
       <div className="flex items-center gap-2" {...headPress.handlers}>
         {tierColor ? (
           <span
@@ -2099,7 +2088,7 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
                 key={`in-${index}`}
                 resource={chip.resource}
                 amountText={
-                  isFreeRecipeInput(chip.raw)
+                  isFreeRecipeInput(chip.raw) && !isControllerSlotInput(chip.raw)
                     ? { text: "FREE" }
                     : chip.raw.consumed === false
                     ? { text: "NC" }
@@ -2107,7 +2096,6 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
                       ? formatChipEnergy(chip.resource, "input", eut, durationTicks)
                       : formatChipAmount(chip.resource, rateView, durationTicks, ratioDivisor)
                 }
-                hasAlternatives={chip.faces.length > 1}
                 onCycle={
                   chip.faces.length > 1
                     ? (step) => {
@@ -2157,10 +2145,8 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
 });
 
 /**
- * A ghost result card: the real card's anatomy with nothing in it yet,
- * breathing on a stagger while the answers travel. Its arrow fills over and
- * over like a furnace's progress bar - the one loading animation this app
- * could ever have.
+ * A ghost result card: the real card's anatomy, empty, pulsing on a stagger
+ * while results load. Its arrow fills repeatedly like a furnace progress bar.
  */
 function powerDialNote(
   source: PowerSourceDefinition,
@@ -2191,12 +2177,10 @@ function formatPowerChipAmount(kind: string, perSecond: number, rateView: RateVi
 }
 
 /**
- * A generator answering the stencil, wearing the RECIPE CARD's own anatomy:
- * machine tile, tier chip, name, the plus - then takes on the left and makes
- * on the right as the same chips, with the EU it generates leading the
- * output column exactly as it leads the card's rail on the board. Not a
- * recipe underneath: the plus places the machine with the matched settings
- * dialed in, and the stats line names those dials.
+ * A generator answering the stencil, laid out like a recipe card, with its
+ * generated EU leading the output column as on the board. Not a recipe
+ * underneath: the plus places the machine with the matched settings, and the
+ * stats line names those settings.
  */
 function PowerHitCard({
   hit,
@@ -2450,8 +2434,6 @@ function ResourceChip({
   hit?: boolean;
   amountText: ChipAmount;
   chance?: number;
-  /** The slot accepts several forms; the icon wears the classic blue plus. */
-  hasAlternatives?: boolean;
   /** Wheel over the chip steps through the forms, and the choice sticks. */
   onCycle?: (step: 1 | -1) => void;
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
@@ -2522,13 +2504,11 @@ function ResourceChip({
           className="!h-full !w-full"
           iconPixelSize={machineArtPixels(32)}
         />
-        {/* No badge of our own: ResourceIcon already draws the blue plus for
-            a slot that accepts several forms. */}
       </span>
       {/* The icon is the big thing; the name is smaller and may take a
           second line rather than losing its second word to an ellipsis. */}
       <span className="min-w-0 flex-1 line-clamp-2 whitespace-normal text-[12px] font-bold leading-tight text-[var(--mc-ink)]">
-        {resource.displayName ?? resource.id}
+        {resourceLabel(resource)}
       </span>
       <span
         className={[
@@ -2560,10 +2540,10 @@ function ResourceChip({
 }
 
 /**
- * A finger has no right button and iOS never fires contextmenu, so a held
- * press opens a menu by hand - the port rows' own 450ms rule. Spread the
- * handlers onto the element; call `consumeClick` first thing in its click,
- * because the tap that ends a long press is not a second gesture.
+ * iOS never fires contextmenu, so a held touch press (450ms, as on port
+ * rows) opens the menu. Spread the handlers onto the element and call
+ * `consumeClick` first in its click: the tap ending a long press is not a
+ * second gesture.
  */
 function useLongPress(onMenu: (event: ReactMouseEvent) => void) {
   const pressTimerRef = useRef<number | undefined>(undefined);
@@ -2698,10 +2678,9 @@ interface ChipAmount {
 }
 
 /**
- * The EU view's chip: one craft's energy (EU/t x ticks) over the amount
- * this slot makes (or eats) per craft. Chance is not applied - the recipe
- * as written, like every other view here. A recipe with no power or no
- * time reads 0, which is honest: a hand craft costs nothing.
+ * The EU view's chip: one craft's energy (EU/t x ticks) over the amount this
+ * slot makes (or eats) per craft. Chance is not applied. A recipe with no
+ * power or no time reads 0.
  */
 function formatChipEnergy(
   resource: ResourceAmount,
@@ -2752,19 +2731,15 @@ function formatChipAmount(
 
 
 /**
- * How much room the search has: everything to the RIGHT of the item browser.
- *
- * The left column stays live beside the search - its list, search box and
- * recents are how queries get seeded, so covering it would cut the tool in
- * half. The right column is only readouts while the search is open, so the
- * search covers it and spends the room on bigger recipes.
+ * The search covers everything RIGHT of the item browser. The left column
+ * stays live because it seeds queries; the right column is only readouts,
+ * so the search covers it.
  */
 const BOARD_SIDEBAR_LEFT = 306;
 const RECIPE_SEARCH_MIN_WIDTH = 640;
 const RECIPE_SEARCH_MAX_WIDTH = 2200;
 const RECIPE_SEARCH_MAX_HEIGHT = 1200;
 const RECIPE_SEARCH_SHEET_BELOW = 700;
-const ZERO_OFFSET = { x: 0, y: 0 };
 
 interface RecipeSearchViewport {
   /** Filling the screen rather than floating over the board. */

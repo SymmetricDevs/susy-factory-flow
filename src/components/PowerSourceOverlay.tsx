@@ -22,13 +22,12 @@ import { useFactoryStore } from "@/store/factory-store";
 import type { MachineTier } from "@/lib/model/types";
 
 /**
- * The power source picker: the recipe search's sibling, at the recipe
- * search's size. Browsing lays the catalog out one GROUP PER COLUMN -
- * generators, engines, boilers, turbines side by side, wrapping when the
- * panel runs out of width. Typing searches the machines AND everything they
- * take or make under any setting - so "benzene" finds every machine that
- * burns it, and picking one places the card with that fuel already dialed
- * in. Multiblocks wear the workbook's full structure renders.
+ * The power source picker, sized like the recipe search. Browsing lays the
+ * catalog out one GROUP PER COLUMN (generators, engines, boilers, turbines),
+ * wrapping as needed. Typing searches the machines AND what they take or make
+ * under any setting, so "benzene" finds every machine that burns it and the
+ * pick places the card with that fuel set. Multiblocks show full structure
+ * renders.
  */
 /** Every unlock tier the catalog actually holds, in the game's own order. */
 const TIER_FILTER_OPTIONS = GT_VOLTAGE_TIERS.map((entry) => entry.tier).filter((tier) =>
@@ -136,11 +135,9 @@ export function PowerSourceOverlay() {
           className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-4 border-[#23262d] bg-[#101215] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_rgba(255,255,255,0.05),inset_-2px_-2px_0_rgba(0,0,0,0.6)]"
           onPointerDown={(event) => event.stopPropagation()}
         >
-          {/* One row on a desktop. On a phone the title takes the first line
-              with the close button at its end, and the search and its two
-              filters take the second: the single row used to push the close
-              button past the right edge of the screen, and a phone has no
-              Escape key to fall back on. */}
+          {/* One row on a desktop. On a phone the title and close button take
+              the first line and the search and filters the second, so the
+              close button never falls off screen. */}
           <div
             className={[
               "flex gap-2 border-b-2 border-[#23262d] p-2 pl-3",
@@ -238,12 +235,10 @@ export function PowerSourceOverlay() {
                           // leaving a bare right half.
                           className="flex min-w-[220px] max-w-[300px] flex-1 basis-[220px] flex-col gap-2"
                         >
-                          {/* The column's title BAR, the way a board window
-                              caps what it owns - but in the power AMBER
-                              with dark ink, because a grey plate over grey
-                              card strips read as one more card. No letter
-                              tracking: BOILERS AND EXCHANGERS must hold one
-                              line at the narrowest column. */}
+                          {/* The column's title bar in power AMBER with dark
+                              ink, so it does not read as another grey card.
+                              No letter tracking: BOILERS AND EXCHANGERS must
+                              fit one line at the narrowest column. */}
                           <div
                             className="flex items-center gap-1.5 border-2 border-[var(--mc-15)] px-2 py-2.5 shadow-[inset_2px_2px_0_rgba(255,255,255,0.18),inset_-2px_-2px_0_rgba(0,0,0,0.35)]"
                             // Between the first grey plate and the full
@@ -363,7 +358,6 @@ function PowerSourceCard({
           <Zap className="h-10 w-10 text-amber-300" aria-hidden />
         )}
       </span>
-      {/* Tighter than the old p-2: one name line does not need a landing. */}
       <span className="flex min-w-0 flex-col gap-0.5 px-2 py-1">
         <span className="flex items-center gap-1.5">
           <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-[var(--mc-ink)]">

@@ -20,7 +20,10 @@ vi.mock("./plan-preview-capture", () => ({
 }));
 vi.mock("@/lib/designs/design-storage", () => ({
   readDesign: (id: string) => readDesign(id),
-  writeDesign: (record: unknown) => writeDesign(record),
+  writeDesignIfUnchanged: async (record: unknown) => {
+    await writeDesign(record);
+    return "written";
+  },
 }));
 vi.mock("@/lib/setups-tab", () => ({ notifySetupsChanged: () => undefined }));
 vi.mock("@/store/community-auth-store", () => ({
@@ -87,6 +90,17 @@ describe("post-follow", () => {
     expect(fields.name).toBe("Cobble");
     expect(fields.description).toBe("Rocks");
     expect(fields.plan).toMatchObject({ name: "Cobble" });
+  });
+
+  it.each(["build", "solve", "pool"] as const)("publishes the saved %s mode", async (mode) => {
+    const record = design(true);
+    Object.assign(record.project, { solveMode: mode !== "build" || undefined, poolMode: mode === "pool" || undefined });
+    readDesign.mockResolvedValue(record);
+    schedulePostFollow("d1", true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const plan = patchCommunityPlan.mock.calls[0][1].plan;
+    expect(Boolean(plan.solveMode)).toBe(mode !== "build");
+    expect(Boolean(plan.poolMode)).toBe(mode === "pool");
   });
 
   it("does nothing for a design with no post", async () => {

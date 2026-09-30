@@ -46,9 +46,9 @@ const SETUP_SORTS: Array<{ value: CommunityPlanSort; label: string }> = [
 const PAGE_SIZE = 60;
 
 /**
- * Every tag seen on any loaded page, kept for the life of the app: a
- * half-typed #tag narrows the results to nothing, so the suggestions must
- * not come from the results alone.
+ * Every tag seen on any loaded page, kept for the app's lifetime: a
+ * half-typed #tag narrows the results to nothing, so suggestions cannot come
+ * from the current results alone.
  */
 const knownTags = new Set<string>();
 
@@ -220,10 +220,9 @@ export function SetupsGrid({
   const isLoading = !needsAccount && (!isCurrent || remembered.page !== activePage);
   const hasMore = isCurrent && remembered.plans.length < remembered.total;
 
-  // Infinite scroll: when the sentinel under the last row comes into view
-  // and the page asked for has LANDED, ask for the next one. Asking while a
-  // page is still loading would cancel that fetch and ask again, forever,
-  // with the grid never growing - which is what this used to do.
+  // Infinite scroll: when the sentinel under the last row is in view and the
+  // requested page has LANDED, ask for the next. Asking while a page is still
+  // loading would cancel that fetch and loop without the grid ever growing.
   useEffect(() => {
     const sentinel = moreRef.current;
     if (!sentinel || isLoading || !hasMore) {
@@ -267,8 +266,8 @@ export function SetupsGrid({
   const fail = (thrown: unknown, fallback: string) =>
     setError(thrown instanceof Error ? thrown.message : fallback);
 
-  // A post shared by an old release carries the stat card that release
-  // computed; the first hover asks once for the current one.
+  // A post may carry a stat card computed by an older app version; the first
+  // hover asks once for a current one.
   const refreshedStatsRef = useRef(new Set<string>());
   const refreshStats = (planId: string) => {
     if (refreshedStatsRef.current.has(planId)) {

@@ -11,11 +11,9 @@ import { renderIoStats, TierBadge } from "./shelf-cards";
 import { EntryIconSlot, IconPicker, iconSuggestionsFromStats } from "./IconPicker";
 
 /**
- * The one confirmation every pocket-to-shelf path lands in: the pocket
- * card's save button, the shelf's share-a-pocket flow, and overwriting an
- * owned row. Mostly filled out already — the pocket's name, its needs and
- * makes, the machine count — plus the face it wears (icon), its tags, and
- * whether it goes public the moment it exists.
+ * The confirmation for saving a blueprint, shown while the blueprint store
+ * holds a `saveRequest`: prefilled name, needs and makes and machine count,
+ * plus its icon, tags and whether it goes public at once.
  */
 export function BlueprintSaveDialog() {
   const request = useBlueprintStore((state) => state.saveRequest);

@@ -2,6 +2,7 @@
 
 import type { FactoryProject } from "@/lib/model/types";
 import {
+  keepStoredPlanMarks,
   toDesignSummary,
   type DesignFolder,
   type DesignRecord,
@@ -9,22 +10,17 @@ import {
 } from "./design-library";
 
 /*
- * Deliberately a different database from the dataset cache in
- * `lib/datasets/browser-cache.ts`. Adding a store to that one means bumping its
- * version, and a version change blocks while any other connection is open — so
- * the two would race on startup, when both are opened at once.
+ * Designs keep their own database: adding a store to a shared one means a
+ * version bump, which blocks while another connection is open.
  */
-const DB_NAME = "susy-factory-flow-designs";
-// 2: the library's folders store. 3: repeat the migration for databases that
-// were opened at version 2 before the folder store was present. The guarded
-// creation makes this safe for databases that already have every store.
+const DB_NAME = "gtnh-factory-flow-designs";
+// 3 adds the folders store (2 also did, but some browsers reached 2 without
+// it). The create below is guarded, so an existing store is untouched.
 const DB_VERSION = 3;
 
 /*
- * Metadata and plans live in separate stores so the tab strip costs almost
- * nothing to draw: names and timestamps are a few hundred bytes each, while the
- * plans they belong to are hundreds of kilobytes with recipe data embedded.
- * Reading one to render the other would load every plan at startup.
+ * Metadata and plans live in separate stores so the tab strip can be drawn
+ * without loading every plan (hundreds of kilobytes each) at startup.
  */
 const META_STORE = "design-meta";
 const PLAN_STORE = "design-plans";
@@ -32,7 +28,7 @@ const PLAN_STORE = "design-plans";
 const FOLDER_STORE = "design-folders";
 
 /** Small enough, and read early enough, to be worth keeping synchronous. */
-export const ACTIVE_DESIGN_STORAGE_KEY = "susy-factory-flow.active-design.v1";
+export const ACTIVE_DESIGN_STORAGE_KEY = "gtnh-factory-flow.active-design.v1";
 
 interface StoredPlan {
   id: string;
@@ -99,11 +95,71 @@ export async function writeDesign(record: DesignRecord): Promise<void> {
   }
 }
 
+/** One design's metadata alone: cheap, for asking "has it moved?". */
+export async function readDesignSummary(id: string): Promise<DesignSummary | undefined> {
+  if (!isDesignStorageAvailable()) {
+    return undefined;
+  }
+
+  const db = await openDesignDb();
+  try {
+    return await requestToPromise<DesignSummary | undefined>(
+      db.transaction(META_STORE, "readonly").objectStore(META_STORE).get(id),
+    );
+  } finally {
+    db.close();
+  }
+}
+
 /**
- * Writes only the metadata.
+ * Writes the design only if its stored plan is still the version the writer
+ * started from (`expectedUpdatedAt`, the stored `updatedAt` it loaded or last
+ * wrote). The check and the write are one transaction, so two browser tabs
+ * saving at once cannot both pass it. `expectedUpdatedAt` undefined writes
+ * unconditionally, and so does a design not stored yet.
  *
- * Renaming shouldn't rewrite a megabyte of plan, and autosave shouldn't be
- * forced to wait behind it.
+ * This stops a tab left open on an old copy from overwriting work saved from
+ * another tab (design-tab-sync.ts).
+ */
+export async function writeDesignIfUnchanged(
+  record: DesignRecord,
+  expectedUpdatedAt: string | undefined,
+): Promise<"written" | "conflict"> {
+  if (!isDesignStorageAvailable()) {
+    return "written";
+  }
+
+  const db = await openDesignDb();
+  try {
+    const transaction = db.transaction([META_STORE, PLAN_STORE], "readwrite");
+    const meta = transaction.objectStore(META_STORE);
+    const outcome = await new Promise<"written" | "conflict">((resolve, reject) => {
+      const current = meta.get(record.id);
+      current.onerror = () => reject(current.error);
+      current.onsuccess = () => {
+        const stored = current.result as DesignSummary | undefined;
+        if (stored && expectedUpdatedAt !== undefined && stored.updatedAt !== expectedUpdatedAt) {
+          resolve("conflict");
+          return;
+        }
+        meta.put(toDesignSummary(record));
+        transaction.objectStore(PLAN_STORE).put({ id: record.id, project: record.project });
+        resolve("written");
+      };
+    });
+    await transactionToPromise(transaction);
+    return outcome;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Writes only the metadata, so a rename never rewrites the whole plan.
+ *
+ * The plan's own stamp and marks stay as stored (`keepStoredPlanMarks`), read
+ * and written in one transaction, so a summary read before a save cannot put
+ * the stamp back behind the plan.
  */
 export async function writeDesignSummary(summary: DesignSummary): Promise<void> {
   if (!isDesignStorageAvailable()) {
@@ -113,7 +169,11 @@ export async function writeDesignSummary(summary: DesignSummary): Promise<void> 
   const db = await openDesignDb();
   try {
     const transaction = db.transaction(META_STORE, "readwrite");
-    transaction.objectStore(META_STORE).put(summary);
+    const meta = transaction.objectStore(META_STORE);
+    const current = meta.get(summary.id);
+    current.onsuccess = () => {
+      meta.put(keepStoredPlanMarks(summary, current.result as DesignSummary | undefined));
+    };
     await transactionToPromise(transaction);
   } finally {
     db.close();
@@ -238,18 +298,14 @@ function openDesignDb(): Promise<IDBDatabase> {
         db.close();
         return;
       }
-      // Another tab of the app wanting a NEWER schema asks this connection
-      // to step aside. Every operation here closes its own connection
-      // anyway, but a long transaction should not be the thing that blocks
-      // the other tab's upgrade forever.
+      // Another tab wanting a NEWER schema asks this connection to step
+      // aside, so a long transaction here never blocks its upgrade.
       db.onversionchange = () => db.close();
       resolve(db);
     };
-    // The mirror case: THIS open wants a newer schema than a connection some
-    // other tab is holding. Without this the open just never settles, the
-    // library never hydrates, and the strip sits empty with a dead plus. A
-    // clear failure is better than a silent hang; a reload once the other
-    // tab has let go clears it.
+    // The mirror case: THIS open wants a newer schema than a connection
+    // another tab holds. Otherwise the open never settles and the library
+    // never hydrates; a clear failure beats a silent hang.
     request.onblocked = () => {
       gaveUp = true;
       reject(

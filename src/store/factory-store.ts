@@ -1,8 +1,14 @@
 "use client";
 
-import { normalizeFullFarms } from "@/lib/model/full-farms";
+import { isInputRate, type TargetMode } from "@/lib/model/storage-target";
 
-import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
+import { dissolveProductionGroup, productionGroupDescendants } from "@/lib/model/production-groups";
+import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
+
+import { normalizeFullFarms } from "@/lib/model/full-farms";
+import { isEecRecipe } from "@/lib/machines/extreme-entity-crusher";
+
+import { carryMachineVoltage, normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 
 import { create, type StateCreator, type StoreApi } from "zustand";
 import { createEmptyProject } from "@/examples";
@@ -82,7 +88,6 @@ import {
   resourceLabel,
 } from "@/lib/model/resources";
 import type {
-  SetupRules,
   EntryIcon,
   FactoryAnnotation,
   FactoryEdge,
@@ -102,32 +107,20 @@ import type {
 } from "@/lib/model/types";
 import { nearestFreeSpot, type PlacementRect } from "@/components/flow/board-placement";
 import { getStorageRoles } from "@/lib/model/storage-role";
+import { edgeRatioWeight, setStorageRatioPercentage, equalizeStorageRatioPercentages } from "@/lib/model/storage-ratios";
 import { collectPocketMembers, expandPocketSelection } from "@/lib/model/pocket-connections";
 import { paperForBoardId, pickBoardPaper } from "@/lib/model/board-paper";
-import { getSetupRules, packSetupRules } from "@/lib/model/setup-rules";
 import type { BoardCamera } from "@/lib/designs/design-camera";
 
-export const LOCAL_STORAGE_KEY = "susy-factory-flow.project.v2";
-export const RESOURCE_HISTORY_STORAGE_KEY = "susy-factory-flow.resource-history.v1";
+export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
+export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.v1";
 const RESOURCE_HISTORY_LIMIT = 30;
 const PROJECT_HISTORY_LIMIT = 100;
 
 /**
- * A move the board's camera has been asked to make from outside the canvas.
- *
- * `centre` lands on a single card at 1:1 - reading one machine. `fit` zooms
- * out until every named card is on screen at once, and an empty `nodeIds`
- * under `fit` means the whole board. `viewport` names the pan and zoom
- * outright, which is how a tab comes back up where you left it.
- */
-/**
- * How hard a `fit` is allowed to push, when the default framing is wrong for
- * the caller.
- *
- * The board's own framing is deliberately timid: it never magnifies past 1:1,
- * because arriving at a plan blown up reads as a bug. A caller that wants
- * "look at THIS card" to actually fill the eye says so rather than every
- * caller inheriting one compromise.
+ * How hard a `fit` may push. The default framing never magnifies past 1:1
+ * (a plan arriving blown up reads as a bug); a caller that wants one card to
+ * fill the view overrides it here.
  */
 export interface BoardFraming {
   /** How far in the fit may zoom. Defaults to BOARD_CAMERA_MAX_ZOOM. */
@@ -142,6 +135,12 @@ export interface BoardFraming {
   insetRight?: number;
 }
 
+/**
+ * A camera move requested from outside the canvas. `centre` lands on one card
+ * at 1:1; `fit` zooms out until every named card is visible (empty `nodeIds`
+ * means the whole board); `viewport` sets pan and zoom exactly, which is how
+ * a tab comes back where it was left.
+ */
 export interface BoardCameraRequest {
   mode: "centre" | "fit" | "viewport";
   nodeIds: string[];
@@ -229,9 +228,8 @@ interface FactoryStore {
   selectedFlowResourceKey?: string;
   /**
    * The flow neighbourhood under the cursor: hovering a port lights every
-   * edge on it plus their far-end ports; hovering an edge label lights that
-   * line and both endpoints. Maps give O(1) membership for per-element
-   * selectors.
+   * edge on it plus their far-end ports (see flow-scope.ts). Maps give O(1)
+   * membership for per-element selectors.
    */
   hoveredFlowScope?: {
     edges: Record<string, true>;
@@ -330,6 +328,12 @@ interface FactoryStore {
     recipe: Recipe,
     options?: { machineHandlerId?: string },
   ) => void;
+  /**
+   * Another recipe on the same machine, as swapping a controller-slot item
+   * does (the EEC's spawner): in place, every machine setting kept, wires
+   * the new recipe can serve re-docked. One undo step.
+   */
+  swapMachineRecipe: (nodeId: string, recipe: Recipe) => void;
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
   /**
    * SHARED MACHINES (shared-machine.ts). Opens the recipe search with this
@@ -410,7 +414,7 @@ interface FactoryStore {
     resource: Pick<ResourceAmount, "kind" | "id" | "displayName">,
   ) => void;
   /**
-   * A loose cell wire (SetupRules.looseCellWires): a filled cell landing
+   * A loose cell wire: a filled cell landing
    * straight on its fluid's input, or a fluid landing straight on its cell's
    * input. The edge carries the SOURCE's own resource, the far form's input
    * handle as its target, and the Canner ratio the gesture fetched; the
@@ -446,20 +450,31 @@ interface FactoryStore {
   ) => void;
   /** Drains only: flip between pulling the feeder flat out and catching the extra. */
   setStorageDrainMode: (storageId: string, drainMode: StorageDrainMode) => void;
-  /** Solve mode's requirement on a product drawer; undefined clears it. */
+  /** Shared Solve/Pool rate on a source or product; undefined clears it. */
   setStorageTarget: (storageId: string, targetPerSecond: number | undefined) => void;
-  /** Free inputs and free outputs: what the board does off its own edges. */
-  setSetupRules: (rules: Partial<SetupRules>) => void;
+  setStorageTargetMode: (storageId: string, mode: TargetMode) => void;
+  /** A rule and its number together, one undo step: the drawer's rule mark
+   * stepping off Any pins what flows now. */
+  setStorageRule: (storageId: string, mode: TargetMode, targetPerSecond: number) => void;
+  setPoolTargetMode: (storageId: string, mode: NonNullable<FactoryStorage["poolTargetMode"]>) => void;
   /**
    * The board's three modes on one switch: build (both flags off), solve
    * (solveMode), pool (solveMode plus poolMode). One undo step.
    */
   setBoardMode: (mode: "build" | "solve" | "pool") => void;
+  /** Screenshot mode changes are transient when viewing someone else's setup. */
+  setScreenshotMode: (mode: "build" | "solve" | "pool") => void;
   /** Plan mode counts machines and reports flows; solve mode takes the
    * product drawers' typed amounts and reports machine counts. */
   setSolveMode: (solveMode: boolean) => void;
   /** Pool mode: every resource is one shared pool, no wires needed. */
   setPoolMode: (poolMode: boolean) => void;
+  createProductionGroup: (name?: string, parentId?: string) => string | undefined;
+  updateProductionGroup: (id: string, patch: Partial<Pick<ProductionGroup, "name" | "parentId">>) => void;
+  dissolveProductionGroup: (id: string) => void;
+  moveToProductionGroup: (ids: string[], groupId?: string) => void;
+  setPoolResourceRule: (groupId: string | undefined, key: string, rule?: PoolResourceRule) => void;
+  setPoolResourceRules: (groupId: string | undefined, keys: string[], rule?: PoolResourceRule) => void;
   /**
    * Pool mode's cell-to-fluid ratios, merged in as the board fetches them
    * from the Canner (litres per filled cell, by cell id). Not an undo step:
@@ -483,6 +498,7 @@ interface FactoryStore {
     side: "source" | "drain",
     /** Where to set it down (flow px, the drawer centred there); absent finds clear floor. */
     position?: { x: number; y: number },
+    productionGroupId?: string,
   ) => void;
   /**
    * Cut a wire at a point and run it through a new drawer of its resource
@@ -545,11 +561,10 @@ interface FactoryStore {
   ) => void;
   /**
    * Land an auto-arrange as ONE undo entry: every card's new position; a
-   * reset of hand-pinned waypoints and dragged rate labels on the wires the
-   * rearranged level shows (steering aimed at the old positions would only
-   * fight the router on the new ones); fresh waypoint lanes for the wires
-   * the arrange chose to steer itself; and the island boxes it draws,
-   * replacing any it drew before. Undo restores all of it together.
+   * reset of hand-pinned waypoints on the wires the rearranged level shows
+   * (steering aimed at the old positions would only fight the router on the
+   * new ones); fresh waypoint lanes for the wires the arrange steers itself;
+   * and any island boxes it draws, replacing earlier ones.
    */
   applyBoardArrangement: (arrangement: {
     moves: Array<{ id: string; position: FactoryNode["position"] }>;
@@ -589,15 +604,10 @@ interface FactoryStore {
    */
   pasteBoardItems: (payload: BoardClipboardPayload, offset: { x: number; y: number }) => string[];
   /**
-   * Wrap a selection in a new OPEN board fitted around it: members keep
-   * their screen positions and every wire, the frame simply appears around
-   * them. Selected boards nest whole. Returns the new board id, or
-   * undefined when the selection held nothing.
-   */
-  /**
-   * Wrap a root selection in a new open board. Refused - and returns
-   * undefined - when anything selected already belongs to a board or IS
-   * one: nothing may sit in two boards at once.
+   * Wrap a root selection in a new OPEN board fitted around it: members keep
+   * their screen positions and every wire. Returns the new board id, or
+   * undefined when the selection is empty or anything selected already
+   * belongs to a board or IS one (nothing may sit in two boards at once).
    */
   wrapSelectionInBoard: (ids: string[], name?: string) => string | undefined;
   /**
@@ -630,10 +640,9 @@ interface FactoryStore {
   }) => string | undefined;
   /**
    * Open a collapsed board. Members of a board that has never stood open
-   * (a legacy pocket) are rebased to fit inside the frame — their old
-   * dive-in coordinates were their own space — and hand-pinned waypoints on
-   * wires touching them are dropped: they steered through a space the wires
-   * no longer travel.
+   * (a legacy pocket, whose coordinates are its own space) are rebased to fit
+   * inside the frame, and hand-pinned waypoints on wires touching them are
+   * dropped: they steered through a space the wires no longer travel.
    */
   expandPocket: (pocketId: string) => void;
   /**
@@ -685,12 +694,9 @@ interface FactoryStore {
   focusBoardNode: (nodeId: string) => void;
   /**
    * Frame `nodeIds`, or everything on the board when they are omitted: the
-   * board zooms out as far as it has to for the lot to fit.
-   *
-   * This is how a plan that arrives from somewhere else lands on screen. A
-   * shared setup carries its author's positions and nothing about where their
-   * camera was, so opening one built thousands of cells from the origin used
-   * to leave the viewer looking at blank canvas.
+   * board zooms out as far as it has to for the lot to fit. This is how an
+   * arriving plan lands on screen: a shared setup carries positions but no
+   * camera, and its cards may sit far from the origin.
    */
   frameBoardNodes: (nodeIds?: string[], framing?: BoardFraming) => void;
   /**
@@ -711,10 +717,10 @@ interface FactoryStore {
     },
   ) => void;
   /**
-   * Several source→target wires as ONE undo entry with one solve — how a
-   * wire dropped on a pocket card fans out to every member that takes the
-   * resource. Each pair keeps connectNodes' semantics: an identical existing
-   * wire toggles off, storage conflicts are skipped.
+   * Several source→target wires as ONE undo entry with one solve, for a
+   * gesture that lays more than one wire. Each pair keeps connectNodes'
+   * semantics: an identical existing wire toggles off, storage conflicts are
+   * skipped.
    */
   connectNodesBatch: (
     connections: Array<{
@@ -739,6 +745,9 @@ interface FactoryStore {
     },
   ) => void;
   updateEdge: (edgeId: string, patch: Partial<FactoryEdge>) => void;
+  setRatioBranchWeight: (storageId: string, edgeIds: string[], weight: number) => void;
+  setRatioBranchPercentage: (storageId: string, edgeId: string | undefined, percentage: number, side?: "input" | "output") => void;
+  equalizeRatioBranches: (storageId: string, side: "input" | "output") => void;
   autoConnectNode: (nodeId: string) => void;
   optimizeMachineCount: (nodeId: string) => void;
   optimizeMachineCounts: () => void;
@@ -755,11 +764,12 @@ const initialProject = createEmptyProject();
  * What Ctrl+C lifts off the board: the selected items verbatim, the wires
  * that run between two selected items, and the recipes those items lean on -
  * carried along so a paste into another design (or after the originals were
- * deleted) still has everything it needs. Selecting a pocket card lifts the
- * whole pocket: the pocket itself, every member, and every nested pocket.
+ * deleted) still has everything it needs. Selecting a board lifts the whole
+ * board: the board itself, every member, and every nested board.
  * Blueprints save exactly this payload.
  */
 export interface BoardClipboardPayload {
+  productionGroups?: ProductionGroup[];
   nodes: FactoryNode[];
   storages: FactoryStorage[];
   annotations: FactoryAnnotation[];
@@ -769,7 +779,7 @@ export interface BoardClipboardPayload {
 }
 
 /**
- * Snapshot a board selection as a clipboard/blueprint payload. Pocket cards
+ * Snapshot a board selection as a clipboard/blueprint payload. Boards
  * expand to their full contents; wires survive only when both feet stand
  * inside the capture. Returns undefined when the selection holds nothing.
  */
@@ -787,10 +797,16 @@ export function captureBoardSelection(
     return undefined;
   }
 
+  const groupIds = new Set([...nodes, ...storages].flatMap((entry) => entry.productionGroupId ? [entry.productionGroupId] : []));
+  for (const id of groupIds) {
+    const parent = project.productionGroups?.find((group) => group.id === id)?.parentId;
+    if (parent) groupIds.add(parent);
+  }
   const recipeIds = new Set(nodes.flatMap((node) => listNodeRecipeIds(node)));
   // Snapshotted, not referenced: the capture must not change when the
   // originals are edited or deleted afterwards.
   return structuredClone({
+    productionGroups: project.productionGroups?.filter((group) => groupIds.has(group.id)),
     nodes,
     storages,
     annotations,
@@ -1070,8 +1086,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
     // A VIEW change: the books are per-second and stay exactly as they are.
     // The formatters read a module singleton, and every surface that prints
     // a rate also subscribes to the dial (useRateDisplayUnits) so it
-    // re-renders. This used to re-solve the whole plan just to hand every
-    // surface a fresh result identity, which froze big boards on a unit
+    // re-renders. Do not re-solve here: that freezes big boards on a unit
     // switch.
     setActiveRateUnit(unit);
     set({ rateUnit: unit });
@@ -1385,9 +1400,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         }
       }
       for (const output of effectiveRecipe.outputs) {
-        // The EU output slot (power became a resource in v2.45) is the
-        // generator's product, and the EU condition below already asks for
-        // it: pushing the slot too showed "EU" and "Power (EU)" side by side.
+        // The EU output slot is the generator's product, and the EU condition
+        // below already asks for it; pushing the slot too would show the
+        // condition twice.
         if (output.kind === "power") {
           continue;
         }
@@ -1639,6 +1654,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
   refactorNodeWithRecipe: (nodeId, recipe, options) => {
     set((state) => refactorNodeToState(state, nodeId, recipe, options));
   },
+  swapMachineRecipe: (nodeId, recipe) => {
+    set((state) => swapMachineRecipeToState(state, nodeId, recipe));
+  },
   updateNode: (nodeId, patch) => {
     set((state) => {
       const project = touchProject(
@@ -1709,9 +1727,14 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       }
       const primary = state.project.recipes.find((entry) => entry.id === node.recipeId);
       // Generators, crop farms and custom rate cards own their recipe and
-      // run nothing else; the same goes for the pick.
+      // run nothing else; the same goes for the pick. So does an EEC: its
+      // controller holds one spawner.
       const ownsRecipe = (entry: Recipe | undefined) =>
-        !entry || isPowerRecipe(entry) || isCropFarmRecipe(entry) || isCustomRateRecipe(entry);
+        !entry ||
+        isPowerRecipe(entry) ||
+        isCropFarmRecipe(entry) ||
+        isCustomRateRecipe(entry) ||
+        isEecRecipe(entry);
       if (ownsRecipe(primary) || ownsRecipe(recipe)) {
         return state;
       }
@@ -2133,15 +2156,11 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
               (entry) => entry.source !== customNodeId && entry.target !== customNodeId,
             )
           : state.project.edges;
-      // One line per port the card is wired to, like the trash can below. This
-      // is the only adopt-on-wire card whose resource can be re-offered
-      // unchanged - drag the same port onto it again and nothing about the card
-      // moves, so without this the wire was simply appended again and the drag
-      // stacked copies on the same pixels, each carrying a share of the dial.
-      //
-      // Nothing to unwire on a repeat, either: a card holds its resource only
-      // while something is wired to it, so toggling the line off would hand back
-      // an empty card in answer to being asked to wire it.
+      // One line per port the card is wired to. Dragging the same port onto
+      // this card again changes nothing about it, so a repeat is ignored
+      // rather than stacking duplicate wires that each take a share of the
+      // dial. A repeat does not toggle the wire off either: the card holds its
+      // resource only while something is wired to it.
       if (findDuplicateEdge(keptEdges, edge)) {
         return state;
       }
@@ -2325,7 +2344,11 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       if (state.project.poolMode && side === "input") {
         return state;
       }
-      // ...and one product drawer per resource: a drop that would make a
+      const nodeIds = Array.isArray(nodeId) ? nodeId : [nodeId];
+      const anchor = state.project.nodes.find((node) => node.id === nodeIds[0]) ??
+        state.project.storages?.find((entry) => entry.id === nodeIds[0]);
+      const productionGroupId = anchor?.productionGroupId;
+      // ...and one product drawer per resource per scope: a drop that would make a
       // second one makes nothing (the ghost said so before the release).
       if (state.project.poolMode && side === "output") {
         const roles = getStorageRoles(state.project);
@@ -2333,16 +2356,15 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
           (storage) =>
             storage.kind === resource.kind &&
             storage.resourceId === resource.id &&
+            storage.productionGroupId === productionGroupId &&
             roles.get(storage.id) === "product",
         );
         if (duplicate) {
           return state;
         }
       }
-      const nodeIds = Array.isArray(nodeId) ? nodeId : [nodeId];
       // Whatever came out of the slot is what the buffer holds. A filled cell
-      // makes a drawer of cells, counted in cells; it used to be rewritten into
-      // its fluid, which is why an item output reported litres.
+      // makes a drawer of cells, counted in cells, never one of its fluid.
       const storageResource = resource;
       // The drawer joins the board of the port it came off: a port you can
       // drag from belongs to a visible card, and a drawer spawned beside a
@@ -2381,6 +2403,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
             : landing,
         ),
         pocketId: anchorFrame ? anchorOwner : undefined,
+        productionGroupId,
         // POOL MODE has no wires: dragging off a port into space still makes
         // the drawer, and the side of the port it came off IS the declaration
         // (off an output: the plan makes this; off an input: it imports this).
@@ -2450,10 +2473,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       return withProjectHistory(state, {
         project: finalProject,
         selectedNodeId: undefined,
-        // The new drawer announces itself with the placed flash below, which
-        // ends on its own. It used to ALSO switch on the board-wide glow for
-        // its resource, and nothing switched that off until you happened to
-        // hover a drawer or start a wire.
+        // The new drawer announces itself with the self-ending placed flash,
+        // not the board-wide resource glow (nothing would switch that off).
         // Only if the sweep above kept it: a drawer nothing reached is gone, and
         // flashing where it briefly was would point at empty canvas.
         ...(placed
@@ -2480,36 +2501,101 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
   },
   setStorageTarget: (storageId, targetPerSecond) => {
     set((state) => {
-      // Duplicate PRODUCT drawers of one resource (a board built in build
-      // mode, or two placed before pool mode refused a second) carry ONE
-      // ask: typing on any of them writes all of them, so the solve never
-      // reads two different amounts for the same thing.
-      const typed = (state.project.storages ?? []).find((storage) => storage.id === storageId);
-      const roles = getStorageRoles(state.project);
-      const twins = new Set(
-        typed
-          ? (state.project.storages ?? [])
-              .filter(
-                (storage) =>
-                  storage.kind === typed.kind &&
-                  storage.resourceId === typed.resourceId &&
-                  roles.get(storage.id) === "product",
-              )
-              .map((storage) => storage.id)
-          : [],
-      );
-      twins.add(storageId);
-      const project = touchProject({
-        ...state.project,
-        storages: (state.project.storages ?? []).map((storage) =>
-          twins.has(storage.id) ? { ...storage, targetPerSecond } : storage,
-        ),
-      });
-
-      return withProjectHistory(state, {
-        project,
-        lastResult: solveBooks(project),
-      });
+      if (state.isReadOnly || (targetPerSecond !== undefined && !Number.isFinite(targetPerSecond))) return state;
+      const next = withStorageTarget(state.project, storageId, targetPerSecond);
+      if (!next) return state;
+      const project = touchProject(next);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  setPoolTargetMode: (storageId, mode) => get().setStorageTargetMode(storageId, mode),
+  setStorageTargetMode: (storageId, targetMode) => {
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const next = withStorageTargetMode(state.project, storageId, targetMode);
+      if (!next) return state;
+      const project = touchProject(next);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  setStorageRule: (storageId, targetMode, targetPerSecond) => {
+    set((state) => {
+      if (state.isReadOnly || !Number.isFinite(targetPerSecond)) return state;
+      const withTarget = withStorageTarget(state.project, storageId, targetPerSecond);
+      const next = withTarget && withStorageTargetMode(withTarget, storageId, targetMode);
+      if (!next) return state;
+      const project = touchProject(next);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  createProductionGroup: (name, parentId) => {
+    let id: string | undefined;
+    set((state) => {
+      if (state.isReadOnly || (parentId && !state.project.productionGroups?.some((g) => g.id === parentId))) return state;
+      id = createId("production-group");
+      const project = touchProject({ ...state.project, productionGroups: [...(state.project.productionGroups ?? []),
+        { id, name: name?.trim() || "Production group", parentId }] });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+    return id;
+  },
+  updateProductionGroup: (id, patch) => {
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const groups = state.project.productionGroups ?? [];
+      const current = groups.find((group) => group.id === id);
+      if (!current) return state;
+      if (patch.parentId && (!groups.some((group) => group.id === patch.parentId)
+        || productionGroupDescendants(groups, id).has(patch.parentId))) return state;
+      const next = { ...current, ...patch, name: patch.name?.trim() || current.name };
+      if (next.name === current.name && next.parentId === current.parentId) return state;
+      const project = touchProject({ ...state.project, productionGroups: groups.map((group) => group.id === id ? next : group) });
+      return withProjectHistory(state, { project, lastResult: next.parentId === current.parentId ? state.lastResult : solveBooks(project) });
+    });
+  },
+  dissolveProductionGroup: (id) => {
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const changed = dissolveProductionGroup(state.project, id);
+      if (changed === state.project) return state;
+      const project = touchProject(changed);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  moveToProductionGroup: (ids, groupId) => {
+    set((state) => {
+      if (state.isReadOnly || (groupId && !state.project.productionGroups?.some((group) => group.id === groupId))) return state;
+      const selected = new Set(ids);
+      let changed = false;
+      const move = <T extends { id: string; productionGroupId?: string }>(entry: T): T => {
+        if (!selected.has(entry.id) || entry.productionGroupId === groupId) return entry;
+        changed = true;
+        return { ...entry, productionGroupId: groupId };
+      };
+      const nodes = state.project.nodes.map(move);
+      const storages = state.project.storages?.map(move);
+      if (!changed) return state;
+      const project = touchProject({ ...state.project, nodes, storages });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  setPoolResourceRule: (groupId, key, rule) => get().setPoolResourceRules(groupId, [key], rule),
+  setPoolResourceRules: (groupId, keys, rule) => {
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const group = state.project.productionGroups?.find((entry) => entry.id === groupId);
+      if (groupId && !group) return state;
+      const current = (group ? group.resourceRules : state.project.poolResourceRules) ?? {};
+      const changed = [...new Set(keys)].filter((key) => /^(item|fluid):.+/.test(key) && current[key] !== rule);
+      if (!changed.length) return state;
+      const rules = { ...current };
+      for (const key of changed) {
+        if (rule) rules[key] = rule; else delete rules[key];
+      }
+      const project = touchProject(group ? { ...state.project,
+        productionGroups: state.project.productionGroups!.map((entry) => entry.id === groupId ? { ...entry, resourceRules: rules } : entry),
+      } : { ...state.project, poolResourceRules: rules });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },
   setPoolMode: (poolMode) => {
@@ -2544,9 +2630,10 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       return { project, lastResult: solveBooks(project) };
     });
   },
-  addPoolStorage: (resource, side, at) => {
+  addPoolStorage: (resource, side, at, productionGroupId) => {
     set((state) => {
-      // ONE product drawer per resource in pool mode: a second is the same
+      if (productionGroupId && !state.project.productionGroups?.some((group) => group.id === productionGroupId)) return state;
+      // ONE product drawer per resource and scope in pool mode: a second is the same
       // ask twice. Asking again goes to the one that exists. Build and
       // solve mode (the board menu's "New product drawer") may hold as many
       // as the player sets down.
@@ -2556,6 +2643,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
             (storage) =>
               storage.kind === resource.kind &&
               storage.resourceId === resource.id &&
+              storage.productionGroupId === productionGroupId &&
               roles.get(storage.id) === "product",
           )
         : undefined;
@@ -2595,6 +2683,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         iconAtlas: resource.iconAtlas,
         dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
         poolSide: side,
+        productionGroupId,
         position,
       };
       const project = touchProject({
@@ -2672,20 +2761,33 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
           sourceHandle: edge.sourceHandle,
           targetHandle: inHandle,
         });
-        if (into && !findDuplicateEdge(project.edges, into)) {
-          project = { ...project, edges: [...project.edges, into] };
+        if (into) {
+          // Inserting a drawer must leave the upstream ratio allocation on
+          // the incoming wire, including the total of a merged channel.
+          const duplicate = findDuplicateEdge(project.edges, into);
+          const keepsRatio = edge.ratioWeight !== undefined || state.project.storages?.some(s => s.id === edge.source && s.bufferMode === "ratio");
+          if (!duplicate) {
+            project = { ...project, edges: [...project.edges, keepsRatio ? { ...into, ratioWeight: edgeRatioWeight(edge) } : into] };
+          } else if (keepsRatio) {
+            project = { ...project, edges: project.edges.map(e => e.id === duplicate.id ? { ...e, ratioWeight: Math.min(Number.MAX_VALUE, edgeRatioWeight(e) + edgeRatioWeight(edge)) } : e) };
+          }
         }
         const outOf = buildEdgeBetweenNodes(project, storage.id, edge.target, {
           ...resource,
           sourceHandle: outHandle,
           targetHandle: edge.targetHandle,
         });
-        if (outOf && !findDuplicateEdge(project.edges, outOf)) {
-          project = applyEdgeInputOverride(
-            { ...project, edges: [...project.edges, outOf] },
-            outOf,
-            resource,
-          );
+        if (outOf) {
+          const duplicate = findDuplicateEdge(project.edges, outOf);
+          const keepsInputRatio = edge.ratioInputWeight !== undefined || state.project.storages?.some(s => s.id === edge.target && s.bufferMode === "ratio");
+          const weight = edge.ratioInputWeight ?? 1;
+          if (!duplicate) {
+            project = applyEdgeInputOverride(
+              { ...project, edges: [...project.edges, keepsInputRatio ? { ...outOf, ratioInputWeight: weight } : outOf] }, outOf, resource,
+            );
+          } else if (keepsInputRatio) {
+            project = { ...project, edges: project.edges.map(e => e.id === duplicate.id ? { ...e, ratioInputWeight: Math.min(Number.MAX_VALUE, (e.ratioInputWeight ?? 1) + weight) } : e) };
+          }
         }
       }
       const finalProject = touchProject(pruneOrphanStorages(project));
@@ -3173,8 +3275,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
   },
   deleteBoardSelection: ({ nodeIds = [], edgeIds = [] }) => {
     set((state) => {
-      // Deleting a pocket card deletes the dimension AND everything in it,
-      // the way deleting a folder deletes its files.
+      // Deleting a board deletes everything in it, the way deleting a folder
+      // deletes its files.
       const { itemIds: doomedItems, pocketIds: doomedPockets } = expandPocketSelection(
         state.project,
         nodeIds,
@@ -3233,6 +3335,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       const projectRecipeIds = new Set(state.project.recipes.map((recipe) => recipe.id));
       const addedRecipes: Recipe[] = [];
       const idMap = new Map<string, string>();
+      const groupMap = new Map((payload.productionGroups ?? []).map((group) => [group.id, createId("production-group")]));
+      const productionGroups = (payload.productionGroups ?? []).map((group) => ({ ...structuredClone(group),
+        id: groupMap.get(group.id)!, parentId: group.parentId ? groupMap.get(group.parentId) : undefined }));
 
       // Boards first: items need the new board ids to re-home into. A
       // payload item at the payload's root lands on the canvas.
@@ -3271,6 +3376,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         clone.id = createId("node");
         idMap.set(node.id, clone.id);
         clone.pocketId = rehome(node.pocketId);
+        clone.productionGroupId = node.productionGroupId ? groupMap.get(node.productionGroupId) : undefined;
         clone.position = placeAt(node.position, clone.pocketId);
         // Custom rate nodes own their recipe (the dialed rate lives on it) -
         // same rule as duplicateNode, or both cards would share one dial.
@@ -3291,6 +3397,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         clone.id = createId("storage");
         idMap.set(storage.id, clone.id);
         clone.pocketId = rehome(storage.pocketId);
+        clone.productionGroupId = storage.productionGroupId ? groupMap.get(storage.productionGroupId) : undefined;
         clone.position = placeAt(storage.position, clone.pocketId);
         return clone;
       });
@@ -3334,6 +3441,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
 
       const project = touchProject({
         ...state.project,
+        productionGroups: productionGroups.length ? [...(state.project.productionGroups ?? []), ...productionGroups] : state.project.productionGroups,
         recipes: addedRecipes.length
           ? [...state.project.recipes, ...addedRecipes]
           : state.project.recipes,
@@ -3482,12 +3590,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         return state;
       }
 
-      // NOTHING IS IN TWO BOARDS AT ONCE. A card already living on a
-      // board cannot be wrapped in a second one, and a board cannot be
-      // wrapped either - that is nesting, which is its own decision and
-      // not one to make by accident from a marquee. The board refuses
-      // the gesture rather than building a frame whose members belong
-      // to somebody else.
+      // NOTHING IS IN TWO BOARDS AT ONCE. A card already on a board cannot
+      // be wrapped in a second one, and a board cannot be wrapped either:
+      // nesting must not happen by accident from a marquee.
       const alreadyHoused =
         memberPockets.length > 0 ||
         memberNodes.some((node) => node.pocketId !== undefined) ||
@@ -3623,8 +3728,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       // fitted (it carries a `size`) holds frame-relative member positions,
       // so the frame's own corner is added back and everything stays put on
       // screen while the frame vanishes around it. A legacy pocket that
-      // never stood open kept its members' old dive-in coordinates, which
-      // surface verbatim — exactly what unpacking always did.
+      // never stood open kept its members' own coordinates, which surface
+      // verbatim.
       const fitted = pocket.size !== undefined;
       const surface = <T extends { pocketId?: string; position: { x: number; y: number } }>(
         items: T[],
@@ -3849,7 +3954,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         (entry) => entry.parentPocketId === pocketId,
       );
 
-      // The dive view never rendered while collapsed, so there are no
+      // Members of a collapsed board were never rendered, so there are no
       // measured member sizes to read; footprints are estimated, and
       // overshooting only makes the frame roomy.
       const footprints = [
@@ -3875,8 +3980,8 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         })),
       ];
 
-      // Members are rebased into the frame: their old coordinates were the
-      // dive view's own space, which nothing outside ever referenced. The
+      // Members are rebased into the frame: a legacy pocket's coordinates
+      // are its own space, which nothing outside references. The
       // frame fits itself around them; a hand-picked size survives while
       // everything still fits inside it.
       let shiftBy = { x: 0, y: 0 };
@@ -4301,6 +4406,40 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       });
     });
   },
+  setRatioBranchPercentage: (storageId, edgeId, percentage, side = "output") => {
+    set((state) => {
+      if (state.isReadOnly || state.checklistMode) return state;
+      const updated = setStorageRatioPercentage(state.project, storageId, edgeId, percentage, side);
+      if (updated === state.project) return state;
+      const project = touchProject(updated);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  equalizeRatioBranches: (storageId, side) => {
+    set((state) => {
+      if (state.isReadOnly || state.checklistMode) return state;
+      const updated = equalizeStorageRatioPercentages(state.project, storageId, side);
+      if (updated === state.project) return state;
+      const project = touchProject(updated);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  setRatioBranchWeight: (storageId, edgeIds, weight) => {
+    if (!Number.isFinite(weight) || weight < 0) return;
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const ids = new Set(edgeIds);
+      const matching = state.project.edges.filter(edge => edge.source === storageId && ids.has(edge.id));
+      if (!matching.length) return state;
+      const part = weight / matching.length;
+      if (matching.every(edge => (edge.ratioWeight ?? 1) === part)) return state;
+      const project = touchProject({
+        ...state.project,
+        edges: state.project.edges.map(edge => edge.source === storageId && ids.has(edge.id) ? { ...edge, ratioWeight: part } : edge),
+      });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
   autoConnectNode: (nodeId) => {
     set((state) => {
       const node = state.project.nodes.find((entry) => entry.id === nodeId);
@@ -4426,17 +4565,18 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       });
     });
   },
-  setSetupRules: (rules) => {
-    set((state) => {
-      const { assumeBoundaries: _legacy, ...rest } = state.project;
-      const project = touchProject({
-        ...rest,
-        setupRules: packSetupRules({ ...getSetupRules(state.project), ...rules }),
-      });
-      return withProjectHistory(state, {
-        project,
-        lastResult: solveBooks(project),
-      });
+  setScreenshotMode: (mode) => {
+    if (!get().isReadOnly) {
+      get().setBoardMode(mode);
+      return;
+    }
+    setPresentation((state) => {
+      const solveMode = mode !== "build" ? true : undefined;
+      const poolMode = mode === "pool" ? true : undefined;
+      if (Boolean(state.project.solveMode) === Boolean(solveMode) &&
+          Boolean(state.project.poolMode) === Boolean(poolMode)) return state;
+      const project = { ...state.project, solveMode, poolMode };
+      return { project, lastResult: solveBooks(project) };
     });
   },
   setBoardMode: (mode) => {
@@ -4902,51 +5042,13 @@ function nodeSectionForHandle(
   return sectionNodeView(node, section);
 }
 
-/** The card with one section's oredict picks replaced. */
-function withSectionInputOverrides(
-  node: FactoryNode,
-  section: number,
-  recipeInputOverrides: Record<string, RecipeInput> | undefined,
-): FactoryNode {
-  if (section === 0) {
-    return { ...node, recipeInputOverrides };
-  }
-  return {
-    ...node,
-    extraRecipes: (node.extraRecipes ?? []).map((extra, index) =>
-      index === section - 1 ? { ...extra, recipeInputOverrides } : extra,
-    ),
-  };
-}
-
 /**
- * The refactor's landing. The pick replaces the card IN PLACE when at least
- * one of its wires still has a matching port on the new recipe - a card with
- * no wires replaces trivially - and the surviving wires re-dock onto the new
- * recipe's slots while the rest are dropped. When every wire would be lost,
- * the old card is left standing and the pick lands beside it instead: a
- * replace that severs everything is not a refactor.
+ * The wires on a card's first recipe, and which of them the new recipe can
+ * still serve, re-docked onto its matching slot. A shared machine's other
+ * sections and their wires are not touched.
  */
-function refactorNodeToState(
-  state: FactoryStore,
-  nodeId: string,
-  recipe: Recipe,
-  options?: { machineHandlerId?: string; machineConfigTiers?: Record<string, string> },
-): Partial<FactoryStore> {
-  const node = state.project.nodes.find((entry) => entry.id === nodeId);
-  if (!node) {
-    return addRecipeNodeToState(state, recipe, undefined, { ...options, focusCamera: true });
-  }
-  if (node.recipeId === recipe.id) {
-    return state;
-  }
-
-  const spawnHandler = options?.machineHandlerId
-    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
-    : undefined;
-  // A shared machine's refactor swaps its FIRST recipe; the other sections
-  // and their wires stand.
-  const touching = state.project.edges.filter(
+function carryWiresOntoRecipe(edges: FactoryEdge[], nodeId: string, recipe: Recipe) {
+  const touching = edges.filter(
     (edge) =>
       (edge.source === nodeId && edgeSectionAt(edge, nodeId, "source") === 0) ||
       (edge.target === nodeId && edgeSectionAt(edge, nodeId, "target") === 0),
@@ -4977,6 +5079,78 @@ function refactorNodeToState(
       }
     }
   }
+  return { touching, carried };
+}
+
+/**
+ * A new recipe on the SAME machine, the way a player swaps the item in its
+ * controller slot (the Extreme Entity Crusher's spawner): always in place,
+ * and the machine stays exactly as built - handler, hatches, tier, count and
+ * every knob. Wires the new recipe can serve re-dock; the rest drop.
+ */
+function swapMachineRecipeToState(
+  state: FactoryStore,
+  nodeId: string,
+  recipe: Recipe,
+): Partial<FactoryStore> {
+  const node = state.project.nodes.find((entry) => entry.id === nodeId);
+  if (!node || node.recipeId === recipe.id) {
+    return state;
+  }
+  const { touching, carried } = carryWiresOntoRecipe(state.project.edges, nodeId, recipe);
+  const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
+  const project = touchProject(
+    pruneOrphanStorages(
+      applyEdgeInputOverrides(
+        {
+          ...state.project,
+          recipes: recipeAlreadyInProject
+            ? state.project.recipes.map((entry) =>
+                entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+              )
+            : [...state.project.recipes, recipe],
+          nodes: state.project.nodes.map((entry) =>
+            entry.id === nodeId ? { ...entry, recipeId: recipe.id, recipeInputOverrides: undefined } : entry,
+          ),
+          edges: [...state.project.edges.filter((edge) => !touching.includes(edge)), ...carried],
+        },
+        carried,
+      ),
+    ),
+  );
+  return withProjectHistory(state, {
+    project,
+    selectedNodeId: nodeId,
+    selectedRecipeId: recipe.id,
+    lastResult: solveBooks(project),
+  });
+}
+
+/**
+ * The refactor's landing. The pick replaces the card IN PLACE when at least
+ * one of its wires still has a matching port on the new recipe (a card with
+ * no wires replaces trivially); surviving wires re-dock onto the new
+ * recipe's slots and the rest drop. When every wire would be lost, the old
+ * card stays and the pick lands beside it instead.
+ */
+function refactorNodeToState(
+  state: FactoryStore,
+  nodeId: string,
+  recipe: Recipe,
+  options?: { machineHandlerId?: string; machineConfigTiers?: Record<string, string> },
+): Partial<FactoryStore> {
+  const node = state.project.nodes.find((entry) => entry.id === nodeId);
+  if (!node) {
+    return addRecipeNodeToState(state, recipe, undefined, { ...options, focusCamera: true });
+  }
+  if (node.recipeId === recipe.id) {
+    return state;
+  }
+
+  const spawnHandler = options?.machineHandlerId
+    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
+    : undefined;
+  const { touching, carried } = carryWiresOntoRecipe(state.project.edges, nodeId, recipe);
 
   if (touching.length > 0 && carried.length === 0) {
     // Nothing survives: the pick lands beside the old card, which stays.
@@ -4988,6 +5162,7 @@ function refactorNodeToState(
     return addConnectedRecipeNodeToState(state, recipe, nodeId, context, options);
   }
 
+  const oldRecipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
   const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
   const projectBase: FactoryProject = {
     ...state.project,
@@ -5003,6 +5178,12 @@ function refactorNodeToState(
             recipeId: recipe.id,
             machineHandlerId: spawnHandler?.id,
             overclockTier: spawnHandler?.minimumTier ?? recipe.minimumTier,
+            ...(oldRecipe
+              ? carryMachineVoltage(
+                  { recipe: oldRecipe, node: entry },
+                  { recipe, machineHandlerId: spawnHandler?.id },
+                )
+              : undefined),
             // A power pick carries its dialed settings into the swap; every
             // other refactor resets the knobs as before.
             machineConfigTiers: options?.machineConfigTiers,
@@ -5017,7 +5198,6 @@ function refactorNodeToState(
     ],
   };
   // A power card OWNS its recipe; swapping away from one would strand it.
-  const oldRecipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
   if (
     oldRecipe &&
     isPowerRecipe(oldRecipe) &&
@@ -5213,27 +5393,16 @@ function applyEdgeInputOverrides(project: FactoryProject, edges: FactoryEdge[]):
 }
 
 /**
- * A deleted drawer's wires HEAL (Jack, 2026-09-08: "it's two edges going
- * in and out, it should just become one ... you scrubbed it away"): the
- * cards the drawer stood between are wired straight to each other, which
- * is exactly the undo of the board menu's "Add a drawer here". Its mode
- * (buffer, strict, product, trash) makes no difference.
- *
- * Who gets rewired, and nothing more:
- * - ONE feeder or ONE taker: every feeder wires to every taker, so a
- *   pass-through becomes one wire and a drawer splitting one output to
- *   three machines leaves those three fed. At most max(feeders, takers)
- *   wires, never a cross product of both.
- * - several of each, but all from one card and all to one card: the
- *   wires pair off in order. That is a drawn channel split through a
- *   drawer, put back as it was.
- * - anything else (a real junction, several feeders AND several takers)
- *   heals nothing: there is no one wire that says what it meant.
- *
- * A wire is only added if the board would accept it anyway
- * (`buildEdgeBetweenNodes` refuses a slot that does not take the
- * resource), so a drawer bridging two things that cannot meet directly
- * just goes.
+ * A deleted drawer's wires HEAL: the cards it stood between are wired
+ * straight to each other, the undo of the board menu's "Add a drawer here".
+ * The drawer's mode makes no difference.
+ * - ONE feeder or ONE taker: every feeder wires to every taker (at most
+ *   max(feeders, takers) wires, never a cross product).
+ * - several of each, but all from one card to one card: the wires pair off
+ *   in order (a drawn channel split through a drawer, put back).
+ * - anything else is a real junction and heals nothing.
+ * A wire is only added if `buildEdgeBetweenNodes` accepts it, so a drawer
+ * bridging two things that cannot meet directly just goes.
  */
 function removeStorageAndHeal(project: FactoryProject, storageId: string): FactoryProject {
   const storage = (project.storages ?? []).find((entry) => entry.id === storageId);
@@ -5326,6 +5495,36 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
     return false;
   }
 
+  // A conversion wire is valid in the forms at its two ends, including a
+  // tank or drawer at either end. Check it before the same-kind storage
+  // branches: any node edit runs this sweep over the entire board.
+  if (edge.crossForm) {
+    const target = parseResourceHandleId(edge.targetHandle);
+    if (
+      !Number.isFinite(edge.crossForm.litresPerCell) ||
+      edge.crossForm.litresPerCell <= 0 ||
+      target?.side !== "input" ||
+      !((edge.resourceKind === "fluid" && target.kind === "item") ||
+        (edge.resourceKind === "item" && target.kind === "fluid"))
+    ) {
+      return false;
+    }
+    const sourceMatches = sourceStorage
+      ? sourceStorage.kind === edge.resourceKind && sourceStorage.resourceId === edge.resourceId
+      : sourceNode && sourceRecipe &&
+        applyRecipeInputOverrides(sourceRecipe, sourceNode).outputs.some((output) =>
+          resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
+        );
+    const targetMatches = targetStorage
+      ? targetStorage.kind === target.kind && targetStorage.resourceId === target.resourceId
+      : targetNode && targetRecipe &&
+        applyRecipeInputOverrides(targetRecipe, targetNode).inputs.some((input) =>
+          isRecipeInputConsumed(input) &&
+          resourceMatchesInput({ kind: target.kind, id: target.resourceId }, input),
+        );
+    return Boolean(sourceMatches && targetMatches);
+  }
+
   // Trash cans have no recipe slots to match: a line into one stays valid as
   // long as the far end still produces the wired resource.
   if (targetRecipe && isTrashRecipe(targetRecipe)) {
@@ -5388,32 +5587,6 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
 
   const effectiveSourceRecipe = applyRecipeInputOverrides(sourceRecipe, sourceNode);
   const effectiveTargetRecipe = applyRecipeInputOverrides(targetRecipe, targetNode);
-
-  // A LOOSE CELL WIRE's two ends are honest in different forms: the source
-  // must still make the wire's own resource, the target must still take the
-  // far form the wire's own target handle names - the fluid under a cell
-  // wire, the cell under a fluid wire.
-  if (edge.crossForm) {
-    const handleParts = (edge.targetHandle ?? "").split(":");
-    const farKind =
-      handleParts[1] === "fluid" || handleParts[1] === "item" ? handleParts[1] : undefined;
-    const farId =
-      handleParts[0] === "input" && farKind && handleParts[2]
-        ? decodeURIComponent(handleParts[2])
-        : undefined;
-    return Boolean(
-      farKind &&
-        farId &&
-        effectiveSourceRecipe.outputs.some((output) =>
-          resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
-        ) &&
-        effectiveTargetRecipe.inputs.some(
-          (input) =>
-            isRecipeInputConsumed(input) &&
-            resourceMatchesInput({ kind: farKind, id: farId }, input),
-        ),
-    );
-  }
 
   return (
     effectiveSourceRecipe.outputs.some((output) =>
@@ -5910,6 +6083,47 @@ function haveSameMachineCounts(left: FactoryProject, right: FactoryProject): boo
 
   const rightCounts = new Map(right.nodes.map((node) => [node.id, node.machineCount]));
   return left.nodes.every((node) => rightCounts.get(node.id) === node.machineCount);
+}
+
+/**
+ * A drawer's typed rate, applied to the project: a source on the board stores
+ * its magnitude negative, and a product's twins (same resource, same group)
+ * share the number. Undefined when the drawer is gone.
+ */
+function withStorageTarget(
+  project: FactoryProject,
+  storageId: string,
+  targetPerSecond: number | undefined,
+): FactoryProject | undefined {
+  const typed = project.storages?.find((storage) => storage.id === storageId);
+  if (!typed) return undefined;
+  const roles = getStorageRoles(project);
+  const oldInput = isInputRate(typed, roles.get(storageId));
+  const value = !project.poolMode && oldInput && targetPerSecond !== undefined ? -Math.abs(targetPerSecond) : targetPerSecond;
+  const input = value === undefined || value === 0 ? oldInput : value < 0;
+  const targetMode = typed.targetMode;
+  return { ...project, storages: project.storages?.map((storage) => {
+    const twin = storage.kind === typed.kind && storage.resourceId === typed.resourceId
+      && storage.productionGroupId === typed.productionGroupId && roles.get(storage.id) === roles.get(storageId)
+      && roles.get(storageId) === "product";
+    return storage.id === storageId || twin ? { ...storage, targetPerSecond: value, targetMode,
+      poolSide: project.poolMode || roles.get(storageId) === "source" ? (input ? "source" : "drain") : storage.poolSide } : storage;
+  }) };
+}
+
+/** A drawer's rate rule; Pool shares it across a product's twins. */
+function withStorageTargetMode(
+  project: FactoryProject,
+  storageId: string,
+  targetMode: TargetMode,
+): FactoryProject | undefined {
+  const typed = project.storages?.find((storage) => storage.id === storageId);
+  if (!typed) return undefined;
+  const roles = getStorageRoles(project);
+  return { ...project, storages: project.storages?.map((storage) =>
+    storage.id === storageId || (project.poolMode && storage.kind === typed.kind && storage.resourceId === typed.resourceId
+      && storage.productionGroupId === typed.productionGroupId && roles.get(storage.id) === "product" && roles.get(storageId) === "product")
+      ? { ...storage, targetMode, poolTargetMode: undefined } : storage) };
 }
 
 function touchProject(project: FactoryProject): FactoryProject {

@@ -1,0 +1,1007 @@
+/* Dense worksheet: one baseline per recipe, with controls kept usable. */
+.pool-worksheet--dense {
+  font-family: var(--app-font);
+  font-size: 11px;
+  line-height: 14px;
+}
+.pool-worksheet--dense .pool-sheet-table {
+  display: table;
+}
+.pool-worksheet--dense .pool-sheet-table > colgroup {
+  display: table-column-group;
+}
+.pool-worksheet--dense .pool-sheet-table > thead {
+  display: table-header-group;
+}
+.pool-worksheet--dense .pool-sheet-table > thead > tr {
+  display: table-row;
+  height: 25px;
+}
+.pool-worksheet--dense .pool-sheet-table > thead > tr > th {
+  display: table-cell;
+  padding: 2px 4px;
+  font: 10px var(--app-font);
+}
+.pool-worksheet--dense .pool-col-picture {
+  width: 52px;
+}
+.pool-worksheet--dense .pool-col-machine {
+  width: var(--pool-machine-width, 180px);
+}
+.pool-worksheet--dense .pool-col-tier { width: var(--pool-tier-width, 80px); }
+.pool-worksheet--dense .pool-col-count { width: max(44px, calc(var(--pool-count-width, 40px) + 8px)); }
+.pool-worksheet--dense .pool-col-status {
+  width: 20px;
+}
+.pool-worksheet--dense .pool-col-circuit {
+  width: 26px;
+}
+.pool-worksheet--dense .pool-col-power {
+  width: var(--pool-power-width, 64px);
+}
+.pool-worksheet--dense .pool-col-actions {
+  width: 88px;
+}
+.pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions {
+  width: 108px;
+}
+.pool-worksheet--dense .pool-sheet-table > tbody {
+  display: table-row-group;
+}
+.pool-worksheet--dense .pool-sheet-table > tbody > tr {
+  display: table-row;
+  height: 28px;
+}
+.pool-worksheet--dense .pool-sheet-table > tbody > tr > td {
+  display: table-cell;
+  padding: 0 4px;
+  vertical-align: middle;
+  border-left: 0;
+}
+.pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-picture-cell {
+  position: relative;
+  width: auto;
+  height: auto;
+  padding: 0;
+}
+.pool-worksheet--dense .pool-machine-row-tools {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  transform: none;
+}
+.pool-worksheet--dense .pool-order-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+}
+.pool-worksheet--dense .pool-order-handle svg {
+  width: 16px;
+  height: 16px;
+}
+.pool-worksheet--dense .pool-machine-picture {
+  inset: 0 0 0 24px;
+}
+.pool-worksheet--dense .pool-machine-picture > [data-machine-picture] {
+  height: 26px;
+  width: 26px;
+}
+.pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell {
+  padding: 1px 4px;
+  min-height: 0;
+}
+.pool-worksheet--dense .pool-machine-layout {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+}
+.pool-worksheet--dense .pool-machine-details {
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+}
+.pool-worksheet--dense .pool-editor-heading {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+}
+.pool-worksheet--dense .pool-editor-heading > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.pool-worksheet--dense .pool-tier-editor { display: flex; justify-content: flex-end; }
+.pool-worksheet--dense .pool-column-headings .pool-tier-heading { text-align: left; }
+.pool-worksheet--dense .pool-editor-power {
+  width: max-content;
+  padding: 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.pool-worksheet--dense .pool-machine-cell [data-machine-menu-toggle] {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  min-height: 20px;
+}
+.pool-worksheet--dense .pool-machine-title {
+  font: 11px/16px var(--app-font);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pool-worksheet--dense .pool-machine-cell [data-machine-menu-toggle] svg {
+  margin: 0;
+  width: 10px;
+  height: 10px;
+}
+.pool-worksheet--dense .pool-editor-power [aria-label^="Tier "],
+.pool-worksheet--dense .pool-editor-power [data-power-controls] > button,
+.pool-worksheet--dense .pool-editor-power [data-power-controls] > input {
+  height: 20px;
+  min-height: 0;
+  width: 34px;
+  font: 10px var(--app-font);
+  padding: 0 2px;
+  box-shadow: none;
+}
+.pool-worksheet--dense .pool-editor-power [data-power-controls] > :first-child {
+  width: 36px;
+}
+.pool-worksheet--dense .pool-machine-count {
+  flex-shrink: 0;
+  flex-basis: var(--pool-count-width, 40px);
+  width: var(--pool-count-width, 40px);
+  display: flex;
+  justify-content: flex-start;
+}
+.pool-worksheet--dense .pool-machine-count [data-tooltip-root] > div {
+  height: 20px;
+  padding: 0;
+  gap: 2px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.pool-worksheet--dense .pool-machine-count [data-tooltip-root] > div > div:first-child {
+  display: none;
+}
+.pool-worksheet--dense .pool-machine-count button,
+.pool-worksheet--dense .pool-machine-count input,
+.pool-worksheet--dense .pool-machine-count button span {
+  font: 11px var(--app-font);
+}
+.pool-worksheet--dense .pool-machine-count input {
+  width: 52px;
+  height: 20px;
+}
+.pool-worksheet--dense .pool-section-status {
+  gap: 1px;
+  align-items: center;
+}
+.pool-worksheet--dense .pool-status {
+  display: block;
+  height: 7px;
+  width: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  font-size: 0;
+  line-height: 0;
+  background: #999b9f;
+  color: transparent;
+}
+.pool-worksheet--dense .pool-status--balanced {
+  background: #94d5b7;
+}
+.pool-worksheet--dense .pool-status--blocked,
+.pool-worksheet--dense .pool-status--power-stalled,
+.pool-worksheet--dense .pool-status--starved,
+.pool-worksheet--dense .pool-status--bottleneck,
+.pool-worksheet--dense .pool-status--dead-loop,
+.pool-worksheet--dense .pool-status--clog-lock {
+  background: #ed9b80;
+}
+.pool-worksheet--dense .pool-shared-label {
+  font-size: 8px;
+  line-height: 9px;
+}
+.pool-worksheet--dense .pool-circuit-slot {
+  min-height: 0;
+  height: 22px;
+}
+.pool-worksheet--dense .pool-machine-power-value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 3px;
+  font-variant-numeric: tabular-nums;
+}
+.pool-worksheet--dense .pool-machine-power-value strong {
+  font-size: 10px;
+  font-weight: 500;
+}
+.pool-worksheet--dense .pool-machine-power-value small {
+  font-size: 8px;
+  color: var(--mc-ink-muted);
+}
+.pool-worksheet--dense .pool-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+}
+.pool-worksheet--dense .pool-sheet-icon-button,
+.pool-worksheet--dense .pool-collapse-machine {
+  height: 20px;
+  width: 19px;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+}
+.pool-worksheet--dense .pool-sheet-icon-button svg {
+  height: 12px;
+  width: 12px;
+}
+.pool-worksheet--dense .pool-port-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px 2px;
+  grid-template: none;
+}
+.pool-worksheet--dense .pool-port {
+  flex: 0 0 auto;
+  min-width: 22px;
+}
+.pool-worksheet--dense .flow-port.pool-port-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  height: 22px;
+  width: auto;
+  padding: 0 1px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.pool-worksheet--dense .pool-port-list .pool-resource-link {
+  height: 18px;
+  justify-content: center;
+  align-items: center;
+}
+.pool-worksheet--dense .pool-port-note { font: 7px/8px var(--app-font); color: var(--mc-ink-muted); white-space: nowrap; }
+.pool-worksheet--dense .pool-port-line:has(.pool-port-note) { height: 28px; }
+.pool-worksheet--dense .pool-takes-cell::before,
+.pool-worksheet--dense .pool-makes-cell::before {
+  display: none;
+}
+.pool-worksheet--dense .pool-collapsed-ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pool-worksheet--dense .pool-sheet-table > tbody > .pool-settings-row {
+  height: auto;
+}
+.pool-worksheet--dense .pool-settings-section {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 0;
+  border-left: 2px solid #6f9cff;
+  background: color-mix(in srgb, #6f9cff 5%, var(--surface));
+}
+.pool-worksheet--dense .pool-settings-section > .pool-machine-settings {
+  flex: 0 1 520px;
+  min-width: 0;
+  width: 520px;
+}
+.pool-worksheet--dense .pool-settings-section > button:last-child {
+  flex: none;
+}
+.pool-machine-settings { container-type: inline-size; }
+.pool-machine-settings [data-grid-block] { height: auto !important; }
+@container (max-width: 360px) {
+  .pool-machine-settings .crop-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.pool-machine-identity { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pool-crop-picker { position: relative; flex: none; }
+.pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr,
+.pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr {
+  height: auto;
+}
+.pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td {
+  padding: 4px 0 4px 8px;
+  border-left: 2px solid #6f9cff44;
+}
+.pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr > td {
+  padding: 3px 6px;
+}
+.pool-worksheet--dense .pool-production-heading {
+  min-height: 22px;
+  gap: 5px;
+}
+.pool-worksheet--dense .pool-production-name {
+  width: 135px;
+  font-size: 11px;
+  border-bottom-color: transparent;
+}
+.pool-worksheet--dense .pool-production-name:hover,
+.pool-worksheet--dense .pool-production-name:focus {
+  border-bottom-color: var(--mc-61);
+}
+.pool-worksheet--dense .pool-production-summary {
+  margin: 0 5px 0 0;
+  font-size: 9px;
+}
+.pool-worksheet--dense .pool-group-power-inline {
+  margin-left: auto;
+}
+.pool-worksheet--dense .pool-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pool-worksheet--dense .pool-production-key {
+  border: 0;
+  padding: 2px;
+  height: 20px;
+  width: 20px;
+  justify-content: center;
+}
+.pool-worksheet--dense .pool-production-move {
+  margin: 0;
+  gap: 3px;
+  font-size: 9px;
+}
+.pool-worksheet--dense .pool-production-select {
+  padding: 0 2px;
+  max-width: 110px;
+  height: 19px;
+  font-size: 9px;
+}
+.pool-worksheet--dense .pool-group-totals {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 1px;
+}
+.pool-worksheet--dense .pool-group-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: start;
+  gap: 2px 7px;
+  min-height: 23px;
+}
+.pool-worksheet--dense .pool-group-flow h4 {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--mc-ink-muted);
+  width: 34px;
+  flex-shrink: 0;
+}
+.pool-worksheet--dense .pool-group-flow-item.pool-port-line {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  height: 29px;
+  padding: 0;
+}
+.pool-worksheet--dense .pool-group-flow-item .pool-resource-link {
+  flex: none;
+}
+.pool-worksheet--dense .pool-group-flow-item strong {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--mc-ink);
+}
+.pool-worksheet--dense .pool-group-flow-item .pool-port-rate small {
+  font-size: 7px;
+  color: var(--mc-ink-muted);
+  opacity: .8;
+}
+.pool-worksheet--dense .pool-group-links {
+  margin-top: 1px;
+  gap: 2px 5px;
+  min-height: 22px;
+}
+.pool-worksheet--dense .pool-group-links > span:first-child {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--mc-ink-muted);
+  width: 34px;
+  margin: 0;
+}
+.pool-worksheet--dense .pool-group-link {
+  gap: 2px;
+  padding: 0 2px;
+  border-color: transparent;
+}
+.pool-worksheet--dense .pool-group-link:hover {
+  border-color: #6f9cff88;
+}
+.pool-worksheet--dense .pool-group-link[aria-pressed="true"] {
+  border-color: #d8a25866;
+}
+.pool-worksheet--dense .pool-group-link strong {
+  font-size: 8px;
+  font-weight: 500;
+}
+.pool-compact-power,
+.pool-power-headline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 10px var(--app-font);
+  font-variant-numeric: tabular-nums;
+}
+.pool-power-headline {
+  outline-offset: 3px;
+}
+.pool-power-headline svg,
+.pool-power-headline small {
+  color: var(--mc-ink-muted);
+}
+.pool-power-headline small {
+  font-size: 8px;
+  margin-left: 1px;
+}
+.pool-power-headline strong {
+  font-weight: 500;
+}
+.pool-power-breakdown {
+  min-width: 230px;
+  font: 11px var(--app-font);
+}
+.pool-power-breakdown th,
+.pool-power-breakdown td {
+  padding: 4px 8px;
+}
+.pool-worksheet--dense .pool-desired-products {
+  margin-bottom: 5px;
+}
+.pool-worksheet--dense .pool-products-heading {
+  height: 22px;
+}
+.pool-worksheet--dense .pool-summary-table th,
+.pool-worksheet--dense .pool-summary-table td {
+  height: 23px;
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
+
+
+
+.pool-worksheet--dense .pool-production-heading {
+  position: relative;
+}
+.pool-compact-power {
+  position: static;
+}
+.pool-power-headline {
+  cursor: pointer;
+  list-style: none;
+}
+.pool-power-headline::-webkit-details-marker {
+  display: none;
+}
+.pool-power-breakdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  padding: 6px;
+  border: 1px solid var(--mc-61);
+  background: var(--surface, #24272c);
+  box-shadow: 0 4px 14px #0006;
+}
+
+.pool-resource-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font: 9px var(--app-font);
+  color: var(--mc-ink-muted);
+}
+
+/* Overview and scope balances use the available width, with no empty summary rows. */
+.pool-worksheet--dense .pool-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-areas: "rates power";
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 4px;
+}
+.pool-worksheet--dense .pool-overview .pool-sheet-power {
+  display: block;
+  width: 100%;
+}
+.pool-worksheet--dense .pool-overview .pool-summary-table :is(th, td) {
+  height: 18px;
+  padding: 0 5px;
+  line-height: 16px;
+  vertical-align: middle;
+}
+.pool-worksheet--dense .pool-overview .pool-summary-table thead th {
+  height: 20px;
+  background: color-mix(in srgb, var(--mc-ink) 3%, var(--surface, #24272c));
+}
+.pool-overview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--mc-ink);
+}
+.pool-overview-title h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
+.pool-worksheet--dense .pool-overview .pool-power-table th:first-child { width: 78px; }
+.pool-worksheet--dense .pool-overview :is(.pool-order-handle, .pool-sheet-icon-button, .pool-add-button) {
+  height: 16px;
+  min-height: 0;
+  vertical-align: middle;
+}
+.pool-worksheet--dense .pool-overview .pool-order-handle { flex-basis: 20px; width: 20px; }
+.pool-worksheet--dense .pool-overview .pool-order-handle svg { height: 12px; width: 12px; }
+.pool-worksheet--dense .pool-overview .pool-add-button { margin-left: auto; border: 0; }
+.pool-worksheet--dense .pool-overview .pool-resource-link { height: 16px; line-height: 16px; }
+.pool-worksheet--dense .pool-overview .pool-item-icon { height: 14px !important; width: 14px !important; }
+.pool-worksheet--dense .pool-overview .pool-resource-link > span { font-size: 11px; }
+.pool-drop-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 400; color: var(--mc-ink-muted); }
+.pool-overview-title h3 { flex-shrink: 0; max-width: 100%; }
+@container (max-width: 440px) {
+  .pool-drop-hint { display: none; }
+}
+.pool-worksheet--dense .pool-overview .pool-resources-scroll {
+  max-height: none;
+}
+.pool-worksheet--dense .pool-overview .pool-desired-products {
+  margin: 0;
+}
+.pool-worksheet--dense .pool-production-heading {
+  min-height: 24px;
+  gap: 4px;
+}
+.pool-worksheet--dense .pool-group-actions {
+  margin-left: auto;
+}
+.pool-worksheet--dense .pool-group-power-inline + .pool-group-actions {
+  margin-left: 0;
+}
+.pool-worksheet--dense .pool-group-balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 18px;
+}
+.pool-worksheet--dense .pool-group-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 18px;
+  padding: 0;
+}
+.pool-worksheet--dense .pool-group-flow {
+  gap: 2px 6px;
+  min-height: 21px;
+}
+.pool-worksheet--dense .pool-group-flow h4 {
+  width: auto;
+}
+.pool-worksheet--dense .pool-group-links {
+  min-height: 21px;
+  margin: 0;
+}
+.pool-worksheet--dense .pool-group-links > span:first-child {
+  width: auto;
+  margin-right: 2px;
+}
+.pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr > td {
+  padding: 1px 5px;
+}
+.pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.pool-worksheet--dense .pool-collapse-machine[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+.pool-worksheet--dense .pool-sheet-table > tbody[data-collapsed] .pool-machine-row-tools {
+  inset: 0 auto 0 0;
+  width: 24px;
+  transform: none;
+}
+@container (max-width: 800px) {
+  .pool-worksheet--dense .pool-overview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .pool-worksheet--dense .pool-production-summary {
+    display: inline;
+  }
+}
+
+.pool-worksheet--dense .pool-settings-toggle {
+  width: 19px;
+  flex: 0 0 19px;
+  padding: 0;
+}
+.pool-worksheet--dense .pool-settings-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
+  color: var(--mc-ink-muted);
+  background: transparent;
+}
+.pool-worksheet--dense .pool-settings-toggle[aria-expanded="true"] {
+  color: #adc7ff;
+  background: #6f9cff18;
+}
+.pool-worksheet--dense .pool-sheet-table > tbody > .pool-settings-row > td {
+  padding: 0;
+}
+.pool-worksheet--dense .pool-settings-section {
+  padding: 6px 10px;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* Readable worksheet columns; headings belong to the scope they describe. */
+.pool-worksheet--dense .pool-col-status { width: var(--pool-status-width, 96px); }
+.pool-worksheet--dense .pool-col-circuit { width: 42px; }
+.pool-worksheet--dense .pool-column-headings > tr { height: 20px; }
+.pool-worksheet--dense .pool-column-headings th {
+  padding: 2px 4px;
+  font: 10px/14px var(--app-font);
+  color: var(--mc-ink-muted);
+  text-align: left;
+  border-bottom: 1px solid #ffffff10;
+}
+.pool-column-headings th:first-child { padding-left: 24px; }
+.pool-column-headings th span { opacity: .7; }
+.pool-worksheet--dense .pool-column-headings th + th,
+.pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr > td:not(.pool-picture-cell):not(.pool-machine-cell) {
+  border-left: 1px solid #ffffff09;
+}
+.pool-machine-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 3px 5px; }
+.pool-machine-toolbar .pool-sheet-search { flex: 0 1 290px; }
+.pool-machine-chooser { position: relative; display: flex; align-items: center; }
+.pool-machine-icon-button { position: relative; width: 27px; height: 27px; padding: 0; display: grid; place-items: center; border-radius: 3px; cursor: pointer; }
+.pool-machine-icon-button:hover, .pool-machine-icon-button:focus-visible { background: #6f9cff24; outline: 1px solid #adc7ff80; }
+.pool-machine-icon-button:disabled { cursor: default; }
+.pool-machine-icon-button > [data-machine-picture] { width: 25px; height: 25px; padding: 0; }
+.pool-machine-icon-button > [data-machine-picture] > * { max-width: 100%; max-height: 100%; }
+.pool-machine-icon-button .pool-machine-swap { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; padding: 1px; background: var(--surface, #24272c); color: #adc7ff; border-radius: 2px; }
+.pool-machine-icon-button:disabled .pool-machine-swap { display: none; }
+.pool-worksheet--dense .pool-status { display: flex; align-items: center; gap: 5px; height: auto; width: auto; font: 10px/13px var(--app-font); color: var(--mc-ink-muted); background: transparent; border-radius: 0; }
+.pool-worksheet--dense .pool-status::before { content: ''; width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: #999b9f; }
+.pool-worksheet--dense .pool-status--balanced::before { background: #94d5b7; }
+.pool-worksheet--dense :is(.pool-status--blocked, .pool-status--power-stalled, .pool-status--starved, .pool-status--bottleneck, .pool-status--dead-loop, .pool-status--clog-lock)::before { background: #ed9b80; }
+
+
+/* Keep readable statuses in the table; dots are only for the compact phone layout. */
+@container (max-width: 700px) {
+  .pool-worksheet--dense .pool-col-status { width: 24px; }
+  .pool-worksheet--dense .pool-status { justify-content: center; min-width: 14px; min-height: 22px; }
+  .pool-worksheet--dense .pool-status-text,
+  .pool-worksheet--dense .pool-status-heading {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+  .pool-worksheet--dense .pool-status::before { width: 7px; height: 7px; }
+  .pool-worksheet--dense .pool-status-heading-dot { display: inline; }
+  .pool-worksheet--dense .pool-status:focus-visible { outline: 1px solid #adc7ff; outline-offset: -1px; border-radius: 3px; }
+}
+.pool-status-heading-dot { display: none; }
+@container (max-width: 850px) {
+  .pool-worksheet--dense .pool-col-power { width: var(--pool-power-width, 64px); }
+  .pool-worksheet--dense .pool-col-actions { width: 88px; }
+  .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions { width: 108px; }
+  .pool-worksheet--dense .pool-column-headings th { font-size: 9px; }
+  .pool-worksheet--dense .pool-column-headings th:first-child > span { display: none; }
+}
+@container (max-width: 650px) {
+  .pool-worksheet--dense .pool-col-power { width: var(--pool-power-width, 64px); }
+  .pool-worksheet--dense .pool-machine-layout { gap: 3px; }
+}
+/* Only phone-sized worksheets leave the table layout. */
+@container (max-width: 560px) {
+  .pool-worksheet--dense .pool-sheet-table { display: block; }
+  .pool-worksheet--dense .pool-sheet-table > colgroup,
+  .pool-worksheet--dense .pool-sheet-table > .pool-column-headings { display: none; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] {
+    display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 104px;
+    padding-block: 2px; border-bottom: 1px solid #ffffff10;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr { display: contents; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr > td {
+    display: block; min-width: 0; padding: 1px 3px; border: 0 !important;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-picture-cell {
+    position: relative; inset: auto; grid-column: 1; grid-row: 1; height: 28px;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell {
+    grid-column: 2 / 4; grid-row: 1; min-height: 0; padding: 1px 3px;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-tier-cell {
+    grid-column: 1 / 3; grid-row: 2; display: flex; align-items: center; gap: 5px;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-count-cell {
+    grid-column: 3; grid-row: 2; display: flex; align-items: center; gap: 5px;
+  }
+  .pool-tier-cell::before, .pool-count-cell::before { color: var(--mc-ink-muted); font: 8px/12px var(--app-font); }
+  .pool-tier-cell::before { content: "Tier"; }
+  .pool-count-cell::before { content: "Count"; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell {
+    grid-column: 4; grid-row: 2; justify-self: end; align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-actions-cell {
+    grid-column: 4; grid-row: calc(var(--pool-section-row) + 1); align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell {
+    grid-column: 4; grid-row: 1;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell {
+    grid-column: 1; grid-row: calc(var(--pool-section-row) + 1); justify-self: start; align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell {
+    grid-column: 1; grid-row: calc(var(--pool-section-row) + 1); justify-self: end; align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell {
+    grid-column: 2; grid-row: calc(var(--pool-section-row) + 1);
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell {
+    grid-column: 3; grid-row: calc(var(--pool-section-row) + 1);
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > .pool-settings-row > td {
+    grid-column: 1 / -1; grid-row: auto;
+  }
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame,
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr,
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td,
+  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope,
+  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr,
+  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr > td { display: block; }
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td { padding-left: 4px; }
+  .pool-worksheet--dense .pool-takes-cell::before,
+  .pool-worksheet--dense .pool-makes-cell::before { display: block; margin: 0; font: 9px/11px var(--app-font); color: var(--mc-ink-muted); }
+  .pool-worksheet--dense .pool-takes-cell::before { content: 'Takes'; }
+  .pool-worksheet--dense .pool-makes-cell::before { content: 'Makes'; }
+  .pool-worksheet--dense .pool-sheet-icon-button { width: 23px; height: 24px; }
+  .pool-worksheet--dense .pool-production-name { width: 104px; }
+  .pool-worksheet--dense .pool-production-heading { gap: 3px; }
+  .pool-worksheet--dense .pool-group-power-inline { margin-left: auto; }
+  .pool-worksheet--dense .pool-section-status { flex-direction: row; gap: 1px; }
+}
+
+/* Rate rules and outcomes are separate, labeled columns. */
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 74px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(3) { width: 100px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 90px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 190px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:last-child { width: 34px; }
+.pool-rates-name-heading .pool-overview-title { min-height: 20px; }
+.pool-rates-name-heading .pool-drop-hint { overflow: visible; flex-shrink: 0; }
+.pool-worksheet--dense .pool-products-table :is(.pool-product-rule, .pool-product-status),
+.pool-worksheet--dense .pool-products-table .pool-rates-columns :is(th:nth-child(2), th:nth-child(5)) { text-align: left; }
+.pool-product-status { font: 10px var(--app-font); color: var(--mc-ink-muted); }
+.pool-rate-state, .pool-product-status button { display: inline-flex; align-items: center; gap: 5px; }
+.pool-state-dot { display: inline-block; flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; background: #999b9f; }
+[data-state="running"] > .pool-state-dot { background: #94d5b7; }
+[data-state="blocked"] > .pool-state-dot { background: #eaa78b; }
+.pool-product-status[data-tone="muted"] { color: var(--mc-ink-muted); }
+.pool-product-status[data-tone="met"] .pool-state-dot { background: #94d5b7; }
+.pool-product-status[data-tone="failed"] .pool-state-dot { background: #eaa78b; }
+.pool-product-status button { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+.pool-product-status button:hover .pool-status-why { text-decoration: underline; }
+.pool-status-why { font-size: 8px; opacity: .8; }
+.pool-target-controls { display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
+.pool-target-controls > [data-tooltip-root] { flex-shrink: 0; }
+.pool-product[data-target-ignored] .pool-product-target [aria-label="Required amount"] { opacity: .5; }
+
+/* Compact material tables keep direction, rate and supply rule on one line. */
+.pool-scope-materials { margin-bottom: 2px; }
+.pool-material-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); align-items: start; gap: 8px; overflow: visible; }
+.pool-material-table { width: 100%; min-width: 0; table-layout: auto; border-collapse: collapse; background: #6f9cff0d; }
+.pool-material-table caption { padding: 1px 4px; text-align: left; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); background: #6f9cff0d; }
+.pool-material-table td { padding: 0 4px; }
+.pool-material-columns { display: grid; grid-template-columns: repeat(auto-fit, 16px var(--pool-material-rate-width, 50px) var(--pool-material-rule-width, 22px)); column-gap: 3px; justify-content: start; font: 7.5px/11px var(--app-font); }
+.pool-scope-material { display: grid; grid-column: span 3; grid-template-columns: subgrid; align-items: center; min-width: 0; height: 20px; border-bottom: 1px solid #ffffff08; }
+.pool-scope-material .pool-resource-link { height: 18px; justify-content: center; }
+.pool-scope-material .pool-item-icon { width: 16px !important; height: 16px !important; }
+.pool-material-rate { width: max-content; text-align: left; white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
+.pool-material-rate strong { font-weight: 600; }
+.pool-material-rate small { margin-left: 1px; font-size: 6px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
+
+.pool-material-balance { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 16px; padding: 0; cursor: pointer; border: 1px solid #ffffff12; border-radius: 2px; background: #ffffff04; color: var(--mc-ink-muted); font: 6px/13px var(--app-font); }
+.pool-material-balance[aria-pressed="true"] { background: #6f9cff20; border-color: #adc7ff60; color: #adc7ff; }
+.pool-material-balance:hover { border-color: #adc7ff; }
+.pool-material-balance:focus-visible { outline: 1px solid #adc7ff; outline-offset: 1px; }
+.pool-material-balance:disabled { cursor: default; opacity: .5; }
+.pool-material-inherited { display: block; height: 17px; font: 9px/17px var(--app-font); color: var(--mc-ink-muted); }
+
+/* Desired rates and power share the top row; target help is only opened on demand. */
+.pool-worksheet--dense .pool-overview > .pool-desired-products { grid-area: rates; width: 100%; min-width: 0; container: pool-rates / inline-size; }
+.pool-worksheet--dense .pool-overview > .pool-sheet-power { grid-area: power; justify-self: end; max-width: 260px; }
+.pool-worksheet--dense .pool-overview .pool-power-table th:first-child { width: 94px; }
+@container (max-width: 650px) {
+  .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rates" "power"; }
+  .pool-worksheet--dense .pool-overview > .pool-sheet-power { justify-self: end; }
+}
+
+.pool-scope-content { min-width: 0; }
+.pool-worksheet--dense .pool-desired-products { position: relative; }
+.pool-target-popover { position: absolute; z-index: 60; top: 100%; right: 0; width: min(360px, 100%); padding: 10px; background: var(--surface, #24272c); border: 1px solid #adc7ff50; box-shadow: 0 4px 12px #0006; color: var(--mc-ink-muted); }
+.pool-target-popover:focus-visible { outline: 1px solid #adc7ff; }
+.pool-calculation-issue { margin: 4px 0; color: var(--flow-input); font-size: 11px; }
+
+.pool-rate-label-compact { display: none; }
+/* Tighten the status and number columns before rearranging a rate row. */
+@container pool-rates (max-width: 680px) {
+  .pool-rate-label-full { display: none; }
+  .pool-rate-label-compact { display: inline; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 74px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(3) { width: 88px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 78px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 130px; }
+  .pool-worksheet--dense .pool-overview .pool-product > .pool-product-status { font-size: 9px; white-space: normal; }
+  .pool-product-status button { flex-wrap: wrap; }
+}
+@container pool-rates (max-width: 520px) {
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 74px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(3) { width: 80px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 70px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 105px; }
+}
+/* A phone rate has two lines: item/status, then rule/target/actual. */
+@container pool-rates (max-width: 400px) {
+  .pool-worksheet--dense .pool-products-table { display: block; width: 100%; }
+  .pool-products-table > caption { display: block; width: 100%; }
+  .pool-products-table > thead { display: none; }
+  .pool-products-table > tbody { display: block; }
+  .pool-products-table .pool-product { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 20px; gap: 2px 6px; padding: 2px 4px; border-bottom: 1px solid #ffffff18; }
+  .pool-worksheet--dense .pool-overview .pool-product > td { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; height: auto; min-height: 20px; padding: 0; border: 0; }
+  .pool-worksheet--dense .pool-overview .pool-product > td:first-child { grid-column: 1 / 3; grid-row: 1; align-items: flex-start; }
+  .pool-worksheet--dense .pool-overview .pool-product > td:nth-child(2) { grid-column: 1; grid-row: 2; align-items: flex-start; }
+  .pool-products-table .pool-product > td:nth-child(3) { grid-column: 2; grid-row: 2; }
+  .pool-products-table .pool-product > td:nth-child(4) { grid-column: 3 / 5; grid-row: 2; }
+  .pool-products-table .pool-product > td:nth-child(2)::before { content: "Rule"; }
+  .pool-products-table .pool-product > td:nth-child(3)::before { content: "Target (±)"; }
+  .pool-products-table .pool-product > td:nth-child(4)::before { content: "Actual"; }
+  .pool-products-table .pool-product > td::before { font: 8px/12px var(--app-font); color: var(--mc-ink-muted); }
+  .pool-worksheet--dense .pool-overview .pool-product > .pool-product-status { grid-column: 3; grid-row: 1; align-items: flex-start; font-size: 8px; text-align: left; }
+  .pool-products-table .pool-product > td:last-child { grid-column: 4; grid-row: 1; }
+  .pool-target-controls { padding-right: 0; }
+}
+
+/* Keep rate editing at worksheet scale rather than the larger board-drawer scale. */
+.pool-worksheet--dense .pool-product .storage-net-line,
+.pool-worksheet--dense .pool-product .pool-balance-rate { font-family: var(--app-font); font-size: 10px; font-weight: 500; line-height: 16px; }
+.pool-worksheet--dense .pool-product .pool-balance-rate > .inspector-unit { font-size: 8px; }
+/* Advertise the drop zone on pickup; strengthen it when the pointer arrives. */
+.pool-worksheet[data-resource-dragging] .pool-sheet-products,
+.pool-sheet-products[data-resource-ready],
+.pool-worksheet .pool-sheet-products[data-resource-drop] { --pool-drop-wash: color-mix(in srgb, #78a7bc 10%, var(--surface, #24272c)); outline: 1px solid #78a7bc90; outline-offset: -1px; box-shadow: 0 0 8px #78a7bc20; }
+.pool-worksheet .pool-sheet-products[data-resource-drop] { --pool-drop-wash: color-mix(in srgb, #78a7bc 20%, var(--surface, #24272c)); outline: 2px solid #78a7bc; }
+.pool-worksheet--dense[data-resource-dragging] .pool-overview .pool-sheet-products :is(caption, th, td),
+.pool-worksheet--dense .pool-overview .pool-sheet-products:is([data-resource-ready], [data-resource-drop]) :is(caption, th, td) { background-color: var(--pool-drop-wash); }
+
+/* Enlarge only the worksheet content; toolbar, board and the surrounding app keep their size. */
+.pool-worksheet--dense > .pool-sheet-scroll { zoom: 1.3; container-type: inline-size; }
+.pool-worksheet--dense .pool-col-circuit { width: 54px; }
+.pool-worksheet--dense .pool-rates-columns > th:last-child { text-align: center; }
+.pool-rates-columns > th:last-child .pool-add-product { display: flex; justify-content: center; }
+@container pool-rates (max-width: 640px) {
+  .pool-rates-name-heading .pool-drop-hint { display: none; }
+}
+@container pool-rates (max-width: 400px) {
+  .pool-products-table > thead { display: block; }
+  .pool-rates-columns { display: flex; align-items: center; }
+  .pool-rates-columns > th:not(:first-child):not(:last-child) { display: none; }
+  .pool-rates-columns > th:first-child { flex: 1; min-width: 0; }
+  .pool-rates-columns > th:last-child { flex: 0 0 34px; }
+}
+
+/* Measure the natural labels, then share their widths across every row. */
+.pool-worksheet--dense .pool-section-status { align-items: flex-start; }
+.pool-worksheet--dense .pool-status,
+.pool-worksheet--dense .pool-machine-power-value,
+.pool-worksheet--dense .pool-machine-count [data-tooltip-root] > div,
+.pool-worksheet--dense .pool-machine-count button { width: max-content; flex-shrink: 0; white-space: nowrap; }
+.pool-worksheet--dense .pool-machine-power-value { flex-wrap: nowrap; }
+
+/* Larger invisible pickup areas keep the compact artwork and layout unchanged. */
+.pool-scope-material[data-material-draggable] { cursor: grab; }
+.pool-worksheet--dense .pool-port-list .pool-resource-link { position: relative; }
+.pool-worksheet--dense .pool-port-list .pool-resource-link::after { content: ""; position: absolute; inset: -2px; }
+
+.pool-balance-hint { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; flex: 1 1 300px; min-width: 0; margin-left: 8px; color: var(--mc-ink-muted); font: 8px/13px var(--app-font); }
+@container (max-width: 600px) {
+  .pool-balance-hint { order: 1; flex-basis: 100%; margin-left: 0; }
+}
+
+.pool-material-balance svg { width: 12px; height: 12px; }
+.pool-balance-hint-part { min-width: 0; max-width: 100%; }
+.pool-balance-legend { display: inline-flex; align-items: center; gap: 3px; vertical-align: -2px; }
+.pool-balance-legend[data-on] { color: #adc7ff; }
+.pool-balance-legend svg { width: 12px; height: 12px; }
+.pool-balance-legend strong { font-weight: 600; }
+
+/* The empty drop target shares power's height without stretching populated rows. */
+.pool-worksheet--dense .pool-overview > .pool-desired-products[data-empty] { align-self: stretch; display: flex; flex-direction: column; }
+.pool-desired-products[data-empty] .pool-sheet-products { flex: 1; }
+.pool-desired-products[data-empty] .pool-products-scroll { display: flex; }
+.pool-desired-products[data-empty] .pool-products-table { height: 100%; }
+.pool-desired-products[data-empty] .pool-products-table thead { height: 21px; }
+.pool-rates-empty { height: 54px; }
+.pool-worksheet--dense .pool-overview .pool-rates-empty > td { height: auto; padding: 8px 12px; vertical-align: middle; text-align: center; white-space: normal; color: var(--mc-ink-muted); font-size: 11px; }
+.pool-rates-empty p { position: absolute; inset: 0; display: grid; place-content: center; margin: 0; padding: 24px 12px; text-wrap: balance; pointer-events: none; }
+@container pool-rates (max-width: 400px) {
+  .pool-desired-products[data-empty] .pool-products-table { display: flex; flex-direction: column; }
+  .pool-desired-products[data-empty] .pool-products-table tbody { flex: 1; display: grid; }
+  .pool-rates-empty { display: grid; align-items: center; min-height: 54px; }
+}
+
+.pool-balance-all[aria-pressed="true"] { color: #adc7ff; background: #6f9cff20; }
+.pool-balance-all[aria-pressed="mixed"] { color: #adc7ff; }
+.pool-balance-all:disabled { cursor: default; opacity: .4; }
+.pool-balance-all:focus-visible { outline: 1px solid #adc7ff; outline-offset: 1px; }
+
+.pool-worksheet--dense .pool-col-takes { width: var(--pool-takes-width); }
+.pool-worksheet--dense .pool-col-makes { width: var(--pool-makes-width); }
+/* Phones keep the same hierarchy in three short lines. */
+@container (max-width: 560px) {
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] { grid-template-columns: 24px 28px minmax(0, 1fr) auto auto 20px; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-picture-cell { grid-column: 1 / 3; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell { grid-column: 3; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-tier-cell { grid-column: 1 / 4; grid-row: 2; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-count-cell { grid-column: 4; grid-row: 2; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell { grid-column: 5 / 7; grid-row: 2; justify-self: end; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell { grid-column: 4 / 7; grid-row: 1; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-actions-cell { grid-column: 6; grid-row: calc(var(--pool-section-row) + 1); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell { grid-column: 1; grid-row: calc(var(--pool-section-row) + 1); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell { grid-column: 2; grid-row: calc(var(--pool-section-row) + 1); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell { grid-column: 3 / 4; grid-row: calc(var(--pool-section-row) + 1); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell { grid-column: 4 / 6; grid-row: calc(var(--pool-section-row) + 1); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-makes-cell { grid-column: 4 / 7; }
+  .pool-tier-cell::before, .pool-count-cell::before { content: none; }
+}
+
+/* Narrow tables keep every value in its column, tightening controls before stacking. */
+@container (min-width: 561px) and (max-width: 700px) {
+  .pool-worksheet--dense .pool-col-picture { width: 40px; }
+  .pool-worksheet--dense .pool-machine-row-tools { width: 14px; }
+  .pool-worksheet--dense .pool-machine-row-tools .pool-order-handle { width: 14px; flex-basis: 14px; }
+  .pool-worksheet--dense .pool-machine-picture { left: 14px; }
+  .pool-worksheet--dense .pool-col-actions,
+  .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions { width: 50px; }
+  .pool-worksheet--dense .pool-row-actions { display: grid; grid-template-columns: repeat(2, 19px); justify-content: end; gap: 1px 2px; padding: 2px 0 2px 4px; }
+}
+.pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell { padding-right: 8px; }

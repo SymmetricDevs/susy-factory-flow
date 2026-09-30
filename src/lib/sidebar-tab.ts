@@ -1,28 +1,22 @@
 /**
- * Landing the left column on one of its three tabs from anywhere else in the
- * app.
+ * Landing the left column on a tab from anywhere else in the app.
  *
- * Same bargain as `setups-tab.ts`, generalised: the panel may not be mounted
- * when the request is made (on a phone it is a closed drawer), so the wanted
- * tab waits in module state until either the mounted panel's listener or the
- * next mount collects it.
- *
- * `openSetupsTab` stays where it is. It carries a shelf SCOPE as well as a tab,
- * and the Setups panel listens for that separately.
+ * The panel may not be mounted when the request is made (on a phone it is a
+ * closed drawer), so the wanted tab waits in module state until either the
+ * mounted panel's listener or the next mount collects it.
  */
 export const OPEN_SIDEBAR_TAB_EVENT = "susy:open-sidebar-tab";
 
-/** Only Items is left in the column; Boards and Setups moved to the library. */
+/** The column's only tab; boards and setups live in the library. */
 export type SidebarTab = "items";
 
 let pendingTab: SidebarTab | undefined;
 let pendingFocusSearch = false;
 
 /**
- * `focusSearch` also puts the cursor in the Items tab's search box. The
- * Welcome page's "Find a recipe" asks for that: with the column already
- * open on Items, opening it again is invisible, and a blinking cursor in the
- * search field is the answer the click deserves.
+ * `focusSearch` also puts the cursor in the Items tab's search box (used by
+ * the Welcome page's "Find a recipe", where the column may already be open,
+ * so reopening it alone would show nothing).
  */
 export function openSidebarTab(tab: SidebarTab, options: { focusSearch?: boolean } = {}): void {
   pendingTab = tab;

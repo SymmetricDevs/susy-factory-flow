@@ -4,12 +4,9 @@
  * Stitching a board capture and its summary bar into one finished image.
  *
  * The board arrives photographed at its own size; the bar is photographed at
- * a fixed design width (720 to 1600 CSS px, see ExportFooter) and scaled to
- * the board's width here. Scaling the BAR rather than designing it at board
- * width is the point: a sprawling factory exports thousands of pixels wide,
- * and a bar that grew with it would keep its font size and shrink into a
- * hairline once Discord fits the image on screen. Scaled, the bar holds a
- * constant fraction of the image and stays readable at any factory size.
+ * a fixed design width (720 to 1600 CSS px, see ExportFooter) and SCALED to
+ * the board's width here, so it keeps a constant fraction of the image and
+ * stays readable however wide the factory is.
  */
 
 export interface CompositeLayout {
@@ -33,9 +30,7 @@ export interface ExportBorder {
 
 /**
  * Frame thickness that reads the same at any factory size: roughly the
- * weight the summary bar's own rules have after scaling, clamped so a tiny
- * plan is not all frame and a mega board's frame stays a hairline of the
- * whole.
+ * scaled weight of the summary bar's rules, clamped at both ends.
  */
 export function resolveExportBorderWidth(boardWidth: number): number {
   if (!Number.isFinite(boardWidth) || boardWidth <= 0) {

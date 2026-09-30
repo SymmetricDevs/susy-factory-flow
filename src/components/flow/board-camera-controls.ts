@@ -12,31 +12,27 @@ import { BOARD_MIN_ZOOM, boardMaxZoom } from "./board-camera";
  * The camera under the hand: eased wheel zoom, a slight glide after a pan,
  * and keys for moving without the mouse.
  *
- * WHEEL. The wheel no longer drives d3 directly (zoomOnScroll is off on the
- * board). Each notch moves a TARGET zoom and the camera eases toward it on a
- * short clock, anchored on the cursor, so a burst of notches reads as one
- * accelerating dive instead of a run of cuts. Wheels that belong to someone
- * else — a `nowheel` popup scrolling its own list, a slot stepping through
- * its alternatives — pass by untouched, exactly the set d3 used to skip.
+ * WHEEL. d3 does not see the wheel (zoomOnScroll is off on the board). Each
+ * notch moves a TARGET zoom and the camera eases toward it, anchored on the
+ * cursor, so a burst of notches reads as one dive instead of a run of cuts.
+ * Wheels that belong to something else (a `nowheel` popup scrolling its own
+ * list, a slot stepping through its alternatives) pass by untouched, the
+ * same set d3 skips.
  *
- * MOMENTUM. Velocity is measured from the VIEWPORT, not the pointer: while a
- * pane drag is down the camera's own movement is sampled, and on release it
- * carries on and dies over about a tenth of a second. Reading the viewport is
- * what keeps every non-pan drag honest for free — a band select, an
- * annotation stroke, a claimed edge swipe never move the camera, so they
- * measure zero and nothing glides.
+ * MOMENTUM. Velocity is sampled from the VIEWPORT, not the pointer, while a
+ * pane drag is down; on release it carries on and dies over about a tenth
+ * of a second. Non-pan drags (band select, annotation stroke, claimed edge
+ * swipe) never move the camera, so they measure zero and nothing glides.
  *
- * KEYS. WASD and the arrows pan (physical positions, the game convention);
- * PageUp/PageDown and +/- zoom on the board's centre. Held keys ease up to
- * cruise and released ones bleed off through the same glide the mouse gets,
- * so the keyboard and the hand speak one dialect. Keys never fire while
- * typing, never while an overlay (the welcome page, a dialog) is over the
- * board, and the arrows yield to a focused card — React Flow moves the card.
+ * KEYS. WASD and the arrows pan (physical positions); PageUp/PageDown and
+ * +/- zoom on the board's centre. Held keys ease up to cruise and released
+ * ones bleed off through the same glide the mouse gets. Keys never fire
+ * while typing or while an overlay (the welcome page, a dialog) covers the
+ * board, and the arrows yield to a focused card, which React Flow moves.
  *
- * All of it runs through instance.setViewport, the same door the touch
- * gestures use, so move reporting (design cameras, the viewport centre) sees
- * these moves like any other. With move motion off every easing collapses to
- * its target: the wheel snaps, keys stop dead, nothing glides — the board
+ * All of it goes through instance.setViewport, like the touch gestures, so
+ * move reporting (design cameras, the viewport centre) sees these moves.
+ * With move motion off every easing collapses to its target, so the board
  * holds still for whoever asked it to, image export included.
  */
 
@@ -157,9 +153,9 @@ export function useBoardCameraControls({
       const dt = lastFrameAt === 0 ? 16 : Math.min(48, Math.max(1, now - lastFrameAt));
       lastFrameAt = now;
 
-      // Someone else moved the camera between frames — a d3 drag underway, a
-      // framing move, a tab switch. Their move wins; every velocity dies so
-      // the loop cannot drag the board back toward where it used to be going.
+      // Someone else moved the camera between frames (a d3 drag, a framing move,
+      // a tab switch). Their move wins; every velocity dies so the loop cannot
+      // drag the board back toward its old heading.
       if (
         lastWritten &&
         (Math.abs(current.x - lastWritten.x) > 0.5 ||

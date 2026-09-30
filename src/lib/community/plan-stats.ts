@@ -19,9 +19,7 @@ function isVoltageTier(value: unknown): value is Exclude<MachineTier, "DEMO"> {
  * client-supplied numbers.
  *
  * `resourceLimit` caps the needs/makes lists; the community shelves keep the
- * default, while the image export asks for everything - a plan with two
- * hundred boundary resources prints two hundred rows if its owner leaves
- * them all checked.
+ * default, while the image export asks for everything.
  */
 export function computeCommunityPlanStats(
   project: FactoryProject,

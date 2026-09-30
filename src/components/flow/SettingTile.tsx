@@ -1,18 +1,20 @@
 "use client";
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { focusDropdownFilter } from "@/lib/dropdown-focus";
+import { useDropdownViewport } from "@/lib/hooks/use-dropdown-viewport";
 
 import { ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
-import type { MachineConfigTierControl } from "@/lib/model/recipe-rules";
+import { snapNumericSetting, type MachineConfigTierControl } from "@/lib/model/recipe-rules";
 import type { MachineConfigTierOption, ResourceAmount } from "@/lib/model/types";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 
 /**
- * ONE TILE GRAMMAR for a card's machine settings (docs/config-tiles-prd.md).
+ * ONE TILE GRAMMAR for a card's machine settings.
  *
  * A setting is a captioned tile with a value and one gesture. A SHORT
  * ladder (six rungs or fewer: pressure, a casing mark, on/off) is stepped
@@ -58,7 +60,9 @@ export const STEPPER_MAX_RUNGS = 6;
  */
 const CAPTIONS: Record<string, string> = {
   heatingCoil: "Coil",
-  pipeCasing: "Casing",
+  // Two different blocks, so neither is a bare "Casing".
+  pipeCasing: "Fluid pipe",
+  itemPipeCasing: "Item pipe",
   solenoidCoil: "Solenoid",
   arcElectrode: "Electrode",
   preciseCasing: "Unit casing",
@@ -108,7 +112,7 @@ export function controlHasFaces(control: MachineConfigTierControl): boolean {
 function Face({ resource }: { resource: ResourceAmount }) {
   return (
     // Same whole-item fit as a port chip. No `alternatives`: the blue plus that marks an
-    // oredict slot means nothing on a coil (Jack, 2026-09-06).
+    // oredict slot means nothing on a coil.
     <span className="relative flex h-[18px] w-[18px] shrink-0 items-center justify-center overflow-hidden">
       <ResourceIcon
 
@@ -124,11 +128,10 @@ function Face({ resource }: { resource: ResourceAmount }) {
   );
 }
 
-// No native `title` anywhere on a tile (Jack, 2026-09-07): the global title
-// tooltip turns a titled element inside a rich area into a STOP, so hovering
-// the value well swapped the setting's whole story for the bare number. One
-// setting, one hover, everywhere on the tile - the rich panel already names
-// the current value in its subtitle.
+// No native `title` anywhere on a tile: the global title tooltip turns a
+// titled element inside a rich area into a STOP, replacing the setting's
+// whole story with the bare number. One setting, one hover, everywhere on
+// the tile; the rich panel already names the current value.
 export function SettingTile({
   caption,
   value,
@@ -271,26 +274,30 @@ export function SettingListMenu({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
+  const viewport = useDropdownViewport();
   // Numbered hatch choices should match with or without thousands separators.
   const needle = query.trim().toLowerCase().replaceAll(",", "");
   const shown = needle ? rows.filter((row) => row.label.toLowerCase().replaceAll(",", "").includes(needle)) : rows;
   useDropdownDismiss(true, { refs: [rootRef], onClose, fade: true });
   if (typeof document === "undefined") return null;
-  const width = 240;
   // The anchor rect and the window are real px; this box is zoomed (ui-zoom),
   // so its fixed offsets are shell px: real px are divided by the scale.
   const scale = getUiScale();
   const shell = (px: number) => px / scale;
-  const left = Math.max(8, Math.min(shell(anchor.left + anchor.width / 2) - width / 2, shell(window.innerWidth) - width - 8));
+  const width = Math.min(240, Math.max(0, shell(viewport.width) - 16));
+  const left = Math.max(shell(viewport.left) + 8, Math.min(shell(anchor.left + anchor.width / 2) - width / 2, shell(viewport.left + viewport.width) - width - 8));
+  const maxHeight = Math.min(360, Math.max(0, shell(viewport.height) - 16));
+  const height = Math.min(maxHeight, Math.max(1, shown.length) * 28 + 12 + (searchable ? 36 : 0));
   const below = shell(anchor.bottom) + 4;
-  const above = shell(window.innerHeight - anchor.top) + 4;
-  const fitsBelow = shell(window.innerHeight) - below >= Math.min(320, rows.length * 28 + 12 + (searchable ? 36 : 0));
+  const bottom = shell(viewport.top + viewport.height) - 8;
+  const fitsBelow = bottom - below >= height;
+  const top = Math.max(shell(viewport.top) + 8, Math.min(fitsBelow ? below : shell(anchor.top) - height - 4, bottom - height));
   return createPortal(
     <div
       ref={rootRef}
       role="listbox"
       className="ui-zoom nodrag nowheel fixed z-[300] flex max-h-[360px] flex-col border-2 border-[var(--mc-15)] bg-[var(--mc-49)] py-1 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.2)]"
-      style={{ left, width, ...(fitsBelow ? { top: below } : { bottom: above }) }}
+      style={{ left, width, top, maxHeight }}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >
@@ -298,7 +305,7 @@ export function SettingListMenu({
         <label className="mx-1 mb-1 flex h-7 shrink-0 items-center gap-1.5 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1.5 text-[12px] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)]">
           <Search className="h-3.5 w-3.5 shrink-0 text-[var(--mc-ink-muted)]" />
           <input
-            autoFocus
+            ref={focusDropdownFilter}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
@@ -528,10 +535,10 @@ function MachineNumberTile({ control, onSelect, help }: {
   const [draft, setDraft] = useState<string>();
   const finished = useRef(false);
   const shown = Number(control.current.key);
-  const { min, max = Number.MAX_SAFE_INTEGER } = control.numeric!;
-  const clamp = (n: number) => Math.min(max, Math.max(min, Math.trunc(n)));
+  const numeric = control.numeric!;
+  const { min, max = Number.MAX_SAFE_INTEGER, step = 1 } = numeric;
   const pick = (n: number) => {
-    const key = String(clamp(n));
+    const key = String(snapNumericSetting(n, numeric));
     if (key !== control.current.key) onSelect(key);
   };
   const commit = () => {
@@ -539,14 +546,14 @@ function MachineNumberTile({ control, onSelect, help }: {
     finished.current = true;
     const text = draft?.replaceAll(",", "").trim() ?? "";
     const parsed = Number(text);
-    if (text && Number.isSafeInteger(parsed)) pick(parsed);
+    if (text && Number.isFinite(parsed) && (step < 1 || Number.isSafeInteger(parsed))) pick(parsed);
     setDraft(undefined);
   };
   const caption = settingCaption(control);
   if (draft !== undefined) {
     return <div className={`${SETTING_TILE_CLASS} nodrag`} onPointerDown={(event) => event.stopPropagation()}>
       <div className={SETTING_TILE_CAPTION_CLASS}>{caption}</div>
-      <input autoFocus inputMode="numeric" aria-label={control.label} value={draft}
+      <input autoFocus inputMode={step < 1 ? "decimal" : "numeric"} aria-label={control.label} value={draft}
         onFocus={(event) => event.target.select()}
         onChange={(event) => setDraft(event.target.value)} onBlur={commit}
         onKeyDown={(event) => {
@@ -560,8 +567,8 @@ function MachineNumberTile({ control, onSelect, help }: {
       />
     </div>;
   }
-  return <SettingTile caption={caption} value={shown.toLocaleString("en-US")}
+  return <SettingTile caption={caption} value={shown.toLocaleString("en-US", { maximumFractionDigits: 2 })}
     canStepDown={shown > min} canStepUp={shown < max}
-    onStep={(direction) => pick(shown + direction)}
+    onStep={(direction) => pick(shown + direction * step)}
     onType={() => { finished.current = false; setDraft(String(shown)); }} help={help} />;
 }

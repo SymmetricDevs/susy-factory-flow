@@ -7,8 +7,8 @@ import type {
 
 /**
  * The face an entry wears in a list: one item or fluid the author picked.
- * Defined with the model now that a plan carries its own; re-exported here so
- * every community consumer keeps its import.
+ * Defined with the model (a plan carries its own); re-exported for community
+ * consumers.
  */
 export type { EntryIcon } from "@/lib/model/types";
 
@@ -131,11 +131,6 @@ export interface CommunityUploadResponse {
 export interface CommunityUser {
   username: string;
   isAdmin?: boolean;
-}
-
-export interface CommunityVoteRequest {
-  deviceId: string;
-  value: 1 | -1;
 }
 
 export interface CommunityVoteResponse {

@@ -9,18 +9,13 @@ import { drawBorder, type CompositeLayout, type ExportBorder } from "@/lib/impor
 import { PULSE_STROKE } from "../flow/edge-pulse";
 
 /**
- * The board as a looping GIF: one static photograph of everything, with the
- * marching flow dashes replayed over it frame by frame - the same geometry,
- * widths and speeds the live pulse canvas draws, erased out of the same card
- * and label rectangles.
+ * The board as a looping GIF: one static photograph with the marching flow
+ * dashes replayed over it frame by frame, using the live pulse canvas's
+ * geometry, widths and speeds and the same occlusion rectangles.
  *
- * The one liberty taken is speed: each line's dash velocity is nudged to the
- * nearest whole number of dash cycles per loop, so frame N-1 hands to frame 0
- * with every line mid-stride. Unquantised, each line would jump at the wrap
- * by its own fraction of a cycle and the loop would visibly hiccup once a
- * cycle. The nudge is at most half a cycle over the whole loop - a few
- * percent - and a line slower than half a cycle is rounded UP to one rather
- * than down to frozen, because a dead line reads as a broken export.
+ * Each line's dash speed is nudged to a whole number of dash cycles per loop
+ * so the loop wraps seamlessly (at most half a cycle over the loop). A line
+ * slower than half a cycle rounds UP to one, never down to frozen.
  */
 
 /** Discord renders embeds ~short; more width is file size, not legibility. */

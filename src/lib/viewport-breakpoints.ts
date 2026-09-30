@@ -1,5 +1,5 @@
 /**
- * The two layout breakpoints, in SHELL pixels (see ui-scale.ts). Kept in a
+ * The layout breakpoints, in SHELL pixels (see ui-scale.ts). Kept in a
  * module with no "use client" so the server layout can inline them into the
  * boot script; compact-view.ts re-exports them and owns the media queries.
  */

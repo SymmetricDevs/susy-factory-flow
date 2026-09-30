@@ -3,44 +3,13 @@
 import { CHANGELOG, type ChangelogEntry } from "@/lib/changelog";
 import { APP_VERSION } from "@/lib/version";
 
-/**
- * Noticing that the app changed under you.
- *
- * Two different situations, and they want two different answers:
- *
- * - you were away and it shipped while you were gone. The code running is the
- *   new code, so the only question is whether this browser has been here
- *   before and what it has already been shown. That is the version stamp
- *   below, read by `pickSpotlight` in release-spotlight.ts, and the answer is
- *   the release notice that arrives once.
- * - you had the tab open and it shipped. The code running is the OLD code and
- *   cannot become the new one on its own, so the honest thing is to say a new
- *   version exists and offer a reload. `useDeployedVersion` asks the server.
- *
- * THE NOTES ARE BACK (Jack, 2026-09-09): the header's version chip opens
- * the full changelog again and wears a dot when a release has shipped that
- * this browser has not read. That dot keeps its OWN stamp, below - the one
- * above is written on every load by the release notice and could never let a
- * dot light.
- */
-const LAST_SEEN_KEY = "susy-factory-flow.last-seen-version.v1";
+/** Release notes open only from the version chip; unread notes get a dot
+ * (see NOTES_READ_KEY). This last-seen stamp stays readable for compatibility
+ * but opens no UI. */
+const LAST_SEEN_KEY = "gtnh-factory-flow.last-seen-version.v1";
 
 /**
- * Which `showToEveryone` releases this browser has already been shown.
- *
- * A SECOND record, deliberately, rather than a special case on the stamp. The
- * stamp answers "what have you seen"; this answers "have you been handed this
- * particular release once". Folding them together would mean the forced
- * showing had to lie about the stamp to work, and then a browser that had
- * genuinely read the notes would be told about them again.
- */
-const FORCED_SHOWN_KEY = "susy-factory-flow.forced-notes.v1";
-
-/**
- * The settings dialog's mute for the update popup. "off" means the notes
- * never arrive by themselves; the dot on the What's new button still marks
- * unread releases, so nothing goes unannounced, just uninterrupted. Absent
- * means on, so a fresh profile and a never-touched setting are the same.
+ * The version this browser last stamped, or nothing if it never has.
  */
 export function readLastSeenVersion(): string | undefined {
   try {
@@ -54,8 +23,7 @@ export function markVersionSeen(version = APP_VERSION): void {
   try {
     window.localStorage.setItem(LAST_SEEN_KEY, version);
   } catch {
-    // A blocked or full quota must never break the app. The cost is one
-    // repeated notice, which is the harmless direction to fail in.
+    // A blocked or full quota must never break the app.
   }
 }
 
@@ -80,12 +48,9 @@ export function compareVersions(left: string, right: string): number {
 /**
  * The newest release whose NOTES this browser has actually opened.
  *
- * A separate stamp from `LAST_SEEN_KEY` on purpose. That one answers "has
- * this browser run this version", and the release notice writes it on every
- * load - so if the dot read it, the dot could never light: the load that
- * would have raised it has already stamped it away. This one is written by
- * one gesture only, opening the notes, which is the only thing that means
- * they were read.
+ * A separate stamp from `LAST_SEEN_KEY` on purpose: a stamp written on page
+ * load would put the dot out on the very load that should raise it. This one
+ * is written only by opening the notes.
  */
 const NOTES_READ_KEY = "gtnh-factory-flow.changelog-read.v1";
 
@@ -101,18 +66,15 @@ function writeNotesRead(version: string): void {
   try {
     window.localStorage.setItem(NOTES_READ_KEY, version);
   } catch {
-    // A blocked or full quota must never break the app. The cost is a dot
-    // that comes back, which is the harmless direction to fail in.
+    // A blocked or full quota must never break the app; the dot just returns.
   }
 }
 
 /**
  * What has shipped since this browser last opened the notes, newest first.
  *
- * Empty on a FIRST visit, deliberately. Somebody arriving for the first time
- * has no idea what any of it used to do, so a list of changes is noise in
- * front of the thing they came to see: the stamp is written silently instead
- * and they hear about the next release like everyone else.
+ * Empty on a FIRST visit, deliberately: a newcomer has no use for a history,
+ * so the stamp is written silently and they see the next release's notes.
  */
 export function unseenEntries(): ChangelogEntry[] {
   const read = readNotesRead();
@@ -131,9 +93,8 @@ export function unseenEntries(): ChangelogEntry[] {
 }
 
 /**
- * The stamp is browser-wide, so the chip and anything else reading it have to
- * agree within the same page. Nothing here is worth a store; it is one string
- * and two readers.
+ * The stamp is browser-wide, so every reader in the page is notified when it
+ * changes.
  */
 const listeners = new Set<() => void>();
 

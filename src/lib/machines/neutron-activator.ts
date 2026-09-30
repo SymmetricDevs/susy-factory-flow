@@ -13,10 +13,10 @@ export function neutronActivatorSpeed(height: number): number {
   return 1 / duration;
 }
 
-/** This machine CEILS whole ticks. Its custom under-one-tick supplier takes
- * ParallelHelper's old path: floor(1 / duration), capped by safeInt(..., 0).
- * The equivalent per-operation duration keeps that parallel batch in the
- * existing rate model. Underflow at extreme heights must saturate, not reset.
+/** This machine CEILS whole ticks. Under one tick its custom supplier follows
+ * ParallelHelper: floor(1 / duration) parallels, capped by safeInt(..., 0),
+ * returned as the per-operation duration 1 / parallels. Underflow at extreme
+ * heights must saturate, not reset.
  */
 export function quantiseNeutronActivatorDuration(duration: number): number {
   if (duration >= 1) return Math.ceil(duration);

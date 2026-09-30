@@ -62,10 +62,8 @@ export function rectsOverlap(a: PlacementRect, b: PlacementRect, gap = 0): boole
 const SEARCH_LIMIT_CELLS = 40;
 
 /**
- * A fence the search must stay inside. Any side may be left open, which is
- * how a card that cannot fit in its board's current bounds is allowed to
- * spill out of the bottom or the right — the frame grows after the drop to
- * take it back in, and growing is only possible in those two directions.
+ * A fence the search must stay inside; any side may be left open. Board
+ * walls are enforced through `PlacementRegion`, not through this.
  */
 export interface PlacementBounds {
   minX?: number;
@@ -154,10 +152,9 @@ export function nearestFreeSpot(
 
 /**
  * The cells of the square ring at `radius`, closest first, ties top-left so
- * the magnet is predictable. Pure function of the radius, so each ring is
- * built and sorted once for the lifetime of the page — the magnet runs per
- * drag frame, and rebuilding (2r+1)² scans plus a sort per frame was most of
- * a contended drag's cost.
+ * the magnet is predictable. A pure function of the radius, so each ring is
+ * built and sorted once per page: the magnet runs every drag frame, and
+ * rebuilding and sorting rings per frame dominates a contended drag.
  */
 const ringOffsetsByRadius: Array<ReadonlyArray<{ dx: number; dy: number }>> = [];
 

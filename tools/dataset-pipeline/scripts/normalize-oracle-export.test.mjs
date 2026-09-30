@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import singleblockCatalysts from "./__fixtures__/singleblock-catalysts.json";
 
 const scriptPath = fileURLToPath(new URL("./normalize-oracle-export.mjs", import.meta.url));
 
@@ -46,6 +47,28 @@ it("retains long fusion thresholds independently of legacy specialValue", () => 
       fluidInputs: [fluid("a", 1, "A")], fluidOutputs: [fluid("b", 1, "B")] }],
   }] }] });
   expect(dataset.recipes[0].metadata).toMatchObject({ fusionStartupEu: 6_000_000_000, specialValue: 0 });
+});
+
+it("retains real furnace tiers and separates the Ore Washing Plant controller across maps", () => {
+  const dataset = normalize({ domains: [
+    { id: "gregtech", recipeMaps: singleblockCatalysts
+      .filter(map => ["gt.recipe.furnace", "gt.recipe.orewasher", "gtpp.recipe.simplewasher"].includes(map.id))
+      .map(map => ({ ...map, recipes: map.id === "gt.recipe.furnace" ? [] : [{
+        id: map.id, durationTicks: 20, eut: 30,
+        itemInputs: [item("minecraft:stone", 1, "Stone")],
+        itemOutputs: [item("minecraft:sand", 1, "Sand")],
+      }] })) },
+    { id: "smelting", recipes: [{ id: "smelt", input: item("minecraft:sand", 1, "Sand"), output: item("minecraft:glass", 1, "Glass") }] },
+  ] });
+  const furnace = dataset.recipes.find(recipe => recipe.source.recipeMap === "Furnace")
+    .machineHandlers.find(handler => handler.id === "electric-furnace");
+  expect(furnace).toMatchObject({minimumTier: "LV", maximumTier: "UMV", durationTicks: 128, eut: 4});
+  expect(furnace.availableTiers).toEqual(["LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UMV"]);
+  const washers = dataset.recipes.filter(recipe => recipe.source.recipeMap !== "Furnace");
+  expect(washers).toHaveLength(2);
+  for (const recipe of washers) {
+    expect(recipe.machineHandlers.find(handler => handler.id === "ore-washing-plant-multiblock")?.kind).toBe("multiblock");
+  }
 });
 
 const RESISTOR = "gregtech:gt.metaitem.01@32716";
@@ -631,5 +654,193 @@ describe("recipe ids survive a rebuild", () => {
       expect(a.id).not.toBe(b.id);
     }
     expect(a.id).toMatch(/:[0-9a-f]{16}$/);
+  });
+});
+
+describe("the Extreme Entity Crusher: one recipe per mob", () => {
+  const modifier = (name, fields) => ({ className: `com.kuba6000.mobsinfo.api.${name}`, ...(fields ? { fields } : {}) });
+  const extra = (name, fields) => ({ className: `com.kuba6000.mobsinfo.loader.extras.${name}`, ...(fields ? { fields } : {}) });
+  let dataset;
+  let byMob;
+
+  beforeAll(() => {
+    dataset = normalize({
+      domains: [
+        {
+          id: "mobDrops",
+          machine: {
+            mobSpawnInterval: 55,
+            maxLootingLevel: 4,
+            diamondSpikesDamage: 9,
+            playerOnlyDropsModifier: 0.1,
+            controller: item("gregtech:gt.blockmachines@14201", 1, "Extreme Entity Crusher"),
+            experience: fluid("xpjuice", 120, "Liquid XP"),
+            spawner: item("enderio:blockpoweredspawner", 1, "Powered Spawner"),
+          },
+          infernal: { eliteRarity: 20, ultraRarity: 10, infernoRarity: 7, minEliteModifiers: 2, minUltraModifiers: 5, minInfernoModifiers: 8, mobModHealthFactor: 1.8 },
+          mobs: [
+            {
+              key: "Zombie",
+              displayName: "Zombie",
+              maxEntityHealth: 20,
+              eut: 1920,
+              durationTicks: 55,
+              drops: [
+                { resource: item("minecraft:rotten_flesh", 1, "Rotten Flesh"), chance: 10000, lootable: true },
+                { resource: item("minecraft:iron_sword", 1, "Iron Sword"), chance: 3, enchantable: 14, damages: { 26: 1 } },
+                { resource: item("minecraft:iron_sword", 1, "Iron Sword"), chance: 10, damages: { 26: 1 } },
+                {
+                  resource: item("forbiddenmagic:shard@5", 1, "Greed Shard"),
+                  chance: 0,
+                  chanceModifiers: [
+                    modifier("IChanceModifier$NormalChance", { chance: 0 }),
+                    modifier("IChanceModifier$EachLevelOfGives", { enchantment: { id: 21 }, change: 5 }),
+                    extra("ForbiddenMagic$EachLevelOfGivesFocus", { change: 0 }),
+                  ],
+                },
+                {
+                  resource: item("thaumcraft:brain", 1, "Zombie Brain"),
+                  chance: 0,
+                  chanceModifiers: [modifier("IChanceModifier$NormalChance", { chance: 10 })],
+                },
+                {
+                  resource: item("draconicevolution:soul", 1, "Mob Soul"),
+                  chance: 0,
+                  chanceModifiers: [extra("DraconicEvolution$DraconicEvolutionSoulChanceModifier", { baseChance: 0.125 })],
+                },
+                { resource: item("bloodarsenal:heart", 1, "Heart"), chance: 5000, playerOnly: true },
+                {
+                  resource: item("somemod:head", 1, "Odd Head"),
+                  chance: 0,
+                  chanceModifiers: [modifier("IChanceModifier$NormalChance", { chance: 5 }), extra("Mystery$NewGate")],
+                },
+              ],
+            },
+            {
+              key: "Blaze",
+              displayName: "Blaze",
+              maxEntityHealth: 20,
+              eut: 1920,
+              durationTicks: 55,
+              alwaysInfernal: true,
+              drops: [{ resource: item("minecraft:blaze_rod", 1, "Blaze Rod"), chance: 5000, lootable: true }],
+            },
+            {
+              key: "witchery.eye",
+              displayName: "Eye",
+              maxEntityHealth: 1,
+              eut: 1920,
+              durationTicks: 55,
+              drops: [
+                {
+                  resource: item("minecraft:ender_eye", 1, "Eye"),
+                  chance: 0,
+                  chanceModifiers: [modifier("IChanceModifier$NormalChance", { chance: 50 }), modifier("IChanceModifier$PoweredCreeper")],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    byMob = Object.fromEntries(dataset.recipes.map((recipe) => [recipe.metadata.eec.mob, recipe]));
+  });
+
+  it("files every mob under the EEC's own map and machine picture", () => {
+    expect(dataset.recipes).toHaveLength(3);
+    expect(dataset.recipeMaps).toContain("Extreme Entity Crusher");
+    expect(dataset.recipeMapIcons).toContainEqual(
+      expect.objectContaining({ recipeMap: "Extreme Entity Crusher", resource: expect.objectContaining({ id: "gregtech:gt.blockmachines@14201" }) }),
+    );
+  });
+
+  it("puts the mob's own spawner in the controller slot, never consumed", () => {
+    const zombie = byMob.Zombie;
+    expect(zombie).toMatchObject({ name: "Extreme Entity Crusher: Zombie", minimumTier: "EV", eut: 1920, durationTicks: 55 });
+    expect(zombie.inputs).toEqual([
+      expect.objectContaining({ id: "factoryflow:eec_mob:zombie", displayName: "Zombie Spawner", consumed: false }),
+    ]);
+  });
+
+  it("keeps only the drops a plain EEC can roll, merging repeats of an item", () => {
+    const zombie = byMob.Zombie;
+    expect(zombie.outputs.map((output) => [output.id, output.amount, output.chance])).toEqual([
+      ["minecraft:rotten_flesh", 1, undefined],
+      // Two sword rolls, 3 and 10 in 10,000: one expected count.
+      ["minecraft:iron_sword", 0.0013, undefined],
+      // Only a Looting weapon makes greed shards: written at Looting I.
+      ["forbiddenmagic:shard@5", 0.05, undefined],
+      ["thaumcraft:brain", 1, 0.1],
+      // Player-only drops come out at a tenth.
+      ["bloodarsenal:heart", 1, 0.05],
+      ["xpjuice", 120, undefined],
+    ]);
+    expect(zombie.metadata.eec.outputs[1].drops.every((drop) => drop.voidable)).toBe(true);
+    expect(zombie.metadata.eec.outputs[2]).toEqual({ refLooting: 1, drops: [{ amount: 1, c0: 0, cL: 500 }] });
+    expect(zombie.metadata.eec.outputs.at(-1)).toEqual({ xp: true });
+    // A soul needs Reaper; an unknown modifier is treated as a gate too.
+    expect(zombie.notes).toContain("Mob Soul");
+    expect(zombie.notes).toContain("Odd Head");
+  });
+
+  it("charges an always-infernal mob eight times the power", () => {
+    expect(byMob.Blaze).toMatchObject({ eut: 15360, minimumTier: "LuV" });
+    expect(byMob.Blaze.metadata.eec.alwaysInfernal).toBe(true);
+  });
+
+  it("still lists the Liquid XP of a mob whose every drop is gated", () => {
+    expect(byMob["witchery.eye"].outputs.map((output) => output.id)).toEqual(["xpjuice"]);
+  });
+});
+
+describe("LFTR sparging: the rolled outputs the recipe registers at 0 L", () => {
+  const tbSalt = (extra = {}) => ({
+    id: "sparge-tb",
+    durationTicks: 500,
+    eut: 7680,
+    itemInputs: [],
+    fluidInputs: [fluid("fluorine", 100, "Fluorine"), fluid("molten.tbsalt", 50, "TB Salt")],
+    itemOutputs: [],
+    fluidOutputs: [fluid("molten.spargedtbsalt", 50, "Fluorine Sparged TB Salt")],
+    ...extra,
+  });
+  const rolled = {
+    spargeGasAmount: 100,
+    spargeMaxByproduct: 20,
+    spargeFluidOutputs: [
+      fluid("molten.spargedtbsalt", 50, "Fluorine Sparged TB Salt"),
+      fluid("fluorine", 0, "Fluorine"),
+      fluid("lithiumfluoride", 0, "Lithium Fluoride"),
+      fluid("neptuniumhexafluoride", 0, "Neptunium Hexafluoride"),
+      fluid("technetiumhexafluoride", 0, "Technetium Hexafluoride"),
+      fluid("seleniumhexafluoride", 0, "Selenium Hexafluoride"),
+      fluid("thoriumtetrafluoride", 0, "Thorium Tetrafluoride"),
+    ],
+  };
+  const exportOf = (recipe) => ({
+    domains: [{
+      id: "gregtech",
+      recipeMaps: [{ id: "gtpp.recipe.lftr.sparging", name: "LFTR Gas Sparging", recipes: [recipe] }],
+    }],
+  });
+
+  it("lists the gas handed back and every byproduct at its average, ThF4 included", () => {
+    const [recipe] = normalize(exportOf(tbSalt(rolled))).recipes;
+    const byId = Object.fromEntries(recipe.outputs.map((slot) => [slot.id, slot.amount]));
+    expect(recipe.outputs[0].id).toBe("molten.spargedtbsalt");
+    // 1-20 L each, the cap never shrinking for the first four rolls.
+    expect(byId.thoriumtetrafluoride).toBeGreaterThan(10.4);
+    expect(byId.thoriumtetrafluoride).toBeLessThanOrEqual(10.5);
+    expect(byId.lithiumfluoride).toBeCloseTo(10.5, 9);
+    const byproducts = recipe.outputs.slice(2).reduce((sum, slot) => sum + slot.amount, 0);
+    expect(byId.fluorine + byproducts).toBeCloseTo(100, 9);
+    expect(recipe.nei.additionalInfo.some((line) => line.includes("1 to 20 L"))).toBe(true);
+  });
+
+  it("keeps the recipe id the plain export had, so saved plans keep their card", () => {
+    const [plain] = normalize(exportOf(tbSalt())).recipes;
+    const [full] = normalize(exportOf(tbSalt(rolled))).recipes;
+    expect(full.id).toBe(plain.id);
+    expect(plain.outputs).toHaveLength(1);
   });
 });

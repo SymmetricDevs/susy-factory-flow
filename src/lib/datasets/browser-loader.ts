@@ -103,12 +103,10 @@ export async function initRecipeDatasetVersion(
     window.location.origin,
   );
   addDatasetCacheKey(url, version);
-  // The catalog is the one dataset response the SERVER adds to (it mints
-  // icons for synthesized handler families in dataset-query.ts), so the
-  // dataset hash alone does not pin its bytes: a release that changes the
-  // minting would sit behind year-long browser caches until the next dataset
-  // republish. The app version joins the cache key so every release misses
-  // cleanly; recipe and shard responses stay dataset-pure and keep hash-only.
+  // The catalog is the one dataset response the SERVER adds to (icons for
+  // synthesized handler families in dataset-query.ts), so the dataset hash
+  // alone does not pin its bytes. The app version joins the cache key so each
+  // release misses cleanly; recipe and shard responses stay hash-only.
   url.searchParams.set("appVersion", APP_VERSION);
   return fetchJson<RecipeDataset>(url.toString(), { signal: options.signal });
 }
@@ -247,6 +245,20 @@ export async function listRecipeDatasetCrops(
   return fetchJson<{ crops: RecipeSummary[] }>(url.toString(), { signal: options.signal });
 }
 
+/** The Extreme Entity Crusher's mobs, for the spawner picker on its card. */
+export async function listRecipeDatasetMobs(
+  _manifestUrl: string,
+  version: DatasetVersion,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ mobs: RecipeSummary[] }> {
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/mobs`,
+    window.location.origin,
+  );
+  addDatasetCacheKey(url, version);
+  return fetchJson<{ mobs: RecipeSummary[] }>(url.toString(), { signal: options.signal });
+}
+
 export async function queryRecipeDatasetResources(
   _manifestUrl: string,
   version: DatasetVersion,
@@ -276,8 +288,6 @@ export async function queryRecipeDatasetResources(
 
   return fetchJson<RecipeDatasetResourceQueryResult>(url.toString(), { signal: options.signal });
 }
-
-export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   // No cache mode: every GET here carries the dataset checksum in its URL, so

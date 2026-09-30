@@ -14,12 +14,11 @@ export interface BlueprintIo {
 }
 
 /**
- * What a blueprint eats, makes and runs at, computed the way a pocket card
- * computes its ports: solve the captured payload as its own little plan and
- * read the external inputs, unconsumed outputs and top voltage tier. Runs
- * client-side at save time — the same trust model as community plan stats —
- * and rides along to the server so listings can show it without ever
- * fetching payloads.
+ * What a blueprint eats, makes and runs at: solve the captured payload as its
+ * own little plan and read the external inputs, unconsumed outputs and top
+ * voltage tier. Runs client-side at save time (the same trust model as
+ * community plan stats) and rides along to the server, so listings never
+ * need to fetch payloads.
  */
 export function computeBlueprintIo(payload: BoardClipboardPayload): BlueprintIo {
   try {

@@ -113,18 +113,6 @@ export async function uploadCommunityPlan(
   return parseJsonOrThrow<CommunityUploadResponse>(response);
 }
 
-export async function updateCommunityPlan(
-  planId: string,
-  upload: Omit<CommunityUploadRequest, "deviceId">,
-): Promise<{ id: string }> {
-  const response = await fetch(`/api/community/plans/${encodeURIComponent(planId)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(upload),
-  });
-  return parseJsonOrThrow<{ id: string }>(response);
-}
-
 /**
  * In-place edits of an owned post. Light fields (name, description, tags,
  * publish state, icon) travel alone; `plan` overwrites the content with a

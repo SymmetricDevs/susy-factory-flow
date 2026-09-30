@@ -33,13 +33,14 @@ export function MinecraftTooltip({
   companion,
   children,
   placement = "pointer",
+  compact = false,
+  openOnFocus = false,
 }: {
   label?: string | string[];
   /**
    * Rich panel body; wins over `label` and brings its own typography. Pass a
-   * THUNK when the body is expensive to build: it is invoked only while the
-   * tooltip is actually open, so a card with eight port tooltips does not
-   * build eight discarded panels on every render.
+   * THUNK when the body is expensive: it is invoked only while the tooltip is
+   * open.
    */
   content?: ReactNode | (() => ReactNode);
   /** A separate controls legend beside the rich panel, wrapping on narrow screens. */
@@ -47,6 +48,10 @@ export function MinecraftTooltip({
   children: ReactNode;
   /** Anchor readouts to their controls, flipping when the preferred side cannot fit. */
   placement?: "pointer" | "below" | "above" | "above-card";
+  /** Small canvas readouts use the same panel with tighter padding. */
+  compact?: boolean;
+  /** Allow a compact information control to expose its details with keyboard focus. */
+  openOnFocus?: boolean;
 }) {
   const lines = useMemo(
     () => (Array.isArray(label) ? label : label ? label.split("\n") : []),
@@ -59,31 +64,35 @@ export function MinecraftTooltip({
   const pointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<DOMRect | undefined>(undefined);
-  const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const rootRef = useRef<HTMLSpanElement | null>(null);
+
+  const readAnchorRect = useCallback(() => {
+    const root = rootRef.current;
+    // The worksheet reuses canvas controls outside React Flow nodes. Anchor
+    // to the control there, so a large power panel cannot fall back to
+    // pointer placement and cover the very dial being adjusted.
+    const card = placement === "above-card" ? root?.closest(".react-flow__node") : undefined;
+    return (card ?? root?.firstElementChild)?.getBoundingClientRect();
+  }, [placement]);
 
   useEffect(
     () => () => {
       if (frameRef.current !== undefined) {
         window.cancelAnimationFrame(frameRef.current);
       }
-      if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current);
     },
     [],
   );
 
-  // A press on one of the hover surface's OWN controls (the tier chip, the
-  // hatch counter) is the tooltip's subject being used, not the pointer
-  // leaving: the panel stays up and re-reads itself, so clicking through
-  // tiers shows each result without re-hovering. Presses anywhere else —
-  // panning, dragging, other cards — still clear.
+  // A press on the hover surface's OWN controls (tier chip, hatch counter)
+  // keeps the panel up and re-reads it, so clicking through tiers shows each
+  // result. Presses anywhere else clear it.
   const pressKeepsTooltip = useCallback(
     (target: EventTarget | null) =>
-      target instanceof HTMLElement &&
-      ((placement === "above-card" && panelRef.current?.contains(target) === true) ||
-       (rootRef.current?.contains(target) === true &&
-        target.closest("button, input, select, textarea") !== null)),
-    [placement],
+      target instanceof Element &&
+      rootRef.current?.contains(target) === true &&
+      target.closest("button, input, select, textarea") !== null,
+    [],
   );
 
   const clampToViewport = useCallback(
@@ -130,12 +139,10 @@ export function MinecraftTooltip({
     [hasContent, placement, companion],
   );
 
-  // The first placement of a fresh tooltip clamps against an ESTIMATED panel
-  // size, and near a screen edge the estimate lands the panel a hundred-odd
-  // pixels from where the measured clamp will. Re-clamping here, before the
-  // browser paints, means nobody ever sees the estimate's position - which
-  // used to read as the tooltip jittering sideways while the pointer crossed
-  // list rows, each row remounting the panel at the estimate first.
+  // A fresh tooltip's first placement clamps against an ESTIMATED size, which
+  // near a screen edge can be far off. Re-clamping against the measured size
+  // before paint means the estimate's position is never seen (no sideways
+  // jitter as rows remount the panel).
   useLayoutEffect(() => {
     const pointer = pointerRef.current;
     if (!position || !pointer || !panelRef.current) {
@@ -148,7 +155,6 @@ export function MinecraftTooltip({
   }, [clampToViewport, position, content]);
 
   const handleMouseMove = (event: MouseEvent) => {
-    if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current);
     if (lines.length === 0 && !hasContent) {
       return;
     }
@@ -186,7 +192,7 @@ export function MinecraftTooltip({
     if (placement !== "pointer" && event.type === "mouseenter") {
       // The wrapper is display:contents. Read its control once on entry,
       // never on the mousemove/animation-frame path.
-      anchorRef.current = (placement === "above-card" ? rootRef.current?.closest(".react-flow__node") : rootRef.current?.firstElementChild)?.getBoundingClientRect();
+      anchorRef.current = readAnchorRect();
     }
     pointerRef.current = { x: event.clientX, y: event.clientY };
     pendingPositionRef.current = clampToViewport(event.clientX, event.clientY);
@@ -213,18 +219,15 @@ export function MinecraftTooltip({
   };
 
   const clearTooltip = useCallback(() => {
-    if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current);
     pendingPositionRef.current = undefined;
     if (frameRef.current !== undefined) {
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = undefined;
     }
     // A functional update, never a closure check: the tip opens on an
-    // animation frame, and a fast pointer has often LEFT before React has
-    // re-rendered with the open position. The leave handler that fires then
-    // still holds the closed state, and guarding on it skipped the hide -
-    // the panel committed open with nobody left to close it, and a quick
-    // sweep across a board left hundreds standing until the next click.
+    // animation frame, and a fast pointer often leaves before React
+    // re-renders. That leave handler still holds the closed state, so guarding
+    // on it would skip the hide and strand the panel open.
     setPosition((current) => (current === undefined ? current : undefined));
   }, []);
 
@@ -240,25 +243,19 @@ export function MinecraftTooltip({
       }
       clearTooltip();
     };
-    // Capture-phase "blur" sees every ELEMENT losing focus, and clicking the
-    // chip under the tooltip blurs whatever held focus before it — only the
-    // window itself going unfocused means the pointer story ended. Told apart
-    // by the target's kind, not identity: an element's blur names the element,
-    // the window's names the window.
+    // Capture-phase "blur" sees every ELEMENT losing focus (clicking the chip
+    // under the tooltip blurs the previous focus); only the WINDOW blurring
+    // should close. Told apart by the target's kind.
     const clearOnWindowBlur = (event: Event) => {
       if (event.target instanceof Element) {
         return;
       }
       clearTooltip();
     };
-    // A wheel or scroll NEVER clears a tooltip by itself (Jack, 2026-09-07):
-    // zooming the board keeps the card under the pointer, a slot that eats
-    // the wheel to step through its items never moves, a setting tile steps
-    // its count in place - and in every one of those the tip blinking out
-    // read as broken. So the question is asked a frame later, once the
-    // page has settled: is the hovered thing STILL under the pointer? It
-    // stays while the answer is yes and goes only when something else has
-    // scrolled in. Where the document cannot answer, the tip stays.
+    // A wheel or scroll NEVER clears a tooltip by itself: board zoom, wheel
+    // stepping on a slot and setting tiles all keep the subject in place. A
+    // frame later, once settled, the tip closes only if the hovered element
+    // is no longer under the pointer. Where the document cannot answer, it stays.
     let settleFrame: number | undefined;
     const recheckAfterScroll = () => {
       if (settleFrame !== undefined) {
@@ -270,11 +267,10 @@ export function MinecraftTooltip({
         if (!pointer) {
           return;
         }
-        if (placement === "above-card" && panelRef.current?.matches(":hover")) return;
         const under = elementUnderPointer(pointer.x, pointer.y);
         if (under === undefined || (under && rootRef.current?.contains(under))) {
           if (placement !== "pointer") {
-            anchorRef.current = (placement === "above-card" ? rootRef.current?.closest(".react-flow__node") : rootRef.current?.firstElementChild)?.getBoundingClientRect();
+            anchorRef.current = readAnchorRect();
             const next = clampToViewport(pointer.x, pointer.y);
             setPosition(current => current && current.maxHeight === next.maxHeight && Math.abs(current.x - next.x) < 2 && Math.abs(current.y - next.y) < 2 ? current : next);
           }
@@ -302,7 +298,7 @@ export function MinecraftTooltip({
       window.removeEventListener("resize", clearOnInteraction, options);
       window.removeEventListener("blur", clearOnWindowBlur, options);
     };
-  }, [clearTooltip, position, pressKeepsTooltip, placement, clampToViewport]);
+  }, [clearTooltip, position, pressKeepsTooltip, placement, clampToViewport, readAnchorRect]);
 
   return (
     <span
@@ -311,10 +307,16 @@ export function MinecraftTooltip({
       className="contents"
       onMouseEnter={handleMouseMove}
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => {
-        if (placement === "above-card") leaveTimer.current = setTimeout(clearTooltip, 150);
-        else clearTooltip();
-      }}
+      onMouseLeave={clearTooltip}
+      onFocus={openOnFocus ? () => {
+        const rect = readAnchorRect();
+        if (!rect || (!hasContent && !lines.length)) return;
+        anchorRef.current = rect;
+        pointerRef.current = { x: rect.left + rect.width / 2, y: rect.bottom };
+        setPosition(clampToViewport(pointerRef.current.x, pointerRef.current.y));
+      } : undefined}
+      onBlur={openOnFocus ? clearTooltip : undefined}
+      onKeyDown={openOnFocus ? (event) => { if (event.key === "Escape") clearTooltip(); } : undefined}
     >
       {children}
       {position && (lines.length > 0 || hasContent) && typeof document !== "undefined"
@@ -323,11 +325,9 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip={companion ? undefined : "true"}
-                className={companion ? `fixed z-[9999] ui-zoom flex w-max flex-wrap gap-1 ${position.belowCard ? "items-start" : "items-end"}` : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
-                onMouseEnter={() => { if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current); }}
-                onMouseLeave={placement === "above-card" ? clearTooltip : undefined}
+                className={companion ? `pointer-events-none fixed z-[9999] ui-zoom flex w-max flex-wrap gap-1 ${position.belowCard ? "items-start" : "items-end"}` : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] ${compact ? "px-2 py-1.5" : "px-3 py-2.5"}`}
                 data-card-placement={placement === "above-card" ? (position.belowCard ? "below" : "above") : undefined}
-                style={{ left: position.x, top: position.y, ...(placement !== "pointer" ? { maxWidth: window.innerWidth / getUiScale() - 16 } : {}), ...(placement === "above-card" ? { maxHeight: position.maxHeight, overflowY: "auto", pointerEvents: "auto" } : {}) }}
+                style={{ left: position.x, top: position.y, ...(placement !== "pointer" ? { maxWidth: window.innerWidth / getUiScale() - 16 } : {}), ...(placement === "above-card" ? { maxHeight: position.maxHeight, overflowY: "auto" } : {}) }}
               >
                 {companion ? <>
                   <div data-minecraft-tooltip="true" className={`${TOOLTIP_PANEL_CLASS} !relative min-w-0 max-w-full px-3 py-2.5`}>
@@ -342,13 +342,10 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip="true"
-                // w-max, and 420 rather than 340: a fixed panel with no width
-                // of its own is squeezed by whatever room is left to the
-                // viewport's edge, so a one-line label near the right side of
-                // the screen shrink-wrapped and broke its last word onto a line
-                // of its own. Asking for max-content makes the panel state its
-                // real width; the pointer clamp above reads that width back and
-                // walks it inside the edge.
+                // w-max: a fixed panel with no width of its own is squeezed by
+                // the room left to the viewport edge and wraps its last word.
+                // With max-content the panel states its real width and the
+                // clamp above moves it inside the edge.
                 className={`${TOOLTIP_PANEL_CLASS} ui-zoom w-max max-w-[420px] px-2 py-1 font-mono text-[16px] leading-[19px]`}
                 style={{ left: position.x, top: position.y }}
               >

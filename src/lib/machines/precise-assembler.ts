@@ -75,7 +75,6 @@ export function prassInputVoltageLimit(settings: Record<string, string>): number
   const index = PRASS_MACHINE_CASING.tiers.findIndex(
     (tier) => tier.key === settings.prassMachineCasing,
   );
-  // Legacy plans never stored this casing. Keep their previous assumption of
-  // a sufficient casing, represented explicitly by the UHV (uncapped) default.
+  // A plan with no stored casing assumes a sufficient one: UHV, uncapped.
   return index < 0 || index === 9 ? Infinity : index;
 }

@@ -2,7 +2,6 @@
 
 import { Check, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { PREVIEW_RELEASE_SPOTLIGHT_EVENT } from "@/lib/release-spotlight";
 import {
   BOARD_TIMELAPSE_SPEEDS,
   getBoardTimelapseCameraMode,
@@ -71,16 +70,12 @@ function dialTooltip(field: RouterTuningField): string {
 }
 
 /**
- * The dev menu, behind a shift-click on the version chip.
+ * The dev menu, behind a shift-click on the version chip: the one home for
+ * dev tools, deliberately undocumented in the UI.
  *
- * One home for the dev tools, so new ones do not each claim a secret click
- * of their own. Deliberately undocumented in the UI - it is a workbench, not
- * a feature.
- *
- * A floating PALETTE, not a modal: no backdrop, no dim, no blur, dragged
- * around by its header. The tools in here act on the board live - the tilt
- * sliders especially - so the board has to stay visible and the panel has
- * to get out of the way of whatever it is adjusting.
+ * A floating PALETTE, not a modal (no backdrop, dim or blur), dragged by its
+ * header, because its tools act on the board live and the board must stay
+ * visible.
  */
 export function DevMenu({ onClose }: { onClose: () => void }) {
   const [perfHud, setPerfHud] = useState<boolean>(() => isPerfHudEnabled());
@@ -528,25 +523,7 @@ export function DevMenu({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          <div className="mt-2 rounded border border-line px-3 py-2.5">
-            <span className="block text-base leading-tight text-fg">Release popup</span>
-            <span className="mt-0.5 block text-xs text-fg-muted">
-              The poster players get once, on the first visit after a release that was written
-              one. Previewing it here changes nothing about what this browser has been shown.
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                requestAnimationFrame(() =>
-                  window.dispatchEvent(new CustomEvent(PREVIEW_RELEASE_SPOTLIGHT_EVENT)),
-                );
-              }}
-              className="mt-2.5 w-full rounded border border-cyan-700 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-500/20"
-            >
-              Preview
-            </button>
-          </div>
+
 
           <div className="mt-2 rounded border border-line px-3 py-2.5">
             <span className="block text-base leading-tight text-fg">Score</span>

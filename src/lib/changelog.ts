@@ -5,20 +5,16 @@
  * THEIR board, never how it was built. Newest first. ONE entry per release,
  * where a release is a deploy to the live site, not a commit (see version.ts).
  *
- * Default to a short headline and at most four one-sentence notes. Release
- * 3.1.4 uses eight short bullets to cover the machine audit; its full
- * engineering explanation lives behind a link after Jack found it too verbose
- * in the dialog. Keep the in-app notes scannable.
+ * Default to a short headline and at most four one-sentence notes. Put long
+ * engineering explanations behind an action link; keep the in-app notes
+ * scannable.
  *
- * The LIST, though, runs all the way back, and that is deliberate. The dialog
- * opens on the releases a given reader has not seen - usually one to four - and
- * keeps the rest behind a "full history" button, so length costs the impatient
- * reader nothing and answers "when did that change?" for everyone else. Do not
- * prune it back to a handful again; that only moved the wall from the archive
- * into the popup for anyone returning after a long break.
+ * Keep the full history; do not prune old entries. The dialog opens on the
+ * releases this reader has not seen and keeps the rest behind "Full history",
+ * so the length costs nothing and answers "when did that change?".
  *
- * An entry can also carry ACTIONS: links for anything that lives outside the
- * app, offered as a button because the reader is already right here.
+ * ACTIONS are links for anything that lives outside the app, shown as
+ * buttons.
  */
 export interface ChangelogAction {
   label: string;
@@ -32,13 +28,10 @@ export interface ChangelogEntry {
   headline: string;
   notes: string[];
   /**
-   * For a release that changed what the app MEANS rather than what it can do.
-   *
-   * Reserve it for the ones where a plan somebody saved months ago will now
-   * read differently, because that reader has no reason to suspect anything
-   * and every reason to think they have found a bug. Rendered loudly, with the
-   * entry's actions inside it, so the warning and the thing that explains it
-   * are one block instead of a sentence and a button that got separated.
+   * For a release that changed what the app MEANS rather than what it can do:
+   * reserve it for changes that make an old saved plan read differently, so
+   * the reader does not mistake it for a bug. Rendered loudly, with the
+   * entry's actions inside the same block.
    */
   warning?: string;
   /** Offered as buttons under the notes. */
@@ -46,6 +39,212 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.9.6",
+    date: "2026-09-30",
+    headline: "SC steam turbines fixed",
+    notes: [
+      "Large and XL Turbo SC Steam Turbines showed 16 times their real steam flow and EU; they now match the game.",
+    ],
+  },
+  {
+    version: "3.9.5",
+    date: "2026-09-30",
+    headline: "Behind-the-scenes cleanup",
+    notes: [
+      "Unused code was removed. Plans, results and controls work exactly as before.",
+    ],
+  },
+  {
+    version: "3.9.4",
+    date: "2026-09-29",
+    headline: "Every machine in the recipe search shows its recipes",
+    notes: [
+      "A machine in the recipe search no longer shows an empty section when its count says it has recipes, and a count like Bricked Blast Furnace 26 now shows all 26 cards.",
+      "Recipes load from the top machine down, and a machine still waiting for its cards shows grey placeholders that fill in as you scroll.",
+    ],
+  },
+  {
+    version: "3.9.3",
+    date: "2026-09-28",
+    headline: "Importing a plan opens a new tab",
+    notes: [
+      "Import a plan now opens the file as a new design. It used to replace the design you had open, even while the Library was covering it.",
+    ],
+  },
+  {
+    version: "3.9.2",
+    date: "2026-09-25",
+    headline: "Big plans save to your account",
+    notes: [
+      "Plans send about half as much to your account, so most plans that were too large to sync now fit.",
+      "A design your account refuses no longer keeps the planner saving to your account every few seconds.",
+      "Designs with names over 80 characters now save to your account, under their first 80 characters.",
+      "A copied or synced plan keeps the overclock data of recipes the current game data no longer has.",
+    ],
+  },
+  {
+    version: "3.9.1",
+    date: "2026-09-25",
+    headline: "No more runaway conflict copies",
+    notes: [
+      "Editing a big plan quickly no longer makes a new \"(conflict copy)\" design every few saves.",
+      "A copy of a conflict copy is numbered instead of repeating the words, and its name fits your account.",
+      "Copies already made are ordinary designs: delete the ones you don't need.",
+      "A heat exchanger on the board no longer breaks the Machines list.",
+    ],
+  },
+  {
+    version: "3.9.0",
+    date: "2026-09-25",
+    headline: "Reactor fuel and sparge byproducts",
+    notes: [
+      "The XL Turbo Steam Turbine now reads EV and the XL Turbo HP Steam Turbine IV, the tiers their controllers are built at. The SC turbines read LuV and ZPM.",
+      "The THTR now takes its TRISO pebbles and returns the burned ones. The HTGR takes its TRISO fuel and the helium it loses each cycle, and returns the burned fuel.",
+      "The LFTR sparge tower lists the gas it hands back and every byproduct, Thorium Tetrafluoride included, at the average of its random roll.",
+      "The LFTR makes 0.37 L/s of Uranium-233, the game's real average, and a partly filled HTGR no longer undercounts its coolant.",
+    ],
+  },
+  {
+    version: "3.8.0",
+    date: "2026-09-24",
+    headline: "Extreme Entity Crusher",
+    notes: [
+      "The Extreme Entity Crusher is here: every mob a Powered Spawner can hold, with the drops it really makes and its Liquid XP.",
+      "Set the weapon's damage, Looting, infernal spawns, the blood ritual and the damaged gear switch, and the rates follow the machine.",
+      "Change the mob from the spawner on the card or the card's menu: the machine keeps its power and settings.",
+    ],
+  },
+  {
+    version: "3.7.0",
+    date: "2026-09-24",
+    headline: "The right pipe casings",
+    notes: [
+      "The Industrial Precision Lathe takes item pipe casings, Tin to Black Plutonium.",
+      "The Chemical Plant and Industrial Autoclave stop at Tungstensteel pipe casings: no more PTFE or PBI.",
+    ],
+  },
+  {
+    version: "3.6.0",
+    date: "2026-09-23",
+    headline: "Share a plan without an account",
+    notes: [
+      "Copy plan, beside the screenshot button, copies a link anyone can open, no account needed; paste one back from the plan menu.",
+      "In Solve, each source and product drawer sits under its resource in the resources panel, with its own rule and rate box.",
+      "Two tabs of the planner no longer undo each other's saves, and the item list no longer waits on the community server when it is slow.",
+      "Wires hop cleanly over crossings at bends, non-strict drawers say (surplus), and the split editor, board paper picker and note style panel work again.",
+    ],
+  },
+  {
+    version: "3.5.1",
+    date: "2026-09-23",
+    headline: "Machine power starts where you expect",
+    notes: [
+      "New multiblocks start on whole amps: 1A LV, not 0.94A LV.",
+      "Raising the tier of a machine set below 1A now gives it 1A of the new tier, so an LCR moved to HV runs like an HV one.",
+      "Switching between a singleblock and its multiblock keeps the voltage: an EV Forge Hammer becomes a 1A EV Industrial Sledgehammer, not 63A.",
+      "Drawer rates read in one size, centred when the drawer has no rule.",
+    ],
+  },
+  {
+    version: "3.5.0",
+    date: "2026-09-23",
+    headline: "Drawers you can read and set",
+    notes: [
+      "Drawers are now small cards: drag the title bar to move one, drag the item to start a wire. Click the item for recipes, right click for uses.",
+      "In Solve, source and product drawers show their real rate again. Type your rate in the box and pick Any, At least, Exactly or At most.",
+      "Pool's Desired rates use the same rules. Ignore is now called Any.",
+      "Drag an item from the item list onto the board to make a drawer of it.",
+    ],
+  },
+  {
+    version: "3.4.0",
+    date: "2026-09-21",
+    headline: "Clearer Pool planning and screenshots",
+    notes: [
+      "Pool has clearer rates, roomier material totals, separate Tier/Count columns, easier dragging, and Balance controls for individual materials or whole groups.",
+      "Use the camera on any plan to capture Build, Solve, or the full Pool worksheet, with detailed cards and a smaller summary.",
+      "Shared setups explain view-only mode and offer Make a copy; tooltips stay readable while you adjust controls.",
+      "Tank and cell wires stay connected when you change machine tiers or settings.",
+    ],
+  },
+  {
+    version: "3.3.2",
+    date: "2026-09-20",
+    headline: "Clearer interchangeable ingredients",
+    notes: [
+      "Ingredients such as any wooden planks cycle through their accepted item icons. Rates and wire colors stay steady.",
+      "Cycling icons blend gently into each other, keeping the current item visible until the next image is ready.",
+      "Existing plans recover missing ingredient icons on recipe cards and supply drawers, without changing their connections.",
+    ],
+  },
+  {
+    version: "3.3.1",
+    date: "2026-09-20",
+    headline: "Small fixes for desired rates",
+    notes: [
+      "*Clear a rate with a middle-click.* Reset a rate to rate? in Solve or Pool without removing the drawer or its connections.",
+      "*A clearer Actual column.* When a Pool target cannot be met, its actual rate stays visible beside a small warning. Hover the warning for details.",
+    ],
+  },
+  {
+    version: "3.3.0",
+    date: "2026-09-20",
+    headline: "A clearer, more compact Pool planner",
+    notes: [
+      "*More room on screen.* Pool has shorter recipe rows, clearer columns and compact power totals.",
+      "*Production groups.* Organize recipes into named groups. Drag recipes between groups, nest groups, and collapse lines you are not working on.",
+      "*Clear material totals.* See each group’s inputs and outputs together, and choose which materials it shares with the rest of your factory.",
+      "*Start with inputs or outputs.* In Desired rates, use a negative number for input and a positive number for output.",
+      "*Rate rules.* Choose At least, Exactly, At most or Ignore for each rate. Rates and rules carry between Solve and Pool; existing wires stay untouched.",
+      "*Machine controls.* Click a machine’s icon to change it, or open settings from its recipe row. Crop and bee machines have their own controls.",
+      "*No more release popup.* Click the version number whenever you want to read what changed.",
+    ],
+  },
+  {
+    version: "3.2.1",
+    date: "2026-09-14",
+    headline: "Cell wire supply indicators",
+    notes: [
+      "Fluid-to-cell and cell-to-fluid wires now show connected inputs correctly, with supply rates and shortage hints in the receiving slot’s units.",
+    ],
+  },
+  {
+    version: "3.2.0",
+    date: "2026-09-13",
+    headline: "Pool workspace and ratio splitters",
+    notes: [
+      "Pool workspace: compact recipe table with machine settings, circuits, per-recipe status, and aligned inputs and outputs. Build and Solve retain the canvas.",
+      "Pool summaries: product targets, resource balances, and average/peak power totals. Narrow screens use collapsible sections to preserve machine-list space.",
+      "Pool organization: search machines or items, reorder machines and products, and drag resources into Products to add targets.",
+      "Ratio splitters: drawers and tanks gain separate input/output percentages and a Setup share for unwired surplus; splits hold when branches back up in Build and Solve.",
+      "Split controls: editable percentages, Equal split, current branch rates, hover previews, and direct scroll adjustment on wire arrows.",
+      "Machine controls: shared canvas tier controls in Pool, dedicated settings below each machine, and separate status/circuit rows for shared recipes.",
+      "Interface: smaller toolbars, stable mode-button positions, clearer scrollbars and overflow previews, and power tooltips that dismiss when leaving the control.",
+      "Hatch supplies (since 3.1.6): water and air intake toggles on eligible multiblock inputs provide the required fluid without an external supply chain.",
+    ],
+  },
+  {
+    version: "3.1.9",
+    date: "2026-09-12",
+    headline: "Singleblock tiers match the game",
+    notes: [
+      "Singleblocks follow their full machine progression, including Ultimate/Epic variants and the Basic-to-Chemical Dehydrator chain.",
+      "Tier controls and calculations stop at each machine's highest registered tier, including on older plans.",
+      "Singleblock tier controls skip unregistered intermediate machines, including the IV-to-ZPM Cold Trap and Reactor Processing Unit.",
+      "Electric Furnace retains its real tier limit, and the Ore Washing Plant controller stays separate from the singleblock Ore Washer.",
+    ],
+  },
+  {
+    version: "3.1.8",
+    date: "2026-09-12",
+    headline: "Mobile dropdown fixes and cleaner item icons",
+    notes: [
+      "Dropdowns stay open while filtering, with the phone keyboard appearing only when you tap the filter.",
+      "Fixed a board crash when switching between desktop and compact layouts.",
+      "Removed cyan plus badges from item icons; alternative ingredient choices still work.",
+    ],
+  },
   {
     version: "3.1.7",
     date: "2026-09-11",
@@ -733,8 +932,6 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "2.23.0",
     date: "2026-08-21",
-    // Reworded when the icon changed: the entry said "gear", and pointing
-    // archive readers at an icon the button no longer wears helps nobody.
     headline: "Setup rules, one button",
     notes: [
       "New button, top left, holding two rules for the whole setup.",
@@ -1198,8 +1395,6 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
     warning:
       "*Your saved setups will act different.* Some machines will have stopped until you say where things go.",
-    // The release that introduced the version stamp, so no browser alive has
-    // one to compare against. Without this, nobody sees these notes at all.
   },
   {
     version: "1.42.1",

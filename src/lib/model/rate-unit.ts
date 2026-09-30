@@ -1,8 +1,7 @@
 /**
  * The board-wide rate unit. A module singleton (not React state) so every
- * formatter — node ports, tooltips, edge labels, sidebar rates — reads the
- * same setting without threading a prop through the world. Flipping it is a
- * VIEW change and never touches the books (they are per-second): every
+ * formatter reads the same setting without threading a prop. Flipping it is
+ * a VIEW change and never touches the books (they are per-second): every
  * surface that prints a rate subscribes to the store's dial
  * (`useRateDisplayUnits`) so it re-renders with the new unit.
  */
@@ -21,20 +20,15 @@ const UNITS: Record<RateUnit, { multiplier: number; per: string }> = {
   second: { multiplier: 1, per: "s" },
   minute: { multiplier: 60, per: "min" },
   hour: { multiplier: 3600, per: "hr" },
-  // ENERGY PER UNIT MADE. Not a clock at all: an output reads the EU spent
-  // on each piece (or litre) it makes - the "bang for my buck" question two
-  // recipes making the same thing at different power leave open. It is
-  // scale-free (machine count, parallels and utilization all cancel) and
-  // it is NOT tier-free, which is the useful part: a regular overclock
-  // doubles it a step, a perfect one leaves it flat, a discount shows as a
-  // cheaper piece. Card ports on both sides wear it (per unit made, per
-  // unit eaten), so do the panel's Inputs and Outputs lists and the search
-  // chips; wires and drawers read per second while it is on. A card's
-  // figure is the cost of THAT STEP; the panel's divides the whole board's
-  // power by each resource crossing its border, so it is the embodied cost
-  // of the chain. Neither splits a run's energy between its outputs: the
-  // player reading a row wants that thing, the rest are free extras, and
-  // GTNH has no honest valuation to split by.
+  // ENERGY PER UNIT MADE, not a clock: an output reads the EU spent on each
+  // piece (or litre). Scale-free (machine count, parallels and utilization
+  // cancel) but NOT tier-free: a regular overclock doubles it per step, a
+  // perfect one leaves it flat. Card ports (per unit made or eaten), the
+  // panel's Inputs/Outputs and the search chips wear it; wires and drawers
+  // stay per second. A card's figure is that step's cost; the panel divides
+  // the whole board's power by each boundary resource (the chain's embodied
+  // cost). Neither splits a run's energy between its outputs: GTNH has no
+  // honest valuation to split by.
   eu: { multiplier: 1, per: "s" },
 };
 
@@ -80,9 +74,7 @@ export function energyPerUnitSuffix(kind: string): string {
  * The CANVAS reading follows the power dial (below): in EU/t mode it is EU
  * per unit, in amps-of-a-tier mode it is that tier's amps per unit - the
  * EU divided by the tier's voltage, "6.25 A LV/Item" for a 200 EU item.
- * Jack asked for it in those words: if the board is being read in LV amps,
- * the cost of an item is read in LV amps too. Cards and the panel take
- * these two; the browser takes the plain pair above.
+ * Cards and the panel take these two; the browser takes the plain pair above.
  */
 export function energyPerUnitDisplayValue(euPerUnit: number): number {
   return powerState.unit === "eu" ? euPerUnit : euPerUnit / getVoltageTierMaxEuT(powerState.unit);
@@ -122,16 +114,11 @@ export function setActivePowerDisplayUnit(unit: PowerDisplayUnit): void {
   powerState.unit = unit;
 }
 
-export function getActivePowerDisplayUnit(): PowerDisplayUnit {
-  return powerState.unit;
-}
-
 /**
- * The kind-aware pair. POWER ignores the board's rate unit on purpose: EU
- * is thought, quoted and tuned in per-tick everywhere - the game, the wiki,
- * every power surface in this app - and "EU/min" is a unit nobody has ever
- * planned in. Its flows are still stored per-second like every flow; only
- * the display converts - to EU/t, or to amps of the chosen tier.
+ * The kind-aware pair. POWER ignores the board's rate unit on purpose: EU is
+ * quoted per tick everywhere (the game, the wiki, every power surface here).
+ * Its flows are still stored per second; only the display converts, to EU/t
+ * or to amps of the chosen tier.
  */
 export function rateSuffixForKind(kind: string): string {
   if (kind === "power") {
@@ -163,12 +150,9 @@ export function powerDisplaySuffix(): string {
 
 /**
  * Scale a noise floor or a rounding step that was written in per-second terms.
- *
- * A formatter that rounds the DISPLAYED number keeps less of the truth the
- * smaller the unit is: per tick every figure is twenty times smaller, so a
- * real 0.004/s output lands under a floor meant to hide nothing but zero, and
- * a port that was reading a rate goes blank. Never above 1 — units bigger than
- * a second already carry their own, more generous, precision.
+ * Per tick every figure is twenty times smaller, so an unscaled floor would
+ * blank a real 0.004/s output. Never above 1: units larger than a second
+ * already keep more precision.
  */
 export function rateUnitPrecisionScale(): number {
   return Math.min(rateUnitMultiplier(), 1);

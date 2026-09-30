@@ -20,7 +20,6 @@ import {
   getSessionUser,
   isAdminRequest,
   isCommunityConfigured,
-  makeActorKey,
   makeVoterKey,
   parseEntryIcon,
   isMissingColumnError,
@@ -105,14 +104,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ plan
 }
 
 /**
- * Saved stat cards go stale as the solver improves: a plan shared by an old
- * release keeps the numbers that release computed, so its preview disagrees
- * with the board a player sees on opening it. On preview open, recompute from
- * the stored plan JSON with today's solver — once per plan per release — and
- * persist the result. Best-effort throughout: a schema without the
- * stats_version column, a plan today's parser rejects, or a failed write all
- * leave the saved card serving as before, except that freshly computed
- * numbers still go out in this response even when the write fails.
+ * Saved stat cards go stale as the solver changes. On preview open, recompute
+ * from the stored plan JSON with this release's solver (once per plan per
+ * release) and persist the result. Best-effort: a missing stats_version
+ * column, an unparseable plan or a failed write leave the saved card as is,
+ * though freshly computed numbers still go out in this response.
  */
 async function refreshStaleStats(
   db: SupabaseClient,

@@ -1,4 +1,4 @@
-import type { EdgeThroughput, FactoryProject, ThroughputResult } from "@/lib/model/types";
+import type { FactoryProject, ThroughputResult } from "@/lib/model/types";
 import { formatCompact, formatPowerValue, formatNumberWithThousands, formatRate, makeResourceKey } from "@/lib/model";
 import {
   energyPerUnitDisplaySuffix,
@@ -8,9 +8,9 @@ import {
   rateSuffixForKind,
   rateUnitMultiplier,
   rateUnitPrecisionScale,
-  rateUnitSuffix,
 } from "@/lib/model/rate-unit";
 import { describeStorage, getStorageRoles } from "@/lib/model/storage-role";
+import { inputEdgeRate, inputEdgeResourceKey } from "./input-edge";
 import { parseResourceHandleId } from "./resource-handles";
 import {
   honestEdgeAskPerSecond,
@@ -28,9 +28,9 @@ const PLUG_STATE_WORD = {
 } as const;
 
 /**
- * A dead end is named by the end it reaches, not by the word "dump" — only
- * the trash can actually destroys anything, and a player reading DUMP over a
- * tank they deliberately wired has been told their plan is wrong.
+ * A dead end is named by the end it reaches, not by the word "dump": only
+ * trash destroys anything, and DUMP over a tank the player wired on purpose
+ * tells them their plan is wrong.
  */
 const PLUG_DUMP_WORD = {
   trash: "TRASH",
@@ -174,6 +174,9 @@ export function edgeTouchesResource(
   kind: string,
   resourceId: string,
 ): boolean {
+  if (side === "input" && edge.crossForm) {
+    return inputEdgeResourceKey(edge) === `${kind}:${resourceId}`;
+  }
   const handle = side === "input" ? edge.targetHandle : edge.sourceHandle;
   const parsed = parseResourceHandleId(handle);
   if (parsed && parsed.kind === kind && parsed.resourceId === resourceId) {
@@ -245,7 +248,8 @@ export function buildPortBreakdown(
       ? describeStorage(storage, storageRoles.get(otherId))
       : (otherRecipe?.machineType ?? otherRecipe?.name ?? "Machine");
     const edgeResult = result.edges[edge.id];
-    const rate = edgeResult?.transferredPerSecond ?? 0;
+    const sourceRate = edgeResult?.transferredPerSecond ?? 0;
+    const rate = isInput ? inputEdgeRate(edge, sourceRate) : sourceRate;
     routed += rate;
 
     if (isInput) {
@@ -287,14 +291,9 @@ export function buildPortBreakdown(
 
 /**
  * A port hover, cut to the bone: the state, and one sentence saying why it
- * reads that way.
- *
- * It used to carry a table of numbers, a list of every line plugged in with
- * its own rate and the far machine's speed, and an arrowed instruction. All of
- * that is a report, and a hover is not a report - the pointer is already
- * moving by the time anyone has read the second row. The rate is on the port
- * itself, the lines are visible on the board, and the marks say where to act;
- * what only the hover can give you is the word and the reason.
+ * reads that way. A hover is not a report: the rate is on the port, the
+ * lines are on the board and the marks say where to act, so only the word
+ * and the reason belong here.
  */
 export interface PortStory {
   stateWord: string;
@@ -375,16 +374,6 @@ export function explainPlug(
     tone: PLUG_STATE_TONE[plug.state],
     lines,
   };
-}
-
-function supplierNote(row: PortLineRow): string | undefined {
-  if (row.isStorage) {
-    return "buffer";
-  }
-  if (row.sourcePct === undefined) {
-    return undefined;
-  }
-  return row.sourcePct >= 99.5 ? "at full speed" : `runs at ${formatPct(row.sourcePct)}%`;
 }
 
 function explainOutputPort(

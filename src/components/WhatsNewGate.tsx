@@ -5,16 +5,9 @@ import { RefreshCw, X } from "lucide-react";
 import { useDeployedVersion } from "@/lib/use-deployed-version";
 
 /**
- * Telling somebody the app moved under them WHILE THE TAB WAS OPEN.
- *
- * The page is running the OLD code and cannot fix that itself, so this is a
- * quiet strip offering the reload. Nothing else arrives by itself: the notes
- * for a release that shipped while you were away used to open as a popup
- * here, with a second "you have not read the heads up" box guarding its
- * close, and both were REMOVED (Jack, 2026-09-08). The version chip in the
- * header opens the notes on request and wears a dot while any are unread;
- * that is the whole announcement now.
- *
+ * A quiet strip offering a reload when a new version deploys WHILE THE TAB IS
+ * OPEN (the page is still running the old code). Release notes never open by
+ * themselves; the header's version chip opens them and wears an unread dot.
  * Mounted once, at the app shell.
  */
 export function WhatsNewGate() {

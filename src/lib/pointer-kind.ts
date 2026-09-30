@@ -4,12 +4,10 @@
  * What last touched the screen, for the handlers that have to tell a finger from
  * a mouse.
  *
- * Every tap fires a full set of MOUSE events after its touch ones — mousemove,
- * mousedown, mouseup, click, and on some engines a `pointerdown` claiming to be a
- * mouse — because that is how the web keeps hover-and-click pages usable on a
- * phone. Handlers that answer both then answer twice, and the second answer is
- * the wrong one: a tap on "what uses it" also ran the row's own click, which asks
- * for recipes.
+ * Every tap fires a full set of synthesised MOUSE events after its touch ones
+ * (mousemove, mousedown, mouseup, click, and on some engines a `pointerdown`
+ * claiming to be a mouse), so handlers that answer both answer twice, the
+ * second time wrongly.
  *
  * Two questions, because neither alone is enough. The KIND is right for hover,
  * where there is nothing to time from. The TIME is right for clicks, because the
@@ -55,7 +53,7 @@ export function isTouchPointer(): boolean {
 }
 
 /**
- * Whether a finger was on the screen just now — so a mouse event arriving here is
+ * Whether a finger was on the screen just now, so a mouse event arriving here is
  * the browser's synthesised echo of it, not a real click.
  */
 export function isEchoOfTouch(withinMs = 700): boolean {

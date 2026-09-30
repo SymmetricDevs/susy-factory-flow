@@ -4,30 +4,22 @@ import { useSyncExternalStore } from "react";
 import { DEFAULT_CANVAS_THEME_ID, isCanvasThemeId, type CanvasThemeId } from "./canvas-themes";
 
 /**
- * Board view settings: how the canvas looks, and which of the read-only display
- * modes are on.
+ * Board view settings: how the canvas looks, and which of the read-only
+ * display modes are on.
  *
- * This module holds the LIVE settings, the ones the board is drawing with right
- * now, in localStorage and outside the Zustand store so they can be read
- * without an effect.
- *
- * They are not global taste, though. How a factory is drawn belongs to the
- * factory: one build wants rate labels and fat lines, the next wants a clean
- * board, and a plan that was dressed to be readable should still be wearing
- * that when you come back to it. So a snapshot goes into every design as it is
- * saved and comes back out when you switch to it (`plan-view.ts`, and
- * `showProject` in the design store), which is the same snapshot a SHARED setup
- * has always carried. Switching tabs therefore rewrites what is here — the
- * localStorage copy is what the board reads, not the record of what any one
- * plan wants.
- *
+ * This module holds the LIVE settings the board is drawing with, in
+ * localStorage and outside the Zustand store so they can be read without an
+ * effect. They belong to the factory, not to global taste: a snapshot goes
+ * into every design as it is saved and comes back when you switch to it
+ * (`plan-view.ts`, and `showProject` in the design store), the same snapshot
+ * a shared setup carries. Switching tabs therefore rewrites what is here.
  * The columns and the resource marks deliberately do NOT work this way; see
  * PlanViewScope.
  *
  * Read through useSyncExternalStore: localStorage does not exist during SSR,
- * so the server renders the defaults and the browser swaps in the saved values
- * on hydration. That is the one shape that neither mismatches the server HTML
- * nor sets state from inside an effect.
+ * so the server renders the defaults and the browser swaps in saved values
+ * on hydration, which neither mismatches the server HTML nor sets state
+ * from inside an effect.
  */
 export type CanvasPattern = "dots" | "lines" | "cross" | "ruled" | "graph" | "none";
 
@@ -67,16 +59,13 @@ export function isGlanceMode(value: unknown): value is GlanceMode {
 export interface BoardView {
   /** Draw every connection at the same base width, independent of rate. */
   fixedEdgeWidth: boolean;
-  // No `snapToGrid`. Snapping was a preference back when cards were sized by
-  // their contents; now they are sized in grid cells, so it is a fact.
+  // No `snapToGrid`: cards are sized in grid cells, so snapping is always on,
+  // not a setting.
   canvasPattern: CanvasPattern;
   /** The paper the board is drawn on; see canvas-themes.ts. */
   canvasTheme: CanvasThemeId;
-  // No `heatmapMode` and no `lineHeatMode` any more. Both used to be their
-  // own switches; both now ride the status (speed) glance view, and only at
-  // the glance step — zoomed in, cards and lines always wear their own
-  // colours. Old saved blobs still carrying the keys are simply ignored, so
-  // anyone who had line colour on has it off now, on purpose.
+  // Card and line heat colouring rides the status (speed) glance view, only at
+  // the glance step; saved `heatmapMode` / `lineHeatMode` keys are ignored.
   /** Dashes march along each line in the direction of flow. */
   linePulseMode: boolean;
   /**
@@ -95,12 +84,10 @@ export const DEFAULT_BOARD_VIEW: BoardView = {
   canvasPattern: "dots",
   canvasTheme: DEFAULT_CANVAS_THEME_ID,
   fixedEdgeWidth: false,
-  // RETIRED (2026-09-07). The marching dashes were a full-board canvas
-  // redrawn every frame; in Firefox a dirty canvas re-renders every board
-  // tile under it, which cost most of the frame rate at 4K (33 fps sitting
-  // still, 166 without it), and the dashes read the camera a frame late, so
-  // they slid against the wires during every pan. The field stays so stored
-  // views and shared plans still parse; it is never true again.
+  // RETIRED: a full-board canvas redrawn every frame is too expensive (in
+  // Firefox a dirty canvas re-renders every board tile under it) and reads
+  // the camera a frame late, sliding against the wires during pans. The field
+  // stays so stored views and shared plans still parse; it is never true.
   linePulseMode: false,
   calmMode: false,
   glanceMode: "identity",
@@ -117,12 +104,9 @@ function readBoardView(): BoardView {
       return DEFAULT_BOARD_VIEW;
     }
     const parsed = JSON.parse(raw) as Partial<Record<keyof BoardView, unknown>>;
-    // A key that is ABSENT falls back to the default; only an explicit `false`
-    // would mean off. Reading a missing key as false would mean anyone with a
-    // saved blob from before a setting existed silently opts out of its
-    // default — and every new default would ship switched off for existing
-    // users. Nothing needs that today: the two remaining flags are both
-    // pinned off regardless of what is stored.
+    // An ABSENT key falls back to the default; only an explicit `false` means
+    // off. Reading a missing key as false would ship every new default switched
+    // off for anyone with an older saved blob.
     const glanceMode = isGlanceMode(parsed.glanceMode)
       ? parsed.glanceMode
       : DEFAULT_BOARD_VIEW.glanceMode;
@@ -137,11 +121,10 @@ function readBoardView(): BoardView {
       // Retired: a stored true is not honoured (see DEFAULT_BOARD_VIEW).
       linePulseMode: false,
       // NEVER honoured from storage, and never written to it (see
-      // writeBoardView). Calm is a render setting the image export borrows
-      // for the length of a capture, not a preference: the board's own
-      // switch for it went on 2026-09-08, so a stored `true` was a room
-      // with no door. Players reported being stuck in softened colours with
-      // no way back (2026-09-09). A reload is now always the way out.
+      // writeBoardView). Calm is a render setting the image export borrows for
+      // one capture, and the board has no switch to turn it off, so a stored
+      // `true` would strand the player in softened colours. A reload must always
+      // be the way out.
       calmMode: false,
       glanceMode,
     };
@@ -151,7 +134,7 @@ function readBoardView(): BoardView {
   }
 }
 
-function subscribe(listener: () => void) {
+export function subscribeBoardView(listener: () => void) {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -176,12 +159,9 @@ export function writeBoardView(patch: Partial<BoardView>) {
   boardViewState = { ...getSnapshot(), ...patch };
   try {
     // `calmMode` is SESSION ONLY and is stripped on the way out. The image
-    // export turns it on for the length of a capture and back off in a
-    // `finally`, and that `finally` is not a promise: close the tab or lose
-    // the renderer mid-export and the last thing written was `true`. With no
-    // switch on the board to clear it, that stranded players in softened
-    // colours for good. Storage cannot hold it, so the worst an interrupted
-    // export can now cost is a reload.
+    // export turns it on for a capture and off in a `finally`, which never runs
+    // if the tab closes mid-export; with no board switch to clear a stored
+    // `true`, the player would be stuck in softened colours.
     const stored: Partial<BoardView> = { ...boardViewState };
     delete stored.calmMode;
     window.localStorage.setItem(BOARD_VIEW_STORAGE_KEY, JSON.stringify(stored));
@@ -194,7 +174,7 @@ export function writeBoardView(patch: Partial<BoardView>) {
 }
 
 export function useBoardView(): BoardView {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribeBoardView, getSnapshot, getServerSnapshot);
 }
 
 /** The same value the hook returns, for callers outside React. */

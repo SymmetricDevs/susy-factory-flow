@@ -14,7 +14,6 @@ import {
   getCommunityDb,
   getSessionUser,
   isCommunityConfigured,
-  makeActorKey,
   makeVoterKey,
   parseEntryIcon,
 } from "@/lib/server/community";

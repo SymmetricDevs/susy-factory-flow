@@ -8,26 +8,17 @@ import { findBareSlots } from "./bare-slots";
 /**
  * Death spirals: rings of machines that feed each other and cannot start.
  *
- * The solver already gets these right, and deliberately so. A ring that makes
- * AT LEAST as much of the looped good as it eats sustains itself - a surplus
- * ring by its own excess, an exactly-balanced ring by the balanced-ring
- * rescue in equilibrium.ts (primed once, it runs forever, so the solver
- * treats it as primed). A ring that loses even a little on every pass winds
- * down geometrically to zero, because that is exactly what would happen in
- * game. Nothing here changes a single number.
+ * The solver already gets these right: a ring that makes AT LEAST as much of
+ * the looped good as it eats sustains itself (an exactly balanced one via the
+ * balanced-ring rescue in equilibrium.ts), and one that loses even a little
+ * per pass winds down to zero, as it would in game. Nothing here changes a
+ * number; it explains the zeros. Otherwise a dead ring is a field of 0%
+ * cards each blaming the next machine round the ring, because "follow the
+ * blocked cards upstream" only terminates on acyclic chains.
  *
- * What it changes is that the board stops keeping the reason a secret. A dead
- * ring reads as a field of 0% cards, and — worse since the verdict split —
- * each one says "blocked, the fix is upstream" while pointing at the next
- * machine round the ring. A hundred cards can chase each other forever. The
- * "follow the amber cards up and you land on a red one" promise is only true
- * for acyclic chains; this is the terminator for the cyclic case.
- *
- * The catch that makes this worth detecting at all: an UNWIRED input is
- * assumed hand-fed, so the same ring reads perfectly healthy right up until
- * you wire it closed. Then it has to source the good from itself, cannot, and
- * everything falls to zero. That transition looks like the planner breaking,
- * and it is the planner finally telling the truth.
+ * An UNWIRED input is assumed hand-fed, so a lossy ring reads healthy until
+ * it is wired closed and then falls to zero. That is the planner telling the
+ * truth, and the story must say so.
  */
 
 /** Below this a node has converged to a hard stop, not merely to "slow".
@@ -56,11 +47,8 @@ export interface DeathSpiral {
   /**
    * Outside MACHINES wired into the ring that could deliver nothing at all
    * and are themselves stopped. When any exist the ring is not dying of its
-   * own losses - it is waiting on a supplier that has its own problem (an
-   * unwired slot, a clog, a switch), and the story must point THERE. The
-   * titanium line was the proving case: a healthy chlorine ring read
-   * "dead loop" because the machine feeding it rutile dust had an unwired
-   * output, and the one actionable card on the board went unmentioned.
+   * own losses: it waits on a supplier with its own problem (an unwired
+   * slot, a clog, a switch), and the story must point THERE.
    */
   deadFeeders: Array<{ nodeId: string; name: string; resourceName: string }>;
 }
@@ -298,9 +286,8 @@ export function findDeathSpirals(
 
 /**
  * The ring's story in plain words: what is happening, why, and the one thing
- * that fixes it. Deliberately says the planner is right — a player watching a
- * hundred machines fall to zero the moment they wired the last line needs to
- * hear that this is the game, not the tool.
+ * that fixes it. It says the planner is right: machines falling to zero the
+ * moment the last line is wired is the game, not the tool.
  */
 export function describeDeathSpiral(spiral: DeathSpiral): {
   title: string;

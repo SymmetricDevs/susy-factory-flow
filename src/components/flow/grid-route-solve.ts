@@ -2,22 +2,18 @@
 /**
  * The wire solve, off the main thread.
  *
- * The grid router is a pure function of published geometry, which makes it
- * a natural worker job - and on a big board it has to be one. Routing runs
- * inside the edge components' render, so a solve that takes half a second
- * is half a second in which nothing on the page moves: no drag frame, no
- * typed digit, no hover. The board therefore posts any solve past
- * `ASYNC_ROUTE_EDGE_LIMIT` wires here and keeps drawing the routes it
- * already has until the answer lands (`FactoryFlow.tsx` installs it and
- * re-issues the edges). Same inputs, same pure function, same routes as the
- * synchronous path - only the thread differs, so the routing invariant in
- * ARCHITECTURE.md (routes depend on flow-space geometry alone) still holds.
+ * Routing runs inside the edge components' render, so on a big board a slow
+ * solve freezes the page (no drag frame, no typed digit, no hover). The
+ * board posts any solve past `ASYNC_ROUTE_EDGE_LIMIT` wires here and keeps
+ * drawing the routes it has until the answer lands (`FactoryFlow.tsx`
+ * installs it and re-issues the edges). Same inputs, same pure function,
+ * same routes; only the thread differs, so the routing invariant in
+ * src/components/flow/CLAUDE.md (routes depend on flow-space geometry alone) still holds.
  *
- * Scheduling is the same shape as `solve-books.ts`: one job in flight, and
- * only the NEWEST waiting job kept, because a drag publishes a fresh
- * geometry several times a second and every intermediate one is already
- * superseded by the time the worker is free. Results carry a sequence
- * number so the board can tell a late answer from a current one.
+ * Scheduling mirrors `solve-books.ts`: one job in flight and only the
+ * NEWEST waiting job kept, since a drag publishes fresh geometry several
+ * times a second. Results carry a sequence number so the board can tell a
+ * late answer from a current one.
  */
 import {
   encodeRouteSolveJob,
@@ -43,16 +39,10 @@ let workerBroken = false;
 let inFlight: RouteSolveJob | undefined;
 let queued: RouteSolveJob | undefined;
 let sink: RouteSolveSink | undefined;
-let lastSolveDurationMs: number | undefined;
 
 /** Whether a solve can leave the main thread at all (no Worker in SSR/tests). */
 export function routeWorkerAvailable(): boolean {
   return !workerBroken && typeof Worker !== "undefined";
-}
-
-/** How long the last worker solve took, for anyone deciding what to follow. */
-export function lastRouteSolveDurationMs(): number | undefined {
-  return lastSolveDurationMs;
 }
 
 /** Where finished routes go. One board at a time, like every route cache. */
@@ -88,7 +78,6 @@ function getWorker(): Worker {
     worker.onmessage = (event: MessageEvent<RouteSolveResult | { error: string }>) => {
       inFlight = undefined;
       if ("routes" in event.data) {
-        lastSolveDurationMs = event.data.solveMs;
         sink?.(event.data);
       } else {
         console.error("route worker error:", event.data.error);

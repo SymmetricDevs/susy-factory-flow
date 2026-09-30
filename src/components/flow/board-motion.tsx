@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useReducer, useRef, useSyncExternalStore } from "react";
 
 import {
   lerpSampledPolylines,
@@ -14,18 +14,15 @@ import {
 /**
  * The board's two motion switches, and the machinery that moves things.
  *
- * MOVEMENT motion is how things get where they are going: cards glide onto
- * their grid cell instead of teleporting cell to cell, and a rerouted wire
- * morphs from its old line to its new one. VALUE motion is how numbers get to
- * what they now are: rates, bars, widths and dash speeds ease over about a
- * second instead of flickering to the new answer, so adding a machine reads
- * as the board speeding up rather than as a scene cut.
+ * MOVEMENT motion: cards glide onto their grid cell instead of teleporting,
+ * and a rerouted wire morphs from its old line to its new one. VALUE motion:
+ * rates, bars, widths and dash speeds ease over about a second, so adding a
+ * machine reads as the board speeding up rather than as a scene cut.
  *
- * Deliberately NOT part of BoardView. That store is a per-plan snapshot — how
- * a factory is dressed travels with the factory — but whether this DEVICE
- * animates is the viewer's taste, like reduced motion, and a shared plan has
- * no business switching it. So: its own localStorage key, never captured into
- * plan-view state, and the default bows to the OS's reduced-motion setting.
+ * Deliberately NOT part of BoardView (a per-plan snapshot): whether this
+ * DEVICE animates is the viewer's taste, like reduced motion, and a shared
+ * plan must not switch it. Its own localStorage key, never captured into
+ * plan-view state; the default follows the OS reduced-motion setting.
  */
 export interface BoardMotion {
   /** Cards magnet onto the grid; rerouted wires glide to their new line. */

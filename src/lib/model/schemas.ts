@@ -148,6 +148,7 @@ export const machineProfileSchema = z.object({
   machineType: z.string().min(1),
   minimumTier: z.string().min(1),
   maximumTier: z.string().min(1).optional(),
+  availableTiers: z.array(z.string().min(1)).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick").optional(),
   eut: z.number().min(0, "EU/t must be zero or positive").optional(),
   maxParallel: z.number().positive().optional(),
@@ -161,7 +162,13 @@ export const machineConfigControlSchema = z.object({
   label: z.string().min(1),
   minimumKey: z.string().min(1),
   defaultKey: z.string().min(1).optional(),
-  numeric: z.object({ min: z.number().int(), max: z.number().int().optional() }).optional(),
+  numeric: z
+    .object({
+      min: z.number(),
+      max: z.number().optional(),
+      step: z.number().positive().optional(),
+    })
+    .optional(),
   minimumHeatFromSpecialValue: z.boolean().optional(),
   tiers: z
     .array(
@@ -208,13 +215,13 @@ export const recipeSchema = z.object({
   machineType: z.string().min(1, "Machine type is required"),
   minimumTier: z.string().min(1, "Minimum tier is required"),
   maximumTier: z.string().min(1).optional(),
+  availableTiers: z.array(z.string().min(1)).optional(),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick"),
   eut: z.number().min(0, "EU/t must be zero or positive"),
   inputs: z.array(recipeInputSchema),
   // Zero outputs is legal: the crop-farm placeholder recipe
   // (factoryflow:crop-farm:empty) has none until a crop is picked, and it
-  // stays in project.recipes, which made plans containing a crop farm fail
-  // validation on community upload and JSON import.
+  // stays in project.recipes.
   outputs: z.array(recipeOutputSchema),
   programmedCircuit: z.string().optional(),
   specialValue: z.number().optional(),
@@ -301,6 +308,7 @@ export const targetRateSchema = z.object({
 });
 
 export const factoryNodeSchema = z.object({
+  productionGroupId: z.string().min(1).optional(),
   id: z.string().min(1),
   recipeId: z.string().min(1),
   colorTag: factoryNodeColorTagSchema.optional(),
@@ -373,6 +381,7 @@ export const factoryNodeSchema = z.object({
 });
 
 export const factoryStorageSchema = z.object({
+  productionGroupId: z.string().min(1).optional(),
   id: z.string().min(1),
   kind: resourceKindSchema,
   resourceId: z.string().min(1),
@@ -382,16 +391,17 @@ export const factoryStorageSchema = z.object({
   iconAtlas: resourceIconAtlasRefSchema.optional(),
   dominantColor: dominantColorSchema,
   capacity: z.number().positive().optional(),
-  // Absent on every plan written before drains had a mode, and absent is
-  // `product` - the pulling one - so nothing anybody has saved changes pace.
+  // Absent means `product` (the pulling one), as on legacy plans.
   drainMode: z.enum(["product", "byproduct", "trash"]).optional(),
-  // Absent means `overflow`: every buffer catches surplus unless the player
-  // deliberately sets it strict.
-  bufferMode: z.enum(["overflow", "strict"]).optional(),
+  // Absent means `overflow` in Build and `strict` in Solve (effectiveBufferMode).
+  bufferMode: z.enum(["overflow", "strict", "ratio"]).optional(),
+  ratioExportPercent: z.number().min(0).max(100).optional(),
   // Pool mode: which side of the shared pool an unwired drawer sits on.
   poolSide: z.enum(["source", "drain"]).optional(),
   // Solve mode's requirement on a product drawer; absent = unconstrained.
-  targetPerSecond: z.number().nonnegative().optional(),
+  targetPerSecond: z.number().finite().optional(),
+  targetMode: z.enum(["at-least", "at-most", "exact", "ignore"]).optional(),
+  poolTargetMode: z.enum(["at-least", "exact", "ignore"]).optional(),
   pocketId: z.string().min(1).optional(),
   position: z.object({
     x: z.number(),
@@ -450,7 +460,7 @@ export const factoryPocketSchema = z.object({
     x: z.number(),
     y: z.number(),
   }),
-  // Standing open as a board window; absent = the classic collapsed card.
+  // Standing open as a board window; absent = minimized summary card.
   expanded: z.boolean().optional(),
   size: z
     .object({
@@ -474,6 +484,8 @@ export const factoryEdgeSchema = z.object({
   resourceId: z.string().min(1),
   label: z.string().optional(),
   ratePerSecond: z.number().positive().optional(),
+  ratioWeight: z.number().nonnegative().optional(),
+  ratioInputWeight: z.number().nonnegative().optional(),
   waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
   // A loose cell wire's Canner ratio; see FactoryEdge.crossForm.
   crossForm: z.object({ litresPerCell: z.number().positive() }).optional(),
@@ -497,12 +509,11 @@ export const fuelProfileSchema = z
 /**
  * The author's workspace arrangement, carried by shared setups only.
  *
- * Every field is optional and loosely typed on purpose. This has to survive a
- * round trip through `factoryProjectSchema.parse` (which strips what it does
- * not know) and the server's own re-validation, and a plan saved by a newer
- * build must not be rejected wholesale because it mentions a view setting this
- * one has never heard of. Unknown values are dropped when the view is APPLIED,
- * where the real constants live, rather than being policed here.
+ * Every field is optional and loosely typed on purpose: it must survive
+ * `factoryProjectSchema.parse` (which strips unknown keys) and server
+ * re-validation, and a plan from a newer build must not be rejected over a
+ * view setting this one does not know. Unknown values are dropped when the
+ * view is APPLIED, where the real constants live.
  */
 export const planViewStateSchema = z.object({
   canvasPattern: z.string().optional(),
@@ -523,6 +534,11 @@ export const planViewStateSchema = z.object({
 });
 
 export const factoryProjectSchema = z.object({
+  productionGroups: z.array(z.object({
+    id: z.string().min(1), name: z.string().min(1), parentId: z.string().min(1).optional(),
+    resourceRules: z.record(z.string(), z.enum(["share", "import"])).optional(),
+  })).optional(),
+  poolResourceRules: z.record(z.string(), z.enum(["share", "import"])).optional(),
   checklist: z.object({ cards: z.array(z.string()), edges: z.array(z.string()) }).optional(),
   schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
   id: z.string().min(1),
@@ -533,7 +549,7 @@ export const factoryProjectSchema = z.object({
   icon: entryIconSchema.optional(),
   view: planViewStateSchema.optional(),
   targetRate: targetRateSchema.optional(),
-  // What the board does with an input nothing feeds and output nothing takes.
+  // Legacy setup rules: still parsed so old JSON validates, dropped on load.
   setupRules: z
     .object({
       freeInputs: z.boolean().optional(),
@@ -541,7 +557,7 @@ export const factoryProjectSchema = z.object({
       looseCellWires: z.boolean().optional(),
     })
     .optional(),
-  // Legacy sketch mode, rewritten as both rules on load.
+  // Legacy sketch mode, dropped on load.
   assumeBoundaries: z.boolean().optional(),
   // Solve mode: product amounts are the question, machine counts the answer.
   solveMode: z.boolean().optional(),
@@ -569,14 +585,13 @@ export const factoryProjectSchema = z.object({
     .optional(),
 });
 
-export type FactoryProjectInput = z.input<typeof factoryProjectSchema>;
-
 /**
  * A captured board selection (the clipboard/blueprint payload): validated
  * server-side before a blueprint is stored, so a hand-crafted upload cannot
  * smuggle malformed cards into every design that later pastes it.
  */
 export const boardSelectionPayloadSchema = z.object({
+  productionGroups: factoryProjectSchema.shape.productionGroups,
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema),
   annotations: z.array(factoryAnnotationSchema),

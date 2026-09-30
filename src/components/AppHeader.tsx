@@ -8,20 +8,9 @@ import { OPEN_SHARE_DIALOG_EVENT } from "@/lib/setups-tab";
 import { useIsCompactViewport } from "@/lib/compact-view";
 import {
   markNotesReadAndNotify,
-  markVersionSeen,
-  readLastSeenVersion,
   subscribeToNotesRead,
   unseenEntries,
 } from "@/lib/whats-new";
-import {
-  PREVIEW_RELEASE_SPOTLIGHT_EVENT,
-  RELEASE_SPOTLIGHTS,
-  markSpotlightSeen,
-  pickSpotlight,
-  readSeenSpotlights,
-  type ReleaseSpotlight as Spotlight,
-} from "@/lib/release-spotlight";
-import { ReleaseSpotlight } from "./ReleaseSpotlight";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { APP_VERSION } from "@/lib/version";
 import { AccountMenu } from "./community/AccountMenu";
@@ -35,21 +24,24 @@ import { DevMenu } from "./DevMenu";
 import { SettingsDialog } from "./SettingsDialog";
 import { HeaderLinks, SupportButton } from "./HeaderLinks";
 
-/** The dataset version selector is part of the planner's main controls. */
-export const SHOW_PACK_PICKER = true;
+/**
+ * The pack picker's switch. See the note where it renders; flip this back to
+ * true when there is more than one pack to pick from.
+ */
+export const SHOW_PACK_PICKER = false;
 
 interface AppHeaderProps {
   onLoadDatasetVersion: (versionId: string) => void;
 }
 
 /**
- * The one top bar for the whole app: title, version chip, game version, board
- * actions, account. The old Community page folded into the sidebar's Setups
- * tab, so there is no page switch up here anymore.
+ * The one top bar for the whole app: title and version chip, design tabs,
+ * plan actions, settings, links and account.
  */
 export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   // The chip wears a dot while a shipped release has notes this browser has
-  // not opened. Its own stamp, not the release notice's — see whats-new.ts.
+  // not opened. It has its own stamp, separate from the release notice's
+  // (see whats-new.ts).
   const hasUnread = useSyncExternalStore(
     subscribeToNotesRead,
     () => unseenEntries().length > 0,
@@ -61,51 +53,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   const [isChangelogOpen, setChangelogOpen] = useState(false);
   // Shift-click the version chip. See DevMenu.
   const [isDevMenuOpen, setDevMenuOpen] = useState(false);
-  // The release POSTER: the one thing allowed to arrive by itself, and only
-  // for a release that was written one (release-spotlight.ts). Decided in an
-  // effect, not during render, because the answer is in localStorage.
-  const [spotlight, setSpotlight] = useState<Spotlight>();
-  useEffect(() => {
-    const due = pickSpotlight({
-      lastSeenVersion: readLastSeenVersion(),
-      seen: readSeenSpotlights(),
-      appVersion: APP_VERSION,
-    });
-    setSpotlight(due);
-    // Stamping is what tells the NEXT release that this browser has been here
-    // before. It is not what the chip's dot reads — that has its own stamp,
-    // written only by opening the notes, or this load would put it out before
-    // anyone saw it. It waits while a notice is due, though: a notice is spent when
-    // it is CLOSED, not when it is rendered, so somebody who reloads before
-    // reading it gets it again. Closing files it in the seen list instead.
-    if (!due) {
-      markVersionSeen();
-    }
-  }, []);
-  // The dev menu previews it without touching what this browser has seen.
-  const [preview, setPreview] = useState<Spotlight>();
-  useEffect(() => {
-    const open = (event: Event) => {
-      const version = (event as CustomEvent<string | undefined>).detail;
-      setPreview(
-        (version ? RELEASE_SPOTLIGHTS.find((entry) => entry.version === version) : undefined) ??
-          RELEASE_SPOTLIGHTS[0],
-      );
-    };
-    window.addEventListener(PREVIEW_RELEASE_SPOTLIGHT_EVENT, open);
-    return () => window.removeEventListener(PREVIEW_RELEASE_SPOTLIGHT_EVENT, open);
-  }, []);
-  const shownSpotlight = preview ?? spotlight;
-  const closeSpotlight = () => {
-    if (preview) {
-      setPreview(undefined);
-      return;
-    }
-    if (spotlight) {
-      markSpotlightSeen(spotlight.version);
-      setSpotlight(undefined);
-    }
-  };
   // The share dialog lives up here rather than in BoardActions so the compact
   // menu can close behind it without unmounting it. The export dialog for the
   // same reason.
@@ -130,14 +77,9 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
     <header className="app-header relative flex h-[30px] shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 compact:h-auto compact:flex-wrap compact:gap-y-0">
       <h1 className="flex min-w-0 items-center gap-2 text-sm font-bold tracking-tight">
         <span className="shrink-0">
-          SuSy <span className="text-cyan-500">Planner</span>
+          GTNH <span className="text-cyan-500">Planner</span>
         </span>
-        {/* THE CHIP OPENS THE NOTES AGAIN (Jack, 2026-09-09): players went
-            looking for what's new and found nothing to press. The release
-            NOTICE still arrives once on its own and says the headline; this
-            is the way back to the whole history afterwards, and to a release
-            somebody skipped. Shift-click is still the way in to the DEV
-            MENU. */}
+        {/* Release notes open only on request. Shift-click opens the dev menu. */}
         <button
           type="button"
           onClick={(event) => {
@@ -164,14 +106,11 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             />
           ) : null}
         </button>
-        {/* The pack picker rides up here beside the app version rather than at
-            the head of the browser column. Two versions that are easy to
-            confuse now sit together and read as a pair, and the column below
-            gets a whole row of its height back. On a phone it moves once more,
-            into the menu: it is the widest control on the bar and the one people
-            touch least. */}
-        {/* Keep the dataset version selector visible so users can switch
-            between published and experimental planner datasets. */}
+        {/* The pack picker sits beside the app version (in the menu on a
+            phone). Hidden by SHOW_PACK_PICKER while only one pack is
+            supported; AppIdentity and `onLoadDatasetVersion` stay wired for
+            when a second ships, and AppMenu's Pack section is hidden the same
+            way. */}
         {isCompact || !SHOW_PACK_PICKER ? null : (
           <>
             <span className="ml-3 h-3.5 w-px bg-line" aria-hidden />
@@ -182,9 +121,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
       <div className="app-header-tabs min-w-0 flex-1 compact:order-last compact:basis-full">
         <DesignTabs />
       </div>
-      {shownSpotlight ? (
-        <ReleaseSpotlight spotlight={shownSpotlight} onClose={closeSpotlight} />
-      ) : null}
       {isChangelogOpen ? (
         <ChangelogDialog unseenVersions={unseenVersions} onClose={() => setChangelogOpen(false)} />
       ) : null}
@@ -207,8 +143,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
             onShare={() => setShareOpen(true)}
             onExportImage={() => setExportOpen(true)}
           />
-          {/* Dressed like the compass and the brand links: settings is a
-              utility square, not one of the coloured calls to action. */}
+          {/* Settings is a plain utility square, not a coloured call to action. */}
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -220,9 +155,8 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
           </button>
           <SupportButton />
           <HeaderLinks />
-          {/* No What's new button up here since 2026-09-06: the version chip
-              at the other end of the bar opens the same notes and wears the
-              unread dot, and the bar was two labelled buttons too wide. */}
+          {/* No What's new button: the version chip opens the notes and wears
+              the unread dot. */}
           <AccountMenu />
         </div>
       )}

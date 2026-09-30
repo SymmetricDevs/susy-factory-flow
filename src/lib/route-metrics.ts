@@ -1,10 +1,8 @@
 /**
  * Geometry of finished wires, independent of routing occupancy and costs:
- * where they cross, how long they are, how often they bend - and the
- * POINTS a board scores (Jack, 2026-09-08): crossings first, then every
- * wire priced the way the router prices it, length plus what its bends
- * cost. A wire that got there in one straight run scores its length; one
- * that zig-zagged pays for every bend.
+ * where they cross, how long they are, how often they bend, and the POINTS
+ * a board scores at the router's prices (see routePoints). The router, the
+ * arranger and the dev menu's score all read these same numbers.
  */
 export interface RoutePoint {
   x: number;
@@ -18,13 +16,10 @@ export interface MeasuredRoute {
 }
 
 /**
- * A wire's WEIGHT from its width (Jack, 2026-09-08: "edges with more
- * items/s or L/s are more expensive to traverse"). Widths come off the
- * lane-fraction menu, 4 px for the quietest wire on the board to 16 px
- * for the busiest; a quiet wire weighs 1, the busiest 2.5. Its length and
- * bends count that many times over in the points, and a crossing weighs
- * the heavier of the two wires - so the arrange keeps the trunk lines
- * short and straight and lets the trickles go round.
+ * A wire's WEIGHT from its width, so busier wires cost more to lay long or
+ * bent. Widths run 4 px (quietest) to 16 px (busiest), weighing 1 to 2.5.
+ * Length and bends count the weight times over in the points, and a
+ * crossing weighs the heavier of the two wires.
  */
 export function wireWeight(width: number | undefined): number {
   return 0.5 + (width ?? 4) / 8;

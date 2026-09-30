@@ -322,6 +322,96 @@ describe("InspectorPanel", () => {
     expect(useFactoryStore.getState().selectedFlowResourceKey).toBeUndefined();
   });
 
+  describe("drawer rates in Solve", () => {
+    /** Ore into ingots, a source drawer feeding the ore and `products`
+     * product drawers taking the ingots. */
+    function seedDrawers({ products = 1, solve = true }: { products?: number; solve?: boolean } = {}) {
+      const productIds = Array.from({ length: products }, (_, index) => `ingots-${index}`);
+      const project: FactoryProject = {
+        schemaVersion: PROJECT_SCHEMA_VERSION,
+        id: "panel-drawers",
+        name: "Panel drawers",
+        solveMode: solve,
+        recipes: [
+          {
+            id: "smelt",
+            name: "Smelt",
+            machineType: "Furnace",
+            minimumTier: "LV",
+            durationTicks: 20,
+            eut: 30,
+            inputs: [{ kind: "item", id: "ore", amount: 1, displayName: "Ore" }],
+            outputs: [{ kind: "item", id: "ingot", amount: 1, displayName: "Ingot" }],
+          },
+        ],
+        nodes: [
+          { id: "smelter", recipeId: "smelt", machineCount: 1, parallel: 1, overclockTier: "LV", enabled: true, position: { x: 0, y: 0 } },
+        ],
+        storages: [
+          { id: "ore-in", kind: "item", resourceId: "ore", displayName: "Ore", position: { x: -200, y: 0 } },
+          ...productIds.map((id, index) => ({ id, kind: "item" as const, resourceId: "ingot", displayName: "Ingot", position: { x: 200, y: index * 100 } })),
+        ],
+        edges: [
+          { id: "ore-edge", source: "ore-in", target: "smelter", resourceKind: "item", resourceId: "ore" },
+          ...productIds.map((id) => ({ id: `edge-${id}`, source: "smelter", target: id, resourceKind: "item" as const, resourceId: "ingot" })),
+        ],
+        fuelProfiles: gtnhFuelProfiles,
+        selectedFuelProfileId: "biodiesel",
+      };
+      useFactoryStore.setState({
+        project,
+        isReadOnly: false,
+        lastResult: calculateThroughput(project, { generatedAt: "fixed" }),
+        selectedBoardIds: [],
+      });
+    }
+    const branchOf = (label: string) =>
+      screen.getByRole("button", { name: label }).closest<HTMLElement>(".inspector-drawer-target")!;
+
+    it("hangs each source and product drawer under its resource with the drawer's rule and box", () => {
+      seedDrawers();
+      const { container } = render(<InspectorPanel />);
+      // The resource rows themselves stay plain readings.
+      for (const key of ["item:ore", "item:ingot"]) {
+        expect(within(container.querySelector<HTMLElement>(`[data-resource-row="${key}"]`)!).queryByRole("button", { name: /^Rule for/ })).toBeNull();
+      }
+      const ore = within(branchOf("Locate source drawer"));
+      const ingot = within(branchOf("Locate product drawer"));
+      expect(ore.getByRole("button", { name: /^Rule for Ore: Any/ }).textContent).toBe("~Any");
+      expect(ore.getByRole("button", { name: /^Your rate: none/ })).toBeDefined();
+      expect(ingot.getByRole("button", { name: /^Rule for Ingot: Any/ })).toBeDefined();
+      expect(ingot.getByRole("button", { name: /^Your rate: none/ })).toBeDefined();
+    });
+
+    it("types a source's rate in its box, which brings the source's rule", () => {
+      seedDrawers();
+      render(<InspectorPanel />);
+      const ore = within(branchOf("Locate source drawer"));
+      fireEvent.click(ore.getByRole("button", { name: /^Your rate/ }));
+      const input = ore.getByRole("textbox", { name: "Your rate" });
+      fireEvent.change(input, { target: { value: "4" } });
+      fireEvent.blur(input);
+      const stored = useFactoryStore.getState().project.storages!.find((s) => s.id === "ore-in")!;
+      expect(stored.targetPerSecond).toBe(-4);
+      expect(stored.targetMode).toBe("exact");
+    });
+
+    it("hangs one branch per drawer when a resource has several", () => {
+      seedDrawers({ products: 2 });
+      render(<InspectorPanel />);
+      expect(screen.getAllByRole("button", { name: "Locate product drawer" })).toHaveLength(2);
+      expect(screen.getAllByRole("button", { name: /^Rule for Ingot/ })).toHaveLength(2);
+    });
+
+    it("sets nothing from the panel in Build", () => {
+      seedDrawers({ solve: false });
+      render(<InspectorPanel />);
+      expect(screen.queryByRole("button", { name: /^Rule for/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Your rate/ })).toBeNull();
+      expect(screen.getByRole("img", { name: "Product" })).toBeDefined();
+    });
+  });
+
   describe("scoped to a board selection", () => {
     /** Ore into ingots into plates, so ingots are internal plan-wide. */
     function seedChain() {

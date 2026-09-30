@@ -126,7 +126,7 @@ function toWin(euT: number, report: NodePowerReport): PowerWin {
 }
 
 /**
- * The scan above costs ~25 ms and its answer does not depend on the budget
+ * The scan above is not free, and its answer does not depend on the budget
  * being set - only on the recipe and the card's other knobs - so every
  * caller that walks or reads the ladder goes through this cache. Keyed by
  * the recipe's identity and figures rather than the object: a card hands

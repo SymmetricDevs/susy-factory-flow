@@ -21,6 +21,7 @@ import {
 import { Fragment, memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
+import { BOARD_TOOL_SCALE } from "./toolbar-fold";
 import {
   GLANCE_CARD_CLASS,
   GLANCE_LINE,
@@ -31,31 +32,28 @@ import {
 } from "@/components/help/card-parts";
 
 /**
- * The board's help corner: a "?" where the zoom buttons used to live.
+ * The board's help corner: a "?" button.
  *
  * Hovering it lays a glance sheet over the whole window: each toolbar gets a
  * dashed ring, an arrow, and a card naming what is in it (see
- * `card-parts.tsx`). The things with no toolbar to ring - what a card does,
- * what a drawer does, the keys, the notices - are LEGEND cards: they stack in
- * whatever column has the room, over the panel they are nearest to.
- *
- * Pure glance layer: pointer events stay off everywhere. Moving away folds the
- * whole thing up again.
+ * `card-parts.tsx`). Things with no toolbar to ring (what a card or a drawer
+ * does, the keys, the notices) are LEGEND cards stacked in whatever column
+ * has room, over the panel they are nearest to. Pointer events stay off
+ * everywhere; moving away folds it up.
  *
  * The sheet portals to <body>: the board, the browser and the inspector each
  * sit in their own stacking contexts, so a scrim rendered inside the board
  * could never dim its neighbours.
  *
  * Regions are found by their `data-help-anchor` attribute and measured once
- * per open, so the overlay follows the real layout instead of hardcoding it.
- * Several elements may share one anchor id, and a ring may union several ids
- * (the tool row is three trays and, folded, a trigger).
+ * per open. Several elements may share one anchor id, and a ring may union
+ * several ids (the tool row is three trays and, folded, a trigger).
  *
  * LAYOUT IS COMPUTED, NOT TUNED. Every card is CARD_W wide and cards live in
- * flex COLUMNS whose corner is fixed to a ring, so no card's position depends
- * on another card's height, and an arrow only ever leaves the card whose edge
- * sits on the column's fixed corner. The old hand-set offsets per card broke
- * at every window size the author had not looked at.
+ * flex COLUMNS whose corner is fixed to a ring, so no card's position
+ * depends on another card's height, and an arrow only ever leaves the card
+ * whose edge sits on the column's fixed corner. Per-card offsets break at
+ * window sizes nobody checked.
  */
 
 type HelpRect = { left: number; top: number; right: number; bottom: number };
@@ -80,21 +78,10 @@ const ARROW_STEM = 3;
 const HIDE_GRACE_MS = 160;
 /**
  * The smallest window the spread-out glance layout is offered in, in SHELL
- * pixels - the space the cards are actually laid out in, which is the window
- * divided by the interface size (`--ui-scale`, 1.3 by default).
- *
- * These used to read 1920x1080, written as though they were real pixels
- * (Jack, 2026-09-07). They are not: `show()` divides by the scale before
- * comparing, so at the shipped 130% they demanded a 2496x1404 window and
- * NOBODY on a 1080p screen ever saw the spread - a maximised browser there
- * measures about 1477x731 here. The whole layout was dead code in practice
- * (Jack, 2026-09-09: "it's just one big scrollable vertical list").
- *
- * So they are now sized to let a real 1080p browser through, and the honest
- * test does the rest: `layoutGlance` reports `fits: false` when its stacks
- * would land on each other, and that answer is READ now rather than
- * computed and thrown away. A window that qualifies on size but still crams
- * falls back to the one-column panel.
+ * pixels (the window divided by the interface size, `--ui-scale`): `show()`
+ * divides by the scale before comparing. Sized so a maximised 1080p browser
+ * qualifies; `layoutGlance`'s `fits: false` then catches a window that
+ * qualifies on size but still crams, which gets the one-column panel.
  *
  * `help-fit-probe.local.mjs <WxH> <out.png>` screenshots it.
  */
@@ -102,10 +89,8 @@ const GLANCE_MIN_VW = 1400;
 const GLANCE_MIN_VH = 700;
 
 /**
- * The sheet's own accent: one soft blue-grey.
- *
- * Not cyan: this draws five rings and a dozen cards over the whole window at
- * once, and in cyan that reads as an alarm going off.
+ * The sheet's own accent: one soft blue-grey. Not cyan: five rings and a
+ * dozen cards in cyan over the whole window read as an alarm.
  */
 const ACCENT = GLANCE_QUIET;
 const ACCENT_DIM = "rgba(147, 164, 187, 0.5)";
@@ -143,7 +128,7 @@ const SOLVE_MODE: HelpCard = {
   rows: [
     { text: "Connect recipes and set a *target*" },
     { text: "*Machine counts* are calculated" },
-    { text: "Target: *drawer rate* or *pinned count*" },
+    { text: "Target: *input/output rate* or *pinned count*" },
   ],
 };
 
@@ -153,7 +138,7 @@ const POOL_MODE: HelpCard = {
     { text: "Choose recipes and set a *target*" },
     { text: "Counts and resource flow are *automatic*" },
     { text: "Inputs with no producer are *imported*" },
-    { chip: "+", tone: "pool", text: "Add a *product drawer*; set its rate" },
+    { chip: "+", tone: "pool", text: "Add a rate: *positive output*, *negative input*" },
   ],
 };
 
@@ -325,8 +310,8 @@ const MODES: HelpCard[] = [BUILD_MODE, SOLVE_MODE, POOL_MODE];
 
 /**
  * The three modes as ONE card for the spread, hung right under the switch.
- * Three cards took 400px of the centre column; this takes half, which is
- * what lets the drawer, board and notice legends stand under it at 920px.
+ * Three cards would take twice the centre column's height and leave no room
+ * for the legends under it.
  */
 const MODES_CARD: HelpCard = {
   title: "Build, Solve, Pool",
@@ -828,13 +813,10 @@ const HELP_BUTTON_CLASS =
   "pointer-events-auto flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] font-mono text-[16px] font-black text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110";
 
 /**
- * The same help, as one scrolling sheet.
- *
- * The glance layer is built out of rings and arrows pointing at the toolbars it
- * describes; on a phone those toolbars are folded into single buttons, its cards
- * are wider than the screen, and there is no hover to open it with. So compact
- * windows get the content and drop the pointing: every card in a column, over a
- * full-screen sheet with one way out.
+ * The same help, as one scrolling sheet for compact windows: their toolbars
+ * are folded into single buttons, the cards are wider than the screen, and
+ * there is no hover. Every card in one column over a full-screen sheet with
+ * one way out, and no pointing.
  */
 function HelpSheet({ onClose }: { onClose: () => void }) {
   return (
@@ -868,13 +850,9 @@ function HelpSheet({ onClose }: { onClose: () => void }) {
 
 /**
  * The help, folded to fit: one scrollable column growing out of the "?".
- *
- * The glance layer needs a big window - a dozen cards spread over the
- * screen, each beside the toolbar it names - and between the phone layout
- * and that spread sits a band of small desktop windows where the spread
- * collapses into a pile of overlapping cards. Those windows get this
- * instead: every card in one column beside the button, scrollable, still
- * opened by hover and closed by leaving. Set a target rate or pin a machine count content, no pointing.
+ * For small desktop windows between the phone layout and the full spread,
+ * where the spread would pile cards on each other. Same content, no
+ * pointing; still opened by hover and closed by leaving.
  */
 function HelpHoverPanel({
   measured,
@@ -1007,18 +985,9 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   }, []);
   useEffect(() => () => window.clearTimeout(hideTimerRef.current), []);
 
-  // Between the phone layout and the full spread sits a band of small
-  // desktop windows; they hover the one-column panel instead. Decided per
-  // open, so resizing simply changes what the next hover shows.
-  //
-  // Two questions, both asked: is there room in principle, and does THIS
-  // board's spread actually land without cards on top of each other. The
-  // second is the one that matters - a window can be wide and still have
-  // both side columns open - and it used to be computed and dropped.
-  const glance = measured ? layoutGlance(measured) : undefined;
-  // Probe hook, the same shape as the board's other ones: what the fit was
-  // judged on and which stacks collided, so help-fit-probe.local.mjs can say
-  // WHY a window fell back to the panel instead of guessing from a picture.
+  // Keep the probe hook before the compact return: opening a keyboard or
+  // resizing the window can switch layouts without remounting this component.
+  const glance = !compact && measured ? layoutGlance(measured) : undefined;
   useEffect(() => {
     (window as unknown as { __gtnhHelpGlance?: unknown }).__gtnhHelpGlance = glance
       ? { vw: measured?.vw, vh: measured?.vh, fits: glance.fits, boxes: glance.boxes, collisions: glance.collisions }
@@ -1033,6 +1002,7 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
           onClick={() => setSheetOpen(true)}
           data-help-anchor="help"
           className={HELP_BUTTON_CLASS}
+          style={{ zoom: BOARD_TOOL_SCALE }}
           title="Board help"
           aria-label="Show board help"
         >
@@ -1048,6 +1018,11 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
     );
   }
 
+  // Small desktop windows between the phone layout and the full spread hover
+  // the one-column panel instead. Decided per open, so a resize changes what
+  // the next hover shows. Both checks matter: room in principle, and whether
+  // THIS board's spread lands without cards on top of each other (a wide
+  // window can still have both side columns open).
   const fitsGlance =
     measured !== undefined &&
     glance !== undefined &&
@@ -1072,6 +1047,7 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
         onBlur={scheduleHide}
         data-help-anchor="help"
         className={HELP_BUTTON_CLASS}
+        style={{ zoom: BOARD_TOOL_SCALE }}
         title="Board help"
         aria-label="Show board help"
       >

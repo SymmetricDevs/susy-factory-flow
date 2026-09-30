@@ -1,6 +1,5 @@
 import { makeResourceKey, formatRate } from "@/lib/model";
 import type { FactoryProject, ResourceKey, ThroughputResult } from "@/lib/model/types";
-import { formatSatisfactionPercent } from "../flow/edge-labels";
 
 /**
  * One factor that could cap a machine's usage. The chain answers "what limits
@@ -40,19 +39,10 @@ interface InputAvailability {
 }
 
 /**
- * The board-wide tables `computeInputAvailability` needs, built once.
- *
- * Both describe the WHOLE board and are identical no matter which node is being
- * asked about, but they used to be rebuilt inside every call — and the call is
- * made once per node. On a 1,200-node plan with 1,650 edges that is about two
- * million edge visits, plus a string key allocated per edge per call, to answer
- * a question whose inputs never changed. It was the most expensive function on
- * the board by self-time, and it ran on every rebuild of the edge set.
- *
- * Cached against the identity of the two inputs it derives from. `result` is
- * replaced wholesale by each solver run and `project` by each edit, so identity
- * is exactly the right invalidation signal — nothing can change underneath a
- * cached index without one of them being a different object.
+ * The board-wide tables `computeInputAvailability` needs, built once rather
+ * than per node (per-node rebuilding is O(nodes x edges)). Cached against the
+ * identity of `result` and `project`, which each solver run and each edit
+ * replace wholesale, so identity is exactly the invalidation signal.
  */
 interface AvailabilityIndex {
   /** `${sourceId}|${resourceKey}` -> total already shipped out. */
@@ -100,10 +90,9 @@ function getAvailabilityIndex(
 }
 
 /**
- * What each connected ingredient's suppliers can actually deliver. A starved
- * producer's nameplate is a promise, not a supply: `capacityNow` scales each
- * producer by its own solved utilization, plus whatever it ships elsewhere is
- * subtracted from the leftover it could still offer.
+ * What each connected ingredient's suppliers can actually deliver:
+ * `capacityNow` scales each producer by its solved utilization, and what it
+ * ships elsewhere is subtracted from the leftover it could offer.
  */
 export function computeInputAvailability(
   project: Pick<FactoryProject, "nodes" | "edges" | "storages">,
@@ -156,10 +145,9 @@ export function computeInputAvailability(
 }
 
 /**
- * How fast this node could run on its current ingredient deliveries, 0..1.
- * This is what the node can honestly promise a consumer: a machine starved to
- * 15% cannot offer its nameplate downstream, while a machine merely idle for
- * lack of demand can (its ceiling stays 1).
+ * How fast this node could run on its current ingredient deliveries, 0..1:
+ * what it can promise a consumer. A starved machine cannot offer its
+ * nameplate downstream; one idle for lack of demand can (ceiling stays 1).
  */
 export function getSupplyCeiling(
   project: Pick<FactoryProject, "nodes" | "edges" | "storages">,
@@ -187,7 +175,7 @@ export function getSupplyCeiling(
 /**
  * Ranks everything that could cap a node's usage, the binding factor first and
  * the rest in the order they would take over. Built on the shared
- * availability model, so it tells the same story as the edge labels.
+ * availability model (computeInputAvailability).
  */
 export function buildUsageLimitChain(
   project: Pick<FactoryProject, "nodes" | "edges" | "storages">,
@@ -202,11 +190,10 @@ export function buildUsageLimitChain(
 
   const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
 
-  // Demand side: what every machine downstream would want at its own full
-  // speed. Storage sinks are different in kind, not degree - a drawer soaks up
-  // any surplus, and the solver runs the node at full speed for it - so a
-  // resource with a storage sink can never be demand-limited, and its flow
-  // into the drawer must not be dressed up as a demand number.
+  // Demand side: what every machine downstream would want at full speed. A
+  // drawer soaks up any surplus (the solver runs the node at full speed for
+  // it), so a resource with a storage sink is never demand-limited and its
+  // flow into the drawer is not a demand number.
   const wantedByOutput = new Map<ResourceKey, number>();
   let hasStorageSink = false;
   for (const edge of project.edges) {
@@ -354,11 +341,10 @@ export function buildUsageLimitChain(
     }
   }
 
-  // The active factor is the lowest ceiling, so the story always agrees with
-  // the header percent. Overdemand outranks everything (a fully fed machine
-  // can still be swamped), a solver-flagged starving edge outranks estimates,
-  // and near-ties go to the demand-side entry, whose sentence explains the
-  // running speed rather than restating a supply that just about suffices.
+  // The active factor is the lowest ceiling, so it agrees with the header
+  // percent. Overdemand outranks everything (a fully fed machine can still be
+  // swamped), a solver-flagged starving edge outranks estimates, and
+  // near-ties go to the demand side, which better explains the running speed.
   const flaggedSupply = supplyEntries
     .filter((entry) => entry.active)
     .sort((left, right) => left.fraction - right.fraction)[0];

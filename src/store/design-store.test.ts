@@ -9,6 +9,10 @@ const storage = vi.hoisted(() => ({
   listDesignSummaries: vi.fn<() => Promise<DesignSummary[]>>(),
   listDesignFolders: vi.fn<() => Promise<DesignFolder[]>>(async () => []),
   readDesign: vi.fn<(id: string) => Promise<DesignRecord | undefined>>(),
+  readDesignSummary: vi.fn<(id: string) => Promise<DesignSummary | undefined>>(),
+  writeDesignIfUnchanged: vi.fn<
+    (record: DesignRecord, expectedUpdatedAt: string | undefined) => Promise<"written" | "conflict">
+  >(),
   writeDesign: vi.fn<(record: DesignRecord) => Promise<void>>(async () => undefined),
   writeDesignSummary: vi.fn<(summary: DesignSummary) => Promise<void>>(async () => undefined),
   writeDesignFolder: vi.fn<(folder: DesignFolder) => Promise<void>>(async () => undefined),
@@ -19,6 +23,26 @@ const storage = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/designs/design-storage", () => storage);
+
+/** Another browser tab, as far as this one can tell: the focus it has, and the saves it hears. */
+const tabs = vi.hoisted(() => ({
+  editing: true,
+  announced: [] as Array<{ designId: string; updatedAt: string }>,
+  heard: undefined as ((message: { designId: string; updatedAt: string }) => void) | undefined,
+}));
+vi.mock("@/lib/designs/design-tab-sync", () => ({
+  THIS_TAB_ID: "this-tab",
+  isEditingInThisTab: () => tabs.editing,
+  announceDesignSaved: (designId: string, updatedAt: string) => {
+    tabs.announced.push({ designId, updatedAt });
+  },
+  subscribeDesignSaved: (handler: (message: { designId: string; updatedAt: string }) => void) => {
+    tabs.heard = handler;
+    return () => {
+      tabs.heard = undefined;
+    };
+  },
+}));
 vi.mock("@/lib/designs/design-camera", () => ({
   keepDesignCameras: vi.fn(),
   forgetDesignCameras: vi.fn(),
@@ -65,6 +89,15 @@ function library(...designs: DesignSummary[]) {
   storage.deleteDesign.mockImplementation(async (id: string) => {
     current.delete(id);
   });
+  storage.readDesignSummary.mockImplementation(async (id: string) => current.get(id));
+  storage.writeDesignIfUnchanged.mockImplementation(async (record, expectedUpdatedAt) => {
+    const stored = current.get(record.id);
+    if (stored && expectedUpdatedAt !== undefined && stored.updatedAt !== expectedUpdatedAt) {
+      return "conflict";
+    }
+    await storage.writeDesign(record);
+    return "written";
+  });
   return current;
 }
 
@@ -78,6 +111,13 @@ beforeEach(() => {
   });
   vi.clearAllMocks();
   storage.listDesignFolders.mockResolvedValue([]);
+  tabs.editing = true;
+  tabs.announced = [];
+  storage.readDesignSummary.mockResolvedValue(undefined);
+  storage.writeDesignIfUnchanged.mockImplementation(async (record) => {
+    await storage.writeDesign(record);
+    return "written";
+  });
 });
 
 describe("opening the design library", () => {
@@ -319,5 +359,198 @@ describe("public viewing sessions", () => {
     expect(useDesignStore.getState().designs).toHaveLength(2);
     expect(useDesignStore.getState().publicView).toBeUndefined();
     expect(useFactoryStore.getState().isReadOnly).toBe(false);
+  });
+});
+
+
+describe("each tab's calculation mode", () => {
+  it("flushes immediate mode changes into only the outgoing design and restores each mode", async () => {
+    useFactoryStore.getState().markHydratedProject(createEmptyProject());
+    useDesignStore.setState({ publicView: undefined, publicViews: [] });
+    library(summary("a"), summary("b"), summary("c"));
+    const records = new Map<string, DesignRecord>([
+      ["a", { ...summary("a"), project: createEmptyProject() }],
+      ["b", { ...summary("b"), project: { ...createEmptyProject(), solveMode: true } }],
+      ["c", { ...summary("c"), project: createEmptyProject() }],
+    ]);
+    storage.readDesign.mockImplementation(async (id) => records.get(id));
+    storage.writeDesign.mockImplementation(async (record) => { records.set(record.id, record); });
+    storage.readActiveDesignId.mockReturnValue("a");
+    await useDesignStore.getState().hydrate();
+    const mode = () => {
+      const project = useFactoryStore.getState().project;
+      return project.poolMode ? "pool" : project.solveMode ? "solve" : "build";
+    };
+    expect(mode()).toBe("build");
+    useFactoryStore.getState().setScreenshotMode("pool");
+    await useDesignStore.getState().switchToDesign("b");
+    expect(mode()).toBe("solve");
+    await useDesignStore.getState().switchToDesign("c");
+    expect(mode()).toBe("build");
+    await useDesignStore.getState().switchToDesign("a");
+    expect(mode()).toBe("pool");
+    await useDesignStore.getState().reloadActiveDesign();
+    expect(mode()).toBe("pool");
+    expect(records.get("a")?.project.poolMode).toBe(true);
+    expect(records.get("b")?.project.poolMode).toBeUndefined();
+    expect(records.get("b")?.project.solveMode).toBe(true);
+    expect(records.get("c")?.project.solveMode).toBeUndefined();
+  });
+
+  it("keeps screenshot modes per public tab without writing personal designs", async () => {
+    useDesignStore.setState({ activeDesignId: undefined, publicView: undefined, publicViews: [], designs: [] });
+    const store = useDesignStore.getState();
+    const original = { ...createEmptyProject(), solveMode: true, poolMode: true };
+    await store.viewPublicProject({ id: "pool-post", name: "Pool" }, original);
+    useFactoryStore.getState().setScreenshotMode("solve");
+    await store.viewPublicProject({ id: "build-post", name: "Build" }, createEmptyProject());
+    expect(useFactoryStore.getState().project.poolMode).toBeUndefined();
+    expect(useFactoryStore.getState().project.solveMode).toBeUndefined();
+    await store.switchToPublicView("pool-post");
+    expect(useFactoryStore.getState().project.solveMode).toBe(true);
+    expect(useFactoryStore.getState().project.poolMode).toBeUndefined();
+    expect(original.poolMode).toBe(true);
+    expect(storage.writeDesign).not.toHaveBeenCalled();
+  });
+});
+
+describe("two browser tabs on one library (Jack, 2026-09-23: hours lost to a second tab)", () => {
+  const T0 = "2026-09-23T10:00:00.000Z";
+  const T1 = "2026-09-23T15:00:00.000Z";
+
+  beforeEach(async () => {
+    useDesignStore.setState({ publicView: undefined, publicViews: [], tabConflict: undefined });
+    storage.readActiveDesignId.mockReturnValue("a");
+  });
+
+  /** This tab opens design "a" as stored at T0; returns the library map. */
+  async function openAt(...more: DesignSummary[]) {
+    const current = library(summary("a", { updatedAt: T0 }), ...more);
+    await useDesignStore.getState().hydrate();
+    storage.writeDesign.mockClear();
+    return current;
+  }
+
+  /** Another tab saves a newer "a". */
+  function otherTabSaves(current: Map<string, DesignSummary>) {
+    current.set("a", { ...current.get("a")!, updatedAt: T1 });
+  }
+
+  const writesOf = (id: string) =>
+    storage.writeDesign.mock.calls.filter(([record]) => record.id === id).length;
+
+  it("never saves an old copy over a newer version: this tab's edits become a copy", async () => {
+    const current = await openAt();
+    otherTabSaves(current);
+    useFactoryStore.getState().renameProject("An edit made on the old copy");
+    await useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+
+    expect(writesOf("a")).toBe(0);
+    expect(current.get("a")?.updatedAt).toBe(T1);
+    const copy = storage.writeDesign.mock.calls.at(-1)?.[0];
+    expect(copy?.name).toBe("Design a (conflict copy)");
+    expect(useDesignStore.getState().activeDesignId).toBe(copy?.id);
+    expect(useDesignStore.getState().tabConflict).toEqual({
+      name: "Design a",
+      copyName: "Design a (conflict copy)",
+    });
+  });
+
+  it("an untouched old copy is never written, not even on the way out", async () => {
+    const current = await openAt(summary("b"));
+    otherTabSaves(current);
+    await useDesignStore.getState().switchToDesign("b");
+    expect(writesOf("a")).toBe(0);
+    expect(current.get("a")?.updatedAt).toBe(T1);
+  });
+
+  it("writes nothing a background tab changed by itself", async () => {
+    await openAt();
+    tabs.editing = false;
+    useFactoryStore.getState().renameProject("A recipe refresh, say");
+    await useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    expect(storage.writeDesign).not.toHaveBeenCalled();
+  });
+
+  it("two saves in flight at once never make a conflict copy of this tab's own work", async () => {
+    // A player on one browser tab got "(conflict copy) (conflict copy) ..."
+    // over and over (2026-09-25): a big plan's write was still landing when
+    // the next autosave started, both checked against the same stored version,
+    // and the second one read the first as another tab's save.
+    const current = await openAt();
+    useFactoryStore.getState().renameProject("First edit");
+    const first = useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    useFactoryStore.getState().renameProject("Second edit");
+    const second = useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    await Promise.all([first, second]);
+
+    expect(useDesignStore.getState().tabConflict).toBeUndefined();
+    expect(useDesignStore.getState().activeDesignId).toBe("a");
+    expect([...current.keys()]).toEqual(["a"]);
+    expect(storage.writeDesign.mock.calls.at(-1)?.[0].project.name).toBe("Design a");
+    expect(writesOf("a")).toBe(2);
+  });
+
+  it("a conflict copy of a conflict copy does not stack the words", async () => {
+    const current = library(summary("a", { updatedAt: T0, name: "Oil (conflict copy)" }));
+    await useDesignStore.getState().hydrate();
+    otherTabSaves(current);
+    useFactoryStore.getState().renameProject("An edit");
+    await useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    expect(useDesignStore.getState().tabConflict?.copyName).toBe("Oil (conflict copy) (2)");
+  });
+
+  it("a conflict copy's name fits the account's 80 characters", async () => {
+    const long = "a".repeat(78);
+    const current = library(summary("a", { updatedAt: T0, name: long }));
+    await useDesignStore.getState().hydrate();
+    otherTabSaves(current);
+    useFactoryStore.getState().renameProject("An edit");
+    await useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    const copyName = useDesignStore.getState().tabConflict?.copyName ?? "";
+    expect(copyName.length).toBeLessThanOrEqual(80);
+    expect(copyName.endsWith("(conflict copy)")).toBe(true);
+  });
+
+  it("saves its own edits and tells the other tabs", async () => {
+    const current = await openAt();
+    useFactoryStore.getState().renameProject("Real work");
+    await useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    expect(writesOf("a")).toBe(1);
+    expect(tabs.announced.map((message) => message.designId)).toEqual(["a"]);
+    expect(tabs.announced[0]?.updatedAt).toBe(current.get("a")?.updatedAt);
+  });
+
+  it("loads another tab's save when it has nothing of its own, and keeps its edits when it has", async () => {
+    const current = await openAt();
+    vi.stubGlobal("document", {
+      visibilityState: "visible",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    const { startDesignTabSync } = await import("./design-store");
+    const stop = startDesignTabSync();
+    try {
+      otherTabSaves(current);
+      const newer = { ...createEmptyProject(), notes: "Three hours of tetranitromethane" };
+      storage.readDesign.mockImplementation(async (id) =>
+        id === "a" ? { ...current.get("a")!, project: newer } : undefined,
+      );
+      tabs.heard?.({ designId: "a", updatedAt: T1 });
+      await vi.waitFor(() =>
+        expect(useFactoryStore.getState().project.notes).toBe("Three hours of tetranitromethane"),
+      );
+
+      // Now this tab edits, and another save arrives: its edits stay put.
+      useFactoryStore.getState().renameProject("Mine");
+      current.set("a", { ...current.get("a")!, updatedAt: "2026-09-23T16:00:00.000Z" });
+      tabs.heard?.({ designId: "a", updatedAt: "2026-09-23T16:00:00.000Z" });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(useFactoryStore.getState().project.name).toBe("Mine");
+    } finally {
+      stop();
+      vi.unstubAllGlobals();
+    }
   });
 });

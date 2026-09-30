@@ -4,26 +4,24 @@ import { useEffect, useRef, type RefObject } from "react";
 import { subscribeBoardCameraMove } from "@/lib/board-camera-signal";
 
 /**
- * How every dropdown in the app closes (Jack, 2026-09-07: menus should be
- * "more prone to close"). One rule, applied to the machine menu, the config
- * tile pickers, the in-card selects, the palettes, the toolbar fold-outs and
- * the header menus alike:
+ * How every dropdown in the app closes. One rule for all menus, pickers,
+ * selects, palettes and fold-outs:
  *
  * - a press anywhere outside the panel (and its anchor) closes it;
  * - Escape closes it and is consumed, so a dropdown over a larger surface
  *   never takes that surface down with it;
- * - a wheel turn or a scroll outside the panel closes it - the hand has
- *   moved on to the page, and a fixed menu no longer points at anything;
- * - the board camera moving closes it, however the camera was moved (drag,
- *   wheel, WASD, pinch, a fly-to);
- * - a window resize closes it;
+ * - a wheel turn or a scroll outside the panel closes it;
+ * - the board camera moving closes it, however the camera was moved;
+ * - a window resize closes it, except a keyboard height change while typing;
  * - with `fade`, a MOUSE drifting away dims the panel with distance and
  *   closes it past `FADE_GRACE + FADE_RANGE` px from the panel or anchor.
- *   Re-entering restores it. Fingers never fade: a touch has no hover.
+ *   Re-entering restores it. Touch never fades. Distance counts from the
+ *   NEAREST the mouse has come since the panel opened, so a panel that opens
+ *   away from the pointer can be walked to; a `fadeKeep` element (the card a
+ *   menu hangs from) counts as over it.
  *
  * Capture phase throughout: the board's pan handler and the search's panels
- * stop pointer events on their way up, and a bubbling listener never heard
- * a press that landed there.
+ * stop pointer events on their way up, so a bubbling listener would miss them.
  */
 export interface DropdownDismissOptions {
   /** The panel first, then any anchor whose own click toggles the menu. */
@@ -33,8 +31,20 @@ export interface DropdownDismissOptions {
   insideSelector?: string;
   /** Dim and close as the mouse moves away. */
   fade?: boolean;
+  /**
+   * With `fade`, start fading only once the mouse has reached the panel. For
+   * a panel that opens AWAY from the pointer (e.g. centred on the window),
+   * which would otherwise close on the first nudge.
+   */
+  fadeAfterReach?: boolean;
   /** Skip the board-camera rule (a menu that lives off the board and follows nothing). */
   ignoreCameraMove?: boolean;
+  /**
+   * With `fade`, the element the panel hangs from (a card): the mouse over it
+   * counts as over the panel, so crossing the card to reach a menu below it
+   * does not fade the menu.
+   */
+  fadeKeep?: () => Element | null | undefined;
 }
 
 /** Pixels of free travel outside the panel before the fade begins. */
@@ -65,12 +75,9 @@ function distanceToRect(x: number, y: number, rect: DOMRect): number {
 }
 
 /**
- * Distance from a point to an element AND its children. Most callers hand
- * over a small `relative` wrapper (the button) whose menu is an `absolute`
- * child hanging under it, and a bounding box does not cover absolutely
- * positioned children - so measured against the wrapper alone, a pointer
- * walking down a tall menu read as drifting away and closed it before it
- * reached the bottom row.
+ * Distance from a point to an element AND its children. Callers often pass a
+ * small `relative` wrapper whose menu is an `absolute` child, and a bounding
+ * box does not cover absolutely positioned children.
  */
 function distanceToElement(x: number, y: number, element: Element): number {
   let nearest = distanceToRect(x, y, element.getBoundingClientRect());
@@ -82,29 +89,41 @@ function distanceToElement(x: number, y: number, element: Element): number {
 }
 
 export function useDropdownDismiss(open: boolean, options: DropdownDismissOptions): void {
-  const { fade, ignoreCameraMove, insideSelector } = options;
+  const { fade, fadeAfterReach, ignoreCameraMove, insideSelector } = options;
   const refs = options.refs;
   // Held in a ref: callers pass inline closures, and re-subscribing on every
   // render would reset a fading panel's opacity mid-fade.
   const onCloseRef = useRef(options.onClose);
+  const fadeKeepRef = useRef(options.fadeKeep);
   useEffect(() => {
     onCloseRef.current = options.onClose;
+    fadeKeepRef.current = options.fadeKeep;
   });
   useEffect(() => {
     const onClose = () => onCloseRef.current();
     if (!open) {
       return;
     }
-    const opts: DropdownDismissOptions = { refs, onClose, insideSelector, fade, ignoreCameraMove };
+    const opts: DropdownDismissOptions = { refs, onClose, insideSelector, fade, fadeAfterReach, ignoreCameraMove };
+    const openedWidth = window.innerWidth;
+    const editingInside = () => {
+      const active = document.activeElement;
+      return isInside(active, opts) && active instanceof HTMLElement &&
+        (active.matches("input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea") || active.isContentEditable);
+    };
     const panel = () => refs[0]?.current as HTMLElement | null | undefined;
     let closed = false;
+    let reached = !fadeAfterReach;
+    // The nearest the mouse has been to the panel since it opened. The fade
+    // runs from THERE, so a panel that opens away from the pointer can be
+    // walked to, and only walking back away from it fades it.
+    let closest = Number.POSITIVE_INFINITY;
     const close = () => {
       if (closed) return;
       closed = true;
       // The opacity is NOT restored here: onClose unmounts the menu on a
-      // later commit, so restoring it now painted one solid frame of a
-      // panel that had faded almost to nothing. The effect cleanup restores
-      // it once the menu is gone.
+      // later commit, so restoring now paints one solid frame of a faded
+      // panel. The effect cleanup restores it once the menu is gone.
       onClose();
     };
 
@@ -121,14 +140,31 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
       if (!isInside(event.target, opts)) close();
     };
     const onScroll = (event: Event) => {
+      // ScrollCamera restores native focus/scrollIntoView accidents. Its
+      // wrapper scrolling is not evidence of a camera gesture; the explicit
+      // camera signal below already covers every real pan and zoom.
+      if (event.target instanceof Element &&
+          event.target.matches("[data-scroll-camera] .react-flow")) return;
+      // Mobile focus can scroll the document to reveal the keyboard. Keep
+      // the filter alive; outside presses/wheels and other scrollers still close.
+      if ((event.target === window || event.target === document ||
+           event.target === document.documentElement || event.target === document.body) && editingInside()) return;
       if (!isInside(event.target, opts)) close();
     };
-    const onResize = () => close();
+    const onResize = () => {
+      if (window.innerWidth === openedWidth && editingInside()) return;
+      close();
+    };
     const onPointerMove = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
       // Over the panel or its anchor, however deep: that is distance zero,
       // whatever the boxes say.
       let nearest = isInside(event.target, opts) ? 0 : Number.POSITIVE_INFINITY;
+      const keep = fadeKeepRef.current?.();
+      if (nearest !== 0 && keep?.isConnected &&
+          distanceToRect(event.clientX, event.clientY, keep.getBoundingClientRect()) === 0) {
+        nearest = 0;
+      }
       for (const ref of refs) {
         if (nearest === 0) break;
         const element = ref.current;
@@ -138,11 +174,19 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
       if (!Number.isFinite(nearest)) return;
       const element = panel();
       if (!element) return;
+      closest = Math.min(closest, nearest);
+      // Once the mouse has been at the panel this is the plain grace;
+      // before, the grace starts at the closest it has come so far.
+      const grace = closest <= FADE_GRACE ? FADE_GRACE : closest + FADE_GRACE;
       if (nearest <= FADE_GRACE) {
+        reached = true;
+      }
+      if (nearest <= grace) {
         element.style.opacity = "";
         return;
       }
-      const away = (nearest - FADE_GRACE) / FADE_RANGE;
+      if (!reached) return;
+      const away = (nearest - grace) / FADE_RANGE;
       if (away >= 1) {
         close();
         return;
@@ -172,5 +216,5 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     };
     // The refs array is rebuilt per render; its members are stable refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, fade, ignoreCameraMove, insideSelector, ...refs]);
+  }, [open, fade, fadeAfterReach, ignoreCameraMove, insideSelector, ...refs]);
 }

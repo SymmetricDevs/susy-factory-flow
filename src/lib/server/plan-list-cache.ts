@@ -1,14 +1,11 @@
 /**
  * A small in-memory cache for the public setups list.
  *
- * One page of the list costs three round trips to the database (the page
- * with its exact count, the reader's votes, the version list), and the
- * public list is the same for everyone: what differs per reader is only
- * `isMine` and `myVote`, which are stamped on after the fact. So the ROWS
- * of a page are kept here, keyed by the query, for a short while, and
- * every write to a post (post, edit, delete, vote) bumps the generation so
- * the next read is fresh. The server runs as one process, so one map is
- * the whole cache.
+ * A page costs several database round trips, and the rows are the same for
+ * every reader (`isMine` and `myVote` are stamped on afterwards). So a page's
+ * ROWS are kept briefly, keyed by the query; every write to a post bumps the
+ * generation so the next read is fresh. The server is one process, so one
+ * map is the whole cache.
  */
 
 const TTL_MS = 60_000;

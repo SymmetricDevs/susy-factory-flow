@@ -1,7 +1,13 @@
 "use client";
 
-import { resolveProjectRecipes } from "@/lib/datasets/refresh-project-recipes";
-import { useCallback, useEffect, useRef } from "react";
+import {
+  noteRecipesRefreshed,
+  noteRecipesRequested,
+  recipesToRefresh,
+  resolveProjectRecipes,
+} from "@/lib/datasets/refresh-project-recipes";
+import type { Recipe } from "@/lib/model/types";
+import { useCallback, useEffect, useRef, type CSSProperties } from "react";
 import {
   DEFAULT_DATASET_MANIFEST_URL,
   fetchDatasetManifest,
@@ -16,10 +22,12 @@ import { useDesignStore } from "@/store/design-store";
 import { recordResourceTrend, resetResourceTrends } from "@/lib/resource-trends";
 import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
 import { openCommunityPost } from "@/lib/community/open-post";
+import { openPlanCodeFromAddress } from "@/lib/open-plan-code";
 import { retryPendingPostFollows } from "@/lib/community/post-follow";
 import { forgetSharedPlanId, readSharedPlanId, syncSharedPlanAddress } from "@/lib/community/shared-link";
 import { useIsCompactViewport } from "@/lib/compact-view";
 import { startLibrarySync } from "@/lib/library/library-sync";
+import { startDesignTabSync } from "@/store/design-store";
 import { useLibraryTab } from "@/lib/library/library-tab";
 import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { AppHeader } from "./AppHeader";
@@ -28,6 +36,8 @@ import { WelcomePage } from "./welcome/WelcomePage";
 import { PlanIdentityDrawer } from "./PlanIdentityDrawer";
 import { SharedAddressSync } from "./SharedAddressSync";
 import { PublicViewBar } from "./community/PublicViewBar";
+import { ViewOnlyNotice } from "./community/ViewOnlyNotice";
+import { TabConflictNotice } from "./TabConflictNotice";
 import { BlueprintSaveDialog } from "./BlueprintSaveDialog";
 import { PowerSourceOverlay } from "./PowerSourceOverlay";
 import { FactoryFlow } from "./flow/FactoryFlow";
@@ -51,10 +61,12 @@ export function FactoryPlannerApp() {
   const setDatasetLoading = useFactoryStore((state) => state.setDatasetLoading);
   const setDatasetError = useFactoryStore((state) => state.setDatasetError);
   const hydratedRef = useRef(false);
-  // Which stored recipes have been checked against which dataset version,
-  // so a design opened AFTER the dataset landed (a tab switch, a hydrated
-  // plan) gets the same refresh the boot load gives, exactly once each.
-  const checkedRecipesRef = useRef<Set<string>>(new Set());
+  // Which stored recipes have been checked against which dataset version, so
+  // a design opened after the dataset landed (tab switch, hydrated plan) gets
+  // the boot load's refresh once, and again when a synced or copied plan
+  // brings a recipe back without its runtime table (recipesToRefresh).
+  const checkedRecipesRef = useRef<Map<string, boolean>>(new Map());
+  const requestedRecipesRef = useRef<WeakSet<Recipe>>(new WeakSet());
   const datasetVersionId = useFactoryStore((state) => state.dataset?.datasetVersionId);
   const datasetManifest = useFactoryStore((state) => state.datasetManifest);
   const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
@@ -66,21 +78,23 @@ export function FactoryPlannerApp() {
     if (!version) {
       return;
     }
-    const pending = project.recipes.filter(
-      (recipe) => !checkedRecipesRef.current.has(`${version.id}|${recipe.id}`),
+    const pending = recipesToRefresh(
+      project.recipes,
+      version.id,
+      checkedRecipesRef.current,
+      requestedRecipesRef.current,
     );
     if (pending.length === 0) {
       return;
     }
-    for (const recipe of pending) {
-      checkedRecipesRef.current.add(`${version.id}|${recipe.id}`);
-    }
+    noteRecipesRequested(pending, version.id, checkedRecipesRef.current, requestedRecipesRef.current);
     let cancelled = false;
     void resolveProjectRecipes(
       datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
       version,
       pending,
     ).then(({ refreshed, migration }) => {
+      noteRecipesRefreshed(refreshed, version.id, checkedRecipesRef.current);
       if (!cancelled && refreshed.length > 0) {
         refreshProjectRecipes(refreshed, migration);
       }
@@ -112,9 +126,10 @@ export function FactoryPlannerApp() {
         const projectRecipes = useFactoryStore.getState().project.recipes;
         if (projectRecipes.length > 0) {
           const { refreshed, migration } = await resolveProjectRecipes(manifestUrl, version, projectRecipes);
-          checkedRecipesRef.current = new Set(
-            projectRecipes.map((recipe) => `${version.id}|${recipe.id}`),
-          );
+          const checked = new Map<string, boolean>();
+          noteRecipesRequested(projectRecipes, version.id, checked, requestedRecipesRef.current);
+          noteRecipesRefreshed(refreshed, version.id, checked);
+          checkedRecipesRef.current = checked;
           refreshProjectRecipes(refreshed, migration);
         }
       } catch (error) {
@@ -150,6 +165,8 @@ export function FactoryPlannerApp() {
               error instanceof Error ? error.message : "Importing the shared setup failed.",
             );
           }
+          // A copied plan's link (#p=...) opens as a new tab of its own.
+          await openPlanCodeFromAddress();
         })
         .finally(() => {
           // Autosave stays parked until the stored design is on the canvas.
@@ -162,9 +179,25 @@ export function FactoryPlannerApp() {
     return cancelHydration;
   }, [hydrateDesigns, hydrateResourceHistory]);
 
+  // A copied plan's link pasted into the address bar of an open tab fires
+  // no load, only a hash change.
+  useEffect(() => {
+    const onHashChange = () => {
+      if (hydratedRef.current) {
+        void openPlanCodeFromAddress();
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   // The library follows the account: sign-in starts the sync, sign-out stops
   // it, and every change here reaches the other devices a few seconds later.
   useEffect(() => startLibrarySync(), []);
+
+  // Other browser tabs of the planner share this library: keep the open
+  // design current with their saves (design-store.ts, canvasBase).
+  useEffect(() => startDesignTabSync(), []);
 
   // Recorded here rather than in the resource panel: the charts must not lose
   // their history because the right column happened to be closed, and every
@@ -254,18 +287,13 @@ export function FactoryPlannerApp() {
   }, [communityUser]);
 
   return (
-    // Height in --ui-dvh (dvh over the interface size, see ui-scale.ts: the
-    // shell is CSS-zoomed and viewport units are not divided by zoom), and
-    // dvh, not vh: a phone browser's address bar comes and goes, and
-    // `vh` measures the window as if it never did, so the bottom row of the
-    // board spent its life under the chrome.
+    // Height in --ui-dvh (see ui-scale.ts: the shell is CSS-zoomed and viewport
+    // units are not divided by zoom). dvh, not vh, so a phone's collapsing
+    // address bar never hides the board's bottom row.
     //
-    // And no minimum height. It used to guarantee 720px for the three columns,
-    // which on a laptop window ~660px tall meant the app was taller than the
-    // window: the page itself scrolled, the board's bottom toolbars sat below the
-    // fold, and a classic scrollbar appeared and threw off every measurement made
-    // against `window.innerWidth`. The board and the panels carry their own
-    // floors, which is where the guarantee belongs.
+    // No minimum height: a shell taller than the window scrolls the page and
+    // adds a scrollbar that skews `window.innerWidth` measurements. The board
+    // and panels carry their own floors.
     <div className="ui-scale-shell flex h-[calc(100*var(--ui-dvh))] flex-col bg-canvas text-fg">
       <RecipeBookOpener />
       <PlacementRevealer />
@@ -292,17 +320,10 @@ interface WorkspaceProps {
 }
 
 /**
- * Asking what makes a resource has to bring its own window with it.
- *
- * The recipe book lives in the left column, and every way of asking — a click or
- * R on a port row, a storage drawer, a slot in the book itself — only wrote the
- * question into the store. With that column folded away (a rail on the desktop, a
- * closed drawer on a phone) the answer was rendering into nothing, so clicking a
- * slot appeared to do nothing at all. The column is the answer's window; opening
- * it is part of answering.
- *
- * The resource is a fresh object on every ask, so asking the same one twice opens
- * the column twice.
+ * Opens the left column whenever a resource is browsed: the recipe book
+ * renders there, so with the column folded (a desktop rail or a closed phone
+ * drawer) the answer would render into nothing. The resource is a fresh
+ * object on every ask, so asking the same one twice opens the column twice.
  */
 function RecipeBookOpener() {
   const browsedResource = useFactoryStore((state) => state.recipeBrowserResource);
@@ -322,15 +343,9 @@ function RecipeBookOpener() {
 }
 
 /**
- * The other half of that bargain: once something has actually been placed, the
- * drawer that placed it gets out of the way.
- *
- * Only on a phone, where a drawer covers the board it just added a card to — the
- * card lands, and you are looking at the panel you added it from. On a desktop the
- * columns sit beside the board and there is nothing to move out of.
- *
- * The board flashes the new card at the same moment (see FactoryFlow), which is
- * what makes the two read as one event rather than the panel simply vanishing.
+ * On a phone, closes the drawer once something has been placed, since the
+ * drawer covers the board the card landed on. The board flashes the new card
+ * at the same moment (see FactoryFlow).
  */
 function PlacementRevealer() {
   const placedBoardToken = useFactoryStore((state) => state.placedBoardToken);
@@ -355,12 +370,11 @@ function BoardColumn() {
     <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
         {covering ? null : publicView ? <PublicViewBar key={publicView.id} /> : <PlanIdentityDrawer />}
+        {covering ? null : <TabConflictNotice />}
       </div>
       {/*
-        Welcome COVERS the board rather than replacing it. Unmounting the board
-        would throw away the camera, the routed wires and the solve, and put
-        them all back a moment later for a page that is only ever a click from
-        being stepped off.
+        Welcome COVERS the board rather than replacing it: unmounting the board
+        would throw away the camera, routed wires and solve.
       */}
       <div className="relative min-h-0">
         <FactoryFlow />
@@ -379,11 +393,9 @@ function BoardColumn() {
 }
 
 /**
- * Which page, if any, is covering the board. Welcome and the shelf never
- * show together (opening one steps the other down), and with NO design open
- * at all the shelf is shown whatever its own flag says: an empty strip has
- * nothing else to stand on, and a board with no design behind it could not
- * save an edit anywhere.
+ * Which page, if any, is covering the board. Welcome and the shelf never show
+ * together. With NO design open the shelf is shown regardless of its flag,
+ * because a board with no design behind it could not save an edit.
  */
 function useCoveringPage(): "welcome" | "shelf" | undefined {
   const welcome = useWelcomeTab();
@@ -400,13 +412,13 @@ function useCoveringPage(): "welcome" | "shelf" | undefined {
 }
 
 function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
-  // The resource column reads the board's solve, and while Welcome covers the
-  // board those figures belong to whichever tab is hidden underneath — numbers
-  // about a plan you are not looking at. It folds to a blank strip for the
-  // duration, WITHOUT writing the workspace view, so stepping off Welcome
-  // brings it back exactly as it was left.
+  // While Welcome covers the board, the resource column (which reads the
+  // hidden board's solve) folds to a blank strip WITHOUT writing the workspace
+  // view, so it returns as it was.
   const covering = useCoveringPage();
-  const rightPanelShown = workspace.rightPanelOpen && !covering;
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const worksheet = poolMode;
+  const rightPanelShown = workspace.rightPanelOpen && !covering && !worksheet;
 
   return (
     <>
@@ -417,19 +429,21 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
       <main
         className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden"
         style={{
+          // Keep the toolbar's fit budget stable when Pool hides this column.
+          "--toolbar-hidden-panel-width": worksheet && !covering
+            ? `${workspace.rightPanelOpen ? 234 : RAIL_WIDTH}px`
+            : "0px",
           gridTemplateColumns: [
             workspace.leftPanelOpen ? "256px" : `${RAIL_WIDTH}px`,
             "minmax(0,1fr)",
             // With a page over the board the resource column is not folded, it is
             // GONE: nothing to open, no rail to hint that there is.
-            rightPanelShown ? "234px" : covering ? "0px" : `${RAIL_WIDTH}px`,
+            rightPanelShown ? "234px" : covering || worksheet ? "0px" : `${RAIL_WIDTH}px`,
           ].join(" "),
-        }}
+        } as CSSProperties}
       >
-        {/* Each column carries its own header row, all the same height, so the
-            three line up where the full-width bar used to be. */}
-        {/* The browser owns its own header row, so no wrapper here — it stays a
-            direct grid item at exactly the column width, as it was before. */}
+        {/* Each column carries its own same-height header row. The browser
+            owns its header, so it stays a direct grid item with no wrapper. */}
         {workspace.leftPanelOpen ? (
           <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
         ) : (
@@ -438,7 +452,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
         <BoardColumn />
         {rightPanelShown ? (
           <InspectorPanel />
-        ) : covering ? null : (
+        ) : covering || worksheet ? null : (
           <PanelRail side="right" label="Resources" />
         )}
       </main>
@@ -447,15 +461,15 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
 }
 
 /**
- * One column: the board, with the other two as drawers over it.
- *
- * Only one drawer at a time — two of them on a 390px screen is a stack of
- * panels with no board left to point at — so opening either closes the other.
+ * One column: the board, with the other two as drawers over it. Only one
+ * drawer at a time, so opening either closes the other.
  */
 function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
   // The resource drawer reads the board's books; under a covering page it
   // is not there at all, handle included.
   const covering = useCoveringPage();
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const worksheet = poolMode;
   const openLeft = () => writeWorkspaceView({ leftPanelOpen: true, rightPanelOpen: false });
   const openRight = () => writeWorkspaceView({ leftPanelOpen: false, rightPanelOpen: true });
 
@@ -471,7 +485,7 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
       >
         <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
       </PanelDrawer>
-      {covering ? null : (
+      {covering || worksheet ? null : (
         <PanelDrawer
           side="right"
           label="resources"
@@ -490,13 +504,9 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
 const RAIL_WIDTH = 26;
 
 /**
- * What a closed side column leaves behind: a rail carrying the button that
- * opens it again, plus the column's name set sideways.
- *
- * A rail rather than a hover-to-peek edge. Peeking hands the column back for
- * as long as the pointer stays put, which makes it useless for anything you
- * want to read while working on the board, and it fires by accident every time
- * the mouse crosses the edge. A rail costs 26px and is never ambiguous.
+ * What a closed side column leaves behind: a 26px rail with the button that
+ * reopens it and the column's name set sideways. A rail, not a hover-to-peek
+ * edge, which fires by accident whenever the mouse crosses it.
  */
 function PanelRail({ side, label }: { side: "left" | "right"; label: string }) {
   const open = () =>
@@ -561,11 +571,6 @@ function ViewerAwareBrowser({ onLoadDatasetVersion }: Pick<WorkspaceProps, "onLo
   if (!readOnly) return <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />;
   return <div className="relative h-full min-h-0 overflow-hidden">
     <div inert className="h-full opacity-30 grayscale"><RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} /></div>
-    <div className="absolute inset-x-2 top-2 border border-line bg-surface p-3 text-sm shadow-lg">
-      <div className="flex items-center justify-between gap-2"><strong>View only</strong>
-        <button type="button" aria-label="Hide the items column" onClick={() => writeWorkspaceView({ leftPanelOpen: false })} className="px-2">‹</button>
-      </div>
-      <p className="mt-1 text-xs text-fg-muted">Open a copy to add items and edit this setup.</p>
-    </div>
+    <ViewOnlyNotice />
   </div>;
 }

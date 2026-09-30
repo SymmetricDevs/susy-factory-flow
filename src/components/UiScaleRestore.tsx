@@ -5,15 +5,11 @@ import { subscribeViewportAttributes } from "@/lib/compact-view";
 import { restoreUiScale } from "@/lib/ui-scale";
 
 /**
- * Keeps the interface size and the viewport attributes on <html> honest once
- * the app is running.
- *
- * The boot script in layout.tsx stamps `--ui-scale`, `data-compact` and
- * `data-snug` before first paint. From here on, compact-view.ts answers the
- * media queries live (window resizes, a changed size setting) and this
- * component is what keeps it subscribed; and, as with the font
- * (AppFontRestore), a back-forward-cache restore runs no script at all, so
- * the scale is re-stamped on pageshow too.
+ * Keeps the interface size and viewport attributes on <html> current after
+ * the boot script in layout.tsx stamps `--ui-scale`, `data-compact` and
+ * `data-snug`. Keeps compact-view.ts subscribed to its live media queries,
+ * and re-stamps on pageshow because a back-forward-cache restore runs no
+ * script (as with AppFontRestore).
  */
 export function UiScaleRestore() {
   useEffect(() => {

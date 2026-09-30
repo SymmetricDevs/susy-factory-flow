@@ -7,12 +7,10 @@ import type { CustomRateMode, FactoryNode, Recipe, ResourceAmount } from "./type
  * synthetic one-second recipe (amount per craft == rate per second), so the
  * solver treats it like any other machine with no special cases.
  *
- * A card holds its resource only for as long as it is wired to something. Pull
- * the last wire and it lets go and offers its universal ports again, so the
- * next thing you drag onto it is what it becomes — see `releaseCustomRates`.
- * The dial survives that on the node (`FactoryNode.customRate`); the resource
- * does not, because a card holding a resource nothing asked for was a card
- * that quietly refused every other resource you tried to give it.
+ * A card holds its resource only while wired. Pull the last wire and it lets
+ * go and offers its universal ports again (`releaseCustomRates`), so it never
+ * refuses a different resource. The dial survives on the node
+ * (`FactoryNode.customRate`); the resource does not.
  */
 export const CUSTOM_RATE_MACHINE_TYPE = "Custom Rate";
 export const CUSTOM_RATE_DURATION_TICKS = 20;
@@ -31,9 +29,7 @@ export function isCustomRateRecipe(
 
 /**
  * Is this card a custom rate card? The CARD is the socket, not the port id it
- * happens to be showing: a card already holding water still takes a drop of
- * lava, and answers with the port it is showing rather than refusing because
- * the ids do not match.
+ * is showing: a card holding water still accepts a drop of lava.
  */
 export function isCustomRateNodeId(
   project: {
@@ -107,11 +103,8 @@ export function getCustomRateDial(
  * Every custom rate card left holding a resource with nothing wired to it,
  * emptied. Returns the same project when there is nothing to release, so the
  * common mutation costs one pass over the nodes and allocates nothing.
- *
- * This runs from `touchProject`, which is to say after EVERY project edit, so
- * there is no path — delete a wire, delete the machine at the far end, delete
- * a whole selection, undo into a state with fewer wires — that can leave a
- * card stuck on a resource it is no longer connected to.
+ * Runs from `touchProject` after EVERY project edit, so no path (wire delete,
+ * far-end delete, undo) can leave a card stuck on an unconnected resource.
  */
 export function releaseCustomRates<
   Project extends {

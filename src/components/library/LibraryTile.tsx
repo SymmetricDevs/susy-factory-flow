@@ -23,19 +23,16 @@ import { normalizeBlueprintTags } from "@/lib/blueprints/types";
 import type { EntryIcon } from "@/lib/model/types";
 
 /**
- * THE tile: one shape for a design of yours and a post on the network, in
- * every view of the library. Fixed height, three rows:
+ * THE tile: one shape for your designs and network posts, in every library
+ * view. Fixed height, three rows:
  *
  *   [face]  Title on one line                           [EV]
  *           creator · 2d ago                    ⋯ (on hover)
  *   🏭 15   ⚡ 5.0k EU/t                   OPEN 🌐●   ▲ 12  ⤓ 34
  *
- * Click opens it: one verb, no question. Right click or the dots is the
- * menu. The creator's name is a filter (click it, the grid narrows to
- * them) and so is the tier badge. The vote arrow is the one other control
- * on the face of it. The small buttons carry a plain native tooltip saying
- * exactly what a press does ("Add to Favorites", "Copy link"); nothing else
- * on a tile has one, and no tooltip says more than the action.
+ * Click opens it; right click or the dots opens the menu. The creator name
+ * and tier badge are filters. Only the small buttons carry a tooltip, and it
+ * names just the action ("Add to Favorites", "Copy link").
  */
 
 export interface TileMarks {
@@ -364,10 +361,9 @@ function Stat({ icon: Icon, value, tone }: { icon: typeof Factory; value: string
 }
 
 /**
- * The globe, always in the same place: green when this is your post (the
- * post follows the design, so there is no "edited since"), dim and clickable when
- * it is not posted yet, a download arrow when it came from someone else's
- * setup. A posted tile also carries the link button beside it.
+ * The globe: green when this is your post (the post follows the design),
+ * dim and clickable when not yet posted, a download arrow when it came from
+ * someone else's setup. A posted tile also carries a link button beside it.
  */
 function PostGlyph({
   marks,

@@ -13,21 +13,17 @@ import { getPoolProject } from "@/lib/solver/pool-mode";
  * Clog locks: machines frozen at 0% because their surpluses have nowhere to
  * go and every escape route runs through another jammed member.
  *
- * The death spiral's mirror image. A spiral STARVES: the loop loses material
- * every lap, winds down, and every card sits empty. A clog lock CHOKES: the
- * loop makes MORE of some good than it can swallow, the spare piles up until
- * every buffer is full, and then nobody can run because nobody has room. In
- * game the line freezes with every slot stuffed - full inputs, full outputs,
- * no progress arrow - and pulling a stack out by hand buys seconds before it
- * jams again. The solver's zeros are that end state, reached instantly.
+ * The death spiral's mirror image: a spiral STARVES (the loop loses material
+ * every lap), a clog lock CHOKES (the loop makes more of some good than it
+ * can swallow, buffers fill, and nobody has room to run). In game the line
+ * freezes with every slot stuffed; the solver's zeros are that end state.
  *
  * Detection is a proof, not a guess: the board is re-solved once with every
  * wired output port allowed to shed surplus at a cost (the vent solve in
- * equations-core). Machines that come alive in that world were stopped by
- * nothing but the surplus, and the vents the solve could not avoid name the
- * exact wires a drawer or trash can would rescue. A starving ring stays dead
- * in the vented world too, so the two detectors can never claim the same
- * machines.
+ * equations-core). Machines that come alive there were stopped only by the
+ * surplus, and the unavoidable vents name the exact wires a drawer would
+ * rescue. A starving ring stays dead in the vented world too, so the two
+ * detectors never claim the same machines.
  */
 
 const DEAD_EPSILON = 1e-4;
@@ -353,12 +349,10 @@ function build(project: FactoryProject, result: ThroughputResult | undefined): C
       continue;
     }
 
-    // Only the vent sites and their surplus wires get marked. A jam can hold
-    // half a board, and flashing every member painted whole plans blue with
-    // nothing to point at; the drawer goes on THESE wires, so these carry
-    // the light. Order follows the vents (worst surplus first), never the
-    // node ids - "Show me" walks this list, and it must land on the machine
-    // the notice is talking about.
+    // Only the vent sites and their surplus wires get marked: a jam can hold
+    // half a board, and the drawer goes on THESE wires. Order follows the vents
+    // (worst surplus first), never node ids: "Show me" walks this list and must
+    // land on the machine the notice is talking about.
     const ventNodeIds = [...new Set(vents.map((vent) => vent.nodeId))];
     const ventPorts = new Set(vents.map((vent) => `${vent.nodeId}|${vent.resourceKey}`));
     const edgeIds: string[] = [];
@@ -392,9 +386,7 @@ function build(project: FactoryProject, result: ThroughputResult | undefined): C
 /**
  * The card-level story, split by role. A vent site speaks in the first
  * person: YOUR spare has nowhere to go, here is the rate, wire it to a
- * drawer. A victim says why it is at 0% and names the machine to go fix,
- * because "clog lock" on twenty cards with one generic sentence left the
- * player knowing the disease but not the address.
+ * drawer. A victim says why it is at 0% and names the machine to go fix.
  */
 export function describeClogLockForNode(
   lock: ClogLock,

@@ -1,11 +1,10 @@
 import type { Recipe } from "./types";
 
 /**
- * The trash can: a pure void. Anything wired into it is eaten at whatever
- * rate arrives and never counts as an output. Unlike the custom rate node it
- * never adopts a resource or grows recipe slots — the recipe stays empty and
- * the solver treats edges INTO a trash node as leftover-drinkers (see
- * equilibrium.ts, role "trash"). One can takes any number of inputs.
+ * The LEGACY trash can node: a pure void with an empty recipe that eats
+ * anything wired into it. The load funnel converts cans to trash-mode drawers
+ * (project-normalize.ts); this remains for recognising them and as dead-path
+ * safety in the solver (equilibrium.ts, role "trash").
  */
 export const TRASH_MACHINE_TYPE = "Trash Can";
 /** The can's universal wire-here port: accepts any concrete resource. */

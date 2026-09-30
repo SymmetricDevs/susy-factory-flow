@@ -1,18 +1,16 @@
 /**
  * Dragging a wire is a MODE, not just a gesture.
  *
- * While a wire is out, the only question on the board is "where does this
- * land", and the board answers it two ways: the green/red wash on every card
- * and the pipe snapping to the slot it will land in. Everything else that
- * normally answers the pointer — edge highlights, edge labels, per-slot hover
- * scopes, the hop map — is a different question, and having it fire under a
- * held wire reads as the board arguing with itself.
+ * While a wire is out, the board answers only "where does this land" (the
+ * green/red wash on every card, the pipe snapping to its slot). Everything
+ * else that answers the pointer (edge highlights, edge labels, per-slot
+ * hover scopes, the hop map) stays quiet, or the board argues with itself.
  *
- * The flag is read imperatively from inside event handlers rather than
- * subscribed to. A value every node and every edge subscribes to would rebuild
- * the whole board twice per gesture, which is the exact cost ARCHITECTURE.md's
- * hover rules exist to avoid. Purely visual suppression rides on the
- * `factory-flow-board--wiring` class instead, so CSS does that half for free.
+ * The flag is read imperatively inside event handlers, never subscribed to:
+ * a value every node and edge subscribes to rebuilds the whole board twice
+ * per gesture, the cost src/components/flow/CLAUDE.md's hover rules exist to avoid. Purely
+ * visual suppression rides on the `factory-flow-board--wiring` class, so CSS
+ * does that half for free.
  */
 let wiringConnection = false;
 const wiringListeners = new Set<(active: boolean) => void>();

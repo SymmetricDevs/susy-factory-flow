@@ -2,7 +2,8 @@
 
 import { Search, X, ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { PointerEvent, RefObject, WheelEvent } from "react";
+import type { DragEvent, PointerEvent, RefObject, WheelEvent } from "react";
+import { writeResourceDrag } from "@/lib/resource-drag";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
   queryRecipeDatasetResources,
@@ -31,12 +32,11 @@ import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { isSwatchFluid, ResourceIcon, spriteArtPixels } from "./nei/ResourceIcon";
 
 /**
- * THE ITEM PANEL: the search box, the six filters and the sort, the paged
- * grid of results and the recent shelf. One component, so the items column
- * and every item picker (the product drawer button, the search stencil's
- * keys, the library filter) are literally the same screen. The caller owns
- * the search text - the column keeps its in the store, a picker keeps its
- * own - and says what a click on a tile does.
+ * THE ITEM PANEL: search box, six filters, sort, paged result grid and the
+ * recent shelf. Shared by the items column and every item picker (product
+ * drawer button, search stencil keys, library filter). The caller owns the
+ * search text (the column keeps it in the store, a picker locally) and
+ * decides what a tile click does.
  */
 export function ResourceIndexPane({
   search,
@@ -108,19 +108,15 @@ export function ResourceIndexPane({
       ? [powerRow, ...resourceResults]
       : resourceResults;
   const displayedTotal = onBoard ? boardResults.total : resourceTotal;
-  const displayedMods = onBoard ? boardResults.mods : resourceMods;
   const displayedOutcome = onBoard ? boardResults.outcome : resourceSearchOutcome;
   const resourcePageCount = Math.max(
     1,
     Math.ceil(displayedTotal / Math.max(1, resourcePageSize)),
   );
   /**
-   * The wheel turns the page, anywhere in the column.
-   *
-   * The list does not scroll - it is paged, a screenful at a time - so a wheel
-   * over it did nothing at all, which reads as a dead panel. Notches are
-   * accumulated rather than acted on one for one, so a trackpad flick moves a
-   * page or two instead of forty.
+   * The wheel turns the page anywhere in the column, since the paged list
+   * does not scroll. Deltas accumulate so a trackpad flick moves a page or
+   * two instead of forty.
    */
   const handleResourceWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>) => {
@@ -279,9 +275,7 @@ export function ResourceIndexPane({
   const browseResource = onBrowse;
   return (
     <div className="flex min-h-0 flex-1 flex-col" onWheel={handleResourceWheel}>
-        {/* The same card the board and setup shelves put their search and
-            filters in. Bare, this tab's controls read as a different kind of
-            thing from the other two, when they are the same thing. */}
+        {/* The same card other column views put their search and filters in. */}
         <ControlsCard>
           <div className="flex items-center gap-1.5">
             {/* 16px text on a phone, deliberately: below that, iOS zooms the
@@ -331,11 +325,8 @@ export function ResourceIndexPane({
             </p>
           ) : null}
 
-          {/* One question, six answers, one of them on at a time. There is no
-              "fluids a bee makes" to ask for, so there is no second row to pair
-              this with; the view toggle sits with the search box it belongs to. */}
-          {/* Three across, two rows: keep the full filter names readable in
-              the narrow items panel. Sort gets its own full-width row. */}
+          {/* Six exclusive filters, three across in two rows so full names stay
+              readable in the narrow panel. Sort gets its own full-width row. */}
           <div className="mt-1 grid grid-cols-3 gap-1">
             {RESOURCE_FILTER_CHOICES.map((choice) => (
               <button
@@ -411,27 +402,20 @@ export function ResourceIndexPane({
 
 const RESOURCE_DEFAULT_PAGE_SIZE = 6;
 /**
- * The one way results are drawn: a dense grid of tiles, the icon on top and a
- * quiet gray name under it. It replaced a list view (name plus a mod/recipe-
- * count line nobody asked for, one item per row) and a bare grid view (no
- * names at all) - as many items as the column holds without losing the name
- * (Jack, 2026-08-31). Four columns in the standard panel; two short lines of
- * name, then the hover tooltip carries the rest.
+ * Results are a dense grid of tiles: icon on top, a quiet gray name (two
+ * lines at most) under it, the hover tooltip carrying the rest. Four columns
+ * in the standard panel.
  */
-// The height is exactly what the tile holds - a 44px icon cell + two 10px
-// name lines + borders - so a wrapped second line is never clipped. Fluid art
-// deliberately stays at the previous 40px size inside the bigger cell: a
-// solid square at full cell size out-shouts every item around it.
+// Height is exactly what the tile holds (44px icon cell + two 10px name lines
+// + borders), so a wrapped second line is never clipped. Fluid art stays at
+// 40px inside the cell: a solid square at full size out-shouts the items.
 const RESOURCE_TILE_HEIGHT = 66;
 const RESOURCE_TILE_MIN_WIDTH = 58;
 const RESOURCE_TILE_GAP = 2;
-const RESOURCE_GRID_CELL = 56;
 const RESOURCE_GRID_GAP = 4;
 /**
- * How the art sits in a grid cell.
- *
- * Magnify the art inside its fixed cell. ResourceIcon caps that zoom against
- * each item's opaque bounds, so wide items keep their corners.
+ * Magnifies the art inside its fixed grid cell. ResourceIcon caps that zoom
+ * against each item's opaque bounds, so wide items keep their corners.
  */
 const RESOURCE_GRID_ART = "!h-full !w-full";
 // The pager measures 28px (24 + 4 margin); the extra is slack so a fractional
@@ -443,15 +427,9 @@ const RESOURCE_WHEEL_PAGE_DELTA = 80;
 type ResourceSortMode = "relevance" | "popular" | "name" | "mod" | "made" | "uses";
 
 /**
- * The one question the list is answering.
- *
- * Six answers, one at a time, because that is how they are actually used: nobody
- * asks for the fluids a bee makes, they ask for what bees make. Splitting the
- * six across a kind row and a source row made it look like they combined, and
- * the combinations were either the same list or nothing.
- *
- * "Board" is answered from the project rather than the server: the cards are
- * already in memory, and nothing the dataset knows could answer it anyway.
+ * The list's filter: six mutually exclusive answers, because the kind and
+ * source filters never usefully combine. "Board" is answered from the
+ * project in memory rather than the server.
  */
 type ResourceFilterMode = "all" | "item" | "fluid" | "board" | "plants" | "bees";
 
@@ -478,12 +456,8 @@ function resourceFilterSource(filter: ResourceFilterMode): "plants" | "bees" | u
 }
 
 /**
- * What a cell with no room for words says when you hover it.
- *
- * The same two lines a list row prints - the name, then where it came from and
- * how many recipes touch it - followed by whatever the dataset itself has to say
- * about the thing. First line white, the rest blue, like every other tooltip in
- * the app.
+ * A tile's hover tooltip: the name, then its mod and recipe count, then any
+ * dataset tooltip lines. First line white, the rest blue, as app-wide.
  */
 function resourceTooltipLines(resource: IndexedResource): string[] {
   const subtitle = [
@@ -513,10 +487,9 @@ function getResourceModLabel(resource: { id: string; kind: string }): string {
 }
 
 /**
- * The item search's power row: typing "power", "energy" or "eu" puts
- * Power (EU) first in the list. Left click asks who makes it (every
- * generator), right click who takes it (the parasitic machines) - the same
- * two questions every item row answers.
+ * The item search's power row: typing "power", "energy" or "eu" puts Power
+ * (EU) first. Left click asks who makes it (generators), right click who
+ * takes it, as for any item.
  */
 function powerSearchRow(query: string): IndexedResource | undefined {
   const trimmed = query.trim().toLowerCase();
@@ -606,12 +579,9 @@ function searchOutcomeOf(result: {
 }
 
 /**
- * Every item and fluid the board already touches.
- *
- * Read off the project rather than the dataset, because that is where the answer
- * is: a card's inputs and outputs (with whatever alternative was picked for a
- * slot) plus every drawer and tank. One entry per resource, however many cards
- * use it.
+ * Every item and fluid the board touches, read off the project: card inputs
+ * and outputs (with the picked slot alternative) plus every drawer and tank.
+ * One entry per resource.
  */
 function useBoardResources(enabled: boolean): IndexedResource[] {
   const nodes = useFactoryStore((state) => state.project.nodes);
@@ -664,11 +634,8 @@ function useBoardResources(enabled: boolean): IndexedResource[] {
 }
 
 /**
- * The same search, run over the board's own resources.
- *
- * It is the identical matcher the server uses, so typing "steal" finds the steel
- * on your board exactly as it finds the steel in the dataset - a filter that
- * behaved differently from the list it replaces would just read as broken.
+ * The same search run over the board's own resources, using the server's
+ * matcher so the Board filter behaves exactly like the dataset list.
  */
 function useBoardResourceResults(
   enabled: boolean,
@@ -768,15 +735,10 @@ interface ResourceQueryCacheEntry {
 
 
 /**
- * The last things looked up, three rows of them under the results.
- *
- * A build keeps coming back to the same dozen items, and this is the shelf they
- * sit on: click for recipes, right click for uses, exactly like a result row.
- * The list itself is the store's browse history, which every panel on the board
- * already writes to - so an item opened from a card's slot lands here too.
+ * The last things looked up, in one small row under the results. Click for
+ * recipes, right click for uses, like a result tile. The list is the store's
+ * browse history, so items opened from anywhere (a card's slot too) land here.
  */
-// One small row everywhere (Jack, 2026-08-31): the shelf is a shortcut, and
-// every pixel it holds is a pixel the results above it lose.
 const RECENT_STRIP_ROWS = 1;
 const RECENT_STRIP_ROWS_COMPACT = 1;
 const RECENT_STRIP_CELL = 36;
@@ -802,9 +764,8 @@ function RecentResourceStrip({
   }
 
   return (
-    // A card of its own, like the controls at the top of the column: bare, a shelf
-    // of loose icons at the foot of a list of icons read as more of the list. The
-    // bottom margin keeps it off the very edge of the window.
+    // A card of its own, like the controls at the top of the column, so it does
+    // not read as more of the list. The bottom margin keeps it off the edge.
     <div className="mx-2 mb-1.5 shrink-0 rounded-[6px] border border-neutral-700 bg-[#2a2d33] p-1">
       <div className="mb-0.5 flex items-center justify-between px-0.5">
         <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-500">
@@ -1026,22 +987,16 @@ function ResourcePager({
 }
 
 /**
- * A finger's way to choose between the two questions a resource answers.
- *
- * A mouse has a left button for "what makes it" and a right one for "what uses
- * it". A finger has one tap, and here it opens the pair as a menu rather than
- * guessing: unlike a port on the board, a row in this list has no third gesture to
- * protect — no wire to drag out of it — so there is nothing to lose by asking, and
- * "uses" was otherwise unreachable on a phone. Holding opens the same menu, which
- * is the gesture the board taught.
- *
- * One menu for the whole list rather than one per row: which resource is being
- * pressed is captured when the press starts, so this costs a ref and not a hook
- * per item in a list that can run to hundreds.
+ * Touch menu for "makes" vs "uses": a tap (or a hold) opens both as a menu,
+ * since a finger has no right button and a list row has no wire drag to
+ * protect. One menu for the whole list: the pressed resource is captured at
+ * press start, so this costs a ref rather than a hook per item.
  */
 function useResourceBrowseMenu(
   browse: (resource: IndexedResource, mode: "recipes" | "uses") => void,
 ) {
+  // Drag an item onto the board for a drawer, or onto Pool's Desired rates.
+  const canDrag = useFactoryStore((state) => !state.isReadOnly);
   const pressedRef = useRef<IndexedResource | undefined>(undefined);
   const [pressedName, setPressedName] = useState("");
   const menu = useBrowseMenu({
@@ -1058,6 +1013,11 @@ function useResourceBrowseMenu(
     menu: menu.menu,
     /** Spread on the row, after its own click and context-menu handlers. */
     pressProps: (resource: IndexedResource) => ({
+      draggable: canDrag && resource.kind !== "aspect",
+      onDragStart: (event: DragEvent<HTMLElement>) => {
+        if (!canDrag || resource.kind === "aspect") { event.preventDefault(); return; }
+        writeResourceDrag(event.dataTransfer, { ...resource, amount: 1 });
+      },
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         pressedRef.current = resource;
         if (event.pointerType !== "mouse") {

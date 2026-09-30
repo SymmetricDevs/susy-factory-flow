@@ -1,0 +1,36 @@
+import { rateMultiplierForKind, rateSuffixForKind } from "@/lib/model/rate-unit";
+import { formatPowerValue } from "@/lib/model/resources";
+import { formatSlotRateBare } from "../flow/flow-explainers";
+
+/** Remove sub-machine-precision residue without changing solver values or saved rates. */
+export function isPoolDisplayZero(value: number): boolean {
+  return Math.abs(value) <= Number.EPSILON;
+}
+
+/** Display-only floor, applied after converting into the selected unit. */
+export function formatPoolRateBare(value: number, kind = "item"): string {
+  if (isPoolDisplayZero(value)) return "0";
+  const shown = value * rateMultiplierForKind(kind);
+  if (kind !== "power" && shown !== 0 && Math.abs(shown) < 0.001) {
+    return shown < 0 ? "(−<.001)" : "(<.001)";
+  }
+  return compactBound(formatSlotRateBare(value, kind));
+}
+
+export function formatPoolRate(value: number, kind: string): string {
+  return formatPoolRateBare(value, kind) + rateSuffixForKind(kind);
+}
+
+export function formatPoolSignedRate(value: number, kind: string, sign: number): string {
+  const text = formatPoolRateBare(Math.abs(value), kind);
+  const prefix = sign < 0 ? "−" : sign > 0 ? "+" : "";
+  return text === "0" ? text : text.startsWith("(") ? `(${prefix}${text.slice(1)}` : prefix + text;
+}
+
+function compactBound(text: string): string {
+  return text.replace(/^([<>]-?)0\./, "$1.");
+}
+
+export function formatPoolPowerValue(value: number): string {
+  return isPoolDisplayZero(value) ? "0" : compactBound(formatPowerValue(value));
+}

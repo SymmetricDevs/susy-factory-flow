@@ -2,11 +2,9 @@ import type {
   Recipe,
   RecipeOutput,
   ResourceAmount,
-  ResourceFlow,
   ResourceKey,
   ResourceKind,
 } from "./types";
-import { rateMultiplierForKind, rateSuffixForKind } from "./rate-unit";
 import { getCropsNhStats } from "./passive-production";
 import { isFreeRecipeInput } from "./free-input";
 
@@ -45,25 +43,19 @@ function isWildcardChoiceResource(resource: Pick<ResourceAmount, "id" | "display
   );
 }
 
-export function parseResourceKey(key: ResourceKey): {
-  kind: ResourceKind;
-  resourceId: string;
-} {
-  const separatorIndex = key.indexOf(":");
-  return {
-    kind: key.slice(0, separatorIndex) as ResourceKind,
-    resourceId: key.slice(separatorIndex + 1),
-  };
-}
-
-export function resourceLabel(resource: Pick<ResourceAmount, "id" | "displayName">): string {
+export function resourceLabel(resource: Pick<ResourceAmount, "id" | "displayName"> & Partial<Pick<ResourceAmount, "alternatives">>): string {
+  if (isOreDictionaryResource(resource)) {
+    const group = resource.id.slice("oredict:".length);
+    const woodNames: Record<string, string> = {
+      plankWood: "wooden planks", stickWood: "wooden sticks", logWood: "wood logs",
+    };
+    const words = group.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    const memberName = resource.alternatives?.find((entry) => !isVirtualChoiceResource(entry))?.displayName;
+    return `Any ${woodNames[group] ?? memberName ?? words}`;
+  }
   const displayName = stripOreDictionaryPrefix(resource.displayName);
   if (displayName) {
     return displayName;
-  }
-
-  if (isOreDictionaryResource(resource)) {
-    return resource.id.slice("oredict:".length);
   }
 
   return resource.id;
@@ -92,16 +84,15 @@ export function formatRate(value: number, digits = 2): string {
 const COMPACT_SUFFIXES = ["", "k", "M", "G", "T", "P", "E"] as const;
 
 /**
- * Late-game numbers, at a width a node cell can hold: 2,147,483,648 becomes
- * "2.15G" and a mega multiblock's 1,440,000 L/s becomes "1.44M".
+ * Late-game numbers at a width a node cell can hold: 2,147,483,648 becomes
+ * "2.15G" and 1,440,000 L/s becomes "1.44M".
  *
- * Two rules that are about honesty rather than width:
- * - exact zero prints "0", never "0.00" — decimals on nothing are noise;
- * - a rate that is small but REAL never prints as zero. A chanced output at
- *   0.004/s is a line that runs, and rounding it to 0.00 said it was dead.
+ * - exact zero prints "0", never "0.00";
+ * - a small but REAL rate never prints as zero (a chanced output at 0.004/s
+ *   runs), so values under 1 keep two significant digits.
  *
- * Three significant digits everywhere else, trailing zeros dropped, so a
- * column of these still lines up without carrying dead characters.
+ * Otherwise two decimals (one from 100 up) before the suffix, trailing zeros
+ * dropped.
  */
 export function formatCompact(value: number): string {
   if (!Number.isFinite(value)) {
@@ -139,11 +130,9 @@ export function formatCompact(value: number): string {
 
 /**
  * `formatCompact` for a number in MOTION: fixed decimals per magnitude,
- * trailing zeros kept, whole numbers below a thousand. The honest formatter
- * trims zeros and varies its decimals, which makes an easing value flicker
- * between widths frame to frame ("20.1", "20", "19.93"); a tween wants every
- * frame the same shape, and the landing frame goes back through
- * `formatCompact` for the clean resting form.
+ * trailing zeros kept, whole numbers below a thousand. `formatCompact` trims
+ * zeros, so an easing value would flicker between widths ("20.1", "20",
+ * "19.93"); the landing frame goes back through `formatCompact`.
  */
 export function formatCompactStable(value: number): string {
   if (!Number.isFinite(value)) {
@@ -186,16 +175,6 @@ export function trimTrailingDecimalZeros(value: string): string {
   return value.replace(/(\.\d*[1-9])0+$/, "$1").replace(/\.0+$/, "");
 }
 
-export function formatResourceRate(flow: ResourceFlow | undefined): string {
-  if (!flow) {
-    return "none";
-  }
-
-  return `${resourceLabel({ id: flow.resourceId, displayName: flow.displayName })} ${formatRate(
-    flow.amountPerSecond * rateMultiplierForKind(flow.kind),
-  )}${rateSuffixForKind(flow.kind).trimStart()}`;
-}
-
 export function primaryOutput(recipe: Recipe): RecipeOutput | undefined {
   return recipe.outputs.find((output) => !output.byproduct) ?? recipe.outputs[0];
 }
@@ -206,8 +185,7 @@ export function getChanceMultiplier(
 ): number {
   // A CropsNH card bakes EXPECTED amounts: the drop-table weight is already
   // inside `amount`, and `chance` is that same weight kept for the display
-  // badge. Multiplying it in again counts the probability twice - Blazereed's
-  // blaze rods came out at a quarter of their real rate.
+  // badge. Multiplying it in again would count the probability twice.
   if (getCropsNhStats(recipe)) {
     return 1;
   }
@@ -233,15 +211,10 @@ const ANY_DAMAGE_SUFFIX = "@32767";
  * whichever damage value". A concrete variant satisfies it and it satisfies a
  * concrete slot, so the two must match wherever an item id is compared.
  *
- * The dataset leans on it hard. `oredict:logWood` lists its vanilla members as
+ * The dataset leans on it hard: `oredict:logWood` lists its vanilla members as
  * the two wildcards rather than the six real logs, and ~2,800 recipes take a
- * wildcard input directly. Matching on the literal string meant a Crop Farm's
- * Oak Log could not feed the logWood slot it is listed under, and a
- * Centrifuge's `minecraft:dirt@32767` could not feed a dirt slot.
- *
- * The server already knows the rule (`resourceIdsAreCompatible` in
- * `dataset-query.ts`), which is why the recipe book finds logWood recipes from
- * a Spruce Log. This is the board side agreeing with it.
+ * wildcard input directly. This mirrors the server's rule
+ * (`resourceIdsAreCompatible` in `dataset-query.ts`).
  */
 function itemIdsMatch(left: string, right: string): boolean {
   return left === right || matchesAnyDamage(left, right) || matchesAnyDamage(right, left);
@@ -259,18 +232,13 @@ function matchesAnyDamage(wildcardId: string, concreteId: string): boolean {
 }
 
 /**
- * An item is an item and a fluid is a fluid. A filled cell is an ordinary item
- * that happens to be named after a fluid, and it does NOT satisfy that fluid's
- * slot — in game you would run the cell through a Canner first, and the planner
- * says so by leaving the two unconnected until you place one.
+ * An item is an item and a fluid is a fluid: kinds compare strictly. A filled
+ * cell is an ordinary item and does NOT satisfy its fluid's slot; in game the
+ * cell goes through a Canner first. Do not add a cross-kind branch: it hides
+ * the Canner, its empty cells and its power from the plan.
  *
- * This used to be true only within a kind: a fluid could quietly satisfy a cell
- * slot and vice versa, converting the amount at a guessed 1000 L per cell. It
- * made a chain look complete while omitting a real machine, a stack of empty
- * cells and the power to run them, and it reported item production in litres.
- *
- * Cross-form equivalence still exists for SEARCH, where it only helps you find
- * that the other form exists — see `isFluidEquivalentToFilledCell`.
+ * Cross-form equivalence exists only for SEARCH (`isFluidEquivalentToFilledCell`)
+ * and the loose cell wire gesture (`getCrossFormCellMatch`).
  */
 export function resourceMatchesInput(
   resource: Pick<ResourceAmount, "kind" | "id" | "displayName">,
@@ -296,11 +264,9 @@ export function resourceMatchesInput(
 }
 
 /**
- * The fluid a filled cell is named after, for SEARCH ONLY.
- *
- * Deliberately carries no amount. Nothing converts between the two forms any
- * more, so there is no litres-per-cell ratio to get wrong; this only answers
- * "does a fluid form of this item exist, so the recipe book can offer it too".
+ * The fluid a filled cell is named after, for SEARCH ONLY: "does a fluid form
+ * of this item exist, so the recipe book can offer it too". Deliberately
+ * carries no amount or litres-per-cell ratio.
  */
 export function getFilledCellFluidEquivalent(
   resource: Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
@@ -325,8 +291,8 @@ export function getFilledCellFluidEquivalent(
 }
 
 /**
- * LOOSE CELL WIRES only (SetupRules.looseCellWires): are this output and this
- * input the same substance worn as a cell on one end and a fluid on the other?
+ * LOOSE CELL WIRES only: are this output and this input the same substance
+ * worn as a cell on one end and a fluid on the other?
  * Either way round - a cell output feeding a fluid input, or a fluid output
  * filling a cell input. Answers with which end is which so the gesture can
  * fetch the Canner ratio; undefined for every ordinary pair. Never consulted

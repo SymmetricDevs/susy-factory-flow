@@ -3,40 +3,27 @@
 import type { CSSProperties, ReactNode } from "react";
 
 /**
- * What a node shows once it is too small to read.
- *
- * Zoomed out, a card's contents are noise: the slot sprites are sub-pixel, the
- * dials are a grey smear, and the machine name is three pixels tall. The whole
- * interior stops being drawn (see node-detail.ts and the rules in globals.css)
- * and one of these takes its place — the single fact that still means something
- * at that size. For a machine that is how hard it is running; for a drawer, a
- * tank or a trash can it is what is in it.
- *
- * Two properties matter and are easy to lose:
+ * What a node shows once it is too small to read: the interior stops being
+ * drawn (see node-detail.ts and the rules in globals.css) and one of these
+ * takes its place, the single fact that still means something at that size.
+ * For a machine that is how hard it is running; for a drawer, a tank or a
+ * trash can it is what is in it.
  *
  * - It must not affect layout. Node size is a routing input, so a card that
  *   changed shape with zoom would reroute the board on every wheel tick. Hence
  *   `absolute inset-0`, and `display` rather than anything that reflows.
- * - It must fill whatever card it lands in. Cards range from a 132px drawer to
- *   a wide multiblock, so a fixed font size is either lost on one or overflows
- *   the other. The text is drawn in an SVG with a viewBox, which makes the
- *   browser scale it to the box for us — always as large as it can be, exactly.
+ * - It must fill whatever card it lands in, from a small drawer to a wide
+ *   multiblock. The text is drawn in an SVG with a viewBox, so the browser
+ *   scales it to the box.
  */
 
 /*
- * The hop map paints this layer, and it does it in CSS.
- *
- * Hovering a card zoomed out floods the whole board with distance colours (see
- * hop-map.ts). None of that arrives as props: the map writes two custom
- * properties onto each node element and the rules in globals.css do the rest,
- * so a hover costs no React work at all on a board that may be carrying two
- * hundred cards. What that buys is why the glance layer takes no colour props
- * here — do not be tempted to "tidy" it into state.
- *
- * The paint lands on the glance layer and nowhere else, which is what keeps it
- * away from the board's geometry: that layer is `absolute inset-0`, it is only
- * displayed at the zoom step where the card's contents are already hidden, and
- * it has no say in the card's size. The router never sees it.
+ * The hop map paints this layer in CSS. Hovering a card zoomed out floods the
+ * board with distance colours (see hop-map.ts): the map writes two custom
+ * properties onto each node element and globals.css does the rest, so a hover
+ * costs no React work. That is why the glance layer takes no colour props;
+ * do not move them into state. The paint lands only on this layer, which has
+ * no say in the card's size, so the router never sees it.
  */
 
 export function NodeGlanceText({
@@ -149,10 +136,8 @@ export function NodeGlanceIcon({ children, tileTint }: { children: ReactNode; ti
       style={tileTint ? glanceTileStyle(tileTint) : undefined}
     >
       {/* Just centres. Sizing is the caller's job: a sprite is a
-          background-image on a fixed-size span rather than an <img>, so it
-          cannot be stretched from out here — it has to be asked for at the
-          size you want. Drawers, tanks and cans are all fixed-width cards, so
-          a size per call site is exact rather than a guess. */}
+          background-image on a fixed-size span, so it has to be asked for at
+          the size you want. */}
       <div className="flex h-full w-full items-center justify-center">{children}</div>
     </div>
   );

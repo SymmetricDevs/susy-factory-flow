@@ -7,10 +7,9 @@ export const FLOW_IMAGE_EXPORT_COMPLETE_EVENT = "susy-flow-export-image-complete
 /**
  * What the board is asked for over FLOW_IMAGE_EXPORT_EVENT.
  *
- * The classic shape downloads a finished file: `fileName` plus `projectJson`
- * to embed. `capture: true` instead hands the raw render back through the
- * complete event, so the export dialog can composite a summary bar, swap the
- * background, or animate it — the board only knows how to photograph itself.
+ * By default it downloads a finished file (`fileName` plus `projectJson` to
+ * embed). `capture: true` instead hands the raw render back through the
+ * complete event, so the export dialog can composite, recolour or animate it.
  */
 export interface FlowExportRequest {
   format: "svg" | "png";
@@ -32,16 +31,10 @@ export interface FlowExportRequest {
    */
   cardDetail?: "full" | "glance" | "status" | "usage" | "power";
   /**
-   * Leave the notes, arrows and backdrops out of the photograph - only the
-   * working board. The frame tightens to the remaining cards too, so a
-   * hidden backdrop does not leave its empty acreage behind.
+   * Leave the notes, arrows and backdrops out of the photograph; the frame
+   * tightens to the remaining cards.
    */
   hideAnnotations?: boolean;
-  /**
-   * Photograph with the board's presentation (calm) colours, whatever the
-   * live board is set to. Forced for the capture and restored after.
-   */
-  presentation?: boolean;
 }
 
 /** One line's marching dashes, as replayable data for the GIF export. */
@@ -185,11 +178,6 @@ export function dataUrlToText(dataUrl: string): string {
   }
 
   return decodeURIComponent(payload);
-}
-
-export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const response = await fetch(dataUrl);
-  return response.blob();
 }
 
 function encodeText(value: string): string {

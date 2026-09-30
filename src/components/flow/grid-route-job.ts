@@ -10,15 +10,12 @@ import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "./router-tuning";
 
 /**
  * The route solve JOB: what a solve is, how it crosses to the worker and
- * back (encode/decode), and how it runs. Pure and worker-safe, and
- * deliberately in its own file: this is everything `grid-route.worker.ts`
- * needs, and it must not import `grid-route-solve.ts`, which is the module
- * that SPAWNS the worker. When the worker's own bundle reached back into
- * that module, the bundle referenced itself and Turbopack's production
- * compile never finished - the v2.50.2 deploy sat at "Creating an optimized
- * production build" for twenty minutes on two machines. The solver worker
- * (`solve-books.worker.ts`) never had the loop because it imports the solver,
- * not the scheduler; this file gives the router the same shape.
+ * back (encode/decode), and how it runs. Pure and worker-safe, and in its
+ * own file on purpose: this is everything `grid-route.worker.ts` needs, and
+ * the worker must NOT import `grid-route-solve.ts`, the module that spawns
+ * it. A worker bundle that reaches back into its spawner references itself
+ * and Turbopack's production build never finishes. The solver worker
+ * (`solve-books.worker.ts`) has the same shape.
  */
 
 

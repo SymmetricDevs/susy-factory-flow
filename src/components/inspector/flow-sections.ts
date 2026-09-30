@@ -2,12 +2,9 @@ import { makeResourceKey } from "@/lib/model/resources";
 import type { FactoryProject, FactoryStorage, ResourceBalance } from "@/lib/model/types";
 
 /**
- * Outputs are ONE section. Product against byproduct is how a drawer asks its
- * machine (pull flat out, or catch what is left), and the board's tiles wear
- * that difference; to the reader of this panel both are simply what leaves
- * the line, and splitting them made one resource show up twice with neither
- * figure being the answer. The split lasted one day (13551d6) before the
- * players asked for the total back.
+ * Outputs are ONE section: product vs byproduct matters to the drawer's
+ * machine, but here both are simply what leaves the line, and splitting them
+ * would list one resource twice with neither figure being the total.
  */
 export type FlowSectionId = "need" | "output" | "internal";
 
@@ -26,7 +23,9 @@ export interface FlowSection {
 }
 
 export type FlowRow =
-  | { type: "product"; key: string; section: FlowSection; storage: FactoryStorage; index: number }
+  // A source or product drawer behind an Inputs or Outputs row, hung under
+  // it like a file in a folder, with its own rule and rate.
+  | { type: "drawer"; key: string; section: FlowSection; storage: FactoryStorage; last: boolean }
   | { type: "header"; key: string; section: FlowSection; collapsed: boolean }
   | { type: "item"; key: string; section: FlowSection; balance: ResourceBalance }
   // A starred resource carries its chart in the row directly beneath it, so a
@@ -35,10 +34,8 @@ export type FlowRow =
   | { type: "empty"; key: string; section: FlowSection };
 
 /**
- * Headline rate for a balance, in the terms its section cares about.
- *
- * Needs report what is missing, outputs report what is spare, and internal rows
- * report throughput — three different questions about the same record.
+ * Headline rate for a balance, in its section's terms: needs report what is
+ * missing, outputs what is spare, internal rows throughput.
  */
 export function getFlowRowValue(section: FlowSectionId, balance: ResourceBalance) {
   switch (section) {
@@ -56,18 +53,10 @@ export function getFlowRowValue(section: FlowSectionId, balance: ResourceBalance
 }
 
 /**
- * The NET reading: an item cannot be a need and an output at once.
- *
- * RAW shows both figures - bring 10 in over here, take 4 away over there -
- * which is the honest ledger of the boundary drawers. NET does the
- * subtraction the reader was doing in their head: one signed figure per item,
- * filed under whichever side of the boundary the sign says. It is arithmetic
- * on the totals the panel already shows, never a claim that anything was
- * wired: an exactly-covered item stays listed as an output at 0/s, which is
- * the panel saying "you do not need to source this" out loud.
- *
- * Netted lists are re-ranked by their new size, the same ordering the raw
- * lists arrive with.
+ * The NET reading: one signed figure per item, filed under the side its sign
+ * says (RAW keeps both boundary figures). Pure arithmetic on the shown totals,
+ * not a claim about wiring; an exactly-covered item stays an output at 0/s.
+ * Netted lists are re-ranked by their new size, like the raw lists.
  */
 export function applyNetFlow(
   needs: ResourceBalance[],
@@ -129,16 +118,10 @@ export interface ResourceMarks {
 }
 
 /**
- * Applies the user's own marks to one group: drops what they never want to
- * see, then floats what they starred to the top.
- *
- * Order within each half is left alone - the solver already sorted by size,
- * which is the ranking that matters once the starred rows are out of the way.
- * Stable partition rather than a sort, so equal rows can never swap places
- * between renders.
- *
- * No tie to break between the two marks: starring a resource unhides it and a
- * starred row offers no hide button, so nothing can be both at once.
+ * Applies the user's marks to one group: drops hidden rows, then floats
+ * starred ones to the top. A stable partition, not a sort, so the solver's
+ * size order holds within each half and equal rows never swap between
+ * renders. Starring unhides, so no row is both.
  */
 export function applyResourceMarks(
   items: ResourceBalance[],
@@ -161,18 +144,32 @@ export function applyResourceMarks(
   return starred.length === 0 ? rest : [...starred, ...rest];
 }
 
+/** The drawers whose rates the panel sets: sources behind Inputs rows,
+ * products behind Outputs rows, by resource key. */
+export interface BoundaryDrawers {
+  need: ReadonlyMap<string, FactoryStorage[]>;
+  output: ReadonlyMap<string, FactoryStorage[]>;
+}
+
+export function drawersBehindRow(
+  drawers: BoundaryDrawers | undefined,
+  section: FlowSectionId,
+  key: string,
+): FactoryStorage[] | undefined {
+  return section === "internal" ? undefined : drawers?.[section].get(key);
+}
+
 /**
  * Flattens the sections into the row list the virtualiser walks.
  *
  * A collapsed section contributes only its header, so folding a 200-row group
- * costs nothing to render.
+ * costs nothing to render. `drawers` is given only while rates can be set.
  */
 export function buildFlowRows(
   sections: FlowSection[],
   collapsed: Record<FlowSectionId, boolean>,
   favourites: ReadonlySet<string> = new Set(),
-  products: ReadonlyMap<string, FactoryStorage[]> = new Map(),
-  expandedProducts: ReadonlySet<string> = new Set(),
+  drawers?: BoundaryDrawers,
 ): FlowRow[] {
   const rows: FlowRow[] = [];
   for (const section of sections) {
@@ -195,11 +192,16 @@ export function buildFlowRows(
 
     for (const balance of section.items) {
       rows.push({ type: "item", key: `${section.id}:${balance.key}`, section, balance });
-      if (section.id === "output" && expandedProducts.has(balance.key)) {
-        (products.get(balance.key) ?? []).forEach((storage, index) => {
-          rows.push({ type: "product", key: `product:${storage.id}`, section, storage, index });
+      const behind = drawersBehindRow(drawers, section.id, balance.key) ?? [];
+      behind.forEach((storage, index) => {
+        rows.push({
+          type: "drawer",
+          key: `drawer:${storage.id}`,
+          section,
+          storage,
+          last: index === behind.length - 1,
         });
-      }
+      });
       if (favourites.has(balance.key)) {
         rows.push({
           type: "chart",
@@ -220,7 +222,7 @@ export function buildFlowRows(
  */
 export function measureFlowRows(
   rows: FlowRow[],
-  heights: { header: number; item: number; empty: number; chart: number; product?: number },
+  heights: { header: number; item: number; empty: number; chart: number; drawer?: number },
   /**
    * Per-row height scale, for rows mid-arrival or mid-departure (the panel's
    * presence animation). The windowing math reads the ANIMATED height, so
@@ -261,15 +263,11 @@ export function findRowIndexAtOffset(offsets: number[], scrollTop: number) {
 }
 
 /**
- * Every card on the board that touches one resource, in board order.
- *
- * Recipe cards match on their raw inputs and outputs, oredict alternatives
- * included, which is the same test the board's own highlight uses - a row and
- * the cards it lights up must never disagree about what counts as a match.
- * Drawers and tanks match on the resource they hold.
- *
- * Order is the project's own card order rather than anything derived, so
- * stepping through the matches twice walks the same ring both times.
+ * Every card on the board that touches one resource, in project card order
+ * (so stepping through matches is stable). Recipe cards match on raw inputs
+ * and outputs, oredict alternatives included: the same test the board
+ * highlight uses, so the two never disagree. Drawers and tanks match on the
+ * resource they hold.
  */
 export function findResourceCardIds(project: FactoryProject, resourceKey: string): string[] {
   const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));

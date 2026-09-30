@@ -31,20 +31,14 @@ import { SetupsFilterBar, useSetupFilters } from "./SetupsFilterBar";
 import { parsePlanSearch } from "@/lib/community/search-query";
 
 /**
- * The Library: everything you have and everything the network has, as one
- * kind of tile (see LibraryTile).
+ * The Library: your designs and the network's public setups, as one kind of
+ * tile (see LibraryTile).
  *
- * YOUR designs are ONE GRID, no sections: the OPEN chip says what is on
- * the strip and the globe says what is posted. The rail on the left is
- * All, then your folders: a folder holds the grid to itself, a tile
- * dragged onto one is filed there (or Move to in its menu, like adding to
- * a playlist). Search, tier and sort at the top apply to whatever is
- * showing. Below a rule sits the one other page, Public setups.
- *
- * Click a tile to open it, right click or the dots for its menu. The globe
- * is green when the design is posted and dim when it is not; clicking the
- * dim one posts it. Posted tiles carry a link button. Closing a tab never
- * deletes; delete lives here, armed.
+ * Your designs are ONE GRID: the OPEN chip marks designs on the tab strip and
+ * the globe marks posted ones (green posted, dim not; clicking dim posts).
+ * The left rail is All, your folders (drop a tile on one, or use Move to),
+ * then Public setups. Search, tier and sort apply to whatever is showing.
+ * Closing a tab never deletes; delete lives here, armed.
  */
 
 const POSTS_PAGE_SIZE = 48;
@@ -245,11 +239,9 @@ export function LibraryPage() {
   const suppressClickRef = useRef(false);
 
   /**
-   * OUR OWN DRAG, not the browser's: a press on a tile that moves a few
-   * pixels becomes a small card riding the pointer (the face, the name, a
-   * count when the selection comes along). Rail chips light as it passes;
-   * releasing on a collection files the lot there, and releasing on New
-   * collection makes one on the spot and files them into it.
+   * A custom pointer drag, not native drag and drop: past a few pixels a small
+   * card (face, name, selection count) rides the pointer. Releasing on a
+   * collection files the lot there; on New collection it creates one first.
    */
   const beginTileDrag = (design: DesignSummary, event: ReactPointerEvent) => {
     const ids = dragIdsFor(design.id);
@@ -359,10 +351,8 @@ export function LibraryPage() {
     }
   };
   /**
-   * A design and its post are one thing, so deleting the design takes the
-   * post down. A post that cannot be reached (signed out, already gone) does
-   * not stop the delete; a leftover post is the owner's to find in Public
-   * setups.
+   * Deleting a design also takes its post down. An unreachable post (signed
+   * out, already gone) does not block the delete.
    */
   const deleteDesign = async (id: string) => {
     const design = designs.find((entry) => entry.id === id);
@@ -398,8 +388,7 @@ export function LibraryPage() {
             an accent by contrast rather than colour, flush to the board. */}
         <div className="flex h-full min-h-0 overflow-hidden border-4 border-[#23262d] bg-[#101215] shadow-[inset_2px_2px_0_rgba(255,255,255,0.05),inset_-2px_-2px_0_rgba(0,0,0,0.6)] compact:flex-col compact:border-0 compact:shadow-none">
           {/* THE RAIL: all, then folders. On a phone, one row of chips. */}
-          {/* On a phone the rail is one dropdown: the chips in a row had to
-              be scrolled sideways to be found at all. */}
+          {/* On a phone the rail is one dropdown rather than a sideways-scrolling row. */}
           <div className="hidden shrink-0 border-b border-[var(--mc-33)] px-2 py-1.5 compact:block">
             <select
               value={railValue(library.view)}
@@ -698,9 +687,8 @@ export function LibraryPage() {
                         const post = design.communityPlanId
                           ? myPosts?.get(design.communityPlanId)
                           : undefined;
-                        // A design opened as a copy of someone else's post is YOURS now: it
+                        // A design opened as a copy of someone else's post is YOURS: it
                         // posts, edits and wears marks like anything you made from scratch.
-                        // The link it keeps to its source serves the plan card's reset only.
                         return (
                           <LibraryTile
                             key={design.id}

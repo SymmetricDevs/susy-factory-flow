@@ -8,7 +8,7 @@
  * The keyboard needs to know which port the pointer is over, and the board is not
  * about to subscribe every card on it to a hover value: a value every port read
  * would rebuild the whole board twice per pointer crossing, which is the cost
- * ARCHITECTURE.md's hover rules exist to avoid. So the pointed-at port is written
+ * CLAUDE.md's hover rules exist to avoid. So the pointed-at port is written
  * here from its own enter and leave handlers, and read imperatively by the one
  * keydown listener on the board.
  *

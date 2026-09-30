@@ -6,17 +6,14 @@ import { leaveWelcomeTab } from "@/lib/welcome/welcome-tab";
 /**
  * The Library: everything you have, and everything the network has.
  *
- * It is not a tab and not a design. It sits at the head of the tab strip
- * as a "Library" pill, and like Welcome it COVERS the board rather than
- * replacing it, so nothing about the plan underneath is unmounted while it
- * is up.
+ * Not a tab and not a design: a "Library" pill at the head of the tab strip
+ * that, like Welcome, COVERS the board so nothing underneath unmounts.
  *
  * ALL is every design you have, one grid; a FOLDER is the same grid held to
  * one folder; PUBLIC is the network's setups.
  *
- * `active` and `view` live in sessionStorage: a reload while you are on the
- * library lands you back on it, on the same view, and a new visit starts on
- * whatever design was open. Same scope Welcome uses for the same reason.
+ * `active` and `view` live in sessionStorage, as Welcome's do: a reload
+ * returns to the same view, and a new visit starts on the open design.
  */
 export type LibraryView =
   | { kind: "all" }

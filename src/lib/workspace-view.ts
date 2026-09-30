@@ -7,18 +7,21 @@ import { isCompactViewport } from "./compact-view";
  * Workspace preferences: which of the three columns are open, and how the
  * resource panel is filtered.
  *
- * Same reasoning as `board-view.ts`, and the same mechanism: personal taste
- * rather than part of a plan, kept in localStorage outside any store and read
- * through useSyncExternalStore so the server can render defaults without a
- * hydration mismatch. Sharing a setup is the same one exception - see
- * `plan-view.ts`.
+ * Same mechanism as `board-view.ts`: personal taste rather than part of a
+ * plan, kept in localStorage outside any store and read through
+ * useSyncExternalStore so the server can render defaults without a hydration
+ * mismatch. Opening a shared setup is the exception (see `plan-view.ts`).
  *
  * Hidden and favourite resources are keyed by `ResourceKey` (`item:iron_ingot`)
- * and kept across designs on purpose: someone who never wants to see Water
- * never wants to see it on any board.
+ * and apply across all designs on purpose.
  */
 export interface WorkspaceView {
-  /** The recipe browser / pockets / setups column on the left. */
+  /** Per-plan list order in the Pool view, independent of canvas order. */
+  poolWorksheetOrder: Record<string, string[]>;
+  /** Collapsed Pool machine groups, keyed by plan; never changes the plan. */
+  poolCollapsedMachines: Record<string, string[]>;
+  poolCollapsedProductionGroups: Record<string, string[]>;
+  /** The column on the left. */
   leftPanelOpen: boolean;
   /** The resource flow panel on the right. */
   rightPanelOpen: boolean;
@@ -48,6 +51,9 @@ export interface WorkspaceView {
 const WORKSPACE_VIEW_STORAGE_KEY = "susy-factory-flow-workspace-view";
 
 export const DEFAULT_WORKSPACE_VIEW: WorkspaceView = {
+  poolWorksheetOrder: {},
+  poolCollapsedMachines: {},
+  poolCollapsedProductionGroups: {},
   leftPanelOpen: true,
   rightPanelOpen: true,
   showHiddenResources: false,
@@ -62,14 +68,12 @@ export const DEFAULT_WORKSPACE_VIEW: WorkspaceView = {
 /**
  * Whether the side columns start open.
  *
- * On a phone the two of them leave the board almost nothing, so they start
- * closed and the board gets the screen. Each edge keeps a handle, so opening one
- * is a tap or a swipe away and the choice is then remembered like any other.
+ * On a compact window they start closed so the board gets the screen; the
+ * choice is then remembered like any other.
  *
  * A media query rather than `window.innerWidth`: a mobile browser widens the
- * layout viewport when a page overflows it, so `innerWidth` on a 390px phone can
- * report 935 — which is exactly how this used to open both columns on the one
- * device that has room for neither.
+ * layout viewport when a page overflows it, so `innerWidth` on a 390px phone
+ * can report 935.
  */
 function defaultPanelsOpen(): boolean {
   return typeof window === "undefined" || !isCompactViewport();
@@ -98,13 +102,21 @@ function readWorkspaceView(): WorkspaceView {
     const keys = (value: unknown) =>
       Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 
-    // A starred resource is never hidden (see toggleResourceFavourite), so a
-    // key in both lists is a blob from a build that allowed it. Settle it here
-    // rather than in every reader: the star wins, once, on the way in.
+    // A starred resource is never hidden (see toggleResourceFavourite). If a
+    // stored blob has a key in both lists, the star wins here on the way in.
     const favouriteResourceKeys = keys(parsed.favouriteResourceKeys);
     const starred = new Set(favouriteResourceKeys);
 
     return {
+      poolCollapsedMachines: parsed.poolCollapsedMachines && typeof parsed.poolCollapsedMachines === "object"
+        ? Object.fromEntries(Object.entries(parsed.poolCollapsedMachines).map(([key, value]) => [key, keys(value)]))
+        : {},
+      poolCollapsedProductionGroups: parsed.poolCollapsedProductionGroups && typeof parsed.poolCollapsedProductionGroups === "object"
+        ? Object.fromEntries(Object.entries(parsed.poolCollapsedProductionGroups).map(([key, value]) => [key, keys(value)]))
+        : {},
+      poolWorksheetOrder: parsed.poolWorksheetOrder && typeof parsed.poolWorksheetOrder === "object"
+        ? Object.fromEntries(Object.entries(parsed.poolWorksheetOrder).map(([key, value]) => [key, keys(value)]))
+        : {},
       favouriteResourceKeys,
       hiddenResourceKeys: keys(parsed.hiddenResourceKeys).filter((key) => !starred.has(key)),
       leftPanelOpen: flag(parsed.leftPanelOpen, defaultPanelsOpen()),
@@ -126,7 +138,7 @@ function readWorkspaceView(): WorkspaceView {
   }
 }
 
-function subscribe(listener: () => void) {
+export function subscribeWorkspaceView(listener: () => void) {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -163,7 +175,7 @@ export function writeWorkspaceView(patch: Partial<WorkspaceView>) {
 }
 
 export function useWorkspaceView(): WorkspaceView {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribeWorkspaceView, getSnapshot, getServerSnapshot);
 }
 
 /** The same value the hook returns, for callers outside React. */
@@ -188,11 +200,9 @@ export function toggleResourceHidden(resourceKey: string) {
 /**
  * Star or unstar a resource. Starring one that was hidden UNHIDES it.
  *
- * A starred resource is unhideable: its row offers no hide button, and this is
- * the one path that could put a resource in both lists at once. Rather than
- * teach every reader to break the tie, the two states are kept mutually
- * exclusive at the point they are written - so "hidden" always means hidden,
- * with no exceptions to remember.
+ * A starred resource is unhideable (its row offers no hide button), and this
+ * is the one path that could put a resource in both lists, so the two states
+ * are kept mutually exclusive here and readers need no tie-break.
  */
 export function toggleResourceFavourite(resourceKey: string) {
   const current = getSnapshot();

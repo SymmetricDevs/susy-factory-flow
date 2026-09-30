@@ -8,55 +8,33 @@ import { inkFor } from "./node-colors";
 /**
  * How far every node is from the one under the cursor, in wires.
  *
- * Zoomed out the board is a field of cards and the shape of the plant is the
- * only thing left to read — but "what feeds this, and what does it feed, and
- * how far away is any of it" is exactly what you cannot see when the lines are
- * hairlines crossing a hundred other lines. So hovering a card at that zoom
- * turns the board into a distance map: the hovered node is the hub, everything
- * one wire away takes the first colour of the ramp, everything two wires away
- * the next, and so on out to the far edge of its chain. Anything the hub can't
- * reach at all drops out to grey.
+ * At glance zoom, hovering a card turns the board into a distance map: the
+ * hovered node is the hub, nodes one wire away take the first colour of the
+ * ramp, two wires the next, and so on; anything the hub cannot reach goes
+ * grey. Distance is UNDIRECTED: a node feeding the hub is as near as one the
+ * hub feeds.
  *
- * Distance is UNDIRECTED. "Two wires from here" is a statement about the
- * plant's layout, not about which way the items move; a node that feeds the hub
- * is as near to it as one the hub feeds, and treating them differently would
- * leave half of every chain grey for no reason a player would recognise.
- *
- * Three things about how it is built, all of them about cost:
- *
- * - NOTHING RE-RENDERS. The colours are written straight onto each mounted node
- *   element as two custom properties, and CSS in globals.css paints the glance
- *   layer from them. The first cut of this did it the React way — one
- *   `useSyncExternalStore` per card — and it cost 5× the frame rate while the
- *   pointer crossed the board: 150 components reconciling per hovered node.
- *   ARCHITECTURE.md's rule that hover must not rebuild the board is not a style
- *   preference, and a feature that only fires on hover is exactly where it
- *   bites. The one React subscriber left is the legend, which is one component.
- * - The map waits for the pointer to SETTLE. Sweeping the cursor towards a
- *   target crosses a dozen cards on the way, and rebuilding on each of them is
- *   both a flicker and a pile of work nobody asked for. A short rest before
- *   painting means the cost is paid once, when a hover is actually meant.
- * - The whole thing only exists at the glance zoom step. Zoomed in a card shows
- *   its real contents and painting over them would be vandalism, so
- *   NodeDetailController clears the map on the way back to full detail.
+ * Cost rules:
+ * - NOTHING RE-RENDERS. Colours are written straight onto each mounted node
+ *   element as two custom properties, and CSS in globals.css paints the
+ *   glance layer from them. A per-card React subscription would reconcile
+ *   every card per hovered node; src/components/flow/CLAUDE.md's rule is that hover must
+ *   not rebuild the board. The one React subscriber is the legend.
+ * - The map waits for the pointer to SETTLE, so sweeping across a dozen
+ *   cards paints once, not a dozen times.
+ * - It exists only at the glance zoom step; NodeDetailController clears it
+ *   on the way back to full detail, where cards show their real contents.
  */
 
 /**
- * The ramp: one colour to one other colour, and nothing in between.
+ * The ramp: one colour fading to one other, so distance reads as one
+ * continuous quantity rather than as categories (a multi-stop rainbow has
+ * seams between adjacent rings). Hot amber at the hub, deep crimson at the
+ * far end.
  *
- * A multi-stop rainbow discriminates more steps, but it reads as CATEGORIES —
- * "the yellow ones, the red ones, the blue ones" — and every stop is a place
- * where two adjacent rings look unrelated. A single fade has no seams in it, so
- * the eye reads it as one continuous quantity, which is what distance is. Hot
- * amber at the hub's doorstep, deep crimson at the far end of its chain.
- *
- * Held in HSL and mixed there rather than as two hex codes mixed channel by
- * channel. Straight RGB between a bright amber and a dark crimson runs through
- * mud — the saturation collapses in the middle and the halfway ring comes out
- * the colour of cardboard. Rotating the hue and dropping the lightness keeps
- * every step as vivid as the ends. The far hue is negative on purpose: it winds
- * DOWN through orange and red into crimson, the warm way round, instead of
- * taking the long way through green.
+ * Mixed in HSL, not RGB: straight RGB between bright amber and dark crimson
+ * goes muddy in the middle. The far hue is negative on purpose so it winds
+ * down through orange and red, not the long way through green.
  */
 const HOP_NEAR = { h: 40, s: 100, l: 64 };
 const HOP_FAR = { h: -20, s: 72, l: 26 };
@@ -65,11 +43,9 @@ const HOP_FAR = { h: -20, s: 72, l: 26 };
 const HUB_FILL = "#fff6df";
 
 /**
- * Nothing the hub touches. Present, but not competing.
- *
- * A light grey with faded ink rather than a dark tile: dark tiles read as
- * ANOTHER end of the ramp — "very far" instead of "not connected" — and the
- * whole point of this colour is to be outside the scale entirely.
+ * Nothing the hub touches: a light grey with faded ink. Not a dark tile,
+ * which would read as the far end of the ramp ("very far") instead of
+ * outside the scale ("not connected").
  */
 const UNREACHABLE_FILL = "#c9ccd1";
 const UNREACHABLE_INK = "rgba(22,22,26,0.42)";
@@ -124,11 +100,8 @@ export function hopFill(depth: number, maxDepth: number): string {
   if (depth === 0) {
     return HUB_FILL;
   }
-  // The ramp spans hop 1 to the furthest hop, so a three-deep chain uses the
-  // whole fade rather than the first fifth of it — the reading is "near or far
-  // for THIS plant", not an absolute number of wires. Safe to stretch this far
-  // precisely because the ends are one colour fading into another: even a
-  // two-ring map looks like two points on a scale, not like two categories.
+  // The ramp spans hop 1 to the furthest hop, so the reading is "near or far
+  // for THIS plant", not an absolute number of wires.
   return rampColor(maxDepth > 1 ? (depth - 1) / (maxDepth - 1) : 0);
 }
 
@@ -140,18 +113,14 @@ export function hopInk(depth: number, maxDepth: number): string {
 /**
  * Breadth-first over the wires, from the hub outwards.
  *
- * Nodes are discovered from the edge list rather than from the node list: a
- * node with no wires at all can only ever be unreachable, and never appearing
- * in the map is the same answer as appearing at distance -1.
+ * Nodes are discovered from the edge list: a node with no wires can only be
+ * unreachable, and absence from the map means the same as distance -1.
  *
- * `passThrough` — the drawers, tanks and buffers — are the exception to one hop
- * per wire. A machine feeding a drawer that feeds another machine is one step
- * away from it in the only sense a player cares about; the drawer is where the
- * items wait, not somewhere the chain goes. So going IN to a buffer costs a
- * hop and coming back out is free, which makes the round trip through it count
- * as one, and puts the buffer itself at the same distance as what it feeds.
- * Leaving the hub is never free, even when the hub is a buffer — hovering a
- * drawer has to put its neighbours at 1, not at 0.
+ * `passThrough` nodes (drawers, tanks, buffers) are where items wait, not a
+ * step in the chain: going IN to one costs a hop and coming out is free, so
+ * a machine -> drawer -> machine trip counts as one hop and the buffer sits
+ * at the same distance as what it feeds. Leaving the hub is never free, even
+ * from a buffer, so hovering a drawer puts its neighbours at 1.
  */
 export function computeHopDepths(
   hubId: string,
@@ -220,14 +189,11 @@ let hopMap: HopMap | null = null;
 const listeners = new Set<() => void>();
 
 /**
- * The board wears "a map is up" as an attribute, and the wires read it in CSS.
- *
- * Under a distance map the wires have already said what they had to say — the
- * map IS the wiring, counted — and at this zoom they are a thicket that hides
- * the colours behind it. So they fade back. Done as an attribute plus a CSS
- * rule rather than as edge props for the reason ARCHITECTURE.md gives: hover
- * must not re-render the board, and this board can carry hundreds of edges.
- * The same trick, and the same warning about `className`, as node-detail.ts.
+ * The board wears "a map is up" as an attribute, and the wires read it in
+ * CSS to fade back (at this zoom they hide the colours). An attribute plus a
+ * CSS rule, not edge props, because hover must not re-render the board
+ * (src/components/flow/CLAUDE.md). The same trick, and the same warning about
+ * `className`, as node-detail.ts.
  */
 export const HOP_MAP_ATTRIBUTE = "data-hop-map";
 
@@ -238,13 +204,10 @@ export const HOP_HUB_ATTRIBUTE = "data-hop-hub";
 const HOP_FILL_PROPERTY = "--hop-fill";
 const HOP_INK_PROPERTY = "--hop-ink";
 /**
- * The figure the card shows while a map is up — the hop count itself.
- *
- * A CSS string, quotes and all, because the rule that draws it is
- * `content: var(--hop-label)`. Doing it this way is what lets the card change
- * what it SAYS, not just what colour it is, without React hearing about it.
- * Out-of-reach cards get an empty label: their answer is "not from here", and
- * a number would be a lie.
+ * The figure the card shows while a map is up: the hop count. A CSS string,
+ * quotes and all, because the rule that draws it is
+ * `content: var(--hop-label)`; that lets the card change its text without
+ * React. Out-of-reach cards get an empty label.
  */
 const HOP_LABEL_PROPERTY = "--hop-label";
 
@@ -261,15 +224,13 @@ export function registerHopMapBoard(element: HTMLElement | null) {
 }
 
 /**
- * Write the current map onto the DOM — or wipe it off.
+ * Write the current map onto the DOM, or wipe it off.
  *
- * Every mounted node gets a colour, including the ones the hub cannot reach:
- * "not connected to this" is part of the answer, and leaving those cards in
- * their normal colours would make them look like part of the map. Nodes that
- * are not mounted are not painted, which is fine and is why the map is dropped
- * the moment the board pans or zooms — see FactoryFlow's move handlers. React
- * Flow culls off-screen nodes, so a map held across a pan would arrive at cards
- * that never got the memo.
+ * Every mounted node gets a colour, unreachable ones included, so they do
+ * not look like part of the map. Unmounted nodes are not painted, which is
+ * why the map is dropped the moment the board pans or zooms (FactoryFlow's
+ * move handlers): React Flow culls off-screen nodes, so a map held across a
+ * pan would miss cards that mount later.
  */
 function paint() {
   const board = boardElement;

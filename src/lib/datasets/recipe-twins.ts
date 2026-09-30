@@ -14,15 +14,12 @@ import { DEFAULT_DATASET_MANIFEST_URL } from "./remote";
 import type { DatasetVersion, RecipeSummary } from "./types";
 
 /**
- * A card's TWINS (Jack, 2026-09-07): every other recipe in the dataset that
- * takes exactly this card's consumed inputs and makes exactly its outputs -
- * the refactor search with both sides set to ONLY - flattened over the
- * machines each one runs on. They share the machine menu under the card's
- * name bar with the recipe's own handlers, because a swap onto one is as
- * lossless as a machine switch: every port the wires need is on the twin,
- * so every wire re-docks. Amounts, time and power may differ; non-consumed
- * slots (circuits, molds) may come and go. The swap itself is the refactor
- * (`refactorNodeWithRecipe`), one undo step.
+ * A card's TWINS: every other recipe that takes exactly this card's consumed
+ * inputs and makes exactly its outputs (the refactor search with both sides
+ * ONLY), flattened over the machines each runs on. They sit in the machine
+ * menu beside the recipe's own handlers because a swap onto one re-docks
+ * every wire, like a machine switch. Amounts, time, power and non-consumed
+ * slots may differ. The swap is the refactor (`refactorNodeWithRecipe`).
  */
 export interface RecipeTwin {
   recipe: RecipeSummary;
@@ -81,9 +78,9 @@ const slotKey = (slot: ResourceAmount) => `${slot.kind}:${slot.id}:${slot.amount
 
 /**
  * The card's own recipe, seen through the dataset. Ids alone do not settle
- * it - an older plan can carry a recipe under a pre-rebuild id - so a
- * candidate that runs on the same map for the same time and power with the
- * same slots and amounts is the card's recipe, not a twin.
+ * it (a plan can carry a recipe under an id from an older build), so a
+ * candidate on the same map with the same time, power, slots and amounts is
+ * the card's recipe, not a twin.
  */
 export function isSameRecipeContent(
   recipe: Pick<Recipe, "id" | "durationTicks" | "eut" | "inputs" | "outputs" | "source" | "machineType">,

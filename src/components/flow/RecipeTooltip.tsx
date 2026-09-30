@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { useFactoryStore } from "@/store/factory-store";
 import type { RecipeTooltipView, TooltipAction } from "./recipe-tooltip-data";
 
 const GESTURE_NAME: Record<TooltipAction["gesture"], string> = {
@@ -6,21 +7,24 @@ const GESTURE_NAME: Record<TooltipAction["gesture"], string> = {
   right: "Right click",
   wheel: "Mouse wheel",
   drag: "Drag",
+  middle: "Middle click",
 };
 
 /**
  * One mouse, drawn at text height so the button it lights is legible at
  * the size the panel is actually read at. Left and right fill their half
- * of the top; wheel fills the wheel; drag adds the arrow under it.
+ * of the top; wheel fills the wheel; middle fills the wheel and presses it
+ * (the arrow under it points down); drag adds a sideways arrow under it.
  */
-function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
+export function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
   return (
     <svg aria-hidden="true" width="20" height="24" viewBox="0 0 20 24" fill="none" className="shrink-0 text-fg-muted">
       <rect x="3" y="1" width="14" height="16" rx="6" stroke="currentColor" strokeWidth="1.6" />
       <path d="M10 1v7.5M3 8.5h14" stroke="currentColor" strokeWidth="1.4" />
       {gesture === "left" && <path d="M4.2 7.7V6.6c0-2.4 1.8-4.1 4.6-4.5V7.7Z" fill="currentColor" />}
       {gesture === "right" && <path d="M15.8 7.7V6.6c0-2.4-1.8-4.1-4.6-4.5V7.7Z" fill="currentColor" />}
-      {gesture === "wheel" && <rect x="8.5" y="3" width="3" height="4.5" rx="1.5" fill="currentColor" />}
+      {(gesture === "wheel" || gesture === "middle") && <rect x="8.5" y="3" width="3" height="4.5" rx="1.5" fill="currentColor" />}
+      {gesture === "middle" && <path d="M7 19.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />}
       {gesture === "drag" && <path d="M3 21h14m-3-2.5 3 2.5-3 2.5" stroke="currentColor" strokeWidth="1.4" />}
     </svg>
   );
@@ -28,7 +32,9 @@ function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
 
 /** Read-only gesture legend; actions remain on the hovered control. */
 export function TooltipActions({ actions }: { actions: readonly TooltipAction[] }) {
-  if (!actions.length) return null;
+  const readOnly = useFactoryStore((state) => state.isReadOnly);
+  // The viewer permits inspection, but none of these editing/browsing gestures.
+  if (readOnly || !actions.length) return null;
   return (
     <div className="mt-3 flex flex-col gap-y-1 border-t border-line pt-2.5 text-fg-subtle" data-tooltip-actions="">
       {actions.map((action) => (

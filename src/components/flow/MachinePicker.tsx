@@ -17,9 +17,8 @@ import type { RecipeTwin } from "@/lib/datasets/recipe-twins";
  * The machine switcher: one list under the card's name bar, opened by the
  * chevron at the bar's left. Each row is the machine's icon, its name and
  * two figures at the recipe's own tier (time, EU/t). Click switches; hover
- * previews the machine on the card exactly as the old tab strip did.
- * Order is fixed - manual, steam, electric, multiblock, by tier inside each -
- * because that is the only order anyone reads a machine list in.
+ * previews the machine on the card. Order is fixed: manual, steam,
+ * electric, multiblock, by tier inside each.
  */
 
 // Rendered machine PNGs are 256px squares whose opaque block art spans
@@ -156,8 +155,8 @@ function formatCompact(value: number): string {
 /* ------------------------------------------------------------------ */
 
 /** The panel's scroll cap, and one row's height, for placing it before it exists. */
-// Sized a third up from the card's own 13px (Jack, 2026-09-07): the menu is
-// screen-fixed while the card is zoomed, and at 13px it read too small.
+// A third larger than the card's own 13px: the menu is screen-fixed while
+// the card is zoomed, so 13px reads too small.
 const MENU_MAX_HEIGHT = 520;
 const MENU_ROW_HEIGHT = 40;
 
@@ -206,8 +205,8 @@ export function MachineMenu({
   /**
    * The card's TWINS: other recipes taking and making exactly what this one
    * does, one row per machine, under the recipe's own machines. The section
-   * exists only when there are some (Jack, 2026-09-07): none, still loading
-   * or failed all read as the plain machine list.
+   * shows only when there are some; none, loading and failed all read as the
+   * plain machine list.
    */
   twins?: RecipeTwin[];
   /** Recipe map -> the map's machine, the face for a twin whose handler has no family icon. */
@@ -233,14 +232,16 @@ export function MachineMenu({
   const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number }>();
   useEffect(() => {
     const bar = anchorRef.current?.parentElement;
-    const card = anchorRef.current?.closest("[data-node-glance-root]");
+    // The worksheet reuses this chooser without a canvas card. Its cell is
+    // the window to align to; other standalone controls can use their bar.
+    const card = anchorRef.current?.closest("[data-node-glance-root], [data-machine-editor-anchor]") ?? bar;
     if (bar && card) {
       // Real px throughout (rects, innerWidth); the menu box wears ui-zoom,
       // so the numbers are divided by the scale where the style reads them.
       const scale = getUiScale();
       const barRect = bar.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const width = Math.max(480 * scale, Math.round(cardRect.width));
+      const width = Math.min(window.innerWidth - 16, Math.max(480 * scale, Math.round(cardRect.width)));
       const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
       // The list's height before it exists: one row per machine, capped
       // where the panel starts scrolling.
@@ -319,6 +320,8 @@ export function MachineMenu({
     fade: true,
   });
 
+  const narrow = anchorAt !== undefined && anchorAt.width < 440;
+  const rowColumns = narrow ? "36px minmax(0,1fr) minmax(0,1fr)" : "36px minmax(0,1fr) 72px 112px";
   const menu = anchorAt ? (
     <div
       ref={rootRef}
@@ -354,10 +357,10 @@ export function MachineMenu({
               "grid w-full items-center gap-x-4 px-3 py-2 text-left text-[17px] leading-[24px]",
               active ? "bg-[var(--mc-71)] text-white" : "text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white",
             ].join(" ")}
-            style={{ gridTemplateColumns: "36px minmax(0,1fr) 72px 112px" }}
+            style={{ gridTemplateColumns: rowColumns, columnGap: narrow ? 8 : undefined }}
           >
             {/* Bare art, no slot chrome: the list is a menu, not a crafting grid. */}
-            <span className="flex h-9 w-9 items-center justify-center">
+            <span className="flex h-9 w-9 items-center justify-center" style={{ gridRow: narrow ? "span 2" : undefined }}>
               {icon ? (
                 <ResourceIcon
                   resource={{ ...icon, amount: 1 }}
@@ -370,7 +373,7 @@ export function MachineMenu({
                 />
               ) : null}
             </span>
-            <span title={handler.label} className={getFusionMachine(handler.machineType) ? "min-w-0 whitespace-normal" : "min-w-0 truncate"}>{handler.label}</span>
+            <span title={handler.label} style={narrow ? { gridColumn: "2 / 4", whiteSpace: "normal", overflowWrap: "anywhere" } : undefined} className={getFusionMachine(handler.machineType) ? "min-w-0 whitespace-normal" : "min-w-0 truncate"}>{handler.label}</span>
             {figures ? <DurationFigure seconds={stats.seconds} /> : <span />}
             {figures ? <Figure value={power.value} unit={power.unit} dim={power.unit === ""} /> : <span />}
           </button>
@@ -401,9 +404,9 @@ export function MachineMenu({
                     onUseTwin?.(twin);
                   }}
                   className="grid w-full items-center gap-x-4 px-3 py-2 text-left text-[17px] leading-[24px] text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white"
-                  style={{ gridTemplateColumns: "36px minmax(0,1fr) 72px 112px" }}
+                  style={{ gridTemplateColumns: rowColumns, columnGap: narrow ? 8 : undefined }}
                 >
-                  <span className="flex h-9 w-9 items-center justify-center">
+                  <span className="flex h-9 w-9 items-center justify-center" style={{ gridRow: narrow ? "span 2" : undefined }}>
                     {icon ? (
                       <ResourceIcon
                         resource={{ ...icon, amount: 1 }}
@@ -416,7 +419,7 @@ export function MachineMenu({
                       />
                     ) : null}
                   </span>
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 truncate" style={narrow ? { gridColumn: "2 / 4", whiteSpace: "normal", overflowWrap: "anywhere" } : undefined}>
                     {twin.handler.label}
                     {showMap ? (
                       <span className="ml-2 text-[13px] text-[var(--mc-ink-muted)]">{twin.recipe.recipeMap}</span>
@@ -444,7 +447,7 @@ export function MachineMenu({
           className="mx-3 mt-1.5 flex w-[calc(100%-24px)] items-center gap-4 border-t-2 border-[var(--mc-33)] px-0 py-2 pt-3 text-left text-[17px] leading-[24px] text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white"
         >
           <span className="flex h-9 w-9 items-center justify-center text-[24px] font-black leading-none">+</span>
-          <span className="min-w-0 truncate">Add another recipe to this machine</span>
+          <span className="min-w-0 whitespace-normal">Add another recipe to this machine</span>
         </button>
       ) : null}
     </div>

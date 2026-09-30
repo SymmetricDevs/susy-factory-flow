@@ -1,10 +1,8 @@
 // Wiki-sourced machine stats for values the in-game tooltips do not state.
 //
-// Source: wiki.gtnewhorizons.com, fetched 2026-07-29. Full provenance and
-// per-machine tables live in docs/machine-support-notes.md. This file exists
-// at the user's explicit request as a stopgap until the structured exporter
-// can pull these values from the machine classes directly; tooltip-parsed
-// stats always take precedence over entries here.
+// Source: wiki.gtnewhorizons.com. This file is a stopgap until the
+// structured exporter can pull these values from the machine classes;
+// tooltip-parsed stats always take precedence over entries here.
 //
 // Shape per entry:
 //   durationMultiplier / eutMultiplier - filled only if the tooltip gave none

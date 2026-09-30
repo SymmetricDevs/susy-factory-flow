@@ -1,22 +1,14 @@
 /**
  * Pure geometry for how edges are drawn: which parallel run each one takes,
- * and how thick its casing is.
- *
- * Split out of FactoryFlow so it can be tested without React Flow, a DOM, or a
- * board — everything here is a function of its arguments and nothing else.
- * Routing (which corridor a wire takes) stays in FactoryFlow; this is only
- * about what gets painted once the route exists.
+ * and how thick its casing is. A function of its arguments only, so it tests
+ * without React Flow, a DOM or a board. Routing lives elsewhere; this is only
+ * what gets painted once a route exists.
  */
 
 /**
- * Outer width of the dark rim drawn under every line.
- *
- * This was a flat `core + 2`. On a 3px wire that is a 1px rim on each side —
- * plenty, since the rim only has to say "this line is in front of that one".
- * On a 34px pipe the same 2px is 6% of the width and reads as nothing, so a
- * crossing of two fat pipes lost its separation exactly where it needed it
- * most and the two colours simply met. Proportional keeps the rim doing its
- * job at every width, and the floor keeps thin lines exactly as they were.
+ * Outer width of the dark rim drawn under every line: proportional to the
+ * core so a crossing of two fat pipes stays visibly separated, with a 2px
+ * floor for thin wires.
  */
 export function edgeCasingWidth(coreWidth: number): number {
   return coreWidth + Math.max(2, coreWidth * 0.22);
@@ -31,21 +23,13 @@ export interface EdgeDepth {
 
 /**
  * Back-to-front order for lines that share pixels. Sorted with this, the line
- * that ends up ON TOP sorts last — and that same line is the one that hops.
+ * on TOP sorts last, and that same line must be the one that hops (when paint
+ * order and hop precedence disagree, a hop arcs under a line painted over it).
  *
- * The two used to disagree, which is what made hops look broken. Paint order
- * went by width (thin on top) while hop precedence went by routeIndex, so a
- * fat pipe with a later routeIndex would rear up over a thin line that was
- * painted above it for the whole crossing: a big hump, buried, arcing over
- * nothing you could see.
- *
- * Thinner lines go on top and do the hopping, which is also the right way
- * round on its own merits. A thin line survives being drawn over a fat pipe;
- * a thin line UNDER a fat pipe is simply gone. And a small bump on a hair line
- * reads instantly, where a 34px pipe rearing over something is a blob.
- *
- * Equal widths fall back to routeIndex, so thin mode — where every line
- * publishes the same width — keeps exactly the precedence it always had.
+ * Thinner lines go on top and do the hopping: a thin line survives being
+ * drawn over a fat pipe but vanishes under one, and a small bump on a thin
+ * line reads instantly where a fat pipe rearing up is a blob. Equal widths
+ * fall back to routeIndex.
  */
 export function compareEdgeDepth(left: EdgeDepth, right: EdgeDepth): number {
   if (left.width !== right.width) {
@@ -62,26 +46,14 @@ export function compareEdgeDepth(left: EdgeDepth, right: EdgeDepth): number {
 export const EDGE_LANE_CAP = 6;
 
 /**
- * Assigns each edge a parallel run, so that no two edges leaving the same node
- * — or arriving at the same node — share one.
+ * Assigns each edge a parallel run so that no two edges leaving the same
+ * node, or arriving at the same node, share one: greedy colouring over that
+ * conflict relation. Edges that merely cross the same empty space are not
+ * conflicts here; that is a corridor problem for the router.
  *
- * This used to be `hash(edgeId) % 4`, which is not an allocation: it has no
- * idea which other edges are anywhere near it, so two wires down the same
- * corridor landed on the identical offset roughly a quarter of the time and
- * drew exactly on top of each other. At 3px that reads as one slightly wrong
- * line. At 34px it reads as the board being broken.
- *
- * Greedy colouring over the real conflict relation (shares a source, or shares
- * a target) fixes the case that actually produces stacked wires: fan-out from
- * one machine's outputs and fan-in to another's inputs. Edges that merely
- * happen to cross the same empty space are NOT conflicts here — that is a
- * global corridor problem, and the route scorer's nearness cost already exists
- * to handle it.
- *
- * Deterministic: iteration follows the given edge order, which is stable for a
- * given plan, and the result depends on nothing else — in particular not on
- * solver output, so a throughput change never reshuffles lanes and never
- * invalidates a route.
+ * Deterministic: iteration follows the given edge order, and the result does
+ * not depend on solver output, so a throughput change never reshuffles lanes
+ * or invalidates a route.
  */
 export function assignEdgeLanes(
   edges: ReadonlyArray<{ id: string; source: string; target: string }>,

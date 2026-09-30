@@ -11,8 +11,8 @@ import { getRuntimeCalculationOutputs } from "./runtime-calculation";
  * - `bare`  fill in only the slots with NO wire on them. The declared
  *           boundary wins, which is what a lifted-out selection needs.
  * - `all`   a drawer on every slot, wired or not, so a half-fed input tops up
- *           and a surplus output spills. The board rules use this: it is
- *           exactly what wiring a source onto every input would do.
+ *           and a surplus output spills (what wiring a source onto every
+ *           input would do).
  */
 export type BoundaryScope = "none" | "bare" | "all";
 
@@ -25,29 +25,23 @@ export interface CloseBoundariesOptions {
  * Close a plan's boundary: a SOURCE drawer on every ingredient nobody makes,
  * a DRAIN drawer on every product nobody takes.
  *
- * By default a board does NOT do this - declaring the boundary is the
+ * A board does NOT do this by default: declaring the boundary is the
  * player's job, and a card with a bare slot reads UNWIRED until they do. It
- * runs in three places:
+ * runs for:
+ * - free inputs/outputs setup rules in calculateThroughput, at scope `all`
+ *   (getSetupRules currently answers every plan with both off);
+ * - `calculateSelectionFlow`, which solves a selection "as if it were the
+ *   whole board": severing the wires would otherwise starve every scoped
+ *   solve at the cut;
+ * - solver fixtures whose subject is something else (allocation, balances,
+ *   overclocks) and that assume raw materials turn up and products go away.
  *
- * - the BOARD RULES, when the player has asked for free inputs or free
- *   outputs, at scope `all`: the drawers go on every slot, so a wired input
- *   short of stock tops up and a wired output with a surplus spills.
- *
- * - `calculateSelectionFlow`, which promises to solve a selection "as if it
- *   were the whole board". Severing the wires is the whole mechanism there,
- *   so without this every scoped solve starves at the cut, which is the exact
- *   opposite of the question the flow panel is asking.
- * - solver fixtures whose subject is something else entirely (allocation,
- *   balances, overclocks) and which have always taken for granted that raw
- *   materials turn up and products go away.
- *
- * It adds nothing to the resource books: `calculateEffectiveBalances` sums
- * node inputs and outputs only, so an ingredient fed by a SOURCE still reads
- * as something the plan NEEDS and a product sent to a DRAIN still reads as
- * something it puts OUT. The panels are unchanged; only the starving stops.
+ * The added drawers read as the plan's imports and exports in the books
+ * (balances.ts reads boundary drawers), so a fed ingredient still shows as
+ * something the plan NEEDS and a drained product as something it puts OUT.
  *
  * Do not use it in tests that are ABOUT the boundary: those wire their own
- * drawers, because which drawer sits where is the thing they are checking.
+ * drawers, because which drawer sits where is what they check.
  */
 export function closeBoundaries(
   project: FactoryProject,
@@ -142,8 +136,8 @@ export function closeBoundaries(
     // The node's REAL ports, not the raw recipe's: an oredict slot pinned to
     // a concrete item consumes that item, and a handler or a runtime variant
     // can change what comes out. A drawer on a port the solve does not have
-    // is an edge the solve drops, which is a silent starve. Rates are not
-    // needed - only which keys exist - so this still runs before the solver.
+    // is an edge the solve drops (a silent starve). Only the keys matter, not
+    // rates, so this can run before the solver.
     const nodeRecipe = applyRecipeInputOverrides(recipe, node);
     const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, node);
     const outputs = getRuntimeCalculationOutputs(effectiveRecipe, node) ?? effectiveRecipe.outputs;

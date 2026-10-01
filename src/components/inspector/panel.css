@@ -76,8 +76,25 @@
 .inspector-machine-summary .tabular-nums > svg {
   display: inline; width: 8px; height: 8px; margin-right: 1px;
 }
-.inspector-product-target { font-size: 12px; background: color-mix(in srgb, var(--flow-output) 2.5%, transparent); }
-.inspector-product-target button, .inspector-product-target input { font-size: 12px; }
+.inspector-drawer-target { font-size: 12px; background: color-mix(in srgb, var(--flow-output) 2.5%, transparent); }
+.inspector-drawer-target[data-tone="need"] { background: color-mix(in srgb, var(--flow-input) 2.5%, transparent); }
+.inspector-drawer-target input { font-size: 12px; }
+/* A drawer's rule and rate: under the sticky section headers (z 10), except
+   while the rule list is open over them. The drawer's pair at the panel's
+   type size: the rule button in Pool's dress, the rate in its sunken box. */
+.inspector-drawer-rate {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 8px;
+}
+.inspector-drawer-rate:has(.storage-rule-list) { z-index: 20; }
+.inspector-drawer-rate .storage-rule-button--table { width: 74px; height: 20px; font-size: 12px; }
+.inspector-drawer-rate .storage-rule-word { font-size: 11px; }
+.inspector-drawer-rate .storage-rate-field {
+  flex: none; width: 84px; height: 20px; padding: 0 4px; font-size: 12px;
+}
+.inspector-drawer-rate .storage-rate-field-number,
+.inspector-drawer-rate .storage-rate-field-unit { height: 18px; line-height: 18px; }
+.inspector-drawer-rate .storage-rate-field-unit { font-size: 9px; }
 
 /* Keep each reading together and align its unit's end to the right edge. */
 .inspector-resource-rate > span > span:last-child,
@@ -105,13 +122,3 @@
 .inspector-machine-build { padding-left: 4px; padding-right: 4px; }
 .inspector-machine-build > span:first-child > span:first-child { left: 4px; width: 16px; }
 .inspector-machine-build > span:first-child > span:nth-child(2) { width: 20px; }
-
-/* Quiet scrollbars keep the content prominent, with a stronger hover target. */
-.inspector-panel * { scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
-@supports selector(::-webkit-scrollbar) {
-  .inspector-panel * { scrollbar-width: auto; scrollbar-color: auto; }
-  .inspector-panel *::-webkit-scrollbar { width: 4px; height: 4px; }
-  .inspector-panel *::-webkit-scrollbar-track { background: transparent; }
-  .inspector-panel *::-webkit-scrollbar-thumb { background: #ffffff26; border-radius: 4px; }
-  .inspector-panel *::-webkit-scrollbar-thumb:hover { background: #ffffff50; }
-}

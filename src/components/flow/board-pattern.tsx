@@ -10,38 +10,28 @@ import type { CanvasGrainLayer } from "./canvas-themes";
  * rulings the stock React Flow Background cannot draw (a notepad's lines, a
  * graph grid with a heavier line every five cells) and the grain below them.
  *
- * THESE LIVE IN FLOW SPACE. Each layer is a div inside the viewport (through
- * React Flow's ViewportPortal), under the wires and the board floors, wearing
- * its tile as a repeating CSS `background-image` sized in FLOW pixels. The
- * viewport's own transform scales the tile with the zoom and the scroll
- * camera (scroll-camera.tsx) pans it with everything else, so a pan writes
- * NOTHING here: no React, no style, no invalidation. Only a zoom re-renders
- * the tile, which is exactly when its geometry changes.
+ * THESE LIVE IN FLOW SPACE. Each layer is a div inside the viewport (React
+ * Flow's ViewportPortal), under the wires and the board floors, wearing its
+ * tile as a repeating CSS `background-image` sized in FLOW pixels. The
+ * viewport's transform scales it with the zoom and the scroll camera
+ * (scroll-camera.tsx) pans it, so a pan writes NOTHING here; only a zoom
+ * re-renders the tile. Any per-frame write (the stock Background's pattern
+ * x/y, a sliding translate) costs a repaint or a display-list rebuild on
+ * every pan frame, badly so in Firefox.
  *
- * THE LAYER COVERS THE VIEW PLUS A MARGIN, NOT THE WORLD. A first cut made
- * each layer two million flow pixels square; its tile coordinates then sat
- * around a million, past what the GPU's single-precision floats hold to a
- * fraction of a pixel, and the dots jiggled against the cards on every
- * frame. `useCoveredRect` keeps the layer's edges within a screen or two of
- * the camera, snapped to whole tiles so the pattern's phase never moves, and
- * only rewrites its box when the view leaves the covered area - a write every
- * few screens of travel, not one per frame.
- *
- * HISTORY (2026-09-07). The stock Background writes the viewport offset into
- * an SVG pattern's x/y every pan frame and repaints the whole layer. The
- * first replacement kept full-size SVG patterns OUTSIDE the viewport and
- * slid them by `translate3d(tx mod tile)` per frame; Firefox re-rasterized
- * those SVGs every frame (about 30 fps of a 4K pan). The second drew the
- * same tiles as CSS backgrounds, still slid per frame; cheap to raster, but
- * the per-frame transform write still cost Firefox a display list rebuild
- * (about 6 ms). In flow space there is no per-frame write.
+ * THE LAYER COVERS THE VIEW PLUS A MARGIN, NOT THE WORLD: tile coordinates
+ * around a million flow px exceed the GPU's single-precision floats and the
+ * dots jiggle against the cards. `useCoveredRect` keeps the layer's edges
+ * within a screen or two of the camera, snapped to whole tiles so the
+ * pattern's phase never moves, and rewrites its box only when the view
+ * leaves the covered area.
  *
  * The geometry is transcribed from the library component so the ink is
  * pixel-identical at every zoom: tile = gap, the dot radius is size / 2, the
- * cross arm is size (all flow pixels now, which the zoom scales exactly as
- * the old `× zoom` did), and the stock's `offset × zoom || 1 + dimension / 2`
- * half-cell shift is kept as the background position, its one SCREEN pixel
- * converted to flow pixels through the zoom.
+ * cross arm is size (all flow pixels), and the stock's
+ * `offset × zoom || 1 + dimension / 2` half-cell shift is kept as the
+ * background position, its one SCREEN pixel converted to flow pixels
+ * through the zoom.
  */
 
 /** How far past the visible edge a layer extends, in screens. */

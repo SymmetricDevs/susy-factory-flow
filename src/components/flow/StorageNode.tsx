@@ -1,19 +1,23 @@
 "use client";
+import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
+import { usePortRowBrowse } from "./use-port-row-browse";
+import { formatAmountWithSuffix, parseAmountWithSuffix, RateBox, RuleButton, trimFlow, useRateRule } from "./rate-rule";
+import type { BrowseMode as PortBrowseMode } from "@/components/browse-menu";
 
-import { Handle, Position, useStoreApi, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowDownToLine, ArrowLeftRight, Pencil } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, Pencil, Repeat, Split } from "lucide-react";
 import type {
   FactoryStorage,
+  StorageBufferMode,
   StorageDrainMode,
   StorageThroughputResult,
 } from "@/lib/model/types";
-import { formatCompact, formatPowerValue, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
-import { isDrainRole, storageRoleFor, type StorageRole } from "@/lib/model/storage-role";
+import { formatCompact, formatPowerValue, makeResourceKey } from "@/lib/model";
+import { effectiveBufferMode, isDrainRole, storageRoleFor, type StorageRole } from "@/lib/model/storage-role";
 import {
   rateMultiplierForKind,
   rateSuffixForKind,
-  rateUnitMultiplier,
   rateUnitPrecisionScale,
 } from "@/lib/model/rate-unit";
 import { FLUID_ICON_SCALE, fluidArtPixels, ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -25,13 +29,18 @@ import { buildBufferKeyTooltip, buildDrainKeyTooltip, buildStorageTooltip, build
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useBoardView } from "./board-view";
 import { MotionNumberText } from "./board-motion";
-import { formatSlotRate } from "./flow-explainers";
 import { makeResourceHandleId } from "./resource-handles";
 import { buildStorageFlowScope } from "./flow-scope";
 import { useRenderedHandles } from "./use-rendered-handles";
 import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
 import { hasAnySolveNumbers } from "@/lib/solver/throughput";
+import { openRatioEditor } from "./ratio-editor";
+import { RatioSetupOutput } from "./RatioWireLabel";
+import { ratioExportShare } from "@/lib/model/storage-ratios";
+import { getCategoryPresentation } from "@/lib/model/category-presentation";
+import { STORAGE_NODE_WIDTH, STORAGE_NODE_HEIGHT } from "@/lib/board-grid";
+import { resourceLabel } from "@/lib/model/resources";
 
 
 export interface StorageNodeData extends Record<string, unknown> {
@@ -81,24 +90,14 @@ const ROLE_PRESENTATION: Record<
 
 
 /**
- * Each job's colour, borrowed from the side panel's sections so board and
- * books say the same thing in the same ink: red IN, green OUT. A source
- * wears the Inputs red, and products and byproducts both wear the Outputs
- * green - they are one section in the panel and one direction on the board,
- * and the blue products used to wear made a third colour for a distinction
- * the header word already carries. Quiet steel for the internal plumbing
- * that buffers are; idle is dimmer still - a drawer mid-drag has nothing to
- * announce.
- */
-/**
  * POWER drawers wear their own tint whatever the role: EU is not a material
- * and its tile must not read as one more green product. A somber burnt
- * amber - vibrant but deliberately NOT the bright wire amber, so the tile
- * is ground and the lightning stays the light. Paint still wins.
+ * and its tile must not read as one more green product. A burnt amber, not
+ * the bright wire amber, so the tile is ground and the lightning stays the
+ * light. Paint still wins.
  */
 const POWER_STORAGE_TINT = "#c07c17";
 
-function storageTint(storage: Pick<FactoryStorage, "kind" | "colorTag">, role: StorageRole): string {
+function storageTint(storage: Pick<FactoryStorage, "kind" | "colorTag" | "bufferMode">, role: StorageRole): string {
   if (storage.colorTag) {
     return GT_NODE_COLORS[storage.colorTag].swatch;
   }
@@ -108,6 +107,12 @@ function storageTint(storage: Pick<FactoryStorage, "kind" | "colorTag">, role: S
   return ROLE_TINTS[role];
 }
 
+/**
+ * Each job's colour, borrowed from the side panel's sections so board and
+ * books use the same ink: red IN (source), green OUT (products and
+ * byproducts: one section, one direction). Steel for buffers, the internal
+ * plumbing; idle dimmer still.
+ */
 const ROLE_TINTS: Record<StorageRole, string> = {
   source: "var(--flow-input)",
   product: "var(--flow-output)",
@@ -118,21 +123,18 @@ const ROLE_TINTS: Record<StorageRole, string> = {
   idle: "#5d6877",
 };
 
-/** Which of the two buffer behaviours this drawer runs (absent is overflow). */
-function isStrictBuffer(storage: FactoryStorage): boolean {
-  return storage.bufferMode === "strict";
+/** Both strict and ratio buffers pass through without banking surplus. */
+function isStrictBuffer(storage: FactoryStorage, solveMode: boolean): boolean {
+  return effectiveBufferMode(storage, solveMode) === "strict" || storage.bufferMode === "ratio";
 }
 
 // Inline (not utility classes) so React Flow's own handle stylesheet can
 // never reposition or resize this: the well is the wire zone, exactly.
 //
-// ONE handle over the whole well, not two halves. A drawer holds one item, so
-// "wire this up" is one gesture and the far end decides which way it runs. The
-// card used to be split down the middle - left half asked who FEEDS it, right
-// half who it feeds - with nothing on screen saying which half you had hold
-// of, so half of all drags asked the wrong question and washed a perfectly
-// good target red. Wires still dock through both port ids; only the grab is
-// one thing now. See `bidirectional` in FactoryFlow.tsx.
+// ONE handle over the whole well, not two halves: a drawer holds one item, so
+// "wire this up" is one gesture and the far end decides which way it runs.
+// Wires still dock through both port ids. See `bidirectional` in
+// FactoryFlow.tsx.
 const WELL_HANDLE: CSSProperties = {
   position: "absolute",
   inset: 0,
@@ -149,23 +151,18 @@ const WELL_HANDLE: CSSProperties = {
   zIndex: 30,
 };
 
-/**
- * Item icon box on the card face; fluids invert FLUID_ICON_SCALE to match.
- * Square and fixed, NOT the well's full box: the well is flexible (a drain
- * spends a row on its mode) and stretching a sprite to a non-square hole
- * distorts it.
- */
-const CARD_ICON_PX = 36;
+/** The port chip's picture. */
+const CHIP_ICON_PX = 32;
 /**
  * Plain-fluid swatches draw edge to edge — no baked-in margin like item
  * sprites — so undiluted they brush right up against the header above and the
  * net line below. Shrink only them; items keep the full box.
  */
-const FLUID_BREATHE_PX = 6;
+const FLUID_BREATHE_PX = 4;
 /** Oversized glance icon (zoomed out) — a shade larger than the card FACE so
     it reads as the node's identity, but well inside the 100px card: at 128
     and even 112 the art swamped the card instead of riding it. */
-const GLANCE_ICON_PX = 88;
+const GLANCE_ICON_PX = 84;
 
 /**
  * Rendered and atlas item sprites carry a big baked-in transparent margin —
@@ -200,13 +197,9 @@ function storageIconPixelSize(
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
-  const reactFlowStore = useStoreApi();
-  // The invisible wire handles blanket the card body, and React Flow does not
-  // select a node for clicks that land on a handle - so a plain click (no
-  // drag) selects explicitly, keeping Delete-to-remove reachable for tanks.
-  const selectOnHandleClick = () => {
-    reactFlowStore.getState().addSelectedNodes([storage.id]);
-  };
+  const category = useFactoryStore((state) =>
+    getCategoryPresentation(state.project.recipes, storage.kind, storage.resourceId),
+  );
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   // The rails print rates, so the drawer follows the rate and power dials.
   useRateDisplayUnits();
@@ -232,15 +225,14 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     return storageRoleFor(storage, hasIn, hasOut, state.project.poolMode === true);
   });
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
-  // POOL MODE leaves some drawers with nothing to do: a SOURCE (the pool
-  // imports by itself) and a loose drawer with no side (the pool is the
-  // buffer now). They stay on the board untouched - switching modes must
-  // never delete anything - and read greyed and see-through while inert.
+  // POOL MODE leaves some drawers with nothing to do. They stay on the board
+  // untouched (switching modes must never delete anything) and read greyed
+  // and see-through while inert.
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  // Only a PRODUCT drawer is live in pool mode (Jack, 2026-09-06): the pool
+  // Source and product drawers are live in Pool: the pool
   // banks every surplus by itself, so byproduct and trash drawers change
-  // nothing a player can see on the board, and go grey with the sources.
-  const inertInPool = poolMode && role !== "product";
+  // nothing a player can see on the board, and go grey with buffers.
+  const inertInPool = poolMode && role !== "product" && role !== "source";
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);
   // Lit when a hovered port/label/drawer pulls this buffer into its flow scope.
   const isFlowScopeLit = useFactoryStore((state) =>
@@ -263,8 +255,8 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   });
   // The board-wide "where is this resource" glow, which BREATHES. It belongs to
   // the side panel (hover or click a resource row) and to a drawer the app just
-  // placed for you. Hovering a drawer on the board is a different question and
-  // no longer asks this one: see buildStorageFlowScope.
+  // placed. Hovering a drawer on the board asks a different question: see
+  // buildStorageFlowScope.
   const isHighlighted = (hoveredFlowResourceKey ?? selectedFlowResourceKey) === resourceKey;
   const isSearchHighlighted = storageMatchesSearch(storage, recipeSearch);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
@@ -276,15 +268,17 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         )
       : undefined;
   const net = result?.netPerSecond ?? 0;
-  const title = storage.displayName ?? storage.resourceId;
+  const title = resourceLabel(category ?? { id: storage.resourceId, displayName: storage.displayName });
   const isTank = storage.kind === "fluid";
   const isPlainFluid = isTank && !storage.iconPath && !storage.iconAtlas;
-  // The card wears its JOB's colour, the same dialect the side panel already
-  // speaks: red is what the plan imports, mint green is what it exports
-  // (products and byproducts), and steel is internal
-  // plumbing. The item's own colour lives in its icon; painting the frame
-  // with it too said the same thing twice and left the four jobs looking
-  // alike. Paint (colorTag) still wins when the player chose one.
+  const ratio = role === "buffer" && storage.bufferMode === "ratio";
+  const word = ratio ? "RATIO" : role === "buffer" && isStrictBuffer(storage, solveMode) ? "STRICT" : ROLE_PRESENTATION[role].word;
+  // Solve's rule row sits on source and product drawers only.
+  const ruled = solveMode && (role === "source" || role === "product");
+  // The card wears its JOB's colour, the side panel's dialect: red is what
+  // the plan imports, green what it exports (products and byproducts), steel
+  // is internal plumbing. The item's own colour lives in its icon. Paint
+  // (colorTag) still wins when the player chose one.
   const tint = storageTint(storage, role);
   const borderColor = `color-mix(in srgb, ${tint} 55%, #262b34)`;
   const inputHandleId = makeResourceHandleId("input", {
@@ -300,6 +294,24 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   // React Flow keeps the old handle bounds and silently drops the rewired
   // edge from the screen until the next reload.
   useRenderedHandles(storage.id, [inputHandleId, outputHandleId]);
+  const readOnly = useFactoryStore((state) => state.isReadOnly);
+  const browseResource = useFactoryStore((state) => state.browseResource);
+  // POWER has no recipe book, exactly as on a machine's port row.
+  const browse = (mode: PortBrowseMode) => {
+    if (storage.kind === "power") return;
+    browseResource(
+      {
+        kind: storage.kind,
+        id: storage.resourceId,
+        displayName: title,
+        iconPath: storage.iconPath,
+        iconAtlas: storage.iconAtlas,
+        dominantColor: storage.dominantColor ?? storage.iconAtlas?.dominantColor,
+      },
+      mode,
+    );
+  };
+  const chipBrowse = usePortRowBrowse({ nodeId: storage.id, port: { displayName: title, handleId: outputHandleId }, browse });
 
   return (
     <div
@@ -310,11 +322,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         "group relative text-[#e8e9ee] transition-[opacity,filter] duration-500",
         (isFlowScopeLit || isFlowScopePort) && !isHighlighted ? "flow-scope-glow" : "",
         isHighlighted ? "resource-glow" : "",
-        // Inert: mostly grey with a trace of its own colour, and nothing on
-        // it takes the pointer - no port to drag off, no pill - while the
-        // card itself still drags (the events fall through to the node).
-        // Only the WIRE HANDLES go dead: the card still selects, deletes and
-        // drags. Blanking every child also swallowed the delete tool.
+        // Inert: mostly grey with a trace of its own colour. Only the WIRE
+        // HANDLES go dead; the card still selects, deletes and drags
+        // (blanking every child would also swallow the delete tool).
         inertInPool ? "opacity-40 grayscale-[0.75] [&_[data-resource-handle]]:pointer-events-none" : "",
       ].join(" ")}
       style={paintCursor ? { cursor: paintCursor } : undefined}
@@ -339,24 +349,23 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         // still reads as a copper-coloured card.
         data-node-glance-root=""
         className={[
-          // Five cells by four, fixed. Wires dock on the card's perimeter, so
+          // Six cells by four, fixed. Wires dock on the card's perimeter, so
           // an off-grid edge would mean off-grid endpoints. A drawer is a
-          // TILE: silhouette and colour for the role, the word to say it in
-          // letters, icon for the item, net rate for the news.
-          "storage-node-card relative flex h-[80px] w-[100px] flex-col p-1",
+          // one-port machine card: a title bar to move it by, a port chip to
+          // wire from. The shared geometry owns this footprint.
+          "storage-node-card relative flex h-[80px] w-[120px] flex-col",
           // Search has no rim of its own, so the card itself brightens to say
-          // "this one matched". The glow states deliberately do NOT: a filter
-          // here also lifts the rim and the wash drawn inside this box, and
-          // brightening #ffd257 clips it to a flat yellow that no longer
-          // matched the gold on the wires. See PLUG_GLOW_STYLE in RecipeNode.
+          // "this one matched". The glow states must not: the filter would
+          // also lift the rim, and brightening #ffd257 clips it to a flat
+          // yellow that no longer matches the wires' gold. See
+          // PLUG_GLOW_STYLE in RecipeNode.
           isSearchHighlighted ? "brightness-125 saturate-150" : "",
         ].join(" ")}
       >
-        {/* The highlight, wearing the silhouette. A slightly larger clone of
-            the shape behind the frame reads as an outline that follows the
-            cut corners, where the shared box ring drew a square around a
-            hexagon. Selection outranks the hover glow; the flow-scope rim is
-            the quiet 2px version of the same idea. */}
+        {/* The highlight, wearing the silhouette: a slightly larger clone of
+            the shape behind the frame, so the outline follows the cut
+            corners. Selection outranks the hover glow; the flow-scope rim is
+            the quiet 2px version. */}
         {selected || isHighlighted || isFlowScopePort || isFlowScopeLit ? (
           <span
             aria-hidden
@@ -372,15 +381,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             style={{ background: selected ? "var(--selection)" : "var(--glow-line)" }}
           />
         ) : null}
-        {/* The SHAPE, on its own layer rather than on the card.
-            Two reasons it cannot live on the card div. The glance icon is
-            deliberately bigger than the card and spills past the frame, and a
-            clip-path on the card would cut it off. And an octagon needs its
-            outline drawn on the diagonals, which a clipped `border` cannot do:
-            the border paints first and the clip then removes it. So the outer
-            span is the border colour, the inner one is the fill inset by 2px,
-            and both carry the same clip - which leaves a real 2px edge all the
-            way round whatever the silhouette is. */}
+        {/* The SHAPE, on its own layer rather than on the card: a clip-path
+            on the card would cut off the oversized glance icon, and a clipped
+            `border` loses its diagonals. So the outer span is the border
+            colour and the inner one the fill inset by 2px, both with the same
+            clip: a real 2px edge whatever the silhouette. */}
         <span
           aria-hidden
           data-storage-shape={role}
@@ -395,8 +400,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             }}
           />
         </span>
-        {/* The breathing wash, clipped to the same silhouette the square
-            ::after used to ignore. Same layer rules as before: above the
+        {/* The breathing wash, clipped to the same silhouette: above the
             card's surfaces, below its chrome, never a click target. */}
         {isHighlighted ? (
           <span
@@ -407,22 +411,19 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
           />
         ) : null}
         {/* No tileTint: the glance layer's box wash would paint a rectangle
-            over a card that now keeps its SILHOUETTE at glance - the shaped
+            over a card that keeps its SILHOUETTE at glance - the shaped
             fill underneath is already the role-coloured ground. */}
         <NodeGlanceIcon>
-          {/* Deliberately bigger than the card it sits on.
-              Zoomed out, WHAT is in the drawer is the only thing worth
-              reading, and a sprite confined inside the frame is a few pixels
-              on screen. Nothing clips it — the card sets no overflow — so it
-              spills a little past the frame and reads as the node's identity
-              rather than as its contents. Node SIZE is untouched, which is
-              what the router cares about. */}
+          {/* Deliberately bigger than the card: zoomed out, what is in the
+              drawer is the only thing worth reading. Nothing clips it (the
+              card sets no overflow). Node SIZE is untouched, which is what
+              the router cares about. */}
           <ResourceIcon
-            resource={{ ...storage, id: storage.resourceId, amount: 1 }}
+            resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
             showAmount={false}
             bare
             iconPixelSize={storageIconPixelSize(GLANCE_ICON_PX, storage)}
-            className="!h-[88px] !w-[88px]"
+            className="!h-[84px] !w-[84px]"
           />
           {glanceMode === "identity" ? (
             // The hover reveal, same machinery as the recipe cards' (see
@@ -455,74 +456,84 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             </span>
           ) : null}
         </NodeGlanceIcon>
-        {/* The content carries the SAME silhouette as the frame. Without it
-            the header and the mode button paint their own square backgrounds
-            straight through the cut corners, and the card reads as a rectangle
-            wearing an octagon. The glance icon stays outside this wrapper on
-            purpose: it is deliberately bigger than the card and spills past
-            the frame, which a clip would eat. */}
-        {/* The hover tooltip covers the WHOLE card, header and buttons
-            included: it is the drawer's one explanation, and it should not
-            matter which pixel of a small tile the pointer found. The span is
-            display:contents, so the flex column underneath lays out as if it
-            were not there. */}
+        {/* Which kind of buffer this is, readable without the hover: a
+            catching buffer wears a thick dashed ring TRACING its hexagon
+            tight inside the frame; a ratio buffer a thin second rim hugging
+            the frame, a double border; a STRICT one is solid border and
+            nothing else. SVG rather than a CSS border, because a border
+            follows the element's box and only a path can follow the
+            silhouette. Drawn over the face (z-20, pointer-events off): the
+            title bar and the chip are inset clear of it. */}
+        {role === "buffer" && !isStrictBuffer(storage, solveMode) ? (
+          <svg
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-20"
+            viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`}
+            width="100%"
+            height="100%"
+          >
+            <polygon
+              points="11.1,1.5 108.9,1.5 118.4,40 108.9,78.5 11.1,78.5 1.6,40"
+              fill="none"
+              stroke={tint}
+              strokeWidth={3}
+              strokeDasharray="7 5.5"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </svg>
+        ) : null}
+        {ratio ? (
+          <svg aria-hidden data-ratio-rim className="pointer-events-none absolute inset-0 z-20" viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`} width="100%" height="100%">
+            <polygon points="11.9,3.75 108.1,3.75 116.1,40 108.1,76.25 11.9,76.25 3.9,40" fill="none" stroke={tint} strokeWidth={1.5} />
+          </svg>
+        ) : null}
+        {/* The hover tooltip covers the WHOLE card: it is the drawer's one
+            explanation, and it should not matter which pixel of a small tile
+            the pointer found. The rule row carries its own. */}
         <MinecraftTooltip content={() => renderStorageHoverContent(storage, role)}>
         <div
           data-storage-shape={role}
           className="storage-shape-content relative z-10 flex min-h-0 flex-1 flex-col"
+          style={{ "--storage-tint": tint } as CSSProperties}
         >
-          {/* Which of the two buffers this is, readable at a glance without
-              the hover: a catching buffer wears a thick dashed ring TRACING
-              its hexagon tight inside the frame, while a STRICT one is solid
-              border and nothing else. An SVG rather than a CSS border,
-              because a border follows the element's box and only a path can
-              follow the silhouette. It sits UNDER the header, the word and
-              the numbers (z-0): the chrome reads on top, and the ring shows
-              wherever the tile is bare. The coordinates are the 100x80
-              tile's hexagon inset by 1.5px - hugging the frame, so the
-              stroke stays off the word and the net line - and they can be
-              exact because STORAGE_NODE_WIDTH/HEIGHT are fixed. */}
-          {role === "buffer" && !isStrictBuffer(storage) ? (
-            <svg
-              aria-hidden
-              className="pointer-events-none absolute inset-0 z-0"
-              viewBox="0 0 100 80"
-              width="100%"
-              height="100%"
-            >
-              <polygon
-                points="15.1,1.5 84.9,1.5 98.4,40 84.9,78.5 15.1,78.5 1.6,40"
-                fill="none"
-                stroke={tint}
-                strokeWidth={3}
-                strokeDasharray="7 5.5"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            </svg>
-          ) : null}
-          <StorageHeader storage={storage} isTank={isTank} tint={tint} role={role} />
-          {/* Everything under the header is the wire zone: drag from the
-              left or right half to pull a wire. The header is plain card,
-              so grabbing it (or the frame) moves the node. The handles
-              carry inline styles pinned to this box; stylesheet !important
-              wars once let them blanket the whole card and swallow the
-              header buttons.
-              The zone is also the resource-hover trigger — the ITEM lights
-              the flow, not the card around it. Wiring is a mode; a held
-              wire must not also be lighting up cards. */}
+          {/* Colour and silhouette carry the role; the tooltip explains it.
+              Keep the word available to assistive technology. */}
+          <span className="storage-node-word sr-only">{word}</span>
+          {/* The TITLE BAR is what you move the drawer by, like a machine
+              card's title row. Nothing on it starts a wire. */}
+          <StorageTitleBar storage={storage} role={role} isTank={isTank} title={title} solveMode={solveMode} />
+          {/* The PORT CHIP answers like a machine's port row: click for the
+              recipes that make the item, right click for the ones that use
+              it, R and U for the same, a long press for a finger, and a drag
+              to wire. One handle blankets it (z-30); what you press on it
+              sits above (z-40). It is also the resource-hover trigger - the
+              ITEM lights the flow, not the card around it. Wiring is a mode;
+              a held wire must not also be lighting up cards. */}
           <div
-            className="relative mx-auto flex min-h-0 w-full flex-1 flex-col"
-            onMouseEnter={() =>
-              isWiringConnection() ? undefined : setHoveredFlowScope(buildStorageFlowScope(useFactoryStore.getState().project, storage))
-            }
-            onMouseLeave={() => setHoveredFlowScope(undefined)}
+            className={`storage-port-chip ${ruled ? "" : "storage-port-chip--centered"}`}
+            onPointerEnter={() => {
+              chipBrowse.handlers.onPointerEnter();
+              if (!isWiringConnection()) {
+                setHoveredFlowScope(buildStorageFlowScope(useFactoryStore.getState().project, storage));
+              }
+            }}
+            onPointerLeave={() => {
+              chipBrowse.handlers.onPointerLeave();
+              setHoveredFlowScope(undefined);
+            }}
+            onPointerDown={chipBrowse.handlers.onPointerDown}
+            onPointerMove={chipBrowse.handlers.onPointerMove}
+            onPointerUp={chipBrowse.handlers.onPointerUp}
+            onPointerCancel={chipBrowse.handlers.onPointerCancel}
+            onClick={chipBrowse.handlers.onClick}
+            onContextMenu={chipBrowse.handlers.onContextMenu}
           >
-            {/* The whole well, one grab point. Typed as a source so a drag can
-                START anywhere on it; the board runs in ConnectionMode.Loose,
-                so a wire coming the other way still lands here, and the drop
-                resolves a drawer by direction rather than by which element the
-                pointer happened to be over (getStorageHandleAtPosition). */}
+            {/* One grab point. Typed as a source so a drag can START anywhere
+                on it; the board runs in ConnectionMode.Loose, so a wire coming
+                the other way still lands here, and the drop resolves a drawer
+                by direction rather than by which element the pointer happened
+                to be over (getStorageHandleAtPosition). */}
             <Handle
               id={outputHandleId}
               type="source"
@@ -530,38 +541,60 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               data-resource-handle="true"
               data-resource-node-id={storage.id}
               data-resource-handle-id={outputHandleId}
-              onClick={selectOnHandleClick}
+              aria-label={`${title}${readOnly ? "" : ". Left click or R for recipes, right click or U for uses, drag to connect"}`}
               className="nodrag"
               style={WELL_HANDLE}
             />
-            {/* The input port keeps its id for WIRES - edges dock on it, plans
-                store it - but it is no longer a place you grab. Zero-sized and
-                inert so React Flow still knows the port exists. */}
+            {/* The input port keeps its id for WIRES (edges dock on it, plans
+                store it) but is not a grab point. Zero-sized and inert so
+                React Flow still knows the port exists. */}
             <Handle
               id={inputHandleId}
               type="target"
               position={Position.Left}
               className="nodrag !pointer-events-none !h-0 !w-0 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0"
             />
-            {/* No wood face, no glass box: the dark tinted card IS the
-                surface, and the item fills nearly the whole well. */}
-            <div className="grid min-h-0 w-full flex-1 place-items-center">
+            <span className="storage-chip-icon">
               <ResourceIcon
-                resource={{ ...storage, id: storage.resourceId, amount: 1 }}
+                resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
                 showAmount={false}
                 bare
-                iconPixelSize={storageIconPixelSize(
-                  isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
-                  storage,
-                )}
-                className="!h-[36px] !w-[36px]"
+                iconPixelSize={storageIconPixelSize(isPlainFluid ? CHIP_ICON_PX - FLUID_BREATHE_PX : CHIP_ICON_PX, storage)}
+                className="!h-[32px] !w-[32px]"
               />
+            </span>
+            <div className="storage-chip-text">
+              {ruled ? (
+                <>
+                  <RuleInput storage={storage} role={role} result={result} net={net} />
+                  {/* What flows, in a well of its own under what you set. */}
+                  <div className="storage-chip-reading">
+                    <ChipRate net={net} kind={storage.kind} role={role} size="small" />
+                    <RuleBar storage={storage} role={role} result={result} net={net} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {role === "buffer" && !isStrictBuffer(storage, solveMode) ? (
+                    // A non-strict buffer's rate is what it banks, the surplus
+                    // leaving the setup, so it says so.
+                    <div className="storage-chip-surplus">
+                      <ChipRate net={net} kind={storage.kind} role={role} size="large" />
+                      <span className="storage-chip-surplus-word">(surplus)</span>
+                    </div>
+                  ) : (
+                    <ChipRate net={net} kind={storage.kind} role={role} size="large" />
+                  )}
+                  {ratio ? (
+                    // Its own control: a click or right click here is not a browse.
+                    <span className="contents" onClick={(event) => event.stopPropagation()} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+                      <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} />
+                    </span>
+                  ) : null}
+                </>
+              )}
             </div>
-            {solveMode && role === "product" ? (
-              <TargetLine storage={storage} result={result} />
-            ) : (
-              <NetLine net={net} kind={storage.kind} role={role} />
-            )}
+            {chipBrowse.menu}
           </div>
         </div>
         </MinecraftTooltip>
@@ -570,14 +603,15 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   );
 }
 
+
 /**
- * The tile's LOOK alone - silhouette, role tint, header, icon, net line -
- * for anything that must show a drawer that is not (yet) a node: the
- * void-drop ghost previews the exact drawer a release would spawn with it.
- * Built from the same parts as the real card (StorageHeader, NetLine,
- * ResourceIcon, the storage-shape layers), so the preview can never drift
- * from the thing it predicts. No handles, no glance, no tooltip, no washes:
- * those belong to the node.
+ * The tile's LOOK alone - silhouette, role tint, title bar, port chip - for
+ * anything that must show a drawer that is not (yet) a node: the void-drop
+ * ghost previews the exact drawer a release would spawn with it. Built from
+ * the same parts as the real card (the title bar's name, the chip, ChipRate),
+ * so the preview can never drift from the thing it predicts. Its keys are
+ * drawn, not wired: a ghost is never pressed. No handles, no glance, no
+ * tooltip, no washes: those belong to the node.
  */
 export function StorageTileFace({
   storage,
@@ -588,12 +622,15 @@ export function StorageTileFace({
   role: StorageRole;
   net?: number;
 }) {
+  const category = useFactoryStore((state) =>
+    getCategoryPresentation(state.project.recipes, storage.kind, storage.resourceId),
+  );
   const isTank = storage.kind === "fluid";
   const isPlainFluid = isTank && !storage.iconPath && !storage.iconAtlas;
   const tint = storageTint(storage, role);
   const borderColor = `color-mix(in srgb, ${tint} 55%, #262b34)`;
   return (
-    <div className="storage-node-card relative flex h-[80px] w-[100px] flex-col p-1 text-[#e8e9ee]">
+    <div className="storage-node-card relative flex h-[80px] w-[120px] flex-col text-[#e8e9ee]">
       <span
         aria-hidden
         data-storage-shape={role}
@@ -611,25 +648,46 @@ export function StorageTileFace({
       <div
         data-storage-shape={role}
         className="storage-shape-content relative z-10 flex min-h-0 flex-1 flex-col"
+        style={{ "--storage-tint": tint } as CSSProperties}
       >
-        <StorageHeader storage={storage} isTank={isTank} tint={tint} role={role} />
-        <div className="relative mx-auto flex min-h-0 w-full flex-1 flex-col">
-          <div className="grid min-h-0 w-full flex-1 place-items-center">
+        <div className={`storage-title-bar ${isDrainRole(role) || role === "buffer" ? "" : "storage-title-bar--no-end"}`}>
+          <span className="storage-title-side">
+            <span aria-hidden className="storage-title-key storage-title-key--delete" />
+          </span>
+          <StorageTitleName title={resourceLabel(category ?? { id: storage.resourceId, displayName: storage.displayName })} />
+          <span className="storage-title-side storage-title-side--end">
+            {isDrainRole(role) || role === "buffer" ? (
+              <span aria-hidden className="storage-title-key">
+                {role === "buffer" ? <ArrowDownToLine /> : <Repeat />}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        <div className="storage-port-chip storage-port-chip--centered">
+          <span className="storage-chip-icon">
             <ResourceIcon
-              resource={{ ...storage, id: storage.resourceId, amount: 1 }}
+              resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
               showAmount={false}
               bare
-              iconPixelSize={storageIconPixelSize(
-                isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
-                storage,
-              )}
-              className="!h-[36px] !w-[36px]"
+              iconPixelSize={storageIconPixelSize(isPlainFluid ? CHIP_ICON_PX - FLUID_BREATHE_PX : CHIP_ICON_PX, storage)}
+              className="!h-[32px] !w-[32px]"
             />
+          </span>
+          <div className="storage-chip-text">
+            <ChipRate net={net} kind={storage.kind} role={role} size="large" />
           </div>
-          <NetLine net={net} kind={storage.kind} role={role} />
         </div>
       </div>
     </div>
+  );
+}
+
+/** The material's name, one line in the title bar, fading where it runs out. */
+function StorageTitleName({ title }: { title: string }) {
+  return (
+    <span className="storage-title-name">
+      {title}
+    </span>
   );
 }
 
@@ -643,15 +701,10 @@ export const StorageNode = memo(
 
 /**
  * A rate that will not fit gives up SIZE, never digits and never pixels: a
- * trickle like +0.000000001/s is a real number the player dialled for, and
- * clipping it printed a confident wrong one. Stepped by string length rather
- * than measured, so the board never reads the DOM for it.
- *
- * The room it has depends on the SILHOUETTE, not the box: the tile's
- * clip-path cuts its children too, and the shield's tapered base and the
- * hexagon's points bite exactly the row this line sits on. Each role's width
- * is the shape's clearance at the line's own height, worked from the
- * polygons in globals.css over the fixed 100x80 tile.
+ * trickle like +0.000000001/s is a real number, and clipping it prints a
+ * confident wrong one. The rate uses the full bottom row, less the clearance
+ * each silhouette needs near its corners, fitted by string length so the
+ * board never reads the DOM.
  */
 const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
   product: 92,
@@ -665,10 +718,8 @@ const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
   trash: 72,
 };
 /**
- * Advance per character at each step. Measured against the rendered bold
- * pixel font, not the em size: 12px Monocraft draws its digits a full 8px
- * wide, which is how "+123k L/s" cleared the arithmetic and still lost its
- * tail to the shield.
+ * Advance per character at each step, measured against the rendered bold
+ * pixel font, not the em size: 12px Monocraft draws its digits 8px wide.
  */
 const NET_LINE_FIT_STEPS = [
   { className: "text-[12px]", perChar: 8 },
@@ -677,8 +728,7 @@ const NET_LINE_FIT_STEPS = [
   { className: "text-[7px]", perChar: 4.7 },
 ] as const;
 
-function rateFitClass(label: string, role: StorageRole): string {
-  const width = NET_LINE_WIDTH_BY_ROLE[role];
+function rateFitClass(label: string, role: StorageRole, width = NET_LINE_WIDTH_BY_ROLE[role]): string {
   for (const step of NET_LINE_FIT_STEPS) {
     if (label.length * step.perChar <= width) {
       return step.className;
@@ -687,63 +737,34 @@ function rateFitClass(label: string, role: StorageRole): string {
   return NET_LINE_FIT_STEPS[NET_LINE_FIT_STEPS.length - 1].className;
 }
 
+function netRateColor(net: number): string {
+  return net > 0.005 ? "var(--flow-output)" : net < -0.005 ? "var(--flow-input)" : "#a8afbb";
+}
+
 /** The tile's one line of news: the net rate, sized to fit its silhouette. */
-function NetLine({ net, kind, role }: { net: number; kind: string; role: StorageRole }) {
+function NetLine({ net, kind, role, width, formatRate = formatCompactRate, unsigned = false, color = netRateColor(net) }: { net: number; kind: string; role: StorageRole; width?: number; formatRate?: (value: number, kind: string) => string; unsigned?: boolean; color?: string }) {
   // The fit class and the colour read the TARGET value: the size and tone
   // land immediately, and only the digits ease their way there.
-  const label = `${net >= 0 ? "+" : ""}${formatCompactRate(net, kind)}`;
+  const label = unsigned ? formatRate(Math.abs(net), kind) : `${net >= 0 ? "+" : ""}${formatRate(net, kind)}`;
   return (
     <div
       className={[
         // No "Net" word: the sign and the colour already say it, and
         // the number is the thing worth reading.
         "storage-net-line relative z-10 h-4 whitespace-nowrap text-center font-bold leading-4 tabular-nums",
-        rateFitClass(label, role),
-        net > 0.005 ? "text-[var(--flow-output)]" : net < -0.005 ? "text-[var(--flow-input)]" : "text-[#a8afbb]",
+        rateFitClass(label, role, width),
       ].join(" ")}
+      style={{ color }}
     >
       <MotionNumberText
         values={[net]}
         render={(shown) => {
           const value = shown[0] ?? net;
-          return `${value >= 0 ? "+" : ""}${formatCompactRate(value, kind)}`;
+          return unsigned ? formatRate(Math.abs(value), kind) : `${value >= 0 ? "+" : ""}${formatRate(value, kind)}`;
         }}
       />
     </div>
   );
-}
-
-/**
- * "2.5k" is a number: metric shorthand for the rate field, k / m / g for
- * thousand, million, billion, either case, spaces and commas forgiven.
- * Anything else is not a number and the caller falls back rather than guess.
- */
-/** The mirror: a committed value is SHOWN in the same shorthand it was
- * typed in - 10000 reads back as 10k, never expanded under your cursor. */
-function formatAmountWithSuffix(value: number): string {
-  if (value >= 1e9) {
-    return `${trimTrailingDecimalZeros((value / 1e9).toFixed(2))}g`;
-  }
-  if (value >= 1e6) {
-    return `${trimTrailingDecimalZeros((value / 1e6).toFixed(2))}m`;
-  }
-  if (value >= 1e3) {
-    return `${trimTrailingDecimalZeros((value / 1e3).toFixed(2))}k`;
-  }
-  return trimTrailingDecimalZeros(value.toFixed(4));
-}
-
-function parseAmountWithSuffix(text: string): number | undefined {
-  const match = text
-    .trim()
-    .toLowerCase()
-    .replace(/,/g, "")
-    .match(/^([0-9]*\.?[0-9]+)\s*([kmg]?)$/);
-  if (!match) {
-    return undefined;
-  }
-  const multiplier = match[2] === "k" ? 1e3 : match[2] === "m" ? 1e6 : match[2] === "g" ? 1e9 : 1;
-  return Number.parseFloat(match[1]!) * multiplier;
 }
 
 /**
@@ -756,25 +777,50 @@ function parseAmountWithSuffix(text: string): number | undefined {
 export function TargetLine({
   storage,
   result,
+  formatDisplayRate,
+  inlinePencil = false,
+  input = isInputRate(storage),
 }: {
   storage: FactoryStorage;
   result: StorageThroughputResult | undefined;
+  formatDisplayRate?: (value: number, kind: string) => string;
+  inlinePencil?: boolean;
+  input?: boolean;
 }) {
   const setStorageTarget = useFactoryStore((state) => state.setStorageTarget);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const target = storage.targetPerSecond;
+  const signed = useFactoryStore((state) => state.project.poolMode === true);
+  const locked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
+  const target = storage.targetPerSecond === undefined ? undefined : Math.abs(storage.targetPerSecond) * (signed && input ? -1 : 1);
+  const mode = storageTargetMode(storage, input ? "source" : "product");
+  const showZero = target === 0;
   const unreachable = result?.targetUnreachable === true;
+  const color = unreachable ? "var(--flow-input)"
+    : target === undefined ? "var(--flow-output)"
+    : netRateColor(input ? -Math.abs(target) : target);
+  const rateStyle = { color, "--target-rate-color": color } as CSSProperties;
   // While the solver has NOTHING to solve for - no amount, no pin, anywhere -
   // every empty rate line blinks the ask, in step with the board's notice.
-  const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project));
+  const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project) && mode !== "ignore");
   const beginEdit = () => {
+    if (locked) return;
     setDraft(
-      target !== undefined && target > 0
-        ? formatAmountWithSuffix(target * rateMultiplierForKind(storage.kind))
+      target !== undefined && (target > 0 || (signed && target < 0) || showZero)
+        ? Math.abs(target * rateMultiplierForKind(storage.kind)) < 1
+          ? (target * rateMultiplierForKind(storage.kind)).toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 21 })
+          : formatAmountWithSuffix(target * rateMultiplierForKind(storage.kind))
         : "",
     );
     setEditing(true);
+  };
+  const clearRate = (event: { button: number; preventDefault: () => void; stopPropagation: () => void }) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (locked) return;
+    setEditing(false);
+    setStorageTarget(storage.id, undefined);
   };
   // Typed figures are read in the BOARD'S rate unit and stored per second,
   // converted at the edges, so the number always matches the board around it.
@@ -785,20 +831,20 @@ export function TargetLine({
       return;
     }
     const value = parseAmountWithSuffix(draft);
-    if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    if (value === undefined || !Number.isFinite(value) || (!signed && value < 0) || (value === 0 && mode !== "exact" && mode !== "at-most")) {
       // Not a number: the field falls back to what it held.
       return;
     }
-    setStorageTarget(storage.id, value / rateMultiplierForKind(storage.kind));
+    setStorageTarget(storage.id, (input && !signed ? -Math.abs(value) : value) / rateMultiplierForKind(storage.kind));
   };
 
   if (!editing) {
     return (
       // The resting face IS the net line - the same component every other
       // tile draws, wrapped only to be clickable (z-40, over the wire
-      // handles that blanket the well at z-30). Unreachable overrides the
-      // line's own green with red from outside.
-      <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result)} />}>
+      // handles that blanket the well at z-30). The value, edit marks and
+      // active input share one rate color, including unreachable targets.
+      <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result, signed, input)} />}>
       <div
         role="button"
         tabIndex={0}
@@ -814,12 +860,11 @@ export function TargetLine({
           }
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => { event.stopPropagation(); if (event.button === 1) event.preventDefault(); }}
+        onAuxClick={clearRate}
         aria-label="Required amount"
-        className={[
-          "nodrag group/target relative z-40 flex cursor-pointer justify-center text-[var(--flow-output)] hover:brightness-125",
-          unreachable ? "[&_div]:!text-[var(--flow-input)]" : "",
-        ].join(" ")}
+        style={rateStyle}
+        className="nodrag group/target relative z-40 flex cursor-pointer justify-center hover:brightness-125"
       >
         {/* Two marks say "this line takes typing", both attached to the
             NUMBER rather than parked at the tile's edge: a dotted
@@ -827,14 +872,14 @@ export function TargetLine({
             idiom - and a pencil riding the text's right shoulder. */}
         {/* Nudged up a couple of pixels so the dotted underline clears the
             tile's bottom edge instead of merging with it. */}
-        <div className="relative -translate-y-[2px] underline decoration-dotted decoration-[1.5px] underline-offset-[3px]">
-          {target !== undefined && target > 0 ? (
-            <NetLine net={target} kind={storage.kind} role="product" />
+        <div className={`relative underline decoration-dotted decoration-[1.5px] underline-offset-[3px] ${inlinePencil ? "inline-flex items-center gap-[3px]" : "-translate-y-[2px]"}`}>
+          {target !== undefined && (target > 0 || (signed && target < 0) || showZero) ? (
+            <NetLine net={input ? -Math.abs(target) : target} unsigned={input && !signed} kind={storage.kind} role={input ? "source" : "product"} formatRate={formatDisplayRate} color={color} />
           ) : (
             <div
               className={[
                 "storage-net-line relative h-4 whitespace-nowrap text-center text-[12px] font-bold leading-4 tabular-nums",
-                askBlink ? "animate-pulse text-[var(--flow-output)]" : "text-[var(--flow-output)] opacity-60",
+                askBlink ? "animate-pulse" : "opacity-60",
               ].join(" ")}
             >
               rate?
@@ -844,7 +889,7 @@ export function TargetLine({
             aria-hidden
             // Centred on the ink-and-underline block, not the line's box:
             // the glyphs sit low in it, so dead-centre floated the pencil.
-            className="absolute left-full top-[calc(50%+2px)] ml-[2px] h-[11px] w-[11px] -translate-y-1/2 fill-current opacity-70 group-hover/target:opacity-100"
+            className={`h-[11px] w-[11px] fill-current opacity-70 group-hover/target:opacity-100 ${inlinePencil ? "shrink-0" : "absolute left-full top-[calc(50%+2px)] ml-[2px] -translate-y-1/2"}`}
           />
         </div>
       </div>
@@ -853,7 +898,7 @@ export function TargetLine({
   }
 
   return (
-    <div className="storage-net-line relative z-40 flex h-4 items-center justify-center whitespace-nowrap text-center leading-none">
+    <div className="storage-net-line relative z-40 flex h-4 items-center justify-center whitespace-nowrap text-center leading-none" style={rateStyle}>
       <input
         autoFocus
         value={draft}
@@ -870,87 +915,85 @@ export function TargetLine({
           event.stopPropagation();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => { event.stopPropagation(); if (event.button === 1) event.preventDefault(); }}
+        onAuxClick={clearRate}
         onTouchStart={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
-        inputMode="decimal"
+        inputMode={signed ? "text" : "decimal"}
         placeholder="rate"
         aria-label="Required amount"
         className={[
           "nodrag h-4 w-[60px] border px-[3px] text-center text-[9px] font-bold tabular-nums outline-none",
           "bg-[#14171d] shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.5)]",
           "placeholder:font-normal placeholder:text-[#6b7280]",
-          "focus:bg-[#1a1e26] focus:ring-1 focus:ring-[var(--flow-output)]",
-          "border-[var(--flow-output)]/40 text-[var(--flow-output)] focus:border-[var(--flow-output)]",
+          "focus:bg-[#1a1e26] focus:ring-1 focus:ring-[var(--target-rate-color)]",
+          "border-current text-inherit",
         ].join(" ")}
       />
     </div>
   );
 }
 
-function StorageHeader({
+/** The ratio editor's pencil, a key in the title bar beside the mode key. */
+function RatioSplitButton({ storageId }: { storageId: string }) {
+  return (
+    <button type="button" data-tooltip-stop aria-label="Edit drawer ratios" title="Edit split"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => { event.stopPropagation(); openRatioEditor(storageId); }}
+      className="storage-title-key board-edit-chrome nodrag nopan"
+    >
+      <Pencil aria-hidden />
+    </button>
+  );
+}
+
+/**
+ * The drawer's title bar: delete, the name, and the one thing you choose.
+ * It is the drawer's MOVE grip, like a machine card's title row: nothing on
+ * it starts a wire, so a drag that begins here always carries the drawer.
+ */
+function StorageTitleBar({
   storage,
-  isTank,
-  tint,
   role,
+  isTank,
+  title,
+  solveMode,
 }: {
   storage: FactoryStorage;
-  isTank: boolean;
-  tint: string;
   role: StorageRole;
+  isTank: boolean;
+  title: string;
+  solveMode: boolean;
 }) {
-  const storageId = storage.id;
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const noun = isTank ? "tank" : "drawer";
-  const presentation = ROLE_PRESENTATION[role];
-  const strict = role === "buffer" && isStrictBuffer(storage);
-  const word = strict ? "STRICT" : presentation.word;
-
+  const ratio = role === "buffer" && storage.bufferMode === "ratio";
+  // Pool has one drain kind, so DrainModeSwap shows nothing there.
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const hasEnd = ratio || role === "buffer" || (isDrainRole(role) && !poolMode);
   return (
-    <div
-      // relative z-40: the invisible wire handles (z-30) blanket the card,
-      // and without a higher stacking position they swallow every click
-      // aimed at the delete/clone buttons underneath.
-      className="storage-node-header relative z-40 flex h-5 items-center gap-1 border-b-2 px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]"
-      style={{
-        borderColor: `color-mix(in srgb, ${tint} 55%, #262b34)`,
-        background: `color-mix(in srgb, ${tint} 32%, #0a0c10)`,
-      }}
-    >
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          deleteStorage(storageId);
-        }}
-        className="board-edit-chrome nodrag flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-red-700"
-        title={`Delete ${noun}`}
-        aria-label={`Delete ${noun}`}
-      >
-        {/* Drawn rather than a "-" glyph: at this size Monocraft's metrics
-            baseline-align the hyphen low instead of centring it. */}
-        <span aria-hidden className="block h-[2px] w-[8px] bg-white" />
-      </button>
-      {/* The role, in letters, centred between the two buttons. Colour and
-          silhouette say it too, but a word is the one channel nobody has to
-          learn. The tile is five cells wide precisely so the longest word
-          (BYPRODUCT) clears the buttons; truncate is the safety net, not the
-          plan. No title here: the card-wide tooltip already explains it.
-          The tapered shapes narrow their own header, so their word steps
-          down a point to keep clear of the slopes.
-          storage-node-word: calm mode leans on this hook too. */}
-      <div
-        className={[
-          "storage-node-word pointer-events-none absolute inset-x-0 truncate text-center font-black tracking-[0.4px] text-[#e8e9ee] [text-shadow:1px_1px_0_rgba(0,0,0,0.65)]",
-          role === "buffer" || role === "byproduct" ? "text-[7px]" : "text-[8px]",
-        ].join(" ")}
-      >
-        {word}
-      </div>
-      {isDrainRole(role) ? (
-        <DrainModeSwap storageId={storageId} role={role} kind={storage.kind} />
-      ) : null}
-      {role === "buffer" ? <BufferModeSwap storageId={storageId} strict={strict} /> : null}
+    <div className={`storage-title-bar ${ratio ? "storage-title-bar--wide" : hasEnd ? "" : "storage-title-bar--no-end"}`}>
+      <span className="storage-title-side">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            deleteStorage(storage.id);
+          }}
+          className="storage-title-key storage-title-key--delete board-edit-chrome nodrag"
+          title={`Delete ${noun}`}
+          aria-label={`Delete ${noun}`}
+        />
+      </span>
+      <StorageTitleName title={title} />
+      <span className="storage-title-side storage-title-side--end">
+        {ratio ? <RatioSplitButton storageId={storage.id} /> : null}
+        {isDrainRole(role) ? (
+          <DrainModeSwap storageId={storage.id} role={role} kind={storage.kind} />
+        ) : role === "buffer" ? (
+          <BufferModeSwap storageId={storage.id} mode={effectiveBufferMode(storage, solveMode)} />
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -958,26 +1001,26 @@ function StorageHeader({
 /**
  * The one thing about a BUFFER you choose, worn as its own icon so the tile
  * SAYS which one it is: an arrow dropping into a tray while the tank catches
- * overflow, plain left-right arrows when it is a strict pass-through.
- * Clicking flips it.
+ * overflow, left-right arrows for strict pass-through, a fork for ratios.
+ * Clicking cycles all three; ratio's pencil beside it opens its editor.
  */
-function BufferModeSwap({ storageId, strict }: { storageId: string; strict: boolean }) {
+function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageBufferMode }) {
   const updateStorage = useFactoryStore((state) => state.updateStorage);
-  const Icon = strict ? ArrowLeftRight : ArrowDownToLine;
+  const Icon = mode === "ratio" ? Split : mode === "strict" ? ArrowLeftRight : ArrowDownToLine;
+  const next = mode === "overflow" ? "strict" : mode === "strict" ? "ratio" : "overflow";
 
   return (
-    <MinecraftTooltip content={() => <RecipeTooltip view={buildBufferKeyTooltip(strict)} />}>
+    <MinecraftTooltip content={() => <RecipeTooltip view={buildBufferKeyTooltip(mode)} />}>
     <button
       type="button"
       onClick={(event) => {
         event.stopPropagation();
-        updateStorage(storageId, { bufferMode: strict ? "overflow" : "strict" });
+        updateStorage(storageId, { bufferMode: next });
       }}
-      aria-label={strict ? "Switch to overflow" : "Switch to strict"}
-      aria-pressed={strict}
-      className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+      aria-label={`Switch to ${next}`}
+      className="storage-title-key board-edit-chrome nodrag"
     >
-      <Icon aria-hidden className="h-2.5 w-2.5" />
+      <Icon aria-hidden />
     </button>
     </MinecraftTooltip>
   );
@@ -985,11 +1028,9 @@ function BufferModeSwap({ storageId, strict }: { storageId: string; strict: bool
 
 /**
  * The one thing about a drawer you CHOOSE. Source and buffer are read off the
- * wiring and cannot be picked; which kind of end-of-the-line this is cannot be
- * read off anything, so it gets a control.
- *
- * A three-way cycle since 2026-08-23: product, byproduct, trash. The trash
- * step is what replaced the toolbar's separate trash can node.
+ * wiring; which kind of end-of-the-line this is cannot be, so it gets a
+ * control: a three-way cycle of product, byproduct, trash. Cycle arrows, so
+ * the strict buffer's left-right arrows mean one thing only.
  */
 function DrainModeSwap({
   storageId,
@@ -1005,8 +1046,6 @@ function DrainModeSwap({
   // are inert there (the pool banks every surplus by itself), so there is
   // nothing to cycle to and the control is not shown.
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  // Always the cycle arrows: the button is the CONTROL, and the tile's word
-  // and silhouette already say which state it is in.
   // POWER cannot be trashed - there is no bin for electricity - so its
   // cycle is two states: product and byproduct.
   const next: StorageDrainMode =
@@ -1030,23 +1069,151 @@ function DrainModeSwap({
         setStorageDrainMode(storageId, next);
       }}
       aria-label={`Switch to ${next}`}
-      className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+      className="storage-title-key board-edit-chrome nodrag"
     >
-      <ArrowLeftRight aria-hidden className="h-2.5 w-2.5" />
+      <Repeat aria-hidden />
     </button>
     </MinecraftTooltip>
   );
 }
 
+/**
+ * The chip's rate: what flows, in the drawer's red or green (steel on trash,
+ * whose intake is voided). Large in Build, a step smaller in Solve's reading
+ * well. The NUMBER keeps one size wherever it fits and the unit rides beside
+ * it smaller, so drawers side by side read at one size. Only a figure that
+ * still will not fit gives up size, never digits, fitted by string length.
+ */
+const CHIP_RATE_ROOM: Record<StorageRole, number> = {
+  product: 63,
+  idle: 63,
+  source: 61,
+  byproduct: 49,
+  trash: 49,
+  buffer: 47,
+};
+const CHIP_RATE_STEPS = {
+  large: [
+    { number: "text-[13px]", unit: "text-[9px]", perChar: 8.2, unitPerChar: 5.2 },
+    { number: "text-[11px]", unit: "text-[8px]", perChar: 7, unitPerChar: 4.6 },
+    { number: "text-[9.5px]", unit: "text-[7px]", perChar: 6, unitPerChar: 4.1 },
+    { number: "text-[8px]", unit: "text-[6.5px]", perChar: 5.1, unitPerChar: 3.8 },
+  ],
+  small: [
+    { number: "text-[11px]", unit: "text-[8px]", perChar: 7, unitPerChar: 4.6 },
+    { number: "text-[10px]", unit: "text-[7.5px]", perChar: 6.4, unitPerChar: 4.3 },
+    { number: "text-[9px]", unit: "text-[7px]", perChar: 5.8, unitPerChar: 4.1 },
+    { number: "text-[8px]", unit: "text-[6.5px]", perChar: 5.1, unitPerChar: 3.8 },
+  ],
+} as const;
+
+/** "+" or a true minus, the same width as the plus (a hyphen stood apart
+ * from the digits). */
+function signedChipNumber(value: number, body: string): string {
+  return value >= 0 ? `+${body}` : body.replace(/^-/, "−");
+}
+
+function ChipRate({ net, kind, role, size }: { net: number; kind: string; role: StorageRole; size: "large" | "small" }) {
+  const parts = formatCompactRateParts(net, kind);
+  const number = signedChipNumber(net, parts.body);
+  const steps = CHIP_RATE_STEPS[size];
+  // Small sits in the reading well: its padding and border come off the room.
+  const room = CHIP_RATE_ROOM[role] - (size === "small" ? 10 : 0);
+  const fit = steps.find((step) => number.length * step.perChar + parts.unit.length * step.unitPerChar + 2 <= room)
+    ?? steps[steps.length - 1];
+  return (
+    <div
+      className={`storage-net-line storage-chip-rate storage-chip-rate--${size} whitespace-nowrap tabular-nums`}
+      style={{ color: role === "trash" ? "#b9c0cd" : netRateColor(net) }}
+    >
+      <span className={`storage-chip-rate-number ${fit.number}`}>
+        <MotionNumberText
+          values={[net]}
+          render={(shown) => {
+            const value = shown[0] ?? net;
+            return signedChipNumber(value, formatCompactRateParts(value, kind).body);
+          }}
+        />
+      </span>
+      <span className={`storage-chip-rate-unit ${fit.unit}`}>{parts.unit}</span>
+    </div>
+  );
+}
+
+/** Where a source or product drawer's typed rate stands: its rule, and
+ * whether it applies. Any covers both no number and a number kept waiting. */
+function useDrawerRule(storage: FactoryStorage, role: StorageRole) {
+  const mode = storageTargetMode(storage, role);
+  const target = storage.targetPerSecond;
+  return { mode, target, any: target === undefined || mode === "ignore", input: isInputRate(storage, role) };
+}
 
 /**
- * The drawer hover: which of the four jobs this card is doing, why it is that
- * one, and the three rates.
- *
- * It used to list every feeder and every drainer by name with its own rate,
- * which on a busy tank was a dozen lines of table hanging off a card whose own
- * face already carries the net. Those wires are on the board; the thing only
- * the hover can tell you is which job the drawer has and what decided it.
+ * Solve's input row on a source or product drawer: a rule BUTTON with a ▾
+ * that opens the four rules in words, and your rate in a sunken BOX you
+ * click and type into.
+ */
+export function RuleInput({
+  storage,
+  role,
+  result,
+  net,
+}: {
+  storage: FactoryStorage;
+  role: StorageRole;
+  result: StorageThroughputResult | undefined;
+  net: number;
+}) {
+  const rule = useRateRule({ storage, role, result, flowing: Math.abs(net) });
+  return (
+    <div
+      // While the list is open no hover tooltip may cover it.
+      data-tooltip-stop={rule.open ? "" : undefined}
+      className="storage-rule-row nodrag nopan"
+      onPointerDown={(event) => event.stopPropagation()}
+      // Its own controls: a click or right click here is not a browse.
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
+    >
+      <RuleButton rule={rule} />
+      <RateBox rule={rule} />
+    </div>
+  );
+}
+
+/** How far the real rate has got toward your rate, drawn like the machine
+ * card's port bars: green once met, red when it can't be, steel on an At
+ * most limit (the share of the allowance in use). No bar on Any. */
+function RuleBar({
+  storage,
+  role,
+  result,
+  net,
+}: {
+  storage: FactoryStorage;
+  role: StorageRole;
+  result: StorageThroughputResult | undefined;
+  net: number;
+}) {
+  const { mode, target, any } = useDrawerRule(storage, role);
+  // No rule, no bar - but its room stays, so the rows never jump when a
+  // rule comes or goes.
+  if (any || target === undefined || Math.abs(target) === 0) {
+    return <span className="storage-rate-bar storage-rate-bar--empty" aria-hidden />;
+  }
+  const share = Math.min(1, Math.abs(net) / Math.abs(target));
+  const tone = result?.targetUnreachable ? "bad" : mode === "at-most" ? "calm" : "ok";
+  return (
+    <span className="storage-rate-bar" aria-hidden>
+      <i data-tone={tone} style={{ width: `${share * 100}%` }} />
+    </span>
+  );
+}
+
+/**
+ * The drawer hover: which of the four jobs this card is doing, what decided
+ * it, and the three rates. Feeders and drainers are not listed: those wires
+ * are on the board.
  */
 function renderStorageHoverContent(storage: FactoryStorage, role: StorageRole): ReactNode {
   const { project, lastResult } = useFactoryStore.getState();
@@ -1065,16 +1232,23 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
 }
 
 function formatCompactRate(value: number, kind: string): string {
+  const { body, unit, spaced } = formatCompactRateParts(value, kind);
+  return spaced ? `${body} ${unit}` : `${body}${unit}`;
+}
+
+/** The compact rate as its number and its unit, for faces that set the
+ * unit apart. `spaced` says whether the joined form puts a space between. */
+function formatCompactRateParts(value: number, kind: string): { body: string; unit: string; spaced: boolean } {
   const scaled = value * rateMultiplierForKind(kind);
   const unit = rateSuffixForKind(kind).trimStart();
-  if (kind === "power") return `${formatPowerValue(scaled)} ${unit}`;
+  if (kind === "power") return { body: formatPowerValue(scaled), unit, spaced: true };
   const abs = Math.abs(scaled);
 
   // The floor is written per second and scaled with the unit, so "balanced"
   // still reads as a flat 0 while a real trickle keeps its digits per tick.
   const spaced = unit.startsWith("L") || unit.startsWith("EU") || unit.startsWith("A ");
   if (!Number.isFinite(scaled) || abs < 0.005 * rateUnitPrecisionScale()) {
-    return `0${spaced ? ` ${unit}` : unit}`;
+    return { body: "0", unit, spaced };
   }
   const body =
     abs >= 1_000_000
@@ -1087,11 +1261,6 @@ function formatCompactRate(value: number, kind: string): string {
           abs >= 1
           ? trimFlow(scaled)
           : formatCompact(scaled);
-  return spaced ? `${body} ${unit}` : `${body}${unit}`;
+  return { body, unit, spaced };
 }
 
-function trimFlow(value: number) {
-  const abs = Math.abs(value);
-  const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  return trimTrailingDecimalZeros(value.toFixed(decimals));
-}

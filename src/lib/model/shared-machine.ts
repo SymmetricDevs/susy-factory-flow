@@ -2,32 +2,25 @@ import type { FactoryEdge, FactoryNode, FactoryNodeRecipeSection, FactoryProject
 import { getRecipeMachineHandlers } from "./recipe-rules";
 
 /**
- * SHARED MACHINES (Jack, 2026-09-07): one card, several recipes, one machine.
+ * SHARED MACHINES: one card, several recipes, one machine.
  *
  * In the game a Large Chemical Reactor fed for two reactions runs whichever
- * one its inputs allow, one at a time, so two recipes TIME-SHARE the machine.
- * The planner keeps that as one card with SECTIONS: section 0 is the card's
- * own `recipeId`, sections 1..n are `extraRecipes`. Every section keeps its
- * own slots, wires and oredict picks. The machine count, tier, power budget
- * and every config knob are the card's, shared by all of them.
+ * one its inputs allow, one at a time, so the recipes TIME-SHARE the machine.
+ * A card has SECTIONS: section 0 is `recipeId`, sections 1..n are
+ * `extraRecipes`. Slots, wires and oredict picks are per section; machine
+ * count, tier, power budget and config knobs are the card's.
  *
- * What is coupled is exactly what the game couples, and nothing more:
- *   - TIME. The solver expands each extra section into a hidden node
- *     (`expandSharedMachines`) and adds one row per card, the sum of the
- *     sections' acts at most one (equations-core.ts). A section's act IS its
- *     share of the machine's time, because its nameplate already carries the
- *     whole machine count.
- *   - NOTHING ELSE. GT5U's ProcessingLogic walks every recipe the inputs
- *     match and skips one that fails on output space or voltage, so a starved
- *     or clogged section simply hands its time to the others. Ports stay per
- *     section, verdicts stay per section.
+ * Only TIME is coupled: the solver expands each extra section into a hidden
+ * node (`expandSharedMachines`) and adds one row per card capping the sum of
+ * the sections' acts at one (equations-core.ts). A section's act IS its share
+ * of the machine's time, since its nameplate carries the whole machine count.
+ * Nothing else is coupled: GT5U's ProcessingLogic skips a recipe that fails
+ * on output space or voltage, so a starved or clogged section hands its time
+ * to the others.
  *
- * ADDRESSING. A section's port handles wear an `r<n>:` prefix on the ordinary
- * handle id (`sectionHandleId`), so a wire on the board says which section
- * it lands on while still naming the real card. The hidden solve node for a
- * section is `sectionNodeId(cardId, n)`; a solve result is read back per
- * section under that id. Section 0 keeps bare handles and the card's own id,
- * so an ordinary card is untouched by all of this.
+ * ADDRESSING: section port handles wear an `r<n>:` prefix (`sectionHandleId`);
+ * a section's hidden solve node is `sectionNodeId(cardId, n)`. Section 0 keeps
+ * bare handles and the card's own id, so an ordinary card is unaffected.
  */
 
 export type { FactoryNodeRecipeSection };
@@ -84,17 +77,9 @@ export function parseSectionNodeId(id: string): { nodeId: string; section: numbe
   return { nodeId: id.slice(0, at), section: Number(tail) };
 }
 
-export function isSectionNodeId(id: string): boolean {
-  return parseSectionNodeId(id).section > 0;
-}
-
 /** The card a solve node id belongs to: itself for a card, the card for a section. */
 export function sectionOwnerId(id: string): string {
   return parseSectionNodeId(id).nodeId;
-}
-
-export function getNodeSectionRecipeId(node: FactoryNode, section: number): string | undefined {
-  return section === 0 ? node.recipeId : node.extraRecipes?.[section - 1]?.recipeId;
 }
 
 /**
@@ -177,8 +162,7 @@ export function sharedHandlersWith(
 
 /**
  * The section a wire lands on at one card, read off its handle. An edge
- * with no handle is section 0, so wires from before sections existed keep
- * their meaning.
+ * with no handle (or no prefix) is section 0.
  */
 export function edgeSectionAt(edge: Pick<FactoryEdge, "source" | "target" | "sourceHandle" | "targetHandle">, nodeId: string, end: "source" | "target"): number {
   if (end === "source") {
@@ -262,9 +246,4 @@ export function listSharedMachineGroups(nodeIds: Iterable<string>): Map<string, 
     }
   }
   return groups;
-}
-
-/** Every solve id a card answers to: itself and its sections. */
-export function listSectionNodeIds(node: FactoryNode): string[] {
-  return listNodeSections(node).map(({ node: view }) => view.id);
 }

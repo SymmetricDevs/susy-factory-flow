@@ -1,25 +1,19 @@
 /**
- * AIR BETWEEN STRANGERS: the one readability term the arranger adds on top
- * of the router's points, and the whole of how islands happen.
+ * AIR BETWEEN STRANGERS: the readability term the arranger adds on top of
+ * the router's points, and how islands emerge without any island rule.
  *
- * Jack (2026-09-08): "a cluster that has lots of edges connecting each
- * other but only one edge connecting back to the main cluster ... how do
- * we make this behaviour emergent?" Nothing here decides what an island
- * is. Two cards that are strangers - three or more hops apart in the wire
- * graph, or not connected at all - pay a small price for every pixel they
- * stand closer than ISLAND_AIR_CELLS. Cards a wire joins attract through
- * that wire's length; cards two hops apart (both fed by one machine) are
- * neutral. A dense cluster hanging off the main body by one wire has
- * dozens of stranger pairs across the seam and one wire pulling it in, so
- * the search pushes it out until the bridge's extra length balances the
- * air owed - and a lone card with one wire stays where its wire wants
- * it. How far a cluster drifts follows from how self-contained it is.
+ * Strangers are cards three or more hops apart in the wire graph, or not
+ * connected. Each card pays `islandAir` points (router-tuning.ts, the same
+ * currency as wire) per pixel its NEAREST stranger stands closer than
+ * ISLAND_AIR_CELLS; per card rather than per pair, so the dial means the
+ * same on small and large boards. Wired cards attract through the wire's
+ * length; cards two hops apart are neutral. A dense cluster hanging off
+ * the main body by one wire is pushed out until the bridge's extra length
+ * balances the air; a lone card with one wire stays where its wire wants
+ * it. At zero the arranger packs as tight as the wires allow.
  *
  * A drawer serving exactly one machine stands in for that machine in the
  * hop count, so two drawers on neighbouring machines are not strangers.
- * Each card pays for its nearest stranger only, at `islandAir` points per
- * pixel of air short (router-tuning.ts) - the same currency as wire; at
- * zero the arranger packs as tight as the wires allow.
  */
 
 /** Strangers owe each other this much air, in cells. */

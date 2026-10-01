@@ -27,8 +27,8 @@ export interface ResourceIconAtlasRef {
 /**
  * One item or fluid picked as the face of a whole entry: a plan, a shared
  * setup, a blueprint. Same icon plumbing as a resource slot, minus the rate.
- * Lives here rather than in the community types because a plan carries its
- * own face now, and the model cannot reach into community code.
+ * Lives in the model because a plan carries its own face and the model cannot
+ * import community code.
  */
 export interface EntryIcon {
   kind: ResourceKind;
@@ -162,12 +162,13 @@ export interface MachineProfile {
   machineType: string;
   minimumTier: MachineTier | string;
   /**
-   * The highest real machine in a singleblock family (a ZPM Elite Canning
-   * Machine II is the last Canning Machine there is). A tier above it is
+   * The highest real machine in a singleblock family. A tier above it is
    * not a block, so the tier chip stops here and the run tier clamps to it.
    * Absent on multiblocks, whose tier is their hatches.
    */
   maximumTier?: MachineTier | string;
+  /** Registered singleblock tiers; some families skip intermediate voltages. */
+  availableTiers?: string[];
   durationTicks?: number;
   eut?: number;
   maxParallel?: number;
@@ -210,8 +211,11 @@ export interface MachineConfigControl {
   label: string;
   minimumKey: string;
   defaultKey?: string;
-  /** Whole-number entry; an omitted maximum means there is no machine limit. */
-  numeric?: { min: number; max?: number };
+  /**
+   * Typed-number entry; an omitted maximum means there is no machine limit.
+   * Values snap to `step` (default: whole numbers).
+   */
+  numeric?: { min: number; max?: number; step?: number };
   /**
    * The recipe's own special value is a 1-based minimum tier on this ladder
    * (the Naquadah Fuel Refinery's field restriction coils), so `minimumKey`
@@ -242,6 +246,8 @@ export interface Recipe {
   minimumTier: MachineTier | string;
   /** The family's highest real machine, carried from the selected handler; see MachineProfile. */
   maximumTier?: MachineTier | string;
+  /** Actual registered tiers carried from the selected singleblock handler. */
+  availableTiers?: string[];
   durationTicks: number;
   eut: number;
   inputs: RecipeInput[];
@@ -328,14 +334,15 @@ export interface FactoryNodeRecipeSection {
 }
 
 export interface FactoryNode {
+  /** Pool production scope, independent of canvas boards and shared recipes. */
+  productionGroupId?: string;
   id: string;
   recipeId: string;
   colorTag?: FactoryNodeColorTag;
   /**
-   * Custom rate cards only: the dial, kept on the CARD rather than in the
-   * synthetic recipe's slot. The slot is the live value the solver reads, and
-   * it is emptied every time the card lets go of its resource — this is what
-   * survives that, so a card you unwire and rewire comes back on your number.
+   * Custom rate cards only: the dial. Kept on the card because the synthetic
+   * recipe's slot (the live value the solver reads) is emptied whenever the
+   * card lets go of its resource; this keeps the number across a rewire.
    */
   customRate?: { perSecond: number; mode: CustomRateMode };
   /** When set, Industrial Farm planting follows this many full seed beds. */
@@ -385,12 +392,12 @@ export interface FactoryNode {
   /**
    * Solve mode's pin: run EXACTLY this many machines, and solve the rest of
    * the line around it ("I want 20 LGTs; what feeds them"). Absent means the
-   * count is the solver's to choose. Ignored in plan mode.
+   * count is the solver's to choose. Ignored in Build mode.
    */
   solvePin?: number;
   targetOutput?: TargetRate;
   enabled: boolean;
-  /** The pocket dimension this card lives in; absent = the root board. */
+  /** The board (pocket) this card lives in; absent = the root board. */
   pocketId?: string;
   position: {
     x: number;
@@ -401,46 +408,52 @@ export interface FactoryNode {
 /**
  * What a drawer at the END of the plan does about the machine feeding it.
  *
- * `product` pulls: it asks its feeder for everything the machine can make, so
- * the machine runs flat out. This is the thing your factory is FOR, and it is
- * the default for every drain, old plans included.
+ * `product` (the default) pulls: it asks its feeder for everything the
+ * machine can make, so the machine runs flat out.
  *
- * `byproduct` only catches what is left: it asks for nothing at all, so the
- * pace is set by whoever really wants the output (or by the plan's target
- * rate), and the leftover lands here instead of clogging the machine.
+ * `byproduct` only catches what is left: it asks for nothing, so the pace is
+ * set by whoever really wants the output (or the plan's target rate), and the
+ * leftover lands here instead of clogging the machine.
  *
- * `trash` voids what arrives: it asks for nothing, un-clogs its feeder like a
- * byproduct, and what it eats is discarded from the books entirely instead of
- * being counted as surplus. The drawer as a bin - this replaced the separate
- * trash can node's spawn button (2026-08-23); old trash can nodes still work.
+ * `trash` asks for nothing and un-clogs like a byproduct, but what it eats is
+ * dropped from the books instead of counted as surplus. Legacy trash can
+ * nodes are converted to trash drawers on load.
  */
 export type StorageDrainMode = "product" | "byproduct" | "trash";
 
 /**
- * How a BUFFER treats a surplus. `overflow` (the default) catches what its
- * takers leave, filling at a visible rate, so the feeder never clogs on it -
- * the way a real chest or tank behaves. `strict` passes through only what is
- * pulled and hands the surplus back to the feeder as a clog, for players who
- * want the imbalance surfaced instead of stored. Neither mode can run the
- * tank net-negative: a buffer never invents supply.
+ * How a BUFFER treats a surplus. `overflow` (the Build default) banks what its
+ * takers leave at a visible rate, so the feeder never clogs, like a real chest.
+ * `strict` passes through only what is pulled and hands the surplus back to
+ * the feeder as a clog. `ratio` splits incoming and outgoing flows by fixed
+ * shares, banking only `ratioExportPercent`. Solve defaults to strict unless a
+ * mode is set. No mode runs the tank net-negative: a buffer never invents supply.
  */
-export type StorageBufferMode = "overflow" | "strict";
+export type StorageBufferMode = "overflow" | "strict" | "ratio";
 
 export interface FactoryStorage {
+  productionGroupId?: string;
   id: string;
   kind: ResourceKind;
   resourceId: ResourceId;
   /** Drains only; absent means `product`. See StorageDrainMode. */
   drainMode?: StorageDrainMode;
   /**
-   * Solve mode's question, typed on a PRODUCT drawer: make at least this much
-   * per second. Ignored in plan mode and on other drawer roles; a product with
+   * Shared boundary target: negative for fresh input, positive for output.
+   * Source editors on the board show the magnitude; Pool shows the sign.
+   * Ignored in Build and on buffer/byproduct/trash drawers; a product with
    * no number is unconstrained (byproduct-shaped) so flipping the mode never
    * errors a board.
    */
   targetPerSecond?: number;
-  /** Buffers only; absent means `overflow`. See StorageBufferMode. */
+  /** Shared Solve/Pool rate rule. Build retains the settings without enforcing them. */
+  targetMode?: "at-least" | "at-most" | "exact" | "ignore";
+  /** Legacy Pool rule, read when targetMode is absent. */
+  poolTargetMode?: "at-least" | "exact" | "ignore";
+  /** Buffers only; absent means `overflow` in Build, `strict` in Solve. See StorageBufferMode. */
   bufferMode?: StorageBufferMode;
+  /** Ratio mode's unwired surplus share, 0–100; absent means no export. */
+  ratioExportPercent?: number;
   /**
    * Which side of the POOL this drawer sits on when it has no wires of its
    * own (`FactoryProject.poolMode`): a `source` feeds the pool, a `drain`
@@ -454,7 +467,7 @@ export interface FactoryStorage {
   iconAtlas?: ResourceIconAtlasRef;
   dominantColor?: string;
   capacity?: number;
-  /** The pocket dimension this drawer lives in; absent = the root board. */
+  /** The board (pocket) this drawer lives in; absent = the root board. */
   pocketId?: string;
   position: {
     x: number;
@@ -472,11 +485,10 @@ export type FactoryAnnotationBorderStyle = "solid" | "dashed" | "none";
  * How strongly a box/zone paints its surface: a faint wash, opaque, or not at
  * all. The surface COLOUR is separate (`fillColor` for a dye, `fillTheme` for
  * a textured paper), and the marks drawn over it are separate again
- * (`marks`) - three orthogonal choices, not one long list.
+ * (`marks`) - three orthogonal choices.
  *
- * The extra tokens are legacy spellings from when one field carried all
- * three; they are still accepted on read (a legacy mark token means "tint
- * surface wearing that mark") so no saved board changes meaning.
+ * The extra tokens are legacy spellings still accepted on read: a mark token
+ * here means a tint surface wearing that mark.
  */
 export type FactoryAnnotationFillStyle =
   | "tint"
@@ -494,10 +506,9 @@ export type FactoryAnnotationMarks = "none" | "dots" | "grid" | "graph" | "ruled
 
 /**
  * How a box, zone or image is dressed. Every field optional: absent means the
- * classic look (solid border and faint tint, both in `colorTag`), so old plans
- * render exactly as they always did. The border and the fill each take their
- * own colour; absent falls back to the annotation's `colorTag`, which is what
- * keeps the paint tool working on styled shapes.
+ * classic look (solid border and faint tint, both in `colorTag`). Border and
+ * fill colours fall back to `colorTag`, which keeps the paint tool working on
+ * styled shapes.
  */
 export interface FactoryAnnotationStyle {
   border?: FactoryAnnotationBorderStyle;
@@ -535,32 +546,25 @@ export interface FactoryAnnotation {
    * board can frame and drag it like any other annotation.
    */
   points?: Array<{ x: number; y: number }>;
-  /**
-   * Text only: font size in px. A note headlining a whole section and a note
-   * labelling one machine want very different sizes, and resizing the box only
-   * ever changed how much room the same small text had to wrap in.
-   */
+  /** Text only: font size in px. Resizing the box changes only the wrap width. */
   fontSize?: number;
   /** Image only: where the picture lives (an uploaded, hosted URL). */
   imageUrl?: string;
   /** Box/zone/image: border and fill dressing. Absent = the classic look. */
   style?: FactoryAnnotationStyle;
-  /** The pocket dimension this ink lives in; absent = the root board. */
+  /** The board (pocket) this ink lives in; absent = the root board. */
   pocketId?: string;
 }
 
 /**
- * A pocket dimension: a named sub-board that collapses a group of cards into
- * one node-like card on its parent board. Members are ordinary project
- * nodes/storages/annotations tagged with `pocketId` — the graph the solver
- * sees is completely flat; pockets only decide what the board SHOWS. Pockets
- * nest through `parentPocketId` (absent = the pocket sits on the root board).
+ * A board (the type keeps its older name, "pocket"): a named container.
+ * Members are ordinary project nodes/storages/annotations tagged with
+ * `pocketId`; the graph the solver sees is flat, and boards only decide what
+ * the canvas SHOWS. Boards nest through `parentPocketId` (absent = root).
  *
- * A pocket can also stand OPEN as a board: a window frame on its parent board
- * whose members render inside it and move with it (`expanded`). Boards and
- * pockets are the same thing in two states — minimizing a board gives back
- * the classic collapsed card, and every plan saved before boards existed
- * simply has no `expanded` flag and renders exactly as it always did.
+ * Open (`expanded`) it is a window frame whose members render inside it and
+ * move with it; minimized it is a summary card. A plan with no `expanded`
+ * flag loads its boards minimized.
  */
 export interface FactoryPocket {
   id: string;
@@ -577,10 +581,10 @@ export interface FactoryPocket {
     y: number;
   };
   /**
-   * Standing open as a board. While open, member positions are relative to
-   * the frame's top-left corner; a legacy pocket's members (whose positions
-   * were their own dive-in space) are rebased to fit the frame the first
-   * time it opens. Absent/false = the classic collapsed pocket card.
+   * Standing open. While open, member positions are relative to the frame's
+   * top-left corner; a legacy pocket's members (positions in their own
+   * separate space, signalled by an absent `size`) are rebased to fit the
+   * frame the first time it opens. Absent/false = minimized summary card.
    */
   expanded?: boolean;
   /** The window frame, whole cells; absent = fitted when it first opens. */
@@ -591,8 +595,8 @@ export interface FactoryPocket {
   /**
    * The paper this board is drawn on: a canvas theme id (see
    * `canvas-themes.ts`), giving the floor its base colour, its grain and its
-   * own grid ink. Absent = the house purple. Deliberately the SAME palette
-   * the canvas itself offers — a board is a piece of board.
+   * own grid ink. Absent = a paper derived from the board's id
+   * (`paperForBoardId` in board-paper.ts).
    */
   theme?: string;
   /**
@@ -612,14 +616,16 @@ export interface FactoryEdge {
   resourceId: ResourceId;
   label?: string;
   ratePerSecond?: number;
+  /** Relative parts leaving a ratio buffer; absent is one, zero closes this branch. */
+  ratioWeight?: number;
+  /** Independent relative share entering a ratio buffer; absent is one. */
+  ratioInputWeight?: number;
   /**
-   * A loose cell wire (SetupRules.looseCellWires): the edge's own resource is
-   * what leaves the source - the filled CELL or the FLUID - and its target
-   * handle names the other form's input it lands on. This carries the
-   * Canner's litres-per-cell ratio, fetched when the wire was drawn. The
-   * solver expands such an edge through a hidden free Tank (see
-   * expandCrossFormEdges in throughput.ts); no wire ever crosses kinds on
-   * its own.
+   * A loose cell wire: the edge's own resource is what leaves the source (the
+   * filled CELL or the FLUID), and its target handle names the other form's
+   * input. Carries the Canner's litres-per-cell ratio, fetched at wire time.
+   * The solver expands it through a hidden free Tank (expandCrossFormEdges in
+   * throughput.ts); no wire crosses kinds on its own.
    */
   crossForm?: {
     litresPerCell: number;
@@ -648,27 +654,18 @@ export interface FuelProfile {
 /**
  * How the author had the workspace set up when they shared a plan.
  *
- * Board view settings and resource marks are normally personal taste kept in
- * localStorage, deliberately outside the project so your grid pattern does not
- * ride along into everyone else's board (see `board-view.ts`). A SHARED SETUP
- * is the exception: the author arranged the view to make their build readable
- * - starred the resources worth watching, hid the noise, picked a rate unit -
- * and that arrangement is part of what they are handing over.
- *
- * So it rides in the plan, but it is only ever APPLIED when a shared setup is
- * opened. Switching between your own designs never touches your live settings,
- * which is the case the original rule was protecting.
- *
- * Every field is optional: an older plan simply has nothing to say, and the
- * viewer's own settings stand.
+ * View settings and resource marks are normally personal, kept in
+ * localStorage outside the project (see `board-view.ts`). A shared setup
+ * carries the author's arrangement in the plan, but it is only APPLIED when a
+ * shared setup is opened; switching between your own designs never touches
+ * your live settings. Every field is optional; absent leaves the viewer's own.
  */
 export interface PlanViewState {
   canvasPattern?: string;
   canvasTheme?: string;
-  /** Historical: older plans carry it, nothing reads it. Line colour rides
-   * the status glance mode now. */
+  /** Historical: older plans carry it, nothing reads it. */
   lineHeatMode?: boolean;
-  /** Historical: the rate pills on wires were dropped (2026-09-08); nothing reads it. */
+  /** Historical: older plans carry it, nothing reads it. */
   lineLabelsMode?: boolean;
   fixedEdgeWidth?: boolean;
   linePulseMode?: boolean;
@@ -687,18 +684,13 @@ export interface PlanViewState {
 }
 
 /**
- * The two things a board cannot do for itself: find stock for an input
- * nothing feeds, and get rid of output nothing takes.
+ * Legacy per-plan boundary rules. Every plan gets the same answer from
+ * `getSetupRules` (setup-rules.ts): closed inputs and outputs, loose cell
+ * wires on. A stored value is dropped on load; the type remains so old JSON
+ * parses and callers can still ask.
  *
- * Both off is the CLOSED plan, and the default: you declare the boundary by
- * wiring it, a slot with no wire reads UNWIRED, and a surplus with nowhere to
- * go clogs. Turning one on is exactly like wiring a source drawer onto every
- * input, or a product drawer onto every output - including slots that already
- * have a wire, so a half-fed input tops up and a surplus output spills rather
- * than holding its machine back.
- *
- * The drawers are virtual: they exist inside the solve and never reach the
- * board, so nothing the player drew is touched or hidden.
+ * When on, a free rule acts like a virtual source/product drawer on every
+ * slot inside the solve, never on the board.
  */
 export interface SetupRules {
   /** An input short of stock takes the rest from off the board. */
@@ -706,16 +698,24 @@ export interface SetupRules {
   /** Output with nowhere to go leaves the board instead of clogging. */
   freeOutputs?: boolean;
   /**
-   * A filled cell may wire straight onto its fluid's input, converting for
-   * free at the Canner's own ratio (stored on the edge at wire time, see
-   * FactoryEdge.crossForm). Off by default: the honest bridge is a Tank or
-   * Canner card, and this rule is the player choosing convenience over it.
-   * Turning it off later keeps the wires already drawn.
+   * A filled cell may wire straight onto its fluid's input, converting at the
+   * Canner's ratio stored on the edge (FactoryEdge.crossForm).
    */
   looseCellWires?: boolean;
 }
 
+/** Share skips this scope's match; import permits external supply here. */
+export type PoolResourceRule = "share" | "import";
+export interface ProductionGroup {
+  id: string;
+  name: string;
+  parentId?: string;
+  resourceRules?: Record<string, PoolResourceRule>;
+}
+
 export interface FactoryProject {
+  productionGroups?: ProductionGroup[];
+  poolResourceRules?: Record<string, PoolResourceRule>;
   /** Construction progress; never changes production. */
   checklist?: { cards: string[]; edges: string[] };
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
@@ -731,7 +731,7 @@ export interface FactoryProject {
   /** Only shared setups carry this; see PlanViewState. */
   view?: PlanViewState;
   targetRate?: TargetRate;
-  /** How the board treats what it cannot feed or shift. See SetupRules. */
+  /** Legacy; dropped on load. See SetupRules. */
   setupRules?: SetupRules;
   /**
    * SOLVE MODE: machine counts become the answer instead of the question.
@@ -743,12 +743,11 @@ export interface FactoryProject {
    */
   solveMode?: boolean;
   /**
-   * POOL MODE: no wires needed. Every resource is one shared pool: whatever
-   * any machine makes goes in, whatever any machine needs comes out, the
-   * surplus banks. Imports are SOURCE drawers placed on the board with
-   * `poolSide: "source"`, products are DRAIN drawers with `poolSide: "drain"`;
-   * a resource nobody makes and no source declares stays short. Wires drawn
-   * anyway still count. Combines with solve mode. Part of the plan JSON.
+   * POOL MODE: machines share resource pools and ignore saved wires.
+   * Production groups resolve local materials first; unmatched or shared ports
+   * reach the parent. The factory imports materials with no producer; an
+   * explicit outside-supply rule permits imports alongside local production.
+   * Surplus banks, and product drawers carry targets. Implies solve mode.
    */
   poolMode?: boolean;
   /**
@@ -759,10 +758,7 @@ export interface FactoryProject {
    * solves the same everywhere without a lookup.
    */
   poolCellRatios?: Record<string, number>;
-  /**
-   * LEGACY sketch mode, read on load and rewritten as both board rules.
-   * Plans saved before the rules existed still carry it; nothing writes it.
-   */
+  /** LEGACY sketch-mode flag: dropped on load, nothing writes it. */
   assumeBoundaries?: boolean;
   recipes: Recipe[];
   nodes: FactoryNode[];
@@ -917,24 +913,18 @@ export interface ResourceBalance {
   surplusPerSecond: number;
   deficitPerSecond: number;
   /**
-   * The BOUNDARY figures, read off the drawers rather than off the books.
-   *
-   * A resource can carry several at once, and that is not a contradiction:
-   * importing carbon at one drawer and catching spare carbon at another says
-   * the plan brings some in over here and has some to haul away over there.
-   * Netting the two would claim the spare feeds the need, which is a wire
-   * nobody drew - and if the player wants it, they can draw it.
+   * The BOUNDARY figures, read off the drawers rather than off the books. A
+   * resource can carry several at once (imported at one drawer, spare at
+   * another). They are never netted: that would claim a wire nobody drew.
    */
   importedPerSecond: number;
   productPerSecond: number;
   byproductPerSecond: number;
   /**
    * Spillover piling up in overflow BUFFERS: each buffer's inflow minus its
-   * outflow, floored at zero, summed per resource. A pass-through buffer
-   * contributes nothing; one that catches more than its takers drink is
-   * accumulating real material, and the plan's books surface that as a
-   * positive alongside products and byproducts instead of letting a tank
-   * quietly swallow it. Sources and drains keep their own columns.
+   * outflow, floored at zero, summed per resource. Surfaced as a positive
+   * beside products and byproducts so a tank never quietly swallows it.
+   * Sources and drains keep their own columns.
    */
   bufferFillPerSecond: number;
 }
@@ -983,8 +973,7 @@ export interface ThroughputResult {
   held?: boolean;
   /**
    * The clog-lock diagnosis, when the solve that made these books also ran
-   * it. Its vent solve is a second, harder LP: a board with many stopped
-   * machines pays 20-60 s for it on the main thread, so the solve worker
+   * it. Its vent solve is a second, expensive LP, so the solve worker
    * computes it beside the books and `findClogLocks` serves it from here.
    */
   clogLocks?: ClogLockIndex;
@@ -1011,9 +1000,8 @@ export interface ClogLock {
   /**
    * The machines whose surplus needs the drawer - the only cards that flash,
    * ordered WORST FIRST so the notice's "Show me" walks them by severity.
-   * A jam can hold half a board; marking every member painted whole plans
-   * blue and pointed nowhere. The victims keep the verdict and its story,
-   * the vent sites carry the ring, exactly as the fix copy promises.
+   * A jam can hold half a board, so members are not all marked: victims keep
+   * the verdict, vent sites carry the ring.
    */
   ventNodeIds: string[];
   /** The wires carrying a vented surplus out of a vent site - the ones the

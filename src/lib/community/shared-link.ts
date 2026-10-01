@@ -2,22 +2,16 @@
 
 /**
  * The link you send someone: `/?plan=<community id>`, which opens that setup in
- * a tab of its own.
- *
- * One module because five places care about it: the Share buttons that write
- * the link, the import that runs on arrival, the Welcome tab (which has to
- * know that this page load already has somewhere to be), and the address-bar
- * sync that keeps the link IN the address while the open board still matches
- * its post - see SharedAddressSync.
+ * a tab of its own. Shared by the Share buttons, the arrival import, the
+ * Welcome tab, and the address-bar sync that keeps the id in the address while
+ * the open board still matches its post (SharedAddressSync).
  */
 const SHARED_PLAN_PARAM = "plan";
 
 /**
- * Captured once, at load. The address bar is rewritten while the app runs
- * (the sync adds and removes the id as the board drifts from its post), so
- * "what did this page load arrive with" and "what does the address say now"
- * are different questions, and arrival must not depend on reading the
- * location before the first rewrite wins the race.
+ * Captured once, at load: the sync rewrites the address bar while the app
+ * runs, so what the page arrived with must not depend on reading the location
+ * before the first rewrite.
  */
 const arrivalSharedPlanId: string | undefined = (() => {
   try {

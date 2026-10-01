@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 
 /**
- * The community hub lives inside the planner now, as the sidebar's Setups
- * tab. Old links still land somewhere useful: /community?plan=x becomes the
- * editor's /?plan=x open-to-edit link, everything else goes home.
+ * The community hub lives inside the planner. Legacy /community links
+ * redirect: /community?plan=x becomes /?plan=x, everything else goes home.
  */
 export default async function CommunityRedirect({
   searchParams,

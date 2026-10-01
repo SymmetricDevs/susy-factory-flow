@@ -1,4 +1,5 @@
 import type { FactoryNode, Recipe, ResourceAmount, ResourceKind } from "./types";
+import { isOreDictionaryResource } from "./resources";
 
 /**
  * The recipe's input amount, restated in the units of the substitute actually
@@ -8,9 +9,9 @@ import type { FactoryNode, Recipe, ResourceAmount, ResourceKind } from "./types"
  * of soldering alloy wants 144 L of tin, and the alternative's ratio says so.
  * Ore dictionary members carry 1 and so leave the amount exactly as it was.
  *
- * Kinds never mix any more — an item satisfies an item slot and a fluid a fluid
- * slot — so a differing kind is not a conversion, it is a wire that should not
- * have been drawn. It leaves the amount alone rather than inventing a ratio.
+ * Kinds never mix (an item satisfies an item slot, a fluid a fluid slot), so a
+ * differing kind is a wire that should not exist; the amount is left alone
+ * rather than inventing a ratio.
  */
 export function inputOverrideAmount(
   input: Pick<ResourceAmount, "kind" | "id" | "displayName" | "amount" | "alternatives">,
@@ -38,6 +39,10 @@ export function applyRecipeInputOverrides(
   const inputs = recipe.inputs.map((input, index) => {
     const override = node.recipeInputOverrides?.[String(index)];
     if (!override) {
+      return input;
+    }
+    // Legacy category wires saved the group itself as a choice, hiding its members.
+    if (isOreDictionaryResource(input) && override.kind === input.kind && override.id === input.id) {
       return input;
     }
     changed = true;

@@ -60,10 +60,10 @@ export interface RouterTuning {
   /** Padding of the wide retry rung a route that paid for a crossing gets, in cells. */
   wideRungCells: number;
   /**
-   * ARRANGE: price per pixel, per pair, that two STRANGER cards (three or
-   * more wire hops apart) pay for standing closer than six cells. This is
-   * the whole of how islands happen (board-arrange-air.ts); zero packs the
-   * board as tight as the wires allow.
+   * ARRANGE: price per pixel each card pays when its nearest STRANGER (three
+   * or more wire hops away) stands closer than six cells. This is the whole
+   * of how islands happen (board-arrange-air.ts); zero packs the board as
+   * tight as the wires allow.
    */
   islandAir: number;
   /** ARRANGE: annealing trials the search may spend (capped by board size). */
@@ -88,8 +88,7 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   costOutsideHome: 3,
   turn45: 35,
   turn90: 80,
-  // All but forbidden (Jack, 2026-09-08: "they can only do it if they
-  // literally have to"): a wire doubles back only when no other route
+  // All but forbidden: a wire doubles back only when no other route
   // exists, which only a pinned dot can force.
   reverse: 100000,
   earlyTurn: 100,
@@ -134,9 +133,8 @@ export interface RouterTuningField {
 }
 
 /**
- * The dials in the order the dev menu shows them, each explained for a
- * player, not a developer (Jack, 2026-09-08: "explain in layman terms,
- * what each setting does on the high end or low end"). The first six
+ * The dials in the order the dev menu shows them, each explained in plain
+ * words (what it is, and what turning it down or up does). The first six
  * groups shape the WIRES; the Arrange group shapes AUTO ARRANGE only and
  * never re-routes a wire by itself.
  */
@@ -419,7 +417,7 @@ export function resetRouterTuning() {
   setRouterTuning({ ...DEFAULT_ROUTER_TUNING });
 }
 
-/** The Arrange group's dials, and only those, back to default (Jack, 2026-09-08). */
+/** The Arrange group's dials, and only those, back to default. */
 export function resetArrangeTuning() {
   const patch: Partial<RouterTuning> = {};
   for (const field of ROUTER_TUNING_FIELDS) {

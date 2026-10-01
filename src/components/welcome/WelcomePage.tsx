@@ -26,18 +26,12 @@ import { useFactoryStore } from "@/store/factory-store";
 import { WelcomeBackdrop } from "./WelcomeBackdrop";
 
 /**
- * The Welcome tab: the first thing a visitor sees, and the place a regular
- * comes back to for their designs and the community's.
- *
- * It COVERS the board (see FactoryPlannerApp) rather than replacing it, over
- * a quiet ASCII backdrop that keeps to the corners. The content is one
- * column, kept short: the name and the three ways to start, your designs and
- * the community's newest setups. Every pick steps off the tab, and the
- * checkbox at the foot is how a regular stops arriving here.
- *
- * There is no "new in vX" section any more (Jack, 2026-09-08): the player
- * facing changelog is gone, and a release announces itself once through
- * ReleaseSpotlight.
+ * The Welcome tab. It COVERS the board (see FactoryPlannerApp) rather than
+ * replacing it, over a quiet ASCII backdrop. One short column: the name, the
+ * ways to start (new design, shared setups, find a recipe, your library) and
+ * community setups. Every pick steps off the tab; the checkbox at the foot
+ * turns off showing it on startup. Release notes live on the header's
+ * version chip, not here.
  */
 
 const COMMUNITY_TILE_COUNT = 15;
@@ -144,7 +138,7 @@ export function WelcomePage() {
               >
                 Find a recipe
               </SecondaryButton>
-              {/* Your own designs live on the shelf now, not on this page. */}
+              {/* Your own designs live in the library, not on this page. */}
               <SecondaryButton icon={Library} onClick={() => openLibrary()}>
                 Your library
               </SecondaryButton>

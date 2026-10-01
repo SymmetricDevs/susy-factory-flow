@@ -8,24 +8,24 @@ import { BOARD_MIN_ZOOM, boardMaxZoom } from "./board-camera";
 import { getPanelPull, type PanelSide } from "./panel-pull";
 
 /**
- * The board's own touch gestures: the two a finger expects and React Flow does
- * not provide.
+ * The board's own touch gestures: the two a finger expects and React Flow
+ * does not provide.
  *
- * **Double tap to zoom, and double tap and slide to keep zooming.** Every map on
- * a phone does this, and pinching is a two-handed move when you are holding the
- * phone in one. Both anchor on the point that was tapped, so the thing you were
- * looking at stays under your finger.
+ * **Double tap to zoom, and double tap and slide to keep zooming**, as phone
+ * maps do (pinching is two-handed when holding the phone in one). Both
+ * anchor on the tapped point, so what you were looking at stays under your
+ * finger.
  *
- * **A swipe in from the side opens that drawer.** The 24px tab down the edge was
- * the only way in, which meant hitting a 24px target with a thumb; now the outer
- * third of the board answers, and the drawer follows the finger from wherever the
- * swipe began. React Flow will have started panning by the time the swipe is
- * unambiguous, so the viewport is put back where it was when the finger landed —
- * the board must not creep sideways every time a drawer is opened.
+ * **A swipe in from either edge opens that side's drawer**, which follows
+ * the finger from where the swipe began. React Flow has started panning by
+ * the time the swipe is unambiguous, so the viewport is put back where it
+ * was when the finger landed; the board must not creep sideways every time
+ * a drawer opens.
  *
- * Listeners are native and in the capture phase: React Flow's pan lives on the
- * pane below, and the only way to take a gesture off it mid-flight is to stop the
- * event before it gets there. `touchmove` is non-passive for the same reason.
+ * Listeners are native and in the capture phase: React Flow's pan lives on
+ * the pane below, and the only way to take a gesture off it mid-flight is to
+ * stop the event before it gets there. `touchmove` is non-passive for the
+ * same reason.
  */
 
 /** Two taps closer together than this, on nearly the same spot, are a double tap. */
@@ -41,13 +41,10 @@ const DOUBLE_TAP_ZOOM_FACTOR = 1.7;
 const SLIDE_ZOOM_DISTANCE = 180;
 
 /**
- * How much of the board's width answers a swipe from either edge: a thumb's width
- * at the very edge, down the whole height.
- *
- * A third of the board was far too much — it swallowed drags aimed at the canvas
- * from anywhere near the sides. The height is what makes this findable, not the
- * width: there is no wrong place to start down the edge, only a wrong distance in
- * from it.
+ * How much of the board's width answers a swipe from either edge: a thumb's
+ * width at the very edge, down the whole height. A wider zone swallows drags
+ * aimed at the canvas near the sides; the full height is what makes it
+ * findable.
  */
 const EDGE_ZONE = 36;
 /** Sideways travel before an edge swipe is a drawer and not a pan. */

@@ -4,16 +4,11 @@ import { useEffect } from "react";
 import { DEFAULT_APP_FONT, getStoredAppFont } from "@/lib/app-font";
 
 /**
- * Re-stamps the saved font once the app is running.
- *
- * The boot script in layout.tsx stamps `data-app-font` before first paint,
- * and that is normally the end of it. Firefox users reported the page coming
- * back in Monocraft after a refresh while the settings dialog still showed
- * their choice (issue #47), which means the storage entry survived and the
- * attribute did not. Whatever takes it off the element between the boot
- * script and the app being usable, this puts it back: on mount, and again
- * when the browser restores the page from its back-forward cache, where no
- * script runs at all.
+ * Re-stamps the saved font once the app is running. The boot script in
+ * layout.tsx stamps `data-app-font` before first paint, but the attribute can
+ * be lost afterwards (seen in Firefox after a refresh) while storage keeps the
+ * choice. This restores it on mount and on back-forward-cache restores, where
+ * no script runs.
  */
 export function AppFontRestore() {
   useEffect(() => {

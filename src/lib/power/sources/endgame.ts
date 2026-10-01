@@ -77,9 +77,8 @@ const lnr: PowerSourceDefinition = {
     const euPerTick = fuel.euPerTick * coolantEfficiency * boostMultiplier;
     // FuelRecipeLoader registers every LNR fuel as getFluidOrGas(1) (= 1 L);
     // MTELargeNaquadahReactor consumes pall litres per recipe (pall = booster
-    // multiplier, or 1), lasting secondsPerCell seconds. So L/s = boost / seconds.
-    // The old (1000 * boost) / seconds treated a cell as 1000 L and overstated
-    // every fuel (and depleted output) 1000x; coolants/boosters were already right.
+    // multiplier, or 1), lasting secondsPerCell seconds. So L/s = boost / seconds:
+    // the workbook's "cell" is that 1 L recipe, not 1000 L.
     const fuelPerSecond = boostMultiplier / fuel.secondsPerCell;
 
     const inputs = [liters(fuel.name, fuelPerSecond), liters("Liquid Air", 2400)];
@@ -163,9 +162,8 @@ function buildFusion(compact: boolean): PowerSourceDefinition {
 
 /**
  * Eye of Harmony, simplified: expected EU over a cycle at base upgrade
- * tiers, success chance shown as a stat. Almost always a net EU cost - the
- * EOH is a materials machine; this card exists so its bill lands in the
- * power summary honestly.
+ * tiers, success chance shown as a stat. Almost always a net EU cost (the
+ * EOH is a materials machine); the card puts that bill in the power summary.
  */
 const eoh: PowerSourceDefinition = {
   id: "eye-of-harmony",

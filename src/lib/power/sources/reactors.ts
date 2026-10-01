@@ -2,7 +2,7 @@
  * Reactors and free-energy machines: THTR, HTGR, LFTR, the IC2 fluid
  * reactor presets, DEHP and the Solar Tower. Formulas from
  * docs/power-planner-math.md; where the workbook leaves a cost out (IC2
- * rods), the card says so instead of pretending.
+ * rods), the card says so.
  */
 import { powerPlannerData } from "../planner-data";
 import type { PowerModel, PowerSourceDefinition } from "../types";
@@ -28,22 +28,83 @@ const thtr: PowerSourceDefinition = {
   compute(read): PowerModel {
     const fill = read.number("fill");
     const efficiency = Math.min(1, 0.01 + Math.pow((fill - 100_000) / 57_500, 2) / 100);
+    // MTEThoriumHighTempReactor.checkProcessing: one 648,000-tick (9 hour)
+    // operation burns floor(fill x 0.5% x eff) TRISO pebbles and hands them
+    // back burned, a pebble ball per 64 and the rest loose. Coolant is drawn
+    // every tick at (int)(4800 x eff) L.
     const pebbleCost = Math.floor(fill * 0.005 * efficiency);
-    const hotCoolantPerSecond = 4800 * efficiency * 20;
+    const operationSeconds = 648_000 / 20;
+    const hotCoolantPerSecond = Math.floor(4800 * efficiency) * 20;
     return {
       // MTEThoriumHighTempReactor draws a flat RECIPE_IV/2 regardless of
       // fill; only the coolant line scales with efficiency.
       euPerTick: -3840,
-      inputs: [liters("Coolant", hotCoolantPerSecond)],
-      outputs: [liters("Hot Coolant", hotCoolantPerSecond)],
+      inputs: [
+        liters("Coolant", hotCoolantPerSecond),
+        items("TRISO pebble", pebbleCost / operationSeconds),
+      ],
+      outputs: [
+        liters("Hot Coolant", hotCoolantPerSecond),
+        items("Burned Out TRISO pebble ball", Math.floor(pebbleCost / 64) / operationSeconds),
+        items("Burned Out TRISO pebble", (pebbleCost % 64) / operationSeconds),
+      ],
       stats: [
         stat("Efficiency", percent(efficiency)),
         stat("Pebbles per cycle", formatAmount(pebbleCost)),
+        stat("Cycle", "9h"),
         stat("Hot coolant", `${formatAmount(hotCoolantPerSecond / 20)} L/t`),
+        // Primed once, never burned: emptying mode hands it all back.
+        stat("Helium charge", "730,000 L, kept"),
       ],
     };
   },
 };
+
+/** kubatech's HTGR constants (MTEHighTempGasCooledReactor). */
+const HTGR_MAX_BALLS = 10_000;
+const HTGR_HELIUM = 512_000;
+/** Pebbles burned per operation per ball: (pi - 3) / 100, the source's own digits. */
+const HTGR_BURN_PER_BALL = 0.00141592653589793;
+const HTGR_COOLANT_SPEEDUP = 0.07 / 20;
+const HTGR_WATER_SPEEDUP = 0.03 / 20;
+
+/**
+ * One HTGR operation at a steady full helium charge and a fill topped up
+ * every tick, as MTEHighTempGasCooledReactor runs it with its hatches kept
+ * supplied.
+ */
+export function htgrOperation(pebble: { base: number; mult: number; exp: number }, fill: number) {
+  const x = fill / HTGR_MAX_BALLS;
+  const efficiency = 0.1 + (1 - Math.pow(1 - x, 3)) * 0.9;
+  const burned = fill * HTGR_BURN_PER_BALL * efficiency;
+  // Per-ball contributions are defined at a full reactor, so a partial fill
+  // weakens the multiplier and exponent - but the fuel base is an average,
+  // and the ball count itself multiplies the coolant line below.
+  const fuelMultiplier = 1 + (pebble.mult - 1) * x;
+  const fuelExponent = 1 + (pebble.exp - 1) * x;
+  const energyMultiplier = pebble.base * Math.pow(fuelMultiplier, fuelExponent);
+  // checkProcessing burns the pebbles before it sizes the draw.
+  const remaining = Math.max(0, fill - burned);
+  const coolantPerTick = Math.floor(energyMultiplier * 0.5 * remaining);
+  const waterPerTick = Math.floor(energyMultiplier * 0.1 * remaining);
+  // Every supplied tick adds whole ticks of progress on top of the one the
+  // base machine adds: 7% of the operation per second for full coolant and
+  // 3% for full water.
+  const maxProgress = Math.floor((1 / (fuelExponent * fuelExponent)) * (2000 + 18_000 * efficiency));
+  // onRunningTick's own expression order (drained share 1, full charge).
+  const speedup = (rate: number) => Math.trunc((maxProgress * rate * 1 * HTGR_HELIUM) / HTGR_HELIUM);
+  const perTick = 1 + speedup(HTGR_COOLANT_SPEEDUP) + speedup(HTGR_WATER_SPEEDUP);
+  const cycleTicks = Math.max(1, Math.ceil(maxProgress / perTick));
+  // Each operation loses 0.05% of the charge, (int) truncated; the hatch
+  // tops it back up before the next one.
+  const heliumLost = HTGR_HELIUM - Math.trunc(HTGR_HELIUM * (1 - 0.0005));
+  return { efficiency, burned, energyMultiplier, coolantPerTick, waterPerTick, cycleTicks, heliumLost };
+}
+
+/** The dataset's names for one HTGR fuel: "Uranium-235" is "(Uranium 235)". */
+function htgrFuelName(pebble: string, burned: boolean): string {
+  return `${burned ? "Burned Out TRISO Fuel" : "TRISO Fuel"} (${pebble.replace("-", " ")})`;
+}
 
 const htgr: PowerSourceDefinition = {
   id: "htgr",
@@ -66,32 +127,36 @@ const htgr: PowerSourceDefinition = {
       powerPlannerData.htgrPebbles.find((entry) => entry.name === read.select("pebble")) ??
       powerPlannerData.htgrPebbles[0];
     const fill = read.number("fill");
-    const x = fill / 10_000;
-    const efficiency = Math.min(1, 0.1 + 0.9 * (1 - Math.pow(1 - x, 3)));
-    const multiplier = pebble.base * x * Math.pow(1 + (pebble.mult - 1) * x, 1 + (pebble.exp - 1) * x);
-    const pebbleCost = fill * (Math.PI - 3) * 0.01 * efficiency;
-    // MTEHighTempGasCooledReactor: COOLANT_PER_BALL 0.5 and WATER_PER_BALL
-    // 0.1 are per-TICK litres at full helium; steam is water x160.
-    const hotCoolantPerTick = 0.5 * fill * multiplier;
-    const waterPerTick = 0.1 * fill * multiplier;
+    const run = htgrOperation(pebble, fill);
+    const cycleSeconds = run.cycleTicks / 20;
+    // COOLANT_PER_BALL 0.5 and WATER_PER_BALL 0.1 are per-TICK litres at
+    // full helium; steam is water x160.
     return {
+      // RECIPE_IV x 0.2 with a full helium charge (the pump penalty is 0).
       euPerTick: -1536,
       inputs: [
-        liters("Coolant", hotCoolantPerTick * 20),
-        liters("Distilled Water", waterPerTick * 20),
+        liters("Coolant", run.coolantPerTick * 20),
+        liters("Distilled Water", run.waterPerTick * 20),
+        items(htgrFuelName(pebble.name, false), run.burned / cycleSeconds),
+        liters("Helium", run.heliumLost / cycleSeconds),
       ],
       outputs: [
-        liters("Hot Coolant", hotCoolantPerTick * 20),
-        liters("Steam", waterPerTick * 160 * 20),
+        liters("Hot Coolant", run.coolantPerTick * 20),
+        liters("Steam", run.waterPerTick * 160 * 20),
+        items(htgrFuelName(pebble.name, true), run.burned / cycleSeconds),
       ],
       stats: [
-        stat("Efficiency", percent(efficiency)),
-        stat("Output multiplier", formatAmount(multiplier)),
-        stat("Pebbles per cycle", formatAmount(pebbleCost)),
+        stat("Efficiency", percent(run.efficiency)),
+        stat("Output multiplier", formatAmount(run.energyMultiplier)),
+        stat("Pebbles per cycle", formatAmount(run.burned)),
+        stat("Cycle", `${formatAmount(cycleSeconds)}s`),
+        stat("Helium charge", "512,000 L"),
       ],
     };
   },
 };
+
+const LFTR_URANIUM_233_PER_SECOND = (20 * 5.5) / 300;
 
 const lftr: PowerSourceDefinition = {
   id: "lftr",
@@ -114,7 +179,8 @@ const lftr: PowerSourceDefinition = {
       powerPlannerData.lftrFuels[0];
     // RecipeLoaderLFTR burns 100 L in 100 seconds (1 L/s). Its output
     // metadata x4 in MTENuclearReactor agrees with EU/L divided by 20.
-    // Use that numeric value: parsing the display label missed mixed-case LuV.
+    // Use that numeric value, not the display label (mixed-case LuV breaks
+    // label parsing).
     const euPerTick = fuel.euPerLiter / 20;
     const inputs = [liters(fuel.name, 1), liters("Li2BeF4", 2)];
     const outputs = [
@@ -122,7 +188,10 @@ const lftr: PowerSourceDefinition = {
       liters("T-Salt", fuel.tSalt / 100),
       liters("TB-Salt", fuel.tbSalt / 100),
       liters("UF6", fuel.uf6 / 100),
-      liters("Uranium-233", fuel.uranium233PerSecond),
+      // MTENuclearReactor.onRunningTick, once warmed up: a 1-in-300 chance
+      // every tick of 1-10 L, so 20 x 5.5 / 300 L/s whatever the fuel (the
+      // workbook rounded it to 0.33).
+      liters("Uranium-233", LFTR_URANIUM_233_PER_SECOND),
     ].filter((flow) => flow.perSecond > 0);
     // The recipes also drink the carrier salt: 200 L Li2BeF4 per 100 s
     // alongside 100 L of fuel salt (RecipeLoaderLFTR).
@@ -182,22 +251,19 @@ const ic2FluidReactor: PowerSourceDefinition = {
 
 /**
  * The Vacuum Reactor: the workbook's `4. Vac Nuke` sheet, an EU-mode IC2
- * reactor on its one fixed layout - 40 fuel rods and 14 coolant cells in
- * the 6x9 chamber - whose cells are swapped out and recooled instead of
- * melting. The card does only what the reactor does: it burns rods to
- * their depleted forms, and it turns cold coolant cells into hot ones at
- * the rate the layout heats them. Recooling is the Vacuum Freezer's own
- * recipe in the dataset (hot cell in, cold cell out, 120 EU/t), so the
- * freezer is a machine you place and wire back into the reactor, exactly
- * the block the sheet draws beside it.
+ * reactor on its one fixed layout (40 fuel rods and 14 coolant cells in the
+ * 6x9 chamber) whose cells are swapped out and recooled instead of melting.
+ * The card burns rods to their depleted forms and turns cold coolant cells
+ * hot at the rate the layout heats them. Recooling is not part of the card:
+ * it is the dataset's Vacuum Freezer recipe (hot cell in, cold cell out,
+ * 120 EU/t), a machine placed and wired back into the reactor.
  *
- * Every rod stat below is transcribed from GT5U LoaderGTBlockFluid
- * (ItemRadioactiveCellIC: cells, durability, sEnergy, sHeat, mox, heat
- * bonus) and the maths from ItemRadioactiveCellIC.processChamber; the
- * sheet agrees with the source on all of it except the MOX bonus, which it
- * flattens to x2.475 for every MOX-type rod while the game multiplies by
- * `1 + heatBonus x heat%` with a per-rod bonus (MOX 1.5, HD Plutonium 6,
- * Excited Plutonium 2, Naquadria 1.5). The source wins there.
+ * Rod stats are transcribed from GT5U LoaderGTBlockFluid (ItemRadioactiveCellIC:
+ * cells, durability, sEnergy, sHeat, mox, heat bonus) and the maths from
+ * ItemRadioactiveCellIC.processChamber. The sheet agrees except for the MOX
+ * bonus: it flattens it to x2.475 for every MOX-type rod, while the game
+ * multiplies by `1 + heatBonus x heat%` with a per-rod bonus (MOX 1.5, HD
+ * Plutonium 6, Excited Plutonium 2, Naquadria 1.5). The source wins.
  *
  * Per rod: pulses p = 1 + cells/2 (single 1, dual 2, quad 3, Core 17).
  * With n rod neighbours it pulses p + n times per cell, each pulse worth

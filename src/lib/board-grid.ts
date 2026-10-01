@@ -16,8 +16,8 @@
  *     port centres land on a grid line: head + 20 + 40i.
  *
  * Rule 3 is why the head, the footer and the config panels have fixed heights
- * rather than sizing to their content. Content that used to set the height now
- * sits inside a box whose height the grid sets.
+ * rather than sizing to their content: content sits inside a box whose height
+ * the grid sets.
  */
 
 /** The cell. Everything on the board is a whole number of these. */
@@ -47,20 +47,13 @@ export function cells(n: number): number {
 /* Card geometry — the sizes every node component builds itself out of.    */
 /* ---------------------------------------------------------------------- */
 
-/** Every recipe card is this wide. 19 cells.
+/** Every recipe card is this wide: 19 cells.
  *
- * The machine PICTURE sits between the two rails (2026-09-06), where the
- * arrow was, and it is the flex-1 middle: 96px, the size a structure render
- * reads at. THREE cells came back off the card on 2026-09-09 without ever
- * touching it - 22 to 21 to 20 to 19 - and every one of them came out of the
- * two item chips and the output coupling instead: 140 to 112 a chip, 34 to
- * 30 the coupling. The picture has been 96px throughout, which is the
- * measurement to re-check first if this number moves again.
- *
- * What pays for it is the NAME, which wraps to two lines rather than
- * truncating. The chip's name column is down to 70px, so a name past about
- * 22 characters now clips on the second line; the hover carries the whole
- * one. That is the trade, and it is the reason not to take a fourth cell.
+ * The machine picture is the flex-1 middle between the two rails and must
+ * stay 96px, the size a structure render reads at; re-check it first if this
+ * width changes. The item chips and output coupling absorb width changes, and
+ * the price is the chip's 70px name column: names wrap to two lines and long
+ * ones clip on the second (the hover shows the whole name).
  */
 export const RECIPE_NODE_WIDTH = cells(19); // 380
 
@@ -73,9 +66,6 @@ export const RECIPE_RAIL_AREA_WIDTH = RECIPE_NODE_WIDTH - 2 * (2 + RECIPE_NODE_P
 /** The input chip, and the chip half of an output row. */
 export const PORT_CHIP_WIDTH = 112;
 
-/** The `→` divider between the two rails. */
-export const RAIL_DIVIDER_WIDTH = 16;
-
 /** Chip + 2px gap + the 30px coupling (`.flow-plug` in globals.css). */
 export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 30; // 144
 
@@ -83,11 +73,9 @@ export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 30; // 144
 export const PORT_ROW_HEIGHT = cells(2); // 40
 
 /**
- * The floor under the machine picture, which is the flex-1 middle between
- * the two rails and grows with them. TWO port rows (2026-09-09): at three
- * it stood a whole row taller than the rails on the commonest card of all,
- * the one input and two outputs, and the picture floated in a window with
- * nothing under it. Two rows against the picture's 96px reads square.
+ * The minimum height of the machine picture's window (the flex-1 middle
+ * between the rails, which grows with them). Two port rows, so the common
+ * one-input two-output card is not made taller by the picture.
  *
  * It must stay a whole number of CELLS or a short card lands off the grid.
  */
@@ -96,21 +84,15 @@ export const PICTURE_MIN_HEIGHT = PORT_ROW_HEIGHT * 2; // 80
 /** The title row. */
 export const HEAD_ROW_HEIGHT = cells(2); // 40
 
-/** The stat footer. */
-export const FOOTER_HEIGHT = cells(2); // 40
-
 /** One row of a machine-config panel (label over a dropdown). */
 export const CONFIG_PANEL_ROW_HEIGHT = cells(3); // 60
 
 /**
- * Drawers and tanks. Five cells by four: a drawer holds one thing, and with
- * buffers between machines everywhere now, a board full of them has to read
- * as small tiles rather than a second fleet of machine cards. Wider than
- * tall, because the tile's two lines of text - the role word up top, the net
- * rate below - need width, not height. The height stays an EVEN number of
- * cells so the side-centre dock points (height / 2) land on a grid line.
+ * Drawers and tanks: six cells by four, a one-port machine card. A one-cell
+ * title bar to move it by, and a three-cell port chip to wire from. Shared by
+ * placement, routing, and drag previews.
  */
-export const STORAGE_NODE_WIDTH = cells(5); // 100
+export const STORAGE_NODE_WIDTH = cells(6); // 120
 export const STORAGE_NODE_HEIGHT = cells(4); // 80
 
 /** Trash cans, same tile. */

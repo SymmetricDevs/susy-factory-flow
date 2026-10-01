@@ -13,19 +13,11 @@ import type {
  * What a MINIMIZED board says about itself.
  *
  * A minimized board is a SUMMARY, not a machine: you cannot wire to it, it
- * has no ports, and it makes no claim about being fed. It reports two
- * things - what is inside (machines, cards, power) and what crosses its
- * border right now - and both come straight out of the plan-wide solve.
- *
- * That is the whole design, and it is deliberately smaller than what came
- * before. The card used to run its own SCOPED solve over the members with
- * the outside world unhooked, and then wear the result as input and output
- * ports. It read like a machine and lied like one: a board holding its own
- * source was told it was starving, because the scoped solve cut the source's
- * wires; a board exporting a byproduct was told it was clogged. Every one of
- * those verdicts was about a factory that does not exist - the members are
- * ordinary cards in the flat graph, and the real solver has been simulating
- * them, with their real supply, all along.
+ * has no ports, and it makes no claim about being fed. It reports what is
+ * inside (machines, cards, power) and what crosses its border right now, both
+ * straight from the plan-wide solve. Do not run a scoped solve over the
+ * members: cutting the outside world off would call a board holding its own
+ * source starving and one exporting a byproduct clogged.
  */
 
 /** One resource crossing a minimized board's border, in one direction. */
@@ -69,10 +61,8 @@ export interface PocketSummary {
 }
 
 /*
- * No cap. A board with forty crossings draws forty lines and stands
- * forty lines tall: a summary that hides half of itself behind "and 12
- * more" is not a summary, and the card is read at whatever zoom the
- * board is read at anyway.
+ * No cap: a board with forty crossings draws forty lines. A summary that
+ * hides half of itself behind "and 12 more" is not a summary.
  */
 
 /** The four lists a minimized card stacks, by length. */
@@ -177,22 +167,16 @@ export function countPocketCrossings(
 }
 
 /**
- * What a board's CONTENTS want and what they make, wires ignored.
+ * What a board's CONTENTS want and what they make, wires ignored and netted
+ * against each other: a board whose own mine feeds its own macerator asks the
+ * world for no ore. What survives is what the board would need brought in and
+ * what it would have to give away.
  *
- * Netting is the whole point: a board whose own mine feeds its own macerator
- * asks the world for no ore, because the ore never leaves the family. What
- * survives the netting is what the board would need brought in and what it
- * would have to give away - the question the right-hand panel answers for the
- * whole plan, asked of one board.
- *
- * Rates are FULL SPEED - what the board would move with everything fed -
- * because a stalled board still needs what it is missing. What is really
- * moving is the other half of the card, the border crossings. With no solve
- * in hand the recipe amounts stand in: the arranger only needs the number of
- * lines, and the signs come out the same in every ordinary case.
- *
- * Drawers are deliberately not counted. A drawer inside is a bank, not a
- * source or a sink, exactly as the plan's own panel treats one.
+ * Rates are FULL SPEED, because a stalled board still needs what it is
+ * missing; the border crossings show what is really moving. With no solve in
+ * hand the recipe amounts stand in: the arranger only needs the number of
+ * lines. Drawers are not counted: a drawer inside is a bank, not a source or
+ * a sink, as the plan's own panel treats one.
  */
 function computeBoardBalance(
   project: FactoryProject,
@@ -220,12 +204,9 @@ function computeBoardBalance(
     }
     const nodeResult = result?.nodes[node.id];
     if (nodeResult) {
-      // FULL SPEED here, deliberately, unlike everything else on this card.
-      // This list answers "what does this board need to run", which is a
-      // property of what is built, not of how it happens to be doing right
-      // now. Scaling by utilization would erase the needs of a board that is
-      // stalled BECAUSE those needs are unmet - the one board that most
-      // needs a red line.
+      // FULL SPEED here, unlike everything else on this card: this list is
+      // what the board needs to run. Scaling by utilization would erase the
+      // needs of a board stalled BECAUSE those needs are unmet.
       for (const flow of Object.values(nodeResult.outputs)) {
         add(flow.kind, flow.resourceId, flow.amountPerSecond);
       }

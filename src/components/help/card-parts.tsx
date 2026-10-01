@@ -4,18 +4,12 @@ import { Fragment, useId } from "react";
 import type { LucideIcon } from "lucide-react";
 
 /**
- * The glance card the board's "?" corner is built from.
- *
- * The idea: dim the screen, ring a thing, put a card beside it saying what it
- * is. A row leads with the mark the SCREEN uses: the button's own icon, a key
- * chip, or a little mouse with the right button lit, and the words that matter
- * are lit rather than spelled out at length. That is what stops the surface
- * reading as a wall of text.
- *
- * The help sheet lays eight cards over the whole window at once, where eight
- * cyan cards would be a fairground, so it passes a calmer accent in and keeps
- * cyan (GLANCE_ACCENT) for anything that can be clicked. A future guided
- * walkthrough can reuse the same card.
+ * The glance card the board's "?" corner is built from: the screen dims, a
+ * thing is ringed, and a card beside it says what it is. Each row leads with
+ * the mark the screen itself uses (the button's icon, a key chip, a mouse
+ * with a button lit) and lights the key words. The help sheet shows many
+ * cards at once, so it passes a calmer accent in and keeps cyan
+ * (GLANCE_ACCENT) for anything clickable.
  */
 
 export type GlanceTone =
@@ -63,10 +57,10 @@ const DRAWER_SHAPE_TINTS: Record<GlanceDrawerShape, string> = {
 };
 
 /**
- * A drawer's silhouette at chip size, the same cuts globals.css makes on
- * the 100x80 tile: product the plain crate, source the rounded one,
- * byproduct the shield (square shoulders, tapered base), trash the bin
- * (sides tapering to a narrower foot), buffer the hexagon.
+ * A drawer's silhouette at chip size, the same cuts globals.css makes on the
+ * drawer card: product the plain crate, source the rounded one, byproduct the
+ * shield (square shoulders, tapered base), trash the bin (sides tapering to a
+ * narrower foot), buffer the hexagon.
  */
 export function DrawerShapeGlyph({ shape }: { shape: GlanceDrawerShape }) {
   const tint = DRAWER_SHAPE_TINTS[shape];
@@ -94,11 +88,9 @@ export const GLANCE_QUIET = "#93a4bb";
 export const GLANCE_LINE = "#2a3441";
 
 /**
- * Chip colours, taken from the app rather than invented.
- *
- * The machine states are the board's own verdict inks (globals.css), so a
- * chip is the same colour as the word on the card it describes. None of them is
- * green: on this board green says "fine", and most of these are not.
+ * Chip colours: machine states use the board's own verdict inks
+ * (globals.css), so a chip matches the word on the card it describes. None
+ * is green: on this board green means "fine".
  */
 export const GLANCE_TONES: Record<GlanceTone, string> = {
   need: "#f87171",
@@ -127,12 +119,8 @@ export function splitEmphasis(text: string): string[] {
 }
 
 /**
- * A little mouse with one button lit.
- *
- * "Left click" and "right click" are what a board gesture usually comes down
- * to, and a drawing of the button says it faster than the words do. The lit
- * half is a plain rectangle CLIPPED to the mouse's own rounded body, so it
- * takes the shell's corners exactly without anyone hand-fitting a curve.
+ * A little mouse with one button lit. The lit half is a plain rectangle
+ * CLIPPED to the mouse's rounded body, so it takes the shell's corners exactly.
  */
 export function MouseGlyph({ kind, color }: { kind: GlanceMouse; color: string }) {
   const clipId = useId();
@@ -171,12 +159,9 @@ export function MouseGlyph({ kind, color }: { kind: GlanceMouse; color: string }
 }
 
 /**
- * A step or callout's lines.
- *
- * A grid rather than a stack of flex rows, with each row `display: contents`:
- * the mark column then sizes itself to the widest mark in the card - the
- * difference between a chip reading BOTTLENECK and one reading TTLENECK - and
- * every row's words still start on the same line down the card.
+ * A step or callout's lines: a grid with each row `display: contents`, so the
+ * mark column sizes to the widest mark (no clipped chips) and every row's
+ * words align down the card.
  */
 export function GlanceRows({
   rows,

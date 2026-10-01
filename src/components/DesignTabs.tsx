@@ -182,13 +182,10 @@ export function DesignTabs() {
       return;
     }
 
-    // ONE motion engine, not the browser's smooth scroll plus a separate
-    // band. Wheel input moves a virtual TARGET that is allowed past the ends
-    // (rubber-damped); each frame the position eases towards it, the in-range
-    // part renders as scrollLeft and the out-of-range part as a translate of
-    // the track. So the glide, the stretch at the wall and the spring back
-    // are a single continuous curve — the strip arrives at the end and flows
-    // straight into the bounce instead of stopping and then twitching.
+    // ONE motion engine: wheel input moves a virtual TARGET allowed past the
+    // ends (rubber-damped); each frame the position eases towards it, the
+    // in-range part rendering as scrollLeft and the overshoot as a translate
+    // of the track. Glide, stretch and spring back form one continuous curve.
     let pos: number | undefined;
     let target = 0;
     /** Raw unspent pull past the end; rendered through `rubber`. */
@@ -287,17 +284,14 @@ export function DesignTabs() {
   }, [isHydrated]);
 
   /**
-   * Mouse-and-pen drag to rearrange. Past a small threshold the press becomes
-   * a drag; from there the held pill rides the pointer as a transform while
-   * the pills it passes slide aside on a transition — the DOM order never
-   * changes mid-drag, so nothing jumps. The drop clears the transforms and
-   * commits the order in the same breath, which React re-renders before the
-   * next paint. Touch keeps its meaning — this same motion is how a finger
-   * scrolls the strip.
+   * Mouse-and-pen drag to rearrange (touch scrolls the strip instead). Past a
+   * small threshold the held pill rides the pointer as a transform while
+   * passed pills slide aside; the DOM order never changes mid-drag. The drop
+   * clears the transforms and commits the order together, before next paint.
    *
-   * All geometry lives in TRACK space (positions captured once at drag start,
-   * the pointer re-based against the track's live rect), so the strip
-   * auto-scrolling under the drag does not put the numbers out.
+   * Geometry lives in TRACK space (positions captured at drag start, pointer
+   * re-based against the track's live rect), so auto-scroll during the drag
+   * does not skew it.
    */
   const beginTabDrag = (event: React.PointerEvent, id: string) => {
     if (event.button !== 0 || event.pointerType === "touch" || renamingId) {
@@ -338,10 +332,9 @@ export function DesignTabs() {
     const trackX = (clientX: number) => clientX - track.getBoundingClientRect().left;
 
     /**
-     * Re-derives everything from the last known pointer position. Called from
-     * pointermove AND once per animation frame: while the strip auto-scrolls
-     * under a parked pointer no pointermove fires, and without this the pill
-     * and the displacement stop dead until the hand twitches.
+     * Re-derives everything from the last pointer position. Called from
+     * pointermove AND every animation frame, because auto-scroll under a
+     * parked pointer fires no pointermove.
      */
     const update = () => {
       if (!dragged) {
@@ -357,11 +350,9 @@ export function DesignTabs() {
       );
       dragged.el.style.transform = `translateX(${dx / scale}px)`;
 
-      // Where the held pill sits, against RESTING midpoints — the DOM never
-      // reorders mid-drag, so they stay true. A neighbour yields as soon as
-      // the pill's LEADING EDGE reaches its middle, not when centre passes
-      // centre: each slot's threshold moves `reach` towards the held pill, so
-      // tabs step aside early instead of waiting to be fully overlapped.
+      // Where the held pill sits, against RESTING midpoints (the DOM never
+      // reorders mid-drag). A neighbour yields once the pill's LEADING EDGE
+      // reaches its middle: each threshold moves `reach` towards the held pill.
       const centre = dragged.mid + dx;
       let index = 0;
       for (const slot of slots) {
@@ -389,10 +380,9 @@ export function DesignTabs() {
     };
 
     /**
-     * Holding the pill against either end walks the strip along, faster the
-     * deeper into the zone, for as long as the hand stays there. Runs on
-     * frames, not pointer events, so a parked pointer keeps scrolling; the
-     * update() after it re-anchors the pill so it stays under the hand.
+     * Holding the pill against either end scrolls the strip, faster the
+     * deeper into the zone. Runs on frames, not pointer events, so a parked
+     * pointer keeps scrolling; the update() after it re-anchors the pill.
      */
     const autoScrollTick = () => {
       const scroller = scrollerRef.current;
@@ -497,28 +487,20 @@ export function DesignTabs() {
     <>
       {/*
         Only the tab list scrolls. The actions sit outside it because an
-        `overflow` container clips absolutely-positioned children, which is what
-        was hiding the export menu when this bar was one scrolling row.
+        `overflow` container clips absolutely-positioned children (menus).
       */}
       <div
         data-help-anchor="tabs"
-        // h-[22px], not the 44px this bar used to run: a tab's name is 12px text in
-        // a 24px pill, so the row was carrying 20px of nothing above and below
-        // it. The board gets the difference.
         className="design-tab-strip flex h-[22px] min-w-0 shrink-0 items-center gap-1 border-b border-line bg-surface px-2"
       >
         {/*
-          Welcome rides at the head of the strip and outside the scroller, so it
-          never scrolls out of reach. It is not a design: it covers the board
-          rather than switching what is on it, which is why the design tabs read
-          their active state off `welcome.active` too - exactly one tab in this
-          row can look current.
+          Welcome sits at the head of the strip, outside the scroller. It covers
+          the board rather than switching designs, so the design tabs also read
+          `welcome.active` to keep exactly one tab looking current.
         */}
         {/*
-          The SHELF: every design, open or not, in folders. Not a tab: a fixed
-          square at the head of the row with no name and no close, because it
-          is a place rather than a thing on the strip. It covers the board the
-          way Welcome does.
+          The SHELF (library): every design, in folders. A fixed square with no
+          name or close, covering the board the way Welcome does.
         */}
         <button
           type="button"
@@ -571,17 +553,10 @@ export function DesignTabs() {
         ) : null}
 
         {/*
-          Sized to its tabs (`shrink`), not to the whole bar (`flex-1`): with a
-          couple of designs the strip is only as wide as they are, so the `+`
-          sits against the last tab instead of being stranded at the far right.
-          Once the tabs outgrow the bar it shrinks and scrolls instead.
-
-          More-tabs-this-way is said with edge FADES, not buttons: they overlay
-          the strip's ends, always mounted and only changing opacity, so the
-          row never shifts when one lights up. (The arrows this replaces popped
-          in and out of the flex row, walking every tab sideways each time.)
-          Scrolling itself already has the wheel, the trackpad, a finger, and
-          dragging a tab against either end.
+          Sized to its tabs (`shrink`, not `flex-1`) so the `+` sits against the
+          last tab; once the tabs outgrow the bar it shrinks and scrolls.
+          Overflow is shown by edge FADES that overlay the ends and only change
+          opacity, so the row never shifts.
         */}
         <div className="relative min-w-0 shrink">
           <div
@@ -893,10 +868,8 @@ function DesignMenu({
 }
 
 /**
- * Which tabs sit either side of one tab, by tab order.
- *
- * The anchor is never in any of the three lists: the menu belongs to that tab,
- * so the one thing every item here leaves standing is the tab it opened from.
+ * Which tabs sit either side of one tab, by tab order. The anchor is never in
+ * any of the three lists: every item here leaves the menu's own tab standing.
  */
 function splitNeighbours(ids: string[], anchorId: string) {
   const index = ids.indexOf(anchorId);
@@ -985,12 +958,10 @@ function hasDrawableFace(icon: EntryIcon | undefined): icon is EntryIcon {
 const TAB_FACE_PX = 20;
 
 /**
- * The design's saved one-item face at the pill's full height. Same rendering
- * as the setup shelf's icon slot: the padded source art drawn oversized and
- * cropped by the wrapper, so the sprite fills the little box. Nudged down a
- * pixel because every pill carries a 2px bottom border (the active underline,
- * transparent on the rest), which centres content a pixel above the pill's
- * visual middle.
+ * The design's saved one-item face at the pill's full height, drawn like the
+ * shelf's icon slot (oversized art cropped by the wrapper). Nudged down a
+ * pixel because every pill's 2px bottom border (the active underline) centres
+ * content a pixel high.
  */
 function TabFace({ icon }: { icon: EntryIcon }) {
   return (
@@ -1011,13 +982,10 @@ function TabFace({ icon }: { icon: EntryIcon }) {
         bare
         tooltip={false}
         showAmount={false}
-        // Both kinds are drawn oversized so the ART fills the box, not the
-        // art plus its padding. A rendered item texture is 256px with the art
-        // in the middle 128 (measured across the set), so exactly 2x the box
-        // puts the art at box size, cropped by the wrapper. A fluid draws as
-        // a swatch inset to FLUID_ICON_SCALE of its cell so it weighs the
-        // same as items in a slot grid; here that inset is inverted away and
-        // the swatch itself fills the box.
+        // Drawn oversized so the ART fills the box, not its padding: a rendered
+        // item texture is 256px with the art in the middle 128, so 2x the box
+        // puts the art at box size. A fluid swatch is normally inset to
+        // FLUID_ICON_SCALE; here that inset is inverted so the swatch fills it.
         iconPixelSize={
           icon.kind === "fluid"
             ? Math.round(TAB_FACE_PX / FLUID_ICON_SCALE)
@@ -1030,11 +998,9 @@ function TabFace({ icon }: { icon: EntryIcon }) {
 }
 
 /**
- * A tiny spinner on the ACTIVE tab while its books are still computing in
- * the worker - the canvas holds only one plan at a time, so the active tab
- * is the only one that can be mid-solve. Its own component so the whole tab
- * strip does not resubscribe to the solve flag; it renders nothing the
- * moment the real numbers land.
+ * A tiny spinner on the ACTIVE tab (the only one that can be mid-solve)
+ * while the worker computes. Its own component so the tab strip does not
+ * subscribe to the solve flag.
  */
 function TabSolvingSpinner() {
   const solving = useSolvingBooks();

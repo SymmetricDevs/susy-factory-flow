@@ -2,7 +2,7 @@
 /**
  * Extracts the power-sector data tables from the community "GTNH Power
  * Planner" spreadsheet (by Fox) into JSON the app imports. Source of truth
- * per docs/power-sector.md; the decoded model is docs/power-planner-math.md.
+ * for the power cards; the decoded model is docs/power-planner-math.md.
  *
  *   node tools/power-planner-extract.mjs "path/to/GTNH Power Planner 2.9.xlsx"
  *

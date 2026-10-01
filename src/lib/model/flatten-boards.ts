@@ -1,15 +1,14 @@
 import type { FactoryProject } from "./types";
 
 /**
- * THE DUMP BEFORE THE ARRANGE (Jack, 2026-09-08: the arrange "should have
- * no respect for player-made boards" unless the Keep boards switch says
- * so). Every board's members surface onto the canvas where the frame
- * stood - exactly what dissolving each board by hand would do - and the
- * boards themselves go, so the arrange sees one flat set of cards.
+ * THE DUMP BEFORE THE ARRANGE (unless "Keep boards on rearrange" is on).
+ * Every board's members surface onto the canvas where the frame stood, as
+ * dissolving each board by hand would, and the boards go, so the arrange sees
+ * one flat set of cards.
  *
- * Pure: returns a new project, touches nothing in the store. The store's
- * `applyBoardArrangement` with `removeBoards` set to every board id makes
- * the same change for real, in the arrange's own undo entry.
+ * Pure: returns a new project. The store's `applyBoardArrangement` with
+ * `removeBoards` set to every board id makes the same change for real, in the
+ * arrange's own undo entry.
  */
 export function flattenBoards(project: FactoryProject): FactoryProject {
   const pockets = project.pockets ?? [];

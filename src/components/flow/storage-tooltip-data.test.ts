@@ -43,6 +43,13 @@ const tip = (p: FactoryProject, id: string) => {
 const labels = (view: { rows: Array<{ label: string }> }) => view.rows.map((r) => r.label);
 
 describe("drawer tooltips are words and figures", () => {
+  it("describes signed Pool input goals with consumption figures", () => {
+    const input = drawer("input", chlorine, { poolSide: "drain", targetPerSecond: -150 });
+    const p = plan({ poolMode: true, solveMode: true, storages: [input], edges: [] });
+    const r = calculateThroughput(p);
+    expect(buildStorageTooltip(p, r, input, "product")).toMatchObject({ subtitle: "Input goal", rows: [{ label: "Consume", value: "150 L/s" }, { label: "Consumed", value: "150 L/s" }] });
+    expect(buildTargetTooltip(input, r.storages.input)).toMatchObject({ title: "Input goal", rows: [{ label: "Consume", value: "150 L/s" }] });
+  });
   it("names each role and shows its one figure", () => {
     const p = plan();
     expect(tip(p, "src")).toMatchObject({ subtitle: "Source", rows: [{ label: "Supplied", value: "200 L/s" }] });
@@ -79,15 +86,22 @@ describe("drawer tooltips are words and figures", () => {
     ]);
     const strict = { ...p, storages: p.storages!.map((s) => (s.id === "out" ? { ...s, bufferMode: "strict" as const } : s)) };
     expect(tip(strict, "out").subtitle).toBe("Buffer · Strict");
+    expect(tip({ ...p, solveMode: true }, "out").subtitle).toBe("Buffer · Strict");
+    const overflow = { ...p, solveMode: true, storages: p.storages!.map(s => s.id === "out" ? { ...s, bufferMode: "overflow" as const } : s) };
+    expect(tip(overflow, "out").subtitle).toBe("Buffer");
   });
   it("requires a wire on an idle drawer and marks inert drawers in pool mode", () => {
     const idle = plan({ edges: [] });
     expect(tip(idle, "out")).toMatchObject({ subtitle: "Drawer", requirement: "You must connect it." });
     const pool = plan({ solveMode: true, poolMode: true, nodes: [{ ...machine, solvePin: 1 }] });
-    expect(tip(pool, "src")).toMatchObject({ subtitle: "Source · Not pooled", rows: [], actions: [] });
+    expect(tip(pool, "src")).toMatchObject({ subtitle: "Source", rows: [{ label: "Supplied", value: "100 L/s" }], actions: [] });
     expect(tip(pool, "out").subtitle).toBe("Product");
     expect(tip(pool, "out").actions).toEqual([]);
-    expect(tip(plan(), "out").actions).toEqual([{ gesture: "drag", label: "Drag to connect" }]);
+    expect(tip(plan(), "out").actions).toEqual([
+      { gesture: "left", label: "Recipes" },
+      { gesture: "right", label: "Uses" },
+      { gesture: "drag", label: "Drag to connect" },
+    ]);
   });
   it("keeps every drawer panel free of explanatory sentences", () => {
     const p = plan();
@@ -97,8 +111,9 @@ describe("drawer tooltips are words and figures", () => {
   });
   it("describes the keys by state and next state", () => {
     expect(buildDrainKeyTooltip("product", "byproduct")).toMatchObject({ title: "Product", actions: [{ label: "Switch to byproduct" }] });
-    expect(buildBufferKeyTooltip(true)).toMatchObject({ title: "Strict", actions: [{ label: "Switch to overflow" }] });
-    expect(buildBufferKeyTooltip(false)).toMatchObject({ title: "Overflow", actions: [{ label: "Switch to strict" }] });
+    expect(buildBufferKeyTooltip("strict")).toMatchObject({ title: "Strict", actions: [{ label: "Switch to ratio" }] });
+    expect(buildBufferKeyTooltip("overflow")).toMatchObject({ title: "Non-strict", actions: [{ label: "Switch to strict" }] });
+    expect(buildBufferKeyTooltip("ratio")).toMatchObject({ title: "Ratio", actions: [{ label: "Switch to overflow" }] });
     const field = buildTargetTooltip(drawer("out", product, { targetPerSecond: 150 }), { producedPerSecond: 100, targetUnreachable: true } as never);
     expect(labels(field)).toEqual(["Required", "Reachable"]);
     expect(field.actions?.[0]?.label).toBe("Edit amount");

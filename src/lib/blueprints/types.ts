@@ -41,31 +41,6 @@ export function normalizeBlueprintTags(raw: unknown): string[] {
   return tags;
 }
 
-/**
- * Tag-aware matching for a search box: a plain term matches names and tags,
- * a `#term` narrows to tags alone. Used verbatim by the Mine shelf's local
- * filter; the public shelf's server search follows the same contract.
- */
-export function blueprintMatchesSearch(
-  blueprint: Pick<BlueprintSummary, "name" | "tags">,
-  query: string,
-): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    return true;
-  }
-  const tagOnly = normalized.startsWith("#");
-  const term = tagOnly ? normalized.slice(1).trim() : normalized;
-  if (!term) {
-    return true;
-  }
-  const tags = blueprint.tags ?? [];
-  if (tags.some((tag) => tag.includes(term))) {
-    return true;
-  }
-  return !tagOnly && blueprint.name.toLowerCase().includes(term);
-}
-
 export const BLUEPRINT_NAME_MAX_LENGTH = 60;
 export const BLUEPRINT_DESCRIPTION_MAX_LENGTH = 500;
 /** A blueprint is a fragment, not a whole plan; half the community cap. */
@@ -128,46 +103,10 @@ export interface BlueprintVoteResponse {
 
 export type BlueprintSort = "newest" | "oldest" | "name" | "largest";
 
-export const BLUEPRINT_SORTS: Record<BlueprintSort, string> = {
-  newest: "Newest",
-  oldest: "Oldest",
-  name: "Name",
-  largest: "Largest",
-};
-
 export type PublicBlueprintSort = "top" | "newest" | "downloads";
-
-export const PUBLIC_BLUEPRINT_SORTS: Record<PublicBlueprintSort, string> = {
-  top: "Top",
-  newest: "New",
-  downloads: "Placed",
-};
 
 export interface PublicBlueprintListRequest {
   sort?: PublicBlueprintSort;
   search?: string;
   page?: number;
-}
-
-export function sortBlueprints(
-  blueprints: BlueprintSummary[],
-  sort: BlueprintSort,
-): BlueprintSummary[] {
-  const sorted = [...blueprints];
-  switch (sort) {
-    case "newest":
-      return sorted.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-    case "oldest":
-      return sorted.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-    case "name":
-      return sorted.sort((left, right) =>
-        left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
-      );
-    case "largest":
-      return sorted.sort(
-        (left, right) =>
-          right.nodeCount + right.storageCount - (left.nodeCount + left.storageCount) ||
-          right.machineCount - left.machineCount,
-      );
-  }
 }

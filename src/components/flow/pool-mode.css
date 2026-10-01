@@ -1,7 +1,7 @@
 /*
  * POOL MODE: wires do not exist. The board keeps the edges in the plan (they
  * come back untouched when the mode goes off) but the two layers that draw
- * them - the wire SVG and the rate labels - fade out together and stop
+ * them - the wire SVG and the edge labels - fade out together and stop
  * answering the pointer. Imported by FactoryFlow.tsx beside the class it
  * sets (factory-flow-board--pool).
  */

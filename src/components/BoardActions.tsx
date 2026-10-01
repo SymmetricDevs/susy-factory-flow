@@ -6,13 +6,12 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  ClipboardPaste,
   Download,
   ImageDown,
   LoaderCircle,
-  Redo2,
   Share2,
   Trash2,
-  Undo2,
   Upload,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -53,22 +52,23 @@ import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { isPowerRecipe } from "@/lib/power/power-recipe";
 import { pickRecipeRefMatch, recipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import { useFactoryStore } from "@/store/factory-store";
+import { useDesignStore } from "@/store/design-store";
+import { untagCommunityPlan } from "@/lib/community/client";
+import { copyToClipboard } from "@/lib/clipboard";
+import { PastePlanDialog } from "./export/PastePlanDialog";
 
 interface BoardActionsProps {
   /**
-   * `bar` is the top bar's row of icons. `list` is the compact menu: the same
-   * actions as labelled rows, with the export dropdown flattened into its three
-   * formats — a menu inside a menu is a trap on a touchscreen — and undo/redo
-   * left out, because on a phone they are two always-visible buttons on the
-   * board itself.
+   * `bar` is the top bar's icons. `list` is the compact menu: the same actions
+   * as labelled rows, with the export dropdown flattened (no nested menus on
+   * touch).
    */
   variant?: "bar" | "list";
   /** Lets the compact menu close itself once one of its rows has fired. */
   onAction?: () => void;
   /**
-   * Opens the share dialog. The dialog itself is owned by the header, not
-   * rendered here: on compact this component lives inside the menu sheet,
-   * which closes (and unmounts) the moment a row fires.
+   * Opens the share dialog, which the header owns: on compact this component
+   * lives in the menu sheet, which unmounts the moment a row fires.
    */
   onShare?: () => void;
   /** Opens the export-image dialog; owned by the header for the same reason. */
@@ -76,10 +76,8 @@ interface BoardActionsProps {
 }
 
 /**
- * Board actions - undo/redo, clean, import/export, theme.
- *
- * Lives on the right of the design tab strip: everything here acts on the plan
- * that strip is switching between, so the two belong on the same bar.
+ * Plan actions (share, clean, import, paste, export) for the header bar or
+ * the compact menu, plus the global undo/redo keyboard shortcuts.
  */
 export function BoardActions({
   variant = "bar",
@@ -98,10 +96,7 @@ export function BoardActions({
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
-  const canUndo = useFactoryStore((state) => state.undoHistory.length > 0);
-  const canRedo = useFactoryStore((state) => state.redoHistory.length > 0);
-  const setProject = useFactoryStore((state) => state.setProject);
-  const frameBoardNodes = useFactoryStore((state) => state.frameBoardNodes);
+  const importProjectAsDesign = useDesignStore((state) => state.importProjectAsDesign);
   const setProjectImporting = useFactoryStore((state) => state.setProjectImporting);
   const cleanBoard = useFactoryStore((state) => state.cleanBoard);
   const undo = useFactoryStore((state) => state.undo);
@@ -109,6 +104,7 @@ export function BoardActions({
   const lastResult = useFactoryStore((state) => state.lastResult);
   const selectedBoardIds = useFactoryStore((state) => state.selectedBoardIds);
   const [diagnosticsState, setDiagnosticsState] = useState<"idle" | "copied" | "failed">("idle");
+  const [isPastingPlan, setPastingPlan] = useState(false);
   // Welcome COVERS the board, so the design underneath still has content and
   // Share would happily post it. But sharing a board you cannot see is a
   // trap, so the button waits until you are looking at the thing it posts.
@@ -131,12 +127,9 @@ export function BoardActions({
           : "Copy diagnostics (whole plan)";
 
   /**
-   * The pasteable version of what the board is showing: every selected card's
-   * machine, tier, config, overclock, rates and verdict, in JSON. Select
-   * nothing and it dumps the plan.
-   *
-   * The menu deliberately stays open - the row itself is the receipt, and
-   * closing it would take the only confirmation away with it.
+   * Copies every selected card's machine, tier, config, overclock, rates and
+   * verdict as JSON (the whole plan when nothing is selected). The menu stays
+   * open because the row itself shows the confirmation.
    */
   const copyDiagnostics = async () => {
     const text = formatBoardDump({
@@ -167,6 +160,12 @@ export function BoardActions({
     }, 450);
   };
 
+  /**
+   * An imported file opens as a NEW design tab, never over the plan on the
+   * board: the Library can cover the board without closing its design, so an
+   * import there would silently replace it and its undo history. Same path as
+   * Paste and shared links; the post link is dropped.
+   */
   const importProjectJson = async (file: File) => {
     setProjectImporting(true);
 
@@ -176,15 +175,14 @@ export function BoardActions({
         (version) => version.id === selectedDatasetVersionId,
       );
       const importedProject = refreshImportedProjectEdges(
-        cloneImportedProject(parseFactoryProjectJson(text)),
+        cloneImportedProject(untagCommunityPlan(parseFactoryProjectJson(text)) as FactoryProject),
       );
+      const name = importedProject.name || file.name.replace(/\.[^.]+$/, "");
 
-      // An imported plan was built on someone else's board, so its cards can
-      // sit anywhere at all: the camera goes to them rather than leaving the
-      // viewer on blank canvas.
+      // A new tab has no camera of its own yet, so it lands framed on the
+      // imported cards, wherever the plan's author left them.
       if (!selectedDatasetVersion) {
-        setProject(importedProject);
-        frameBoardNodes();
+        await importProjectAsDesign(importedProject, name);
         console.warn(
           "Plan imported without an active GTNH dataset; embedded recipe data was kept.",
         );
@@ -195,8 +193,7 @@ export function BoardActions({
         importedProject,
         selectedDatasetVersion,
       );
-      setProject(refreshImportedProjectEdges(hydration.project));
-      frameBoardNodes();
+      await importProjectAsDesign(refreshImportedProjectEdges(hydration.project), name);
 
       if (hydration.missingRecipes.length) {
         console.warn(
@@ -315,6 +312,11 @@ export function BoardActions({
           }}
         />
         <MenuAction
+          icon={ClipboardPaste}
+          label="Paste a copied plan"
+          onClick={() => setPastingPlan(true)}
+        />
+        <MenuAction
           icon={diagnosticsState === "copied" ? Check : ClipboardList}
           label={diagnosticsLabel}
           onClick={() => {
@@ -341,6 +343,14 @@ export function BoardActions({
           />
         ) : null}
         {planFileInput}
+        {isPastingPlan ? (
+          <PastePlanDialog
+            onClose={() => {
+              setPastingPlan(false);
+              onAction?.();
+            }}
+          />
+        ) : null}
       </div>
     );
   }
@@ -348,16 +358,9 @@ export function BoardActions({
   return (
     <div data-help-anchor="plan-actions" className="flex shrink-0 items-center gap-1">
       <div className="flex items-center gap-1">
-        {/* No undo, redo or clean-board up here. Undo and redo already sit on
-            the board's own build toolbar, an inch from the thing being undone,
-            and having them in two places at once only made the header look
-            like the authoritative pair. Clean board is a whole-plan action that
-            was one slip away from the import button; it lives in the menu. */}
-        {/* ONE plan menu since 2026-09-06: share, import and the exports
-            all live behind the one key. Share and import used to be their
-            own buttons on the bar; the bar was too wide and this is the
-            corner where a menu is expected. Share is also on the plan's own
-            identity drawer, so it is never more than a click away. */}
+        {/* No undo/redo or clean-board buttons here; undo/redo live on the
+            board's build toolbar. Share, import, paste and the exports sit
+            behind the one plan menu. */}
         <div ref={exportMenuRef} className="relative">
           <button
             type="button"
@@ -399,6 +402,14 @@ export function BoardActions({
                   projectInputRef.current?.click();
                 }}
               />
+              <ExportMenuItem
+                icon={ClipboardPaste}
+                label="Paste a copied plan..."
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  setPastingPlan(true);
+                }}
+              />
               <div className="my-1 border-t border-line-strong" />
               <ExportMenuItem
                 icon={diagnosticsState === "copied" ? Check : ClipboardList}
@@ -431,14 +442,14 @@ export function BoardActions({
       </div>
 
       {planFileInput}
+      {isPastingPlan ? <PastePlanDialog onClose={() => setPastingPlan(false)} /> : null}
     </div>
   );
 }
 
 /**
- * One row of the compact menu: a 40px tap target with the icon the top bar
- * would have shown on its own, and the words that icon was relying on a
- * tooltip for.
+ * One row of the compact menu: a 40px tap target with the top bar's icon and
+ * its label written out.
  */
 function MenuAction({
   icon: Icon,
@@ -462,34 +473,6 @@ function MenuAction({
       <span className="truncate">{label}</span>
     </button>
   );
-}
-
-/**
- * Write text to the system clipboard, with the old selection-based path behind
- * it: the async API needs a secure context, and a plan opened from a file or
- * over plain http has none. Reports whether it landed rather than throwing,
- * because the caller's whole job is to say so on the button.
- */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const scratch = document.createElement("textarea");
-      scratch.value = text;
-      scratch.setAttribute("readonly", "");
-      scratch.style.position = "fixed";
-      scratch.style.opacity = "0";
-      document.body.append(scratch);
-      scratch.select();
-      const copied = document.execCommand("copy");
-      scratch.remove();
-      return copied;
-    } catch {
-      return false;
-    }
-  }
 }
 
 function nextAnimationFrame(): Promise<void> {

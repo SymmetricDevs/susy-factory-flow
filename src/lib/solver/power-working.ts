@@ -1,8 +1,7 @@
-import { getEnergyHatchType } from "@/lib/machines/energy-hatches";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
 import { formatCompact } from "@/lib/model/resources";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
-import type { MachineTier, Recipe } from "@/lib/model/types";
+import type { Recipe } from "@/lib/model/types";
 import { getHeatDiscountMultiplier } from "./heat";
 import { getEffectiveVoltageOrdinal } from "./power";
 import { getMachineEutMultiplier } from "./machine-effects";
@@ -16,27 +15,6 @@ import {
   type PowerWin,
   type PowerWinNode,
 } from "./power-wins";
-
-type VoltageTier = Exclude<MachineTier, "DEMO">;
-
-/**
- * EVERY HATCH IS AN EU/t FIGURE (Jack, 2026-09-07): a regular hatch of tier
- * T carries 2 amps of T's voltage, an exotic hatch its whole rating of
- * them. The calculator adds and subtracts these from the card's number and
- * remembers nothing.
- */
-export function hatchEuT(tier: string, familyId: string): number {
-  return getVoltageTierMaxEuT(tier as VoltageTier) * getEnergyHatchType(familyId).amps;
-}
-
-/** The row's name: the tier alone for a plain hatch, the rating for an exotic. */
-export function hatchRowLabel(tier: string, familyId: string): string {
-  const type = getEnergyHatchType(familyId);
-  if (!type.exotic) {
-    return tier;
-  }
-  return `${tier} ${type.chip}${type.id.startsWith("laser") ? " Laser" : ""}`;
-}
 
 /**
  * One rung of the ladder: what the recipe is on its own, and what it is with

@@ -2,13 +2,11 @@
  * A LAYOUT STRING: everything a board's routing problem needs, and nothing
  * the recipes are.
  *
- * "Versus mode" (Jack, 2026-09-08): a player arranges a board by hand, the
- * arranger arranges the same board, and the two compare scores and setups
- * by pasting strings at each other. A whole plan export is far more than
- * that needs; this is the plan's id, the score as drawn, every card's
- * top-left and size in cells, and every wire with its two ends, port rows
- * and width - enough to rebuild the board, route it and arrange it
- * offline, and about a kilobyte for a big board.
+ * Used by the dev menu's versus mode to compare a hand layout with the
+ * arranger's by pasting strings. It holds the plan's id, the score as
+ * drawn, every card's top-left and size in cells, and every wire with its
+ * ends, port rows and width: enough to rebuild, route and arrange the board
+ * offline.
  *
  *   {"p":"<plan id>","v":2,"s":{"x":3,"px":14972},
  *    "c":{"node-91f43e9":[8,15,22,15],"storage-54a7":[1,14,5,4],...},

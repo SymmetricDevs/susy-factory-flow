@@ -15,6 +15,29 @@ describe("factory JSON import/export", () => {
     expect(parsed.metadata?.isDemo).toBe(true);
   });
 
+  it("fills missing handler machine types before export validation", () => {
+    const project = loadBiodieselDemoProject();
+    const recipe = project.recipes[0]!;
+    project.recipes[0] = {
+      ...recipe,
+      machineHandlers: [
+        {
+          id: "legacy-handler",
+          label: "Apiary",
+          machineType: undefined,
+          minimumTier: "NONE",
+          kind: "multiblock",
+        } as unknown as NonNullable<typeof recipe.machineHandlers>[number],
+      ],
+    };
+
+    const exported = JSON.parse(serializeFactoryProject(project));
+    expect(exported.recipes[0].machineHandlers[0]).toMatchObject({
+      label: "Apiary",
+      machineType: "Apiary",
+    });
+  });
+
   it("reports invalid JSON and invalid factory data", () => {
     expect(() => parseFactoryProjectJson("{")).toThrow(/Invalid JSON/);
     expect(() =>

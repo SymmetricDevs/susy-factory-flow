@@ -421,7 +421,7 @@ describe("GT overclocking", () => {
     expect(parallels).toBe(2);
   });
 
-  it("still grants heat overclocks to the blast furnace family", () => {
+  it("applies the available EBF coil tiers to heat overclocks and EU usage", () => {
     const stats = getOverclockedRecipeStats(
       {
         machineType: "Blast Furnace",
@@ -431,15 +431,14 @@ describe("GT overclocking", () => {
         nei: { additionalInfo: ["Special value: 1500"] },
         machineConfigControls: [heatCoilControl()],
       },
-      { overclockTier: "EV", coilTier: "naquadah" },
+      { overclockTier: "EV", coilTier: "nichrome" },
     );
 
-    // Naquadah coils sit 5901 K over the recipe's 1500 K, which is worth two
-    // 4x steps and a 0.95^6 EU discount.
+    // Nichrome plus the EV voltage bonus gives 3801 K. Against the 1500 K
+    // recipe this buys one perfect and one normal step, with a 0.95^2 discount.
     expect(stats.overclockSteps).toBe(2);
-    // 62.5 ticks truncates to 62.
-    expect(stats.durationTicks).toBe(62);
-    expect(stats.eut).toBeCloseTo(120 * 0.95 ** 6 * 16, 6);
+    expect(stats.durationTicks).toBe(125);
+    expect(stats.eut).toBeCloseTo(120 * 0.95 ** 2 * 16, 6);
   });
   it("rounds a sub-tick multiblock duration down to a natural fraction, like ParallelHelper", () => {
     // Oil Berry -> Heavy Oil: 10 ticks, 30 EU/t, in a Large Chemical Reactor

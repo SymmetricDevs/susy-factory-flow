@@ -1,17 +1,18 @@
 import type { FactoryProject, NodeThroughputResult, ResourceKey } from "@/lib/model/types";
 import { makeResourceKey } from "@/lib/model/resources";
-import { getStorageRoles } from "@/lib/model/storage-role";
+import { effectiveBufferMode, getStorageRoles } from "@/lib/model/storage-role";
 import { listSharedMachineGroups } from "@/lib/model/shared-machine";
 import { isPoolEdgeId } from "./pool-mode";
 import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
 import { type LinearProgram, type LpSolution } from "./simplex";
 import { solveLpAuto } from "./lp-engine";
+import { storageRatioEqualities } from "./storage-ratios";
 
 /**
  * SOLVE MODE: the planner's question turned around. Plan mode fixes the
- * machine counts and asks what flows; solve mode fixes the product amounts
- * (each product drawer's typed rate) and asks how many machines. Same
+ * machine counts and asks what flows; solve mode fixes input/output rates
+ * (each boundary drawer's typed rate) and asks how many machines. Same
  * conservation rows as equations-core.ts, but:
  *
  *  - each machine's act is UNBOUNDED above: act is "multiples of the built
@@ -21,10 +22,12 @@ import { solveLpAuto } from "./lp-engine";
  *  - a product drawer's typed amount is a ROW: inflow >= target. Targets are
  *    minimums, not equalities, because fixed recipe ratios can force one
  *    product past its number while another lands exactly (the distillation
- *    tower shape); the overshoot reads as spare.
- *  - the objective is MINIMIZE TOTAL MACHINERY (sum of act x machineCount),
- *    ShadowTheAge's objective. It also settles under-determination: a chain
- *    no target needs solves to zero, which is itself the answer.
+ *    tower shape); the overshoot reads as spare. Either mode can opt into an exact
+ *    output. Input rates can be exact, minimums, or supply ceilings. Pool also
+ *    makes an exact output's receiving pool strict.
+ *  - the objective is MINIMIZE TOTAL MACHINERY (sum of act x machineCount).
+ *    This also settles under-determination: a chain no target needs solves
+ *    to zero, which is itself the answer.
  *
  * Deliberately absent from this mode: the fairness stage, the equal-fill
  * rows, and power-stall pinning. All three encode "what does this BUILD do
@@ -33,17 +36,22 @@ import { solveLpAuto } from "./lp-engine";
  * stalls in game at any scale, and the per-target feasibility probe below is
  * what names the products that strands.
  *
- * Feasibility is per-target separable: every non-target row is homogeneous
+ * Positive-only feasibility is per-target separable: every non-target row is homogeneous
  * (conservation scales), so two individually reachable targets are always
  * jointly reachable - sources are unlimited and machinery is unbounded. An
  * infeasible solve therefore means some target is unreachable at ANY scale
  * (no wired path, or a bare port pinning its chain), and probing each target
- * alone identifies exactly which.
+ * alone identifies exactly which. Input limits and exact outputs add finite bounds;
+ * conflicting goals must be reported rather than silently dropped.
  */
 
 export interface SolveModeTarget {
   storageId: string;
   amountPerSecond: number;
+  exact?: boolean;
+  atMost?: boolean;
+  /** Explicit direction also represents a zero input limit. */
+  input?: boolean;
 }
 
 /** Run EXACTLY this many machines of this node; the line solves around it. */
@@ -59,7 +67,7 @@ export interface SolveModeResult {
   scaleByNode: Map<string, number>;
   /** Resource per second on each modeled wire at the solved scale. */
   edgeFlowPerSecond: Map<string, number>;
-  /** Product drawers whose typed amount no chain can reach at any scale. */
+  /** Source/product drawers whose target conflicts or has no usable path. */
   unreachableStorageIds: Set<string>;
   /** The pinned counts cannot all run together (an output with nowhere to
    * go, or two pins fighting through a shared port). */
@@ -130,7 +138,7 @@ export function solveSolveMode(
     if (role === "product" || role === "byproduct" || role === "trash") {
       return "sink";
     }
-    return storage.bufferMode === "strict" ? "strict-buffer" : "buffer";
+    return effectiveBufferMode(storage, true) === "strict" || (storage.bufferMode === "ratio" && (storage.ratioExportPercent ?? 0) <= 0) ? "strict-buffer" : "buffer";
   };
 
   const flowVar = new Map<string, number>();
@@ -165,17 +173,15 @@ export function solveSolveMode(
     }
   }
 
-  const equalities: LinearProgram["equalities"] = [];
+  const equalities: LinearProgram["equalities"] = storageRatioEqualities(project, flowVar);
   const upperBounds: LinearProgram["upperBounds"] = [];
 
   // Drawer-to-drawer wires get a finite roof so a teleporter chain cannot
   // read as unbounded; machine wires are bounded by their port rows. POOL
   // wires are exempt: a source-to-pool import is bounded by what the pool's
-  // takers drink and a pool-to-product line by what its feeders make, both
-  // machine rows - and every import and product in pool mode runs over one
-  // of them, so the roof capped a typed target at a million a second
-  // (Jack, 2026-09-06: 1000/t of a product read "no machine count reaches
-  // the required amount" because its import needed more than that).
+  // takers drink and a pool-to-product line by what its feeders make (machine
+  // rows), and every pool import and product runs over one of them, so the
+  // roof would cap large typed targets.
   for (const edge of usable) {
     if (!actVar.has(edge.source) && !actVar.has(edge.target) && !isPoolEdgeId(edge.id)) {
       upperBounds.push({ coefficients: new Map([[flowVar.get(edge.id)!, 1]]), rhs: 1e6 });
@@ -227,8 +233,8 @@ export function solveSolveMode(
     }
   }
 
-  // Buffer pools: inflow equals outflow plus fill; a strict buffer's fill is
-  // pinned at zero.
+  // Default intermediate drawers balance exactly, like direct wires. Only an
+  // explicit overflow choice or ratio export may store unused production.
   for (const storage of project.storages ?? []) {
     const kind = storageKind(storage.id);
     if (kind !== "buffer" && kind !== "strict-buffer") {
@@ -299,31 +305,35 @@ export function solveSolveMode(
     }
   }
 
-  // A target is a row: the wires into that product drawer together carry at
-  // least the typed amount. Built as -inflow <= -target.
-  const targetRow = (target: SolveModeTarget): LinearProgram["upperBounds"][number] | undefined => {
-    const coefficients = new Map<number, number>();
-    for (const edge of usable) {
-      if (edge.target === target.storageId) {
-        coefficients.set(flowVar.get(edge.id)!, -1 / Math.max(1, target.amountPerSecond));
-      }
-    }
-    if (coefficients.size === 0) {
-      return undefined;
-    }
-    return { coefficients, rhs: -target.amountPerSecond / Math.max(1, target.amountPerSecond) };
-  };
-
-  const activeTargets = targets.filter((t) => t.amountPerSecond > 0);
-  // A target with no wire into its drawer at all is unreachable outright.
+  // Outputs default to minimums; exact rates and input limits add a
+  // ceiling. Their strict receiving pool prevents hidden surplus. Keep these
+  // ceilings when probing other goals, so a conflict cannot bypass them.
+  const activeTargets = targets.filter((t) => t.amountPerSecond !== 0 || t.exact || t.atMost);
   const unreachableStorageIds = new Set<string>();
   const rowsByTarget = new Map<string, LinearProgram["upperBounds"][number]>();
   for (const target of activeTargets) {
-    const row = targetRow(target);
-    if (row) {
-      rowsByTarget.set(target.storageId, row);
-    } else {
-      unreachableStorageIds.add(target.storageId);
+    const input = target.input ?? target.amountPerSecond < 0;
+    const amount = Math.abs(target.amountPerSecond);
+    const scale = 1 / Math.max(1, amount);
+    const coefficients = new Map<number, number>();
+    for (const edge of usable) {
+      if (input ? edge.source === target.storageId : edge.target === target.storageId) {
+        coefficients.set(flowVar.get(edge.id)!, -scale);
+      }
+    }
+    if (!coefficients.size) { if (amount > 0 && !target.atMost) unreachableStorageIds.add(target.storageId); continue; }
+    if (!target.atMost) rowsByTarget.set(target.storageId, { coefficients, rhs: -amount * scale });
+    if (target.exact || target.atMost || (input && target.input === undefined)) {
+      const ceiling = new Map([...coefficients].map(([v, c]) => [v, -c]));
+      if (!input && project.poolMode) {
+        // Cap all exports from the same receiving pool, so another drawer
+        // cannot silently catch surplus beyond the exact output goal.
+        const pools = new Set(usable.filter((edge) => edge.target === target.storageId).map((edge) => edge.source));
+        for (const edge of usable) {
+          if (pools.has(edge.source) && storageKind(edge.target) === "sink") ceiling.set(flowVar.get(edge.id)!, scale);
+        }
+      }
+      upperBounds.push({ coefficients: ceiling, rhs: amount * scale });
     }
   }
 
@@ -410,12 +420,13 @@ export function solveSolveMode(
       }
       const pinsAlone = solve({ maximize: probe, equalities, upperBounds });
       if (pinsAlone.status !== "optimal") {
+        for (const target of activeTargets) if (target.exact || target.atMost || (target.input === undefined && target.amountPerSecond < 0)) unreachableStorageIds.add(target.storageId);
         return { ...emptyResult("failed"), pinsInfeasible: true };
       }
     }
-    // Some target cannot be reached at any scale. Feasibility is per-target
-    // separable here (see the header note), so probe each alone to name the
-    // strays, then answer for the reachable rest.
+    // Probe each target within the declared input ceilings to identify
+    // unreachable goals, then solve the remainder together. Finite input
+    // goals can also conflict jointly even when each is feasible alone.
     for (const [storageId, row] of rowsByTarget) {
       const probe = new Array<number>(totalVars).fill(0);
       for (const [v, weight] of machineWeights) {
@@ -431,6 +442,7 @@ export function solveSolveMode(
       .map(([, row]) => row);
     solution = solveStages(reachableRows);
     if (!solution) {
+      for (const id of rowsByTarget.keys()) unreachableStorageIds.add(id);
       return emptyResult("failed");
     }
   }

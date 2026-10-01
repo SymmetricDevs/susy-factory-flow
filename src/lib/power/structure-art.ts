@@ -55,12 +55,9 @@ export function getPowerStructureArt(sourceId: string): string | undefined {
 /**
  * Structure renders for PROCESSING multiblocks, keyed by the dataset's
  * machine handler id (`recipe.machineHandlers[].id`), shipped beside the
- * power renders. Jack supplied the first twenty (2026-09-06) - the ones the
- * public setups place most, which cover most cards on community boards -
- * as 1254px renders, re-encoded here at 640px wide, palette PNG. A handler
- * not in this set wears its controller's item icon, as every multiblock
- * did before. To add one: drop `<handler-id>.png` in public/power-art and
- * list the id here.
+ * power renders as 640px-wide palette PNGs. A handler not in this set wears
+ * its controller's item icon. To add one: drop `<handler-id>.png` in
+ * public/power-art and list the id here.
  */
 const MACHINE_STRUCTURE_ART_IDS = new Set([
   "cryogenic-freezer",
@@ -83,8 +80,7 @@ const MACHINE_STRUCTURE_ART_IDS = new Set([
   "thermic-heating-device",
   "vacuum-freezer",
   "volcanus",
-  // The second batch (2026-09-06): machines whose maps export no handler
-  // list and so were missed by the first sweep, the Pyrolyse Oven first.
+  // Machines whose recipe maps export no handler list.
   "boldarnator",
   "chemical-plant",
   "coke-oven",
@@ -93,9 +89,8 @@ const MACHINE_STRUCTURE_ART_IDS = new Set([
   "industrial-sledgehammer",
   "multiblock-electrolyzer",
   "pyrolyse-oven",
-  // The grey tower that stood as the LFTR's render all along (Jack,
-  // 2026-09-09): it is this plant, and the reactor is the purple slab that
-  // took its place in lftr.png.
+  // The grey tower render is this plant, not the LFTR (lftr.png is the
+  // purple slab).
   "reactor-fuel-processing-plant",
 ]);
 

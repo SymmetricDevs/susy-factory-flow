@@ -37,7 +37,24 @@ export function parseFactoryProjectJson(source: string): FactoryProject {
 }
 
 export function serializeFactoryProject(project: FactoryProject): string {
-  const validatedProject = factoryProjectSchema.parse(normalizeProjectFuelProfiles(project));
+  const normalizedProject = normalizeProjectFuelProfiles(project);
+  const exportSafeProject = {
+    ...normalizedProject,
+    recipes: normalizedProject.recipes.map((recipe) => {
+      if (!recipe.machineHandlers?.length) {
+        return recipe;
+      }
+      return {
+        ...recipe,
+        machineHandlers: recipe.machineHandlers.map((handler) => ({
+          ...handler,
+          label: handler.label || handler.machineType || recipe.machineType,
+          machineType: handler.machineType || handler.label || recipe.machineType,
+        })),
+      };
+    }),
+  };
+  const validatedProject = factoryProjectSchema.parse(exportSafeProject);
   return `${JSON.stringify(validatedProject, null, 2)}\n`;
 }
 

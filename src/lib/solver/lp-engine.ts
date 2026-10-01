@@ -2,19 +2,16 @@ import { solveLp, type LinearProgram, type LpSolution } from "./simplex";
 
 /**
  * The LP engine switchboard: HiGHS (MIT, WASM) behind the homegrown solver's
- * exact interface, exactly the "if numerics ever bite, swap the engine"
- * branch simplex.ts promises. The homegrown dense simplex re-walks the whole
- * tableau from scratch for every one of the doctrine's staged solves, and a
- * board whose loops multiply the fairness stages (124 solves on one
- * 59-machine platline) pays seconds for what HiGHS answers in milliseconds.
+ * exact interface. The homegrown dense simplex re-walks the whole tableau for
+ * every staged solve, so boards with many fairness stages pay seconds for
+ * what HiGHS answers in milliseconds.
  *
  * Nothing switches until `initLpEngine` is awaited: the solve worker calls
- * it at startup, so big and slow boards get HiGHS, while the main thread,
- * SSR and the test suite keep the synchronous homegrown path - the doctrine
- * locks each stage's objective VALUE, not its vertex, so the two engines
- * agree on the books wherever the answer is determined (and the equivalence
- * test pins that on real community plans). Any load or solve failure falls
- * back to the homegrown engine, never to a missing answer.
+ * it at startup, while the main thread, SSR and the test suite keep the
+ * synchronous homegrown path. The stage chain locks each objective VALUE,
+ * not its vertex, so the two engines agree on the books wherever the answer
+ * is determined (an equivalence test pins this). Any load or solve failure
+ * falls back to the homegrown engine, never to a missing answer.
  */
 
 interface HighsInstance {
@@ -54,10 +51,10 @@ async function loadNodeHighs(wasmUrl?: string): Promise<HighsInstance> {
 
 /**
  * The browser path fetches the emscripten glue from public/ and evaluates it
- * outside the bundler: the glue stays byte-identical to the package's own
- * build, the worker chunk stays small, and the whole engine is up in ~100ms
- * next to its wasm. The glue is UMD - with no module system in scope it
- * leaves its factory in a top-level `Module` var, which the wrapper returns.
+ * outside the bundler, so the glue stays byte-identical to the package's
+ * build and the worker chunk stays small. The glue is UMD: with no module
+ * system in scope it leaves its factory in a top-level `Module` var, which
+ * the wrapper returns.
  */
 async function loadBrowserHighs(glueUrl: string, wasmUrl?: string): Promise<HighsInstance> {
   const response = await fetch(glueUrl);

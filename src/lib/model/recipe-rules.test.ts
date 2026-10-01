@@ -138,6 +138,25 @@ describe("recipe machine handlers", () => {
     ]);
   });
 
+  it("falls back to the recipe machine type when a handler label is missing", () => {
+    const recipe: Recipe = {
+      ...testRecipe("Macerator"),
+      machineHandlers: [
+        {
+          id: "macerator-handler",
+          label: undefined,
+          machineType: undefined,
+          minimumTier: "LV",
+          kind: "single",
+        } as unknown as MachineHandler,
+      ],
+    };
+
+    expect(getRecipeMachineHandlers(recipe)).toMatchObject([
+      { id: "macerator-handler", label: "Macerator", machineType: "Macerator" },
+    ]);
+  });
+
   it("falls back to the label when a handler carries no machineType", () => {
     const recipe: Recipe = {
       ...testRecipe("Forge Hammer"),

@@ -101,6 +101,7 @@ public final class GtnhCalcOracleExporter {
         domains.add(exportForestryBees(adapters));
         domains.add(exportIc2Crops(adapters));
         domains.add(exportCropsNhCrops(adapters));
+        domains.add(exportMobDrops(adapters));
         domains.add(exportMining(adapters));
 
         Map<String, Object> root = map();
@@ -241,6 +242,13 @@ public final class GtnhCalcOracleExporter {
                     exportedRecipe.put("itemOutputs", outputItemStacks(recipe));
                     exportedRecipe.put("fluidInputs", fluidInputs);
                     exportedRecipe.put("fluidOutputs", fluidStacks(recipe.mFluidOutputs));
+                    if ("gtpp.recipe.lftr.sparging".equals(map.unlocalizedName)) {
+                        putSpargeByproducts(exportedRecipe, recipe);
+                    }
+                    if ("gtpp.recipe.fluidchemicaleactor".equals(map.unlocalizedName)
+                        || "gtpp.recipe.oremill".equals(map.unlocalizedName)) {
+                        putWearingInputs(exportedRecipe, recipe);
+                    }
                     exportedRecipe.put("nonConsumedInputs", specialItems(recipe.mSpecialItems));
                     exportedRecipe.put("runtimeCalculation", buildGtRuntimeCalculation(map.unlocalizedName, name, recipe));
                     recipes.add(exportedRecipe);
@@ -979,6 +987,301 @@ public final class GtnhCalcOracleExporter {
         }
 
         return domain;
+    }
+
+    /**
+     * The Extreme Entity Crusher's recipes: kubatech's MobHandlerLoader.recipeMap, one entry per mob a
+     * Powered Spawner can hold, built from MobsInfo's simulated drop tables (overrides and extra loaders
+     * applied). MobsInfo only posts the per-mob registration events that fill that map when a world
+     * starts, and the client autorun sits at the main menu, so an empty map is processed here first.
+     */
+    private Map<String, Object> exportMobDrops(List<Map<String, Object>> adapters) {
+        long started = System.currentTimeMillis();
+        Map<String, Object> domain = domain("mobDrops");
+        List<Map<String, Object>> mobs = new ArrayList<Map<String, Object>>();
+        boolean present = isClassPresent("kubatech.loaders.MobHandlerLoader")
+            && isClassPresent("com.kuba6000.mobsinfo.loader.MobRecipeLoader");
+
+        if (!present) {
+            adapters.add(adapter("kubatech-eec-mobs", "not_present", false, 0, 0, started, null));
+            domain.put("mobs", mobs);
+            return domain;
+        }
+
+        try {
+            Class<?> handlerLoader = Class.forName("kubatech.loaders.MobHandlerLoader");
+            Map<?, ?> recipeMap = (Map<?, ?>) readStaticField(handlerLoader, "recipeMap");
+            boolean processed = false;
+            if (recipeMap == null || recipeMap.isEmpty()) {
+                Class.forName("com.kuba6000.mobsinfo.loader.MobRecipeLoader")
+                    .getMethod("processMobRecipeMap")
+                    .invoke(null);
+                recipeMap = (Map<?, ?>) readStaticField(handlerLoader, "recipeMap");
+                processed = true;
+            }
+            domain.put("processedMobRecipeMap", Boolean.valueOf(processed));
+            domain.put("machine", eecMachine());
+            putIfPresent(domain, "infernal", infernalMobsSettings());
+
+            Item spawnerItem = poweredSpawnerItem();
+            List<String> keys = new ArrayList<String>();
+            for (Object key : recipeMap.keySet()) {
+                keys.add(String.valueOf(key));
+            }
+            Collections.sort(keys);
+            for (String key : keys) {
+                Map<String, Object> exported = eecMob(key, recipeMap.get(key), spawnerItem);
+                if (exported != null) {
+                    mobs.add(exported);
+                }
+            }
+            domain.put("mobs", mobs);
+            String status = mobs.isEmpty() ? "partial" : "computed";
+            String warning = mobs.isEmpty() ? "MobHandlerLoader.recipeMap stayed empty after processing MobsInfo's mob map." : null;
+            adapters.add(adapter("kubatech-eec-mobs", status, true, 1, mobs.size(), started, warning));
+        } catch (Throwable t) {
+            adapters.add(adapter("kubatech-eec-mobs", "partial", true, 0, mobs.size(), started, t.toString()));
+            domain.put("mobs", mobs);
+        }
+
+        return domain;
+    }
+
+    private Map<String, Object> eecMachine() {
+        Map<String, Object> machine = map();
+        String className = "kubatech.tileentity.gregtech.multiblock.MTEExtremeEntityCrusher";
+        machine.put("className", className);
+        try {
+            Class<?> eec = Class.forName(className);
+            putIfPresent(machine, "mobSpawnInterval", readStaticField(eec, "MOB_SPAWN_INTERVAL"));
+            putIfPresent(machine, "maxLootingLevel", readStaticField(eec, "MAX_LOOTING_LEVEL"));
+            putIfPresent(machine, "diamondSpikesDamage", readStaticField(eec, "DIAMOND_SPIKES_DAMAGE"));
+        } catch (Throwable ignored) {
+        }
+        try {
+            putIfPresent(
+                machine,
+                "playerOnlyDropsModifier",
+                readStaticField(Class.forName("kubatech.config.Config$MobHandler"), "playerOnlyDropsModifier")
+            );
+        } catch (Throwable ignored) {
+        }
+        try {
+            Class<?> itemList = Class.forName("kubatech.api.enums.ItemList");
+            @SuppressWarnings({ "unchecked", "rawtypes" })
+            Object constant = Enum.valueOf((Class<Enum>) itemList.asSubclass(Enum.class), "ExtremeEntityCrusher");
+            Object stack = invokeBest(constant, "get", new Object[] { Long.valueOf(1L), new Object[0] });
+            putIfPresent(machine, "controller", itemStack(stack instanceof ItemStack ? (ItemStack) stack : null));
+        } catch (Throwable ignored) {
+        }
+        putIfPresent(machine, "experience", fluidStack(FluidRegistry.getFluidStack("xpjuice", 120)));
+        Item spawnerItem = poweredSpawnerItem();
+        if (spawnerItem != null) {
+            putIfPresent(machine, "spawner", itemStack(new ItemStack(spawnerItem, 1, 0)));
+        }
+        return machine;
+    }
+
+    private Item poweredSpawnerItem() {
+        try {
+            Object block = readStaticField(Class.forName("crazypants.enderio.EnderIO"), "blockPoweredSpawner");
+            return block instanceof net.minecraft.block.Block
+                ? Item.getItemFromBlock((net.minecraft.block.Block) block)
+                : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private Map<String, Object> infernalMobsSettings() {
+        try {
+            Class<?> core = Class.forName("atomicstryker.infernalmobs.common.InfernalMobsCore");
+            Object instance = core.getMethod("instance").invoke(null);
+            Map<String, Object> settings = map();
+            for (String name : Arrays.asList(
+                "getEliteRarity",
+                "getUltraRarity",
+                "getInfernoRarity",
+                "getMinEliteModifiers",
+                "getMinUltraModifiers",
+                "getMinInfernoModifiers",
+                "getMobModHealthFactor"
+            )) {
+                putIfPresent(settings, name.substring(3, 4).toLowerCase(Locale.ROOT) + name.substring(4), asNumber(invokeBest(instance, name, new Object[0])));
+            }
+            putIfPresent(settings, "eliteDrops", infernalDropPool(invokeBest(instance, "getDropIdListElite", new Object[0])));
+            putIfPresent(settings, "ultraDrops", infernalDropPool(invokeBest(instance, "getDropIdListUltra", new Object[0])));
+            putIfPresent(settings, "infernoDrops", infernalDropPool(invokeBest(instance, "getDropIdListInfernal", new Object[0])));
+            putIfPresent(settings, "dimensionBlackList", invokeBest(instance, "getDimensionBlackList", new Object[0]));
+            return settings.isEmpty() ? null : settings;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private List<Map<String, Object>> infernalDropPool(Object rawPool) {
+        List<Map<String, Object>> pool = new ArrayList<Map<String, Object>>();
+        for (Object entry : iterable(rawPool)) {
+            Map<String, Object> stack = itemStack(entry instanceof ItemStack ? (ItemStack) entry : null);
+            if (stack != null) {
+                pool.add(stack);
+            }
+        }
+        return pool;
+    }
+
+    private Map<String, Object> eecMob(String key, Object eecRecipe, Item spawnerItem) {
+        if (eecRecipe == null) {
+            return null;
+        }
+        Object recipe = readField(eecRecipe, "recipe");
+        Map<String, Object> mob = map();
+        mob.put("key", key);
+        putIfPresent(mob, "displayName", mobDisplayName(key, recipe));
+        putIfPresent(mob, "entityName", readField(recipe, "entityName"));
+        Object entity = readField(recipe, "entity");
+        if (entity != null) {
+            mob.put("entityClass", entity.getClass().getName());
+        }
+        putIfPresent(mob, "maxEntityHealth", asNumber(readField(recipe, "maxEntityHealth")));
+        putIfPresent(mob, "eut", asNumber(readField(eecRecipe, "mEUt")));
+        putIfPresent(mob, "durationTicks", asNumber(readField(eecRecipe, "mDuration")));
+        putIfPresent(mob, "isPeacefulAllowed", readField(recipe, "isPeacefulAllowed"));
+        putIfPresent(mob, "alwaysInfernal", readField(recipe, "alwaysinfernal"));
+        putIfPresent(mob, "infernalityAllowed", readField(recipe, "infernalityAllowed"));
+        putIfPresent(mob, "maxDamageChance", asNumber(readField(recipe, "mMaxDamageChance")));
+        if (spawnerItem != null) {
+            ItemStack spawner = new ItemStack(spawnerItem, 1, 0);
+            NBTTagCompound tag = new NBTTagCompound();
+            tag.setString("mobType", key);
+            spawner.setTagCompound(tag);
+            putIfPresent(mob, "spawner", itemStack(spawner));
+        }
+        List<Map<String, Object>> drops = new ArrayList<Map<String, Object>>();
+        for (Object drop : iterable(readField(eecRecipe, "mOutputs"))) {
+            Map<String, Object> exported = mobDrop(drop);
+            if (exported != null) {
+                drops.add(exported);
+            }
+        }
+        mob.put("drops", drops);
+        return mob;
+    }
+
+    private String mobDisplayName(String key, Object recipe) {
+        try {
+            String translationKey = "entity." + key + ".name";
+            String translated = StatCollector.translateToLocal(translationKey);
+            if (translated != null && translated.length() > 0 && !translated.equals(translationKey)) {
+                return translated;
+            }
+        } catch (Throwable ignored) {
+        }
+        String fromEntity = invokeString(readField(recipe, "entity"), "getCommandSenderName");
+        return fromEntity != null && fromEntity.length() > 0 && !fromEntity.startsWith("entity.") ? fromEntity : key;
+    }
+
+    private Map<String, Object> mobDrop(Object drop) {
+        Object rawStack = readField(drop, "stack");
+        ItemStack stack = rawStack instanceof ItemStack ? (ItemStack) rawStack : null;
+        Map<String, Object> resource = itemStack(stack);
+        if (resource == null) {
+            return null;
+        }
+        Map<String, Object> exported = map();
+        exported.put("resource", resource);
+        putIfPresent(exported, "damageable", Boolean.valueOf(stack.isItemStackDamageable()));
+        Object type = readField(drop, "type");
+        putIfPresent(exported, "type", type instanceof Enum ? ((Enum<?>) type).name() : null);
+        putIfPresent(exported, "chance", asNumber(readField(drop, "chance")));
+        putIfPresent(exported, "enchantable", asNumber(readField(drop, "enchantable")));
+        Object damages = readField(drop, "damages");
+        if (damages instanceof Map && !((Map<?, ?>) damages).isEmpty()) {
+            Map<String, Object> weights = map();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) damages).entrySet()) {
+                weights.put(String.valueOf(entry.getKey()), asNumber(entry.getValue()));
+            }
+            exported.put("damages", weights);
+        }
+        putIfPresent(exported, "lootable", readField(drop, "lootable"));
+        putIfPresent(exported, "playerOnly", readField(drop, "playerOnly"));
+        putIfPresent(exported, "variableChance", readField(drop, "variableChance"));
+        List<Map<String, Object>> modifiers = new ArrayList<Map<String, Object>>();
+        for (Object modifier : iterable(readField(drop, "chanceModifiers"))) {
+            if (modifier != null) {
+                modifiers.add(mobChanceModifier(modifier));
+            }
+        }
+        putIfPresent(exported, "chanceModifiers", modifiers);
+        List<String> info = new ArrayList<String>();
+        for (Object line : iterable(readField(drop, "additionalInfo"))) {
+            if (line != null) {
+                info.add(String.valueOf(line));
+            }
+        }
+        putIfPresent(exported, "additionalInfo", info);
+        return exported;
+    }
+
+    /** A chance modifier's class, its NEI description and its plain fields, for the pipeline to judge. */
+    private Map<String, Object> mobChanceModifier(Object modifier) {
+        Map<String, Object> exported = map();
+        exported.put("className", modifier.getClass().getName());
+        putIfPresent(exported, "description", invokeString(modifier, "getDescription"));
+        Map<String, Object> fields = map();
+        Class<?> type = modifier.getClass();
+        while (type != null && type != Object.class) {
+            for (Field field : type.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic() || fields.containsKey(field.getName())) {
+                    continue;
+                }
+                try {
+                    field.setAccessible(true);
+                    putIfPresent(fields, field.getName(), plainModifierValue(field.get(modifier)));
+                } catch (Throwable ignored) {
+                }
+            }
+            type = type.getSuperclass();
+        }
+        putIfPresent(exported, "fields", fields.isEmpty() ? null : fields);
+        return exported;
+    }
+
+    private Object plainModifierValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number || value instanceof Boolean || value instanceof String) {
+            return value;
+        }
+        if (value instanceof Enum) {
+            return ((Enum<?>) value).name();
+        }
+        if (value instanceof ItemStack) {
+            return itemStack((ItemStack) value);
+        }
+        if (value instanceof net.minecraft.world.biome.BiomeGenBase) {
+            return ((net.minecraft.world.biome.BiomeGenBase) value).biomeName;
+        }
+        if (value instanceof net.minecraft.enchantment.Enchantment) {
+            return enchantmentRef((net.minecraft.enchantment.Enchantment) value, null);
+        }
+        if (value instanceof net.minecraft.enchantment.EnchantmentData) {
+            net.minecraft.enchantment.EnchantmentData data = (net.minecraft.enchantment.EnchantmentData) value;
+            return enchantmentRef(data.enchantmentobj, Integer.valueOf(data.enchantmentLevel));
+        }
+        return value.getClass().getName();
+    }
+
+    private Map<String, Object> enchantmentRef(net.minecraft.enchantment.Enchantment enchantment, Integer level) {
+        Map<String, Object> ref = map();
+        if (enchantment == null) {
+            return ref;
+        }
+        ref.put("id", Integer.valueOf(enchantment.effectId));
+        putIfPresent(ref, "name", enchantment.getName());
+        putIfPresent(ref, "level", level);
+        return ref;
     }
 
     private Map<String, Object> thaumcraftRecipe(String sourceList, int index, Object rawRecipe) {
@@ -2225,6 +2528,104 @@ public final class GtnhCalcOracleExporter {
         return method.invoke(target, value);
     }
 
+    /**
+     * A sparge tower rolls its byproducts at run time (MTESpargeTower.randomizeByproducts):
+     * the recipe registers the returned sparge gas and every byproduct at 0 L, which the plain
+     * fluid list drops, and caps each byproduct at SPARGE_MAX_BYPRODUCT. Both are exported so
+     * the normalizer can replay the roll's expected value.
+     */
+    private void putSpargeByproducts(Map<String, Object> exportedRecipe, GTRecipe recipe) {
+        List<Map<String, Object>> fluids = new ArrayList<Map<String, Object>>();
+        for (FluidStack stack : recipe.mFluidOutputs) {
+            if (stack == null || stack.getFluid() == null) {
+                continue;
+            }
+            Map<String, Object> fluid = map();
+            fluid.put("kind", "fluid");
+            fluid.put("id", stack.getFluid().getName());
+            fluid.put("amount", Integer.valueOf(stack.amount));
+            fluid.put("displayName", stack.getLocalizedName());
+            FluidStack shown = stack.copy();
+            shown.amount = Math.max(1, shown.amount);
+            String icon = FluidStackIconExporter.captureIcon(shown);
+            if (icon != null && icon.length() > 0) {
+                fluid.put("icon", icon);
+            }
+            fluids.add(fluid);
+        }
+        exportedRecipe.put("spargeFluidOutputs", fluids);
+        if (recipe.mFluidInputs.length > 0 && recipe.mFluidInputs[0] != null) {
+            exportedRecipe.put("spargeGasAmount", Integer.valueOf(recipe.mFluidInputs[0].amount));
+        }
+        try {
+            Object key = readStaticField(GTRecipeConstants.class, "SPARGE_MAX_BYPRODUCT");
+            for (Method method : GTRecipe.class.getMethods()) {
+                if ("getMetadataOrDefault".equals(method.getName()) && method.getParameterTypes().length == 2) {
+                    Object value = method.invoke(recipe, key, Integer.valueOf(0));
+                    if (value instanceof Number) {
+                        exportedRecipe.put("spargeMaxByproduct", Integer.valueOf(((Number) value).intValue()));
+                    }
+                    break;
+                }
+            }
+        } catch (Throwable t) {
+            exportedRecipe.put("spargeError", t.toString());
+        }
+    }
+
+    /**
+     * Inputs a machine wears down instead of eating whole: GT++ chemical plant catalysts and
+     * IsaMill milling balls sit in their own housing, lose one durability per damage roll and
+     * break at their maximum (a catalyst leaving an Empty Catalyst Carrier). The recipe lists
+     * them as non-consumed; export which ones wear, how far they last and what they leave.
+     */
+    private void putWearingInputs(Map<String, Object> exportedRecipe, GTRecipe recipe) {
+        List<Map<String, Object>> wearing = new ArrayList<Map<String, Object>>();
+        try {
+            Class<?> chemicalPlant = Class.forName(
+                "gtPlusPlus.xmod.gregtech.common.tileentities.machines.multi.production.chemplant.MTEChemicalPlant");
+            Class<?> isaMill = Class.forName(
+                "gtPlusPlus.xmod.gregtech.common.tileentities.machines.multi.processing.MTEIsaMill");
+            Class<?> chemBase = Class.forName("gtPlusPlus.core.item.chemistry.general.ItemGenericChemBase");
+            Method isCatalyst = chemicalPlant.getMethod("isCatalyst", ItemStack.class);
+            Method isMillingBall = isaMill.getMethod("isMillingBall", ItemStack.class);
+            for (ItemStack stack : recipe.mInputs) {
+                if (stack == null || stack.getItem() == null) {
+                    continue;
+                }
+                ItemStack probe = stack.copy();
+                probe.stackSize = 1;
+                Map<String, Object> entry = null;
+                if (Boolean.TRUE.equals(isCatalyst.invoke(null, probe))) {
+                    entry = map();
+                    entry.put("durability", chemBase.getMethod("getMaxCatalystDurability").invoke(null));
+                    Object carrier = readStaticField(
+                        Class.forName("gtPlusPlus.xmod.gregtech.api.enums.GregtechItemList"),
+                        "EmptyCatalystCarrier");
+                    Object spent = carrier.getClass().getMethod("get", long.class, Object[].class)
+                        .invoke(carrier, Long.valueOf(1L), new Object[0]);
+                    if (spent instanceof ItemStack) {
+                        entry.put("spent", itemStack((ItemStack) spent));
+                    }
+                } else if (Boolean.TRUE.equals(isMillingBall.invoke(null, probe))) {
+                    entry = map();
+                    entry.put("durability", chemBase.getMethod("getMaxBallDurability", ItemStack.class).invoke(null, probe));
+                }
+                if (entry != null) {
+                    String registryId = String.valueOf(Item.itemRegistry.getNameForObject(probe.getItem()));
+                    entry.put("id", itemResourceId(registryId, probe.getItemDamage()));
+                    wearing.add(entry);
+                }
+            }
+        } catch (Throwable t) {
+            exportedRecipe.put("wearError", t.toString());
+            return;
+        }
+        if (!wearing.isEmpty()) {
+            exportedRecipe.put("wearingInputs", wearing);
+        }
+    }
+
     private List<Map<String, Object>> outputItemStacks(GTRecipe recipe) {
         List<Map<String, Object>> outputs = new ArrayList<Map<String, Object>>();
         int index = 0;
@@ -3241,7 +3642,7 @@ public final class GtnhCalcOracleExporter {
                     count++;
                 }
             }
-            for (String key : Arrays.asList("recipes", "species", "crops")) {
+            for (String key : Arrays.asList("recipes", "species", "crops", "mobs")) {
                 for (Object ignored : iterable(domain.get(key))) {
                     count++;
                 }

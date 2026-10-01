@@ -5,7 +5,7 @@
  * treat it as an ordinary machine. Settings live on the node
  * (machineConfigTiers); changing one rewrites the recipe through
  * buildPowerRecipe, and normalizeLoadedProject resynthesizes on load so
- * stored plans pick up corrected math.
+ * stored plans always carry the current math.
  */
 import type { FactoryNode, Recipe, RecipeInput, RecipeOutput } from "@/lib/model/types";
 import { resolvePowerResource } from "./planner-data";
@@ -43,20 +43,6 @@ export function isPowerRecipe(
   recipe: Pick<Recipe, "power" | "category"> | undefined,
 ): recipe is Recipe & { power: RecipePowerInfo } {
   return Boolean(recipe?.power);
-}
-
-export function isPowerNodeId(
-  project: {
-    nodes: Array<Pick<FactoryNode, "id" | "recipeId">>;
-    recipes: Array<Pick<Recipe, "id" | "power" | "category">>;
-  },
-  nodeId: string | null | undefined,
-): boolean {
-  if (!nodeId) {
-    return false;
-  }
-  const node = project.nodes.find((entry) => entry.id === nodeId);
-  return Boolean(node && isPowerRecipe(project.recipes.find((entry) => entry.id === node.recipeId)));
 }
 
 function flowToSlot(flow: PowerFlowLine): (RecipeInput & RecipeOutput) | undefined {
@@ -145,17 +131,17 @@ export function buildPowerRecipe(
 
 /**
  * Every power card's recipe rebuilt from its node's settings. Runs in the
- * load funnel so old plans pick up corrected math and resource fixes; a
- * recipe whose source id is unknown (a newer plan on an older build) is
- * left exactly as saved.
+ * load funnel so saved plans always carry the current math and resource
+ * mapping; a recipe whose source id is unknown (a newer plan on an older
+ * build) is left exactly as saved.
  */
 export function resynthesizePowerRecipes<
   Project extends { nodes: FactoryNode[]; recipes: Recipe[] },
 >(project: Project): Project {
   let changed = false;
-  // A power card OWNS its recipe, but a clone made before the clone learned
-  // to remint left two nodes on one recipe - so a rotor change on one
-  // turbine rewrote the other's output. Every node past the first gets its
+  // A power card OWNS its recipe. Saved plans can hold two nodes on one
+  // power recipe (a clone that did not remint), where one card's settings
+  // would rewrite the other's output. Every node past the first gets its
   // own recipe id here, rebuilt below from its OWN settings.
   let nodes = project.nodes;
   const powerIds = new Set(
@@ -203,10 +189,9 @@ export function resynthesizePowerRecipes<
     changed = true;
     return rebuilt;
   });
-  // Input overrides stamped onto a power node (by the connect gesture, before
-  // it learned to skip power cards) repaint the rebuilt slots forever - a
-  // card wired to benzene once stayed benzene through every fuel switch.
-  // Power slots are exact, so a power node never legitimately carries one.
+  // Power slots are exact, so a power node never legitimately carries input
+  // overrides. Any found in a saved plan are dropped: they would repaint the
+  // rebuilt slots and pin the card to one fuel through every fuel switch.
   nodes = nodes.map((node) => {
     if (!powerRecipeIds.has(node.recipeId) || node.recipeInputOverrides === undefined) {
       return node;

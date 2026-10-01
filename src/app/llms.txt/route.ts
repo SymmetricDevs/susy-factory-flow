@@ -8,13 +8,10 @@ import { describePlanRow } from "@/lib/server/plan-preview";
 import { APP_VERSION } from "@/lib/version";
 
 /**
- * The site as one page of markdown, for readers that are language models.
- *
- * An LLM crawler fetches raw HTML and runs no JavaScript, so to it the
- * planner is a nearly empty page: this file (the llms.txt convention,
- * llmstxt.org) is where it learns what the site actually is. The top shared
- * plans are listed as links because each plan URL server-renders its name
- * and summary into metadata, making them the only text-rich pages we have.
+ * The site as one page of markdown for language-model crawlers (the llms.txt
+ * convention), which run no JavaScript and so see the planner as an empty
+ * page. Top shared plans are linked because each plan URL server-renders its
+ * name and summary into metadata.
  */
 export const revalidate = 3600;
 

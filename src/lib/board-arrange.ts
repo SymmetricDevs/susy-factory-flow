@@ -1,32 +1,20 @@
 /**
- * Auto-arrange: one deterministic layout pass over the visible board.
+ * Auto-arrange for the visible board.
  *
- * The shape it aims for is the one players draw by hand when they have the
- * patience. A factory plan is almost a TREE: one main product line, fed by
- * side chains, which are fed by their own side chains - with a few wires
- * that double back (recycles) or cross over (one pump feeding four
- * machines). So the layout leans into that:
+ * The COLUMN PASS treats a plan as almost a tree: flow runs left to right,
+ * the TRUNK (the chain behind the biggest final product) runs through the
+ * middle, and every feeder chain joining it is a SECTION kept as one
+ * contiguous band, so a wire's two ends usually share a band. Recycles stay
+ * beside their own section, and a vertical pass lines ports up with the
+ * ports they feed, weighted by flow. Disconnected webs become separate
+ * islands; unwired cards go on a shelf at the bottom.
  *
- *  - Flow runs LEFT TO RIGHT, raw inputs to final products, one column past
- *    the cards that feed you.
- *  - The TRUNK - the chain behind the plan's biggest final product - runs
- *    through the middle. Every feeder chain that joins it is a SECTION: its
- *    cards stay together as one contiguous band, big sections hugging the
- *    trunk, with clear air between bands. That is what kills spaghetti -
- *    a wire's two ends are almost always in the same band.
- *  - Recycles stay tight. The forward half of a loop reads left to right;
- *    the wire that doubles back hugs its own section instead of lassoing
- *    the board.
- *  - Wires want to be short and straight. Columns sit close (growing only
- *    when many wires must cross a boundary), and the vertical pass lines
- *    each card's ports up with the ports they feed, weighted by how much
- *    actually flows - the busiest lines get the straightest runs.
- *  - Cards with no wire to the main graph become their own islands below;
- *    cards wired to nothing at all are gathered onto a shelf at the bottom.
+ * `arrangeBoard` runs that pass plain and with the optimiser
+ * (board-arrange-optimize.ts), plus a column-free placement
+ * (board-arrange-free.ts), and picks by the router's points.
  *
- * The result is a pure function of the graph: same cards and wires in, same
- * layout out, regardless of camera, render order, or what the board looked
- * like before. Everything lands on the 20px grid.
+ * Deterministic: same cards and wires in, same layout out, regardless of
+ * camera or render order. Everything lands on the 20px grid.
  */
 
 import { BOARD_GRID, cells, snapToGrid } from "./board-grid";
@@ -48,11 +36,10 @@ export interface ArrangeCard {
   width: number;
   height: number;
   /**
-   * "storage" marks drawers, tanks and trash cans - the small tiles. A
-   * storage whose every wire meets one machine becomes a SATELLITE: it
-   * leaves the column system entirely and pins itself against that
-   * machine's edge at the port it serves - supplies on the left, catches
-   * on the right - the way players park them. Absent means machine.
+   * "storage" marks drawers, tanks and trash cans. A storage whose every
+   * wire meets one other card becomes a SATELLITE: it leaves the column
+   * system and pins to that card's edge at the port it serves (supplies
+   * left, catches right). Absent means machine.
    */
   role?: "machine" | "storage";
 }
@@ -122,18 +109,14 @@ export interface ArrangeResult {
     backdrop: boolean;
   }>;
   /**
-   * Steering for the bridges: a wire between two islands that would cut
-   * through a third island's ground gets the same stops a player places by
-   * hand, walking it around that ground. Wires inside an island never get
-   * stops - routing there is the router's business.
+   * Waypoints for bridges: a wire between two islands that would cut
+   * through a third island's ground gets stops walking it around that
+   * ground. Wires inside an island never get stops.
    */
   wireRoutes: Array<{ id: string; waypoints: Array<{ x: number; y: number }> }>;
 }
 
-/**
- * The dials a player may want a hand on, all optional; absent means the
- * default taste. These map one-to-one onto the arrange settings panel.
- */
+/** Layout preferences, all optional; absent means the default taste. */
 export interface ArrangeTaste {
   /** How much air everything gets. */
   spacing?: "compact" | "normal" | "roomy";
@@ -151,10 +134,9 @@ export interface ArrangeInput {
   origin?: { x: number; y: number };
   taste?: ArrangeTaste;
   /**
-   * The judge of candidate layouts (board-arrange-optimize.ts): given
-   * every card's top-left, how many crossings the board's real wires would
-   * have. Built by the host on the board's own route requests, so the
-   * arranger optimises the picture the player will actually get.
+   * The judge of candidate layouts: given every card's top-left, how the
+   * board's real wires would route. Built by the host on the board's own
+   * route requests, so the arranger optimises the picture actually drawn.
    */
   judge?: (
     positions: ReadonlyMap<string, { x: number; y: number }>,
@@ -177,7 +159,7 @@ export interface ArrangeInput {
   };
   /**
    * Judge calls the exact polish may spend after the layout is chosen
-   * (default 60). Each is a full solve of the board's wires.
+   * (default: the tuning's `polishBudget`).
    */
   polishBudget?: number;
   /**
@@ -231,10 +213,8 @@ let SATELLITE_STACK_GAP = cells(1);
 let PAGE_FOLD = false;
 
 /**
- * The dev menu's Arrange dials override the taste's spacing (Jack,
- * 2026-09-08) - but only a dial someone has MOVED; at its default the
- * taste (compact, normal, roomy) still decides, so tests and callers that
- * ask for a taste get it.
+ * The dev menu's Arrange dials override the taste's spacing only when moved
+ * off their defaults, so callers that ask for a taste still get it.
  */
 function applyArrangeDials(dials: RouterTuning | undefined): void {
   if (!dials) return;
@@ -249,8 +229,8 @@ function applyArrangeDials(dials: RouterTuning | undefined): void {
 
 function applyTaste(taste: ArrangeTaste | undefined): void {
   const spacing = taste?.spacing ?? "normal";
-  // Compact is what a hand draws (Jack's oil board, 2026-09-08): rows a
-  // cell apart, columns two, drawers touching. Wire has to be paid for.
+  // Compact matches hand-drawn boards: rows a cell apart, columns two,
+  // drawers touching.
   ROW_GAP = cells(spacing === "compact" ? 1 : spacing === "roomy" ? 3 : 2);
   SECTION_GAP = cells(spacing === "compact" ? 2 : spacing === "roomy" ? 6 : 4);
   COLUMN_GAP_MIN = cells(spacing === "compact" ? 2 : spacing === "roomy" ? 5 : 3);
@@ -262,9 +242,8 @@ function applyTaste(taste: ArrangeTaste | undefined): void {
 }
 
 /**
- * Run the SAME layout engine at island scale: every gap swaps to the
- * island gap, then swaps back. Cards in an island and islands on the
- * board are one problem - this is what keeps it one engine.
+ * Run the same layout engine at island scale: every gap swaps to the
+ * island gap for the duration of `run`, then swaps back.
  */
 function atIslandScale<T>(run: () => T): T {
   const saved = {
@@ -352,23 +331,17 @@ interface Block {
 }
 
 /**
- * The layout, then the challenger. The column pass lays the board out as
- * it always has; the optimiser (board-arrange-optimize.ts) then rearranges
- * each island against a router-shaped score. With a judge supplied by the
- * host, BOTH layouts are routed with the real router and the one with
- * fewer crossings wins, shorter wire breaking the tie - so an arrange is
- * never worse than the plain pass on the board's own wires. Without a
- * judge the plain pass stands: the optimiser's proxy is not to be trusted
- * unjudged.
+ * Three candidates: the plain column pass, the column pass with the
+ * optimiser (the challenger), and the free placement. With a host judge,
+ * each is routed by the real router, the best two by points are polished,
+ * and the better polished board wins. Without a judge the proxy score
+ * picks among the three.
  */
 export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
-  // ISLANDS ARE EMERGENT (Jack, 2026-09-08). The one readability term on
-  // top of the router's points is the air strangers owe each other
-  // (board-arrange-air.ts), and it is in the objective EVERYWHERE - the
-  // proxy the search runs on, the finalists the router judges, the polish
-  // and the choice between the plain pass and the challenger - so the
-  // judge never undoes what the search found. The player's score in the
-  // dev menu stays pure routing points.
+  // The stranger air (board-arrange-air.ts) is added to the judge's points
+  // here so every stage (search proxy, finalists, polish, final choice)
+  // optimises the same objective and the judge never undoes the search.
+  // The dev menu's score stays pure routing points.
   ARRANGE_PRICES = rawInput.tuning ?? routerPrices();
   ARRANGE_AIR = makeAirTerm(rawInput.cards, rawInput.wires, ARRANGE_PRICES.islandAir);
   const airOf = (positions: ReadonlyMap<string, { x: number; y: number }>) => ARRANGE_AIR(positions);
@@ -407,8 +380,7 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
     input.onProgress?.({ step: 1, stage: "Searching for a better layout", done, total });
   const challenger = arrangeBoardOnce(input, true);
   ARRANGE_SEARCH_PROGRESS = undefined;
-  // THE THIRD CANDIDATE (Jack, 2026-09-08): a placement with no columns at
-  // all, from graph distance and a free search (board-arrange-free.ts).
+  // The third candidate: no columns at all (board-arrange-free.ts).
   const free = arrangeFreeCandidate(input);
   input.onProgress?.({ step: 2, stage: "Routing the candidates", done: 0, total: 1 });
   const verdict = (result: ArrangeResult) =>
@@ -435,9 +407,8 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
   input.onProgress?.({ step: 5, stage: "Choosing the better board", done: 1, total: 1 });
   const finalFirst = verdict(polishedFirst);
   const finalSecond = verdict(polishedSecond);
-  // POINTS decide (Jack, 2026-09-08): a crossing is already priced into
-  // them at the crossing dial, and a board that avoids one by sending a
-  // wire round the whole board has paid more than the crossing cost.
+  // Points alone decide: a crossing is already priced into them, so a
+  // layout that dodges one with a long detour does not win on crossings.
   return finalSecond.points < finalFirst.points ? polishedSecond : polishedFirst;
 }
 
@@ -498,24 +469,21 @@ export function arrangeBoardColumns(rawInput: ArrangeInput): ArrangeResult {
 }
 
 /**
- * THE EXACT POLISH. The layout is done; now the real router says where the
- * wires still cross, and the cards on those wires are tried elsewhere -
- * swapped with a column neighbour, or set down beside a partner on any of
- * its four sides - each try judged by the router itself. The first try
- * that lowers the crossings (or keeps them and shortens the wire) is
- * taken, and the search goes again from there until nothing helps or the
- * budget of judge calls is spent. This is what a player does by hand: look
- * at the crossing, move the card. Every try keeps the grid and the
- * no-overlap rule; nothing else on the board moves.
- */
-/**
- * How long one polish may run, on top of its count of judge calls. Two
- * polishes per arrange, so the pair takes at most twice this plus the
- * verdict in flight when time runs out. The oil board's polish spends a
- * couple of seconds; a board routing in seconds per verdict hits this.
+ * Wall-clock allowance for one polish, on top of its count of judge calls:
+ * on a big board one verdict can take seconds. Two polishes run per
+ * arrange.
  */
 const POLISH_TIME_MS = 8_000;
 
+/**
+ * The exact polish: the real router says where wires still cross (or, with
+ * none, which wires are longest), and the cards on them are tried elsewhere:
+ * beside a partner on any side, level with it in their own column, or
+ * swapped with a card in their column, their buds riding along. The first
+ * try that lowers the router's points is taken and the search repeats until
+ * nothing helps or the budget runs out. Every try keeps the grid and the
+ * no-overlap rule.
+ */
 function polishWithJudge(
   input: ArrangeInput,
   result: ArrangeResult,
@@ -533,12 +501,9 @@ function polishWithJudge(
   }
   const fullBudget = input.polishBudget ?? ARRANGE_PRICES?.polishBudget ?? 100;
   let budget = fullBudget;
-  // The budget is a COUNT of judge calls, and on a big board each call is
-  // a whole-board route that can take seconds - Jack watched "Polishing
-  // the first layout, 110 crossings" for five minutes (2026-09-08). So
-  // each polish also has a wall-clock allowance: the verdict under way
-  // finishes, and the next one is not asked for. The bar reads whichever
-  // of the two is further along, so it keeps moving on a slow board.
+  // Past the deadline the verdict under way finishes and no further one is
+  // asked for. The progress bar reads whichever of budget and time is
+  // further along, so it keeps moving on a slow board.
   const startedAt = performance.now();
   const deadline = startedAt + POLISH_TIME_MS;
   const spend = () => {
@@ -572,22 +537,6 @@ function polishWithJudge(
   let best = verdict;
   const start = { positions: new Map(positions), verdict };
   const gap = BOARD_GRID;
-  const overlaps = (id: string, x: number, y: number): boolean => {
-    const size = sizeById.get(id)!;
-    for (const [other, at] of positions) {
-      if (other === id) continue;
-      const otherSize = sizeById.get(other)!;
-      if (
-        x < at.x + otherSize.width + gap &&
-        x + size.width + gap > at.x &&
-        y < at.y + otherSize.height + gap &&
-        y + size.height + gap > at.y
-      ) {
-        return true;
-      }
-    }
-    return false;
-  };
   const tried = new Set<string>();
   // A machine moves with the drawers that serve only it, the way a hand
   // drags a machine and its buds together.
@@ -730,8 +679,7 @@ function polishWithJudge(
         if (typeof process !== "undefined" && process.env?.ARRANGE_DEBUG) {
           console.log("try", id.slice(0, 14), candidate.x, candidate.y, "quick", quick.crossings, Math.round(quick.points), "best", best.crossings, Math.round(best.points));
         }
-        // A crossing fewer is always worth the full verdict; a length gain
-        // must be real (two percent) to be worth one.
+        // Only a quick verdict at least two percent better earns a full one.
         if (quick.points < best.points * 0.98) {
           const next = judge(positions);
           if (next.points < best.points - 1) {
@@ -904,11 +852,9 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
     members.sort((a, b) => a.index - b.index);
     const componentSet = new Set(members);
     const componentLinks = mainLinks.filter((link) => componentSet.has(link.from));
-    // One connected web is one island. Loose clusters used to be cut off
-    // by a rule here (a branch hanging on by a wire or two); now they part
-    // from the main body inside the search, because strangers owe each
-    // other air (board-arrange-air.ts) - and only as far as that air is
-    // worth against the bridge wire's length.
+    // One connected web is one island. Loose clusters part from the main
+    // body inside the search instead, through the stranger air
+    // (board-arrange-air.ts).
     for (const group of [members]) {
       const groupSet = new Set(group);
       const groupLinks = componentLinks.filter(
@@ -923,11 +869,9 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
       islandGroups.push({ members: group, links: groupLinks, satellites: groupSatellites });
     }
   }
-  // A buffer SHARED ACROSS islands belongs to none of them. Only a storage
-  // that two or more OTHER islands trade through steps out to stand alone
-  // in the gap - a simple pass-through between two islands stays where the
-  // split put it, part of that island's own chain. The island graph then
-  // places the shared one between its users like any trader.
+  // A storage that two or more OTHER islands trade through steps out to
+  // stand alone as an interchange island, which the island graph places
+  // between its users. A plain pass-through between two islands stays put.
   {
     const prelim = new Map<CardSlot, number>();
     islandGroups.forEach((group, index) => {
@@ -1067,12 +1011,9 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
   let localPlaceOfCard = assemble();
   let offsets = placeIslands(blocks, bridgeLinks, localPlaceOfCard);
 
-  // The second pass. With every island standing somewhere real, each
-  // bridge's far end is a known point - so every island lays itself out
-  // once more with its bridges pulling their exit cards toward where the
-  // partner actually is. A wire to the island below now leaves from the
-  // bottom edge, not the top corner, and the islands are placed again
-  // around the reshaped blocks.
+  // Second pass: with every island placed, each bridge's far end is a known
+  // point, so every island lays itself out again with its exit cards pulled
+  // toward their partners, and the islands are placed again.
   if (bridgeLinks.length > 0) {
     const pullsByGroup = islandGroups.map(
       () => new Map<string, Array<{ y: number; weight: number; anchor: number }>>(),
@@ -1137,12 +1078,10 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
 
   followInk(input, newById, moves);
 
-  // Bridges never cut through a foreign island. A wire between two islands
-  // that would pass OVER a third gets steering stops walking it around that
-  // island's ground - because the router routes around CARDS, not around
-  // the ground an island stands on. The hit is judged against the island's
-  // own rectangle, so a wire passing NEAR an island earns nothing; the
-  // detour lane is laid on the no-go collar, two cells clear of the box.
+  // A bridge that would pass over a third island gets waypoints walking it
+  // around that island's ground, since the router avoids cards, not island
+  // grounds. The hit is judged against the island's own rectangle; the
+  // detour lane runs on a collar four cells clear of it.
   const wireRoutes: ArrangeResult["wireRoutes"] = [];
   {
     const collar = cells(4);
@@ -1187,9 +1126,8 @@ function arrangeBoardOnce(input: ArrangeInput, optimise: boolean): ArrangeResult
 }
 
 /**
- * Ink follows the cards it overlapped: a note pinned on a machine, a box
- * framing a cluster, each rides the average displacement of the cards it
- * reached. Ink over empty canvas has nothing to follow and stays put.
+ * Ink moves by the average displacement of the cards it overlapped (within
+ * INK_REACH). Ink over empty canvas stays put.
  */
 function followInk(
   input: ArrangeInput,
@@ -1281,11 +1219,10 @@ function segmentHitsGround(
 
 /**
  * Walk a straight run around every ground it would cut through: for each
- * offender in travel order, stops trace the nearer collar side, then the
- * walk continues toward the target. Every stop is CLAMPED inside the
- * run's own span - a stop the wire must double back for reads as broken -
- * and a walk still blocked after two detours places NO stops at all: the
- * router making its own way beats a trail of confused dots.
+ * offender in travel order, stops trace the nearer collar side. Stops are
+ * clamped inside the run's own span (a stop the wire must double back for
+ * reads as broken), and a walk still blocked after two detours returns no
+ * stops, leaving the router to find its own way.
  */
 function routeAroundGrounds(
   start: { x: number; y: number },
@@ -1393,11 +1330,10 @@ function unionComponents(count: number, links: WireLink[]): (index: number) => n
 }
 
 /**
- * Which storages ride as satellites. A drawer whose every wire meets one
- * other card is furniture for that card, not a station of its own: a supply
- * pins to the left edge, a catch to the right, each at the port row it
- * serves. Two lone storages wired only to each other stay ordinary cards -
- * a satellite needs solid ground to pin to.
+ * Which storages ride as satellites: a drawer whose every wire meets one
+ * other card pins to that card (supply left, catch right) at the port row it
+ * serves. Two storages that would pin to each other both stay ordinary
+ * cards: a satellite cannot anchor on another satellite.
  */
 function planSatellites(
   slotById: Map<string, CardSlot>,
@@ -1449,10 +1385,8 @@ function planSatellites(
 }
 
 /**
- * The wires of every two-card loop (A feeds B, B feeds A). Those pairs are
- * drawn STACKED - same column, one above the other - the way players draw
- * an electrolyzer trading with its reactor, so their wires stay off the
- * column system entirely.
+ * The wires of every two-card loop (A feeds B, B feeds A). Such pairs stack
+ * in one column, so their wires stay off the column system.
  */
 function twoCycleLinks(links: WireLink[]): Set<WireLink> {
   const directions = new Set<string>();
@@ -1479,9 +1413,8 @@ function layoutIsland(
   exits: ReadonlyMap<string, number>,
   pulls?: ReadonlyMap<string, Array<{ y: number; weight: number; anchor: number }>>,
   /**
-   * Every wire on the board, satellite wires included: the optimiser at
-   * the end scores the island against ALL the wires inside it, not only
-   * the ones the column system saw.
+   * Every wire on the board, satellite wires included: the optimiser scores
+   * the island against all its wires, not only those the column system saw.
    */
   allLinks?: WireLink[],
   _judge?: ArrangeInput["judge"],
@@ -1514,24 +1447,20 @@ function layoutIsland(
       );
     }
   }
-  // -- Cycles. A layered layout needs an acyclic graph to rank, so a DFS in
-  // input order marks the wires that close each loop. Those wires still
-  // exist for every later pass - they pull their ends together vertically -
-  // they just do not constrain the columns, so the forward half of a
-  // recycle reads left to right and the return wire doubles back beside it.
-  // Two-card loops are lifted out before any of that: their wires never
-  // touch the column system, and the pair stacks in one column.
+  // -- Cycles. Ranking needs an acyclic graph, so a DFS in input order marks
+  // the wires that close each loop. Those wires still pull their ends
+  // together vertically in later passes; they just do not constrain columns.
+  // Two-card loops are lifted out first and stack in one column.
   const pairs = twoCycleLinks(links);
   const forward = splitCoFeeders(breakCycles(members, links, pairs), members);
 
   assignLayers(members, forward, pairs, exits);
 
   // -- The fold. A big recycle ring flattened into one line leaves its
-  // closure wire lassoing the whole board. Folding the ring's far half back
-  // over the top turns the line into the loop the player would draw: flow
-  // runs out along the bottom deck, back along the top, and every closure
-  // is a short vertical hop. Where the fold lands is chosen by arithmetic
-  // (least total wire span), so the arbitrary cycle break stops mattering.
+  // closure wire spanning the whole board. Folding the ring's far half back
+  // over the top makes a loop (out along the bottom deck, back along the
+  // top). The fold point minimises total wire span, so the arbitrary cycle
+  // break stops mattering.
   const { topDeck, pinned } = foldBigCycles(members, links, pairs);
   // The fold moved the ring; everything hanging off it re-slides to its new
   // wires (the ring itself is pinned), pairs re-stack, and a drawer shared
@@ -1613,22 +1542,17 @@ function layoutIsland(
     }
   }
 
-  // A provisional vertical pass, then the anti-crossing polish: with real
-  // positions on the board, cards are reordered WITHIN their column and
-  // section to follow where their wires pull - a drawer whose feed leaves
-  // the bottom of its machine belongs below it, not above, and two wires
-  // that would cross between columns uncross by swapping their ends. Bands
-  // survive: the polish permutes order only among cards already sharing a
-  // column and a section. Then the column settles again.
+  // A provisional vertical pass, then the anti-crossing polish: cards are
+  // reordered within their column and section to follow their wires' pull,
+  // then the column settles again. Bands survive because order changes only
+  // among cards already sharing a column and a section.
   placeRows(collectLayers(members), links, extraPartners);
   for (let pass = 0; pass < 3; pass += 1) {
     polishColumnOrder(collectLayers(members), links, extraPartners);
     placeRows(collectLayers(members), links, extraPartners);
   }
-  // The finisher a hand gives a board: the barycenter passes above get the
-  // order close, this pass does what a player does by eye - flip the one
-  // pair of neighbours sitting on the wrong sides of each other, counted
-  // against the actual wires, until no flip helps.
+  // The barycenter passes get the order close; this pass flips neighbour
+  // pairs whose actual wires cross, until no flip helps.
   for (let pass = 0; pass < 3; pass += 1) {
     if (!transposeToUncross(collectLayers(members), links)) {
       break;
@@ -1732,10 +1656,9 @@ function layoutIsland(
     }
   }
 
-  // THE OPTIMISER. The column system got the island's shape; now the cards
-  // move until the wires the router will draw cross as little as possible
-  // (board-arrange-optimize.ts). Every wire inside the island counts,
-  // satellite wires included, and satellites keep to the side they serve.
+  // The optimiser (board-arrange-optimize.ts) starts from the column layout
+  // and moves cards to lower a router-shaped score. Every wire inside the
+  // island counts, satellite wires included; satellites keep their side.
   if (OPTIMISE && allLinks && ids.length >= 2) {
     const idSet = new Set(ids);
     const satelliteOf = new Map<string, { anchorId: string; side: "left" | "right" }>();
@@ -1763,8 +1686,6 @@ function layoutIsland(
         target: link.to.card.id,
         weight: link.weight,
         width: link.width,
-        sourcePortY: link.fromAnchor,
-        targetPortY: link.toAnchor,
       }));
     if (optimizeWires.length > 0) {
       // The host's judge sees the whole board; the island's finalists are
@@ -1783,9 +1704,8 @@ function layoutIsland(
         sectionGapCells: Math.round(SECTION_GAP / BOARD_GRID),
         columnGapCells: Math.round(COLUMN_GAP_MIN / BOARD_GRID),
         satellitePadCells: Math.round(SATELLITE_PAD / BOARD_GRID),
-        // The real router confirms the finalists (Jack, 2026-09-08: the
-        // proxy searches, the router confirms): the host's judge when
-        // there is one, the optimiser's own stand-in otherwise.
+        // The proxy searches; the real router judges the finalists (the
+        // host's judge when there is one, the optimiser's stand-in otherwise).
         judge: hostJudge
           ? (positions) =>
               hostJudge(
@@ -1845,12 +1765,10 @@ function layoutIsland(
 }
 
 /**
- * The serpentine. When the columns in a run would stretch wider than the
- * page, they fold back like text lines: contiguous groups of columns
- * become BANDS, odd bands reading right to left so the walk turns at the
- * margin instead of leaping back. Layers are remapped to positions within
- * the band; the caller stacks the bands with seq and section strides.
- * Returns each card's band, empty when no fold was needed.
+ * The serpentine: columns wider than the page fold back like text lines.
+ * Contiguous groups of columns become BANDS, odd bands reading right to
+ * left. Layers are remapped within the band; the caller stacks bands with
+ * seq and section strides. Returns each card's band, empty when no fold.
  */
 function pageFold(members: CardSlot[]): Map<CardSlot, number> {
   const bandOf = new Map<CardSlot, number>();
@@ -1953,11 +1871,9 @@ function breakCycles(
 }
 
 /**
- * Rank every card into a column. Longest path from the sources puts each card
- * one column past the furthest card that feeds it; the tightening sweeps then
- * slide cards toward whichever side holds more of their wire WEIGHT, which
- * pulls a lone raw-material source right up beside its consumer instead of
- * leaving it stranded in column zero, and keeps a heavy line's ends adjacent.
+ * Rank every card into a column: longest path from the sources, then sweeps
+ * that slide cards toward whichever side holds more of their wire weight
+ * (so a lone raw source sits beside its consumer, not in column zero).
  */
 function assignLayers(
   members: CardSlot[],
@@ -1987,18 +1903,13 @@ function assignLayers(
 }
 
 /**
- * Two machines that FEED THE SAME DRAWER stand on opposite sides of it, the
- * drawer between them - the way Jack drew the oil board (2026-09-08): the
- * tower's product drawers in a column to its right, the second producer to
- * the right of the drawers, feeding them leftward. Ranked left to right
- * alone, both producers land in one column, stacked, and their fans of
- * wires into the shared drawers cross each other wholesale. So for every
- * pair of machines that share a drawer as co-feeders (or co-consumers) and
- * have no forward path between them, the wires of one of them are turned
- * round for the RANKING only: that machine ranks past the drawers and
- * stands to their right. The one that keeps the left is the one with more
- * of its own other wires pointing right (its own satellites, its onward
- * chain); the other has less to lose from facing left.
+ * Two machines that feed the same drawer stand on opposite sides of it.
+ * Ranked left to right alone, both would stack in one column and their wire
+ * fans into the shared drawers would cross wholesale. So for each pair of
+ * co-feeders (or co-consumers) with no forward path between them, one
+ * machine's drawer wires are reversed for the RANKING only, putting it past
+ * the drawers. The machine with more weight in its other rightward wires
+ * keeps the left.
  */
 function splitCoFeeders(forward: WireLink[], members: CardSlot[]): WireLink[] {
   const byStorage = new Map<CardSlot, WireLink[]>();
@@ -2088,11 +1999,9 @@ function slideTowardWires(
       }
       const ins = incoming.get(slot) ?? [];
       const outs = outgoing.get(slot) ?? [];
-      // A card whose wire leaves for another island leans toward the edge
-      // it exits from - a bridge should leave the FACING side of its
-      // island, not drag across it first. The lean is deliberately heavy:
-      // where it argues with the card's own left-to-right preference, the
-      // exit wins - a clean hand-over beats tidy flow inside one island.
+      // A card whose wire leaves for another island leans toward the edge it
+      // exits from, so the bridge leaves the facing side. The lean is heavy
+      // on purpose: it beats the card's own left-to-right preference.
       const exitBias = (exits?.get(slot.card.id) ?? 0) * 4;
       let lower = 0;
       for (const link of ins) {
@@ -2131,9 +2040,8 @@ function slideTowardWires(
 }
 
 /**
- * Two-card loops share a column, stacked, the way players draw an
- * electrolyzer trading with its reactor: the member with fewer other
- * wires adopts the better-anchored one's column.
+ * Two-card loops share a column, stacked: the member with fewer other wires
+ * adopts the better-anchored one's column.
  */
 function pullPairsTogether(pairs: ReadonlySet<WireLink>, forward: WireLink[]): void {
   const degree = new Map<CardSlot, number>();
@@ -2155,10 +2063,9 @@ function pullPairsTogether(pairs: ReadonlySet<WireLink>, forward: WireLink[]): v
 }
 
 /**
- * A drawer serving several machines belongs BETWEEN them, not to the right
- * of them all: left-to-right ranking only means something for cards that
- * transform, and a shared chest just collects. Its column becomes the
- * weighted middle of its partners'.
+ * A drawer serving several machines belongs between them, not right of them
+ * all (ranking only means something for cards that transform). Its column
+ * becomes the weight-averaged column of its partners.
  */
 function relaxSharedStorages(
   members: CardSlot[],
@@ -2294,11 +2201,10 @@ function foldBigCycles(
     const minLayer = group.reduce((min, slot) => Math.min(min, slot.layer), Infinity);
     const flat = new Map(group.map((slot) => [slot, slot.layer - minLayer]));
     const span = group.reduce((max, slot) => Math.max(max, flat.get(slot)!), 0);
-    // SQUARED span: one wire lassoing four columns is far worse than four
-    // wires each hopping one - long wires are the ugliness being priced.
-    // A same-column link is NOT free: an output feeding an input in its own
-    // column wraps around the cards, so it prices like a two-column hop.
-    // Without this, two rings sharing a machine fold into one tower.
+    // SQUARED span: one wire across four columns is far worse than four
+    // wires hopping one each. A same-column link wraps around the cards, so
+    // it prices like a two-column hop; free, it would let two rings sharing
+    // a machine fold into one tower.
     const cost = (layerOf: (slot: CardSlot) => number) =>
       inner.reduce((sum, link) => {
         const d = Math.abs(layerOf(link.from) - layerOf(link.to));
@@ -2376,19 +2282,15 @@ function topologicalOrder(
 }
 
 /**
- * The heart of the sectioned look. The island is almost a tree, so treat it
- * as one: grow a spanning tree from the plan's main product (the final sink
- * with the most machinery behind it), heaviest wires claimed first. The
- * TRUNK is the chain of largest subtrees down from that root - the main
- * line. Every subtree hanging off the trunk becomes a SECTION.
+ * Sections: grow a spanning tree from the main product (the final sink with
+ * the most machinery behind it), heaviest wires first. The TRUNK is the
+ * chain of largest subtrees down from that root; every subtree hanging off
+ * it is a SECTION.
  *
- * A single in-order walk then hands out two numbers per card: `seq`, the
- * global vertical theme (cards sort within their column by it, so a
- * subtree's cards stay contiguous in every column they touch - a wire's two
- * ends land in the same band, which is the anti-spaghetti), and `section`,
- * which buys the air between bands. Sections are balanced around the trunk,
- * the biggest hugging it from either side, so the main line runs through
- * the middle of its factory rather than along an edge.
+ * One in-order walk assigns `seq` (cards sort within their column by it, so
+ * a subtree stays contiguous in every column it touches) and `section`
+ * (which buys air between bands). Sections are balanced on both sides of
+ * the trunk so the main line runs through the middle.
  */
 function buildBands(members: CardSlot[], links: WireLink[], forward: WireLink[]): void {
   // How many wires actually touch each card. The spanning tree can leave a
@@ -2525,11 +2427,9 @@ function buildBands(members: CardSlot[], links: WireLink[], forward: WireLink[])
   }
 
   // Which trunk-child subtree each off-trunk card hangs from, and how hard
-  // that whole branch holds onto the trunk: every wire between the branch
-  // and ANY trunk card counts. This is what puts each branch where its
-  // wires want it - a recycle loop (a wire out AND a wire back) hugs the
-  // line, a heavy feed sits closer than a trickle, and a big-but-loose
-  // branch drifts outward instead of shouldering in on card count alone.
+  // that branch holds onto the trunk (weight of every wire between the
+  // branch and any trunk card). Strongly coupled branches (recycles, heavy
+  // feeds) sit nearest the trunk; loose ones drift outward.
   const branchRoot = new Map<CardSlot, CardSlot>();
   for (const trunkSlot of onTrunk) {
     for (const child of children.get(trunkSlot) ?? []) {
@@ -2560,7 +2460,7 @@ function buildBands(members: CardSlot[], links: WireLink[], forward: WireLink[])
   }
 
   // The in-order walk. At a trunk card, side sections split above and below
-  // it, biggest nearest the trunk; elsewhere children keep claim order.
+  // it, most coupled nearest the trunk; elsewhere children keep claim order.
   let seqCounter = 0;
   let sectionCounter = 0;
   type Visit = { slot: CardSlot; section: number };
@@ -2589,15 +2489,10 @@ function buildBands(members: CardSlot[], links: WireLink[], forward: WireLink[])
         }
         continue;
       }
-      // A trunk card: hang its branches around the line and push the trunk
-      // continuation through the middle. BUDS - single stray cards, a
-      // byproduct drawer, a lone supply - are not sections at all: they keep
-      // the trunk's band and nestle right against their machine. Real
-      // branches become sections, placed in coupling order (the branch with
-      // the most wire into the trunk sits nearest, which is what keeps a
-      // recycle loop or a heavy feed snug), and dealt above or below
-      // whichever side is currently shorter, so the main line stays
-      // vertically centred in its own factory.
+      // A trunk card: the trunk continuation goes through the middle. BUDS
+      // (one-wire leaves) keep the trunk's band beside their machine. Other
+      // branches become sections in coupling order, each dealt to whichever
+      // side is currently shorter so the trunk stays vertically centred.
       const trunkChild = kids.find((child) => onTrunk.has(child));
       const sides = kids
         .filter((child) => child !== trunkChild)
@@ -2611,10 +2506,9 @@ function buildBands(members: CardSlot[], links: WireLink[], forward: WireLink[])
       const below: Visit[] = [];
       let aboveHeight = 0;
       let belowHeight = 0;
-      // A bud is a true one-wire leaf - a catch drawer, a lone supply. A
-      // pass-through buffer can be a TREE leaf while carrying two wires,
-      // and gluing it to this card would drag its other wire across the
-      // island; it becomes a section of its own instead.
+      // A bud is a true one-wire leaf. A pass-through buffer can be a TREE
+      // leaf while carrying two wires; glued here it would drag its other
+      // wire across the island, so it becomes a section instead.
       const isLeafBud = (child: CardSlot) =>
         (subtreeSize.get(child) ?? 1) === 1 && (wireDegree.get(child) ?? 0) <= 1;
       const buds = sides.filter(isLeafBud);
@@ -2666,19 +2560,6 @@ function collectLayers(members: CardSlot[]): CardSlot[][] {
   return layers;
 }
 
-/**
- * The vertical pass: give every card a y that lines its ports up with the
- * ports on the other end of its wires, without two cards in a column ever
- * overlapping, and with section boundaries holding their air.
- *
- * Each sweep computes where every card WANTS to sit (the flow-weighted
- * average of its wire partners' port lines, measured port to port), then
- * settles the column with an exact solve: minimising the weighted squared
- * distance to those wishes subject to "stay in order, keep your gaps" is
- * isotonic regression, and pool-adjacent-violators gives the optimum in
- * linear time. Busy cards carry more weight, so a hub holds its line and
- * stragglers come to it.
- */
 interface PartnerEntry {
   other: CardSlot;
   own: number;
@@ -2709,9 +2590,7 @@ function buildPartners(
       weight: link.weight * emphasis,
     });
   }
-  // Phantom partners: fixed anchors a card is pulled toward - how a bridge
-  // to another island reaches inside and pulls its exit card to the edge
-  // facing the partner.
+  // Phantom partners: fixed anchors (bridge pulls toward another island).
   if (extra) {
     for (const [slot, entries] of extra) {
       for (const entry of entries) {
@@ -2740,14 +2619,11 @@ function wishFor(
 }
 
 /**
- * The anti-crossing pass, at two levels. Within one column, every SECTION
- * moves as one block to where its members' wires pull on average, and the
- * members reorder inside their block by their own pull - so a whole band
- * dealt to the wrong side of the trunk migrates across it, a drawer fed
- * from the bottom of its machine drops below it, and two wires that would
- * cross between columns uncross, while a band can never be split up.
- * The column's seq numbers are dealt back out in the new order; seq only
- * ever means "my order within my column", so nothing else moves.
+ * The anti-crossing pass, at two levels: within one column every SECTION
+ * moves as one block to its members' mean pull, and members reorder inside
+ * their block by their own pull, so a band can move but never split. The
+ * column's seq numbers are dealt back out in the new order (seq only means
+ * order within a column, so nothing else moves).
  */
 function polishColumnOrder(
   layers: CardSlot[][],
@@ -2794,6 +2670,13 @@ function polishColumnOrder(
   }
 }
 
+/**
+ * The vertical pass: give every card a y that lines its ports up with its
+ * wire partners' ports, with no overlap in a column and section air kept.
+ * Each sweep computes every card's wish (flow-weighted average of partner
+ * port lines) and settles each column exactly: weighted least squares under
+ * "keep order and gaps" is isotonic regression (see settleLine).
+ */
 function placeRows(
   layers: CardSlot[][],
   links: WireLink[],
@@ -2845,10 +2728,9 @@ function gapBetween(upper: CardSlot, lower: CardSlot): number {
 }
 
 /**
- * The last word on straight wires. Every card lands on the grid, then each
- * card in turn snaps onto the exact line of its heaviest wire, when that is
- * a nudge of two cells or less and its column neighbours keep their air -
- * the difference between a wire that is almost straight and one that IS.
+ * Snap every card to the grid, then onto the exact line of its heaviest
+ * wire when that is a nudge of two cells or less and its column neighbours
+ * keep their air.
  */
 function straightenRows(
   layers: CardSlot[][],
@@ -2900,18 +2782,15 @@ function straightenRows(
 }
 
 /**
- * Adjacent-pair transposition against the REAL wires: for every pair of
- * vertical neighbours in every column, count the crossings their wires
- * make as placed and as swapped, and keep the swap when it strictly
- * helps. This is the move a player makes by eye - the averaging passes
- * cannot see an actual crossing, only pulls - and it runs until no flip
- * improves anything. Returns whether any flip happened.
+ * Adjacent-pair transposition against the real wires: for every pair of
+ * vertical neighbours, count their wires' crossings as placed and as
+ * swapped, and keep strictly better swaps (the averaging passes see pulls,
+ * not crossings). Repeats until no flip helps; returns whether any did.
  */
 function transposeToUncross(layers: CardSlot[][], links: WireLink[]): boolean {
-  // EVERY link counts, the same-column ones included: a pair's wrap-around
-  // wires cost nothing while the pair sits stacked, and cross everything
-  // between the two the moment a swap separates them - which is exactly
-  // what keeps the finisher from tearing a stacked pair apart.
+  // Same-column links count too: a stacked pair's wrap-around wires cost
+  // nothing while stacked and cross everything between them once a swap
+  // separates them, which keeps stacked pairs together.
   const spanning = links;
   const linksOf = new Map<CardSlot, WireLink[]>();
   for (const link of spanning) {
@@ -3029,10 +2908,9 @@ function settleColumn(
 
 /**
  * Weighted isotonic regression with fixed spacings (pool adjacent
- * violators): place a line of items as close to their wishes as their
- * order and least-distances allow, exactly. `spacing[i]` is the least
- * distance from item i-1's top to item i's top; spacing[0] is ignored.
- * The same settle serves the cards in a column and the islands in one.
+ * violators): place a line of items as close to their wishes as their order
+ * and least distances allow, exactly, in linear time. `spacing[i]` is the
+ * least distance from item i-1's top to item i's top; spacing[0] is ignored.
  */
 function settleLine(
   wishes: Array<{ wish: number; weight: number }>,
@@ -3083,8 +2961,7 @@ interface BridgeLink {
 /**
  * Which island stands upstream of which: net flow per pair picks the
  * direction, a DFS drops ring-closing edges, longest path deals columns,
- * and two slide passes pull each island toward its heavier side. Shared by
- * the exit-bias pre-pass and the island placement, so the two always agree.
+ * and two slide passes pull each island toward its heavier side.
  */
 function islandFlowLayers(
   indices: number[],
@@ -3200,15 +3077,11 @@ function islandFlowLayers(
 }
 
 /**
- * Where each island stands: the blocks go through the very engine that
- * laid out their insides, as meta-cards. Their sizes are the block sizes,
- * their ports are the bridge endpoints, and every idea transfers - a
- * single-wire island is a BUD tucked beside its partner, two islands
- * trading both ways STACK as a pair, a lone interchange drawer is a free
- * band between its users, a ring of islands FOLDS, and the polish, the
- * transposition and the settle uncross and level the bridges exactly as
- * they do wires. Islands with no bridges pack in rows below; the shelf of
- * strays keeps the last row. Returns one offset per block.
+ * Where each island stands: the blocks run through the same column engine
+ * as meta-cards (block sizes, bridge endpoints as ports), so satellites,
+ * stacked pairs, folds and the uncrossing passes apply to islands too.
+ * Islands with no bridges pack in rows below; the shelf of strays keeps the
+ * last row. Returns one offset per block.
  */
 function placeIslands(
   blocks: Block[],

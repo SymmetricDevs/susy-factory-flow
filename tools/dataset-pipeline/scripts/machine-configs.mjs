@@ -27,8 +27,8 @@ export const VOLTAGE_TIER_NAMES = [
   "UHV",
   "UEV",
   "UIV",
+  "UMV",
   "UXV",
-  "OpV",
   "MAX",
 ];
 
@@ -64,13 +64,27 @@ export const heatingCoilTiers = [
   { heat: 13501, key: "eternal", label: "Eternal", blockId: "gregtech:gt.blockcasings5@13" },
 ];
 
+// Fluid pipe casings: gt.blockcasings2 metas 12-15 are all any tiered
+// structure accepts (MTEChemicalPlant, MTEMultiAutoclave). PTFE and PBI pipe
+// casings are other blocks, and no pipe-tiered machine takes them.
 const pipeCasingTiers = [
   { key: "bronze", label: "Bronze", blockId: "gregtech:gt.blockcasings2@12" },
   { key: "steel", label: "Steel", blockId: "gregtech:gt.blockcasings2@13" },
   { key: "titanium", label: "Titanium", blockId: "gregtech:gt.blockcasings2@14" },
   { key: "tungstensteel", label: "Tungstensteel", blockId: "gregtech:gt.blockcasings2@15" },
-  { key: "ptfe", label: "PTFE", blockId: "gregtech:gt.blockcasings8@1" },
-  { key: "pbi", label: "PBI", blockId: "gregtech:gt.blockcasings9" },
+];
+
+// Item pipe casings: gt.blockcasings11 metas 0-7, tier meta + 1. Keys match
+// the app's curated itemPipeCasing control.
+const itemPipeCasingTiers = [
+  { key: "tin", label: "Tin", blockId: "gregtech:gt.blockcasings11" },
+  { key: "brass", label: "Brass", blockId: "gregtech:gt.blockcasings11@1" },
+  { key: "electrum", label: "Electrum", blockId: "gregtech:gt.blockcasings11@2" },
+  { key: "platinum", label: "Platinum", blockId: "gregtech:gt.blockcasings11@3" },
+  { key: "osmium", label: "Osmium", blockId: "gregtech:gt.blockcasings11@4" },
+  { key: "quantium", label: "Quantium", blockId: "gregtech:gt.blockcasings11@5" },
+  { key: "fluxed-electrum", label: "Fluxed Electrum", blockId: "gregtech:gt.blockcasings11@6" },
+  { key: "black-plutonium", label: "Black Plutonium", blockId: "gregtech:gt.blockcasings11@7" },
 ];
 
 const solenoidTiers = [
@@ -237,13 +251,13 @@ export function machineConfigControlsForOracleRecipe(machineType, specialValue, 
 // Machine handler templates from recipe map catalysts
 // ---------------------------------------------------------------------------
 
-const TIER_SUFFIX_PATTERN = /\s*\((ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\)\s*$/i;
+const TIER_SUFFIX_PATTERN = /\s*\((ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\)\s*$/i;
 const ROMAN_SUFFIX_PATTERN = /\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/;
 const GRADE_PREFIX_PATTERN =
   /^(?:Basic|Advanced|Elite|Ultimate|Epic|MAX|Turbo|Quick|Instant|Universal)\s+/i;
 const PER_TIER_LINE_PATTERN = /\bper\s+.+?\s+tier\b/i;
 
-export function buildMachineHandlerTemplates(machineType, catalysts) {
+export function buildMachineHandlerTemplates(machineType, catalysts, singleblockFamilyIds = new Set()) {
   const families = new Map();
 
   for (const catalyst of catalysts ?? []) {
@@ -268,13 +282,28 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
       // into one machine family, mirroring the app's family folding.
       label = label.replace(ROMAN_SUFFIX_PATTERN, "").replace(GRADE_PREFIX_PATTERN, "").trim();
     }
-    const familyKey = normalizeLabel(label);
-    if (!familyKey) {
+    if (!normalizeLabel(label)) {
       continue;
     }
 
     const minimumTier =
       normalizeVoltageTierName(tierSuffix) ?? voltageTierFromTooltip(tooltip) ?? undefined;
+
+    // Electric singleblocks rename themselves at high tiers (Chemical
+    // Reactor -> Chemical Performer). Their exported class and explicit
+    // Machine Type still identify the same family. Scope this to voltage
+    // input machines, so steam machines and multiblock controllers stay apart.
+    // GT++ omits Machine Type on some singleblocks; their exported recipe-map
+    // membership supplies it (Basic/Chemical Dehydrator share that backend).
+    const declaredType = tooltip
+      .map((line) => /^Machine Type:\s*([^,]+)$/.exec(line)?.[1])
+      .find(Boolean);
+    const runtimeFamily =
+      !multiblock && minimumTier && catalyst.sourceClass &&
+      tooltip.some((line) => /^Voltage IN:/i.test(line));
+    const familyKey = runtimeFamily
+      ? `${catalyst.sourceClass}:${normalizeLabel(declaredType ?? machineType)}`
+      : normalizeLabel(label);
 
     const existing = families.get(familyKey);
     if (existing) {
@@ -284,6 +313,8 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
           voltageTierIndex(minimumTier) < voltageTierIndex(existing.minimumTier))
       ) {
         existing.minimumTier = minimumTier;
+        existing.id = slug(label);
+        existing.label = label;
         // The family's face is its lowest-tier variant (Basic Electric
         // Furnace, not Epic Atom Stimulator IV).
         existing.catalystResource = catalyst.resource;
@@ -318,6 +349,15 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
   if (templates.length === 0) {
     return [];
   }
+  // A controller can share a display name with a tiered singleblock (Ore
+  // Washing Plant). Keep the singleblock's saved ID and distinguish the
+  // controller consistently across every map in which it is registered.
+  const singleIds = new Set([...singleblockFamilyIds, ...templates.filter(t => t.kind === "single").map(t => t.id)]);
+  for (const template of templates) {
+    if (template.kind === "multiblock" && singleIds.has(template.id)) {
+      template.id += "-multiblock";
+    }
+  }
   for (const template of templates) {
     // Tier order, as a plain list; a family with one variant carries none
     // (its face already is that variant).
@@ -332,6 +372,7 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
     // not a block that exists, so the card's tier chip stops there.
     if (template.kind === "single" && variants.length > 0) {
       template.maximumTier = variants[variants.length - 1].tier;
+      template.availableTiers = variants.map((variant) => variant.tier);
     }
   }
 
@@ -1016,7 +1057,12 @@ function fixedParallelControl(parallels, note = `Parallels: ${parallels}`) {
 }
 
 export function instantiateRecipeMachineHandlers(templates, recipe) {
-  if (!Array.isArray(templates) || templates.length < 2) {
+  // Even a lone electric singleblock needs its handler: otherwise its
+  // maximum tier disappears and the app invents an uncapped placeholder.
+  if (
+    !Array.isArray(templates) || templates.length === 0 ||
+    (templates.length === 1 && !templates[0].maximumTier)
+  ) {
     return undefined;
   }
 
@@ -1034,6 +1080,7 @@ export function instantiateRecipeMachineHandlers(templates, recipe) {
       machineType: template.label,
       minimumTier: VOLTAGE_TIER_NAMES[tierIndex] ?? recipe.minimumTier,
       ...(template.maximumTier ? { maximumTier: template.maximumTier } : {}),
+      ...(template.availableTiers ? { availableTiers: template.availableTiers } : {}),
     };
 
     if (Number.isFinite(template.durationMultiplier) && template.durationMultiplier !== 1) {
@@ -1167,6 +1214,23 @@ function machineConfigTierDefinitionForSubject(subject) {
         ]),
       })),
       tooltipPrefix: "Heating coil tier",
+    };
+  }
+  // Before the fluid pipes, which "pipe casing" would otherwise catch too.
+  // Only a tooltip that says "Item" gets here: the lathe's says plain "Pipe
+  // Casing Tier" for its item pipes, and the app's machine table covers it.
+  if (normalized.includes("item pipe casing")) {
+    return {
+      id: "itemPipeCasing",
+      label: "Item Pipe Casing",
+      tiers: itemPipeCasingTiers.map((tier) => ({
+        key: tier.key,
+        label: tier.label,
+        resource: machineConfigResource(tier.blockId, `${tier.label} Item Pipe Casing`, [
+          "Item pipe casing tier",
+        ]),
+      })),
+      tooltipPrefix: "Item pipe casing tier",
     };
   }
   if (normalized.includes("pipe casing")) {
@@ -1326,6 +1390,7 @@ function normalizeVoltageTierName(value) {
     return undefined;
   }
   const normalized = String(value).trim().toLowerCase();
+  if (normalized === "opv") return "UXV";
   return VOLTAGE_TIER_NAMES.find((tier) => tier.toLowerCase() === normalized);
 }
 
@@ -1335,7 +1400,7 @@ function voltageTierFromTooltip(tooltip) {
       continue;
     }
     const match =
-      /\b(ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\b/i.exec(
+      /\b(ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\b/i.exec(
         line.replace(/voltage/i, ""),
       );
     if (match) {

@@ -4,7 +4,7 @@
  * from settings to flows and EU/t. Math and data are transcribed from the
  * community "GTNH Power Planner 2.9" spreadsheet (by Fox), decoded in
  * docs/power-planner-math.md - that workbook is the source of truth, with
- * the game source as arbiter (docs/power-sector.md).
+ * the game source as arbiter (src/lib/power/CLAUDE.md).
  */
 
 export type PowerGroupId =

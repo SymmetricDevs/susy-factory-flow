@@ -1,16 +1,14 @@
 /**
  * The interface size, as a setting.
  *
- * The setting's 100% renders at 117% on desktop (10% smaller than the
- * previous 130% baseline, Jack, 2026-09-10). The chrome
+ * The setting's 100% renders at `UI_SCALE_BASE` (1.17) on desktop. The chrome
  * (top bar, both columns, the toolbars over the board, dialogs, menus) is
- * scaled with CSS `zoom` on the app shell (`.ui-scale-shell` in globals.css),
- * and the board is scaled through its own camera instead: React Flow measures
- * cards and the pointer in two different pixel spaces once CSS zoom is
- * involved (fit framed a plan at a third of its size, wheel zoom drifted,
- * drags ran fast - probed 2026-09-07), so `.react-flow` UNZOOMS itself back
- * to real pixels and the board's zoom ceilings and glance thresholds carry
- * the factor instead (`boardZoomScale` below; board-camera.ts, node-detail.ts).
+ * scaled with CSS `zoom` on the app shell (`.ui-scale-shell` in globals.css).
+ * The board must NOT be CSS-zoomed: React Flow then measures cards and the
+ * pointer in two different pixel spaces (fit, wheel zoom and drags all go
+ * wrong). So `.react-flow` UNZOOMS itself back to real pixels and the board's
+ * zoom ceilings and glance thresholds carry the factor instead
+ * (`boardZoomScale` below; board-camera.ts, node-detail.ts).
  *
  * Two pixel spaces exist from here on, and every measurement has to say
  * which one it is in:
@@ -27,15 +25,14 @@
  * body keeps its positioning box unzoomed (real pixels both ways) and wears
  * `.ui-zoom` on its visual box so its contents are drawn at the setting.
  *
- * Phones use a 0.9 base on a viewport that is compact at 1:1,
- * because the drawers are 344px wide and a 390px phone has no room for a
- * third more. The base is read once per page load.
+ * Phones (a viewport that is compact at 1:1) use a 0.9 base, since the side
+ * drawers leave no room to scale up. The base is read once per page load.
  *
  * The no-flash boot script in layout.tsx stamps the same variables before
  * first paint from the same storage key (`uiScaleBootScript` in
- * ui-scale-boot.ts, which has no hook import so the server layout may use it), and
- * `UiScaleRestore` re-stamps them once the app runs and after a
- * back-forward-cache restore, exactly as the font does.
+ * ui-scale-boot.ts, which has no hook import so the server layout may use
+ * it), and `UiScaleRestore` re-stamps them once the app runs and after a
+ * back-forward-cache restore.
  */
 
 import { useSyncExternalStore } from "react";
@@ -123,11 +120,12 @@ export function getUiScalePercent(): number {
 }
 
 /**
- * The live CSS zoom factor of the shell. 1 on the server and in tests, where
- * nothing is zoomed and every measurement is already in real pixels.
+ * The live CSS zoom factor of the shell. 1 on the server and where matchMedia
+ * is unavailable (including jsdom), where nothing is zoomed and every
+ * measurement is already in real pixels.
  */
 export function getUiScale(): number {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return 1;
   }
   return uiScaleFactor(readPercent());
@@ -137,8 +135,7 @@ export function getUiScale(): number {
  * The board's share of the interface size. The board cannot be CSS-zoomed
  * (see the header), so its camera carries the factor instead: framing stops
  * at `boardCameraMaxZoom`, the wheel at `boardMaxZoom`, and the glance step
- * moves with it (node-detail.ts), so a card at any React Flow zoom looks the
- * way it did under browser zoom at the same number.
+ * moves with it (node-detail.ts).
  */
 export function boardZoomScale(): number {
   return getUiScale();

@@ -12,22 +12,19 @@ import { getUiScale } from "@/lib/ui-scale";
 import { useFactoryStore } from "@/store/factory-store";
 
 /**
- * THE BOARD'S ONE RIGHT-CLICK MENU (Jack, 2026-09-08: "a universal right
- * click menu ... very simple, easy to use, easy to understand"). Right
- * click the void, a card, a drawer or a wire and the same small menu opens
- * at the pointer with the few things you can do there:
+ * THE BOARD'S ONE RIGHT-CLICK MENU. Right click the void, a card, a drawer
+ * or a wire and the same small menu opens at the pointer:
  *
  * - the void: a new product drawer, picked from the item picker the pool
  *   key uses, set down where you clicked;
- * - a machine: clone it, delete it;
- * - a drawer: clone it, delete it;
- * - a wire: add a drawer HERE - the wire is cut at the click and both
- *   halves run through the new drawer - or delete the wire.
+ * - a machine or a drawer: clone it, delete it;
+ * - a wire: add a drawer HERE (the wire is cut at the click and both halves
+ *   run through the new drawer), or delete the wire.
  *
  * Controls that already answer a right click (port rows open uses, a tier
- * chip steps down, the count stepper) keep it: they prevent the event's
- * default, and the board's handlers do nothing for a prevented event. No
- * tooltips, no submenus, no second sentence anywhere in it.
+ * chip steps down, the count stepper) prevent the event's default, and the
+ * board's handlers do nothing for a prevented event. Kept deliberately
+ * plain: no tooltips, no submenus.
  */
 
 export type BoardMenuTarget = {

@@ -1,17 +1,14 @@
 /**
  * The live frame of a board being resized.
  *
- * A resize that drags the TOP or LEFT edge moves the frame's origin, and
- * member positions are relative to that origin — so the cards would slide
- * with the wall unless something shifts them back by the same step. Both
- * halves have to happen on the same frame or the board visibly tears, and
- * both live in the board's React Flow node state, which the frame component
- * does not own.
- *
- * So the frame publishes its draft here and the board applies it, the same
- * imperative hand-off the hop map and the wire drag already use. Nothing is
- * written to the plan until the pointer comes up: one undo entry, and no
- * store churn per pointer move.
+ * Dragging the TOP or LEFT edge moves the frame's origin, and member
+ * positions are relative to it, so the members must shift back by the same
+ * step on the same frame or the board visibly tears. Both halves live in the
+ * board's React Flow node state, which the frame component does not own, so
+ * the frame publishes its draft here and the board applies it (the same
+ * imperative hand-off the hop map and the wire drag use). Nothing is written
+ * to the plan until the pointer comes up: one undo entry, and no store churn
+ * per pointer move.
  */
 
 export interface BoardResizeDraft {

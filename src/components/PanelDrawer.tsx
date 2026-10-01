@@ -5,20 +5,13 @@ import { registerPanelPull } from "./flow/panel-pull";
 import { getUiScale } from "@/lib/ui-scale";
 
 /**
- * A side column as a drawer over the board, for windows too narrow to give it a
- * column of its own.
+ * A side column as a drawer over the board, for compact windows (in place of
+ * the desktop's 26px rail), with a grab handle on its edge.
  *
- * On the desktop a closed column leaves a 26px rail behind carrying its name set
- * sideways. That rail is most of a phone's remaining board width for a word
- * nobody needs twice, so in compact mode it is replaced by this: a drawer that
- * slides in over the board, and a grab handle on the edge it came from.
- *
- * The drawer follows your finger. A tap on the handle slides it in, a drag pulls
- * it in at whatever speed you pull, and a drag back over the panel throws it out
- * again — with the release deciding, from how far it got, whether it lands open
- * or closed. That live tracking is the whole reason this is one component and not
- * two: the panel has to be on screen and moving before the gesture that opens it
- * has finished.
+ * The drawer follows the finger: a tap on the handle slides it in, a drag
+ * pulls it in live, a drag back throws it out, and the release decides from
+ * how far it got whether it lands open or closed. The panel must be on screen
+ * and moving before the opening gesture finishes.
  */
 
 /** How long the drawer takes to finish the job after you let go. */
@@ -52,10 +45,9 @@ export function PanelDrawer({
   const [isDragging, setDragging] = useState(false);
   const [isSlidIn, setSlidIn] = useState(false);
   const settleTimerRef = useRef<number | undefined>(undefined);
-  // A drawer often opens because a finger asked for it — tapping "what makes it"
-  // on a port opens the recipe book, which lives in here. The tap that asked then
-  // finishes with a synthesised click, which lands on a scrim that did not exist
-  // when the finger went down, and the drawer closed again the instant it opened.
+  // A tap that opens the drawer (e.g. "what makes it" on a port) ends with a
+  // synthesised click that lands on the new scrim; this timestamp lets the
+  // scrim ignore it instead of closing the drawer at once.
   const openedAtRef = useRef(0);
   // A touch that turned into a drag still ends with a synthesised click on
   // whatever was under the finger, which on the edge strip is the handle: the
@@ -84,10 +76,9 @@ export function PanelDrawer({
   const closedTranslate = side === "left" ? "-100% 0" : "100% 0";
 
   /**
-   * How wide the panel is, or will be. Measured when it is on screen; when the
-   * drag that will mount it has only just started, worked out from the same
-   * `min(88vw, …)` the class below sets, since a React state change cannot mount
-   * the element before this event handler needs its width.
+   * How wide the panel is, or will be. Measured when on screen; at the start
+   * of the drag that mounts it, computed from the class's `min(88vw, …)`,
+   * since the element is not mounted yet when this handler needs the width.
    */
   const getPanelWidth = () =>
     panelRef.current?.offsetWidth ||
@@ -95,12 +86,9 @@ export function PanelDrawer({
     Math.min((document.documentElement.clientWidth / getUiScale()) * 0.88, side === "left" ? 256 : 234);
 
   /**
-   * Live during a drag: 0 fully closed, 1 fully open.
-   *
-   * Written to `translate`, not `transform`, because that is the property
-   * Tailwind's own `-translate-x-full` sets — and the two COMPOSE, so a transform
-   * of -187px on a class already holding the panel a full width off screen put it
-   * two widths out instead of under the finger.
+   * Live during a drag: 0 fully closed, 1 fully open. Written to `translate`,
+   * not `transform`: Tailwind's `-translate-x-full` sets `translate`, and the
+   * two properties COMPOSE, which would double the offset.
    */
   const paint = (progress: number) => {
     const panel = panelRef.current;
@@ -199,9 +187,7 @@ export function PanelDrawer({
     onEnd: (travelled, width) => settle(travelled < width * COMMIT_FRACTION),
   });
 
-  // And from the board behind it. With a drawer up, the only thing the board can
-  // be asked for is to put it away, so every part of the screen answers: a tap
-  // anywhere, or a swipe anywhere, in any direction that means "away".
+  // The scrim over the board also dismisses: a tap or an "away" swipe anywhere.
   useSlideGesture({
     elementRef: scrimRef,
     enabled: open,
@@ -222,11 +208,9 @@ export function PanelDrawer({
             "absolute inset-0 z-40 bg-black/50 transition-opacity duration-200",
             isSlidIn ? "opacity-100" : "opacity-0",
           ].join(" ")}
-          // A tap on the board behind is the dismissal everyone tries first, and
-          // it goes out through the same settle the gestures use so it slides
-          // rather than blinks. Not a <button>: it wraps nothing and names
-          // nothing, and a full-screen button in the tab order ahead of the panel
-          // is a trap.
+          // A tap closes through the same settle as the gestures, so it slides.
+          // Not a <button>: a full-screen button in the tab order ahead of the
+          // panel would be a keyboard trap.
           onClick={() => {
             if (performance.now() - openedAtRef.current < 400) {
               return;
@@ -257,12 +241,10 @@ export function PanelDrawer({
         </div>
       ) : null}
       {open ? null : (
-        // The strip is the swipe zone: a band down the middle of the edge, so the
-        // gesture has somewhere to land without having to hit the tab exactly,
-        // while the corners stay clear for the board's own toolbars and the help
-        // button. `touch-none` keeps the board underneath from panning along with
-        // the drag. Only the visible tab is a tap target — an invisible button
-        // down each side of the board would swallow drags aimed at the canvas.
+        // The strip is the swipe zone: a band down the middle of the edge,
+        // leaving the corners to the board's toolbars and help button.
+        // `touch-none` stops the board panning with the drag. Only the visible
+        // tab is a tap target, so drags aimed at the canvas are not swallowed.
         <div
           ref={stripRef}
           className={[
@@ -313,13 +295,10 @@ export function ChevronIcon({ direction }: { direction: "left" | "right" }) {
 /**
  * One finger, dragging a panel one way.
  *
- * Native listeners rather than React's props because `touchmove` has to be
- * non-passive: once the drag is claimed it calls preventDefault, which is what
- * stops the panel's own list from scrolling underneath the gesture and what stops
- * a phone treating the same movement as a page swipe.
- *
- * `onMove` reports distance travelled in the wanted direction, never negative and
- * never past the panel's width, so callers do not have to think about signs.
+ * Native listeners because `touchmove` must be non-passive: once claimed, the
+ * drag calls preventDefault so the panel's list does not scroll and the phone
+ * does not treat it as a page swipe. `onMove` reports distance in the wanted
+ * direction, clamped to [0, panel width].
  */
 function useSlideGesture({
   elementRef,
@@ -338,9 +317,8 @@ function useSlideGesture({
   /** 1 for rightwards, -1 for leftwards. */
   towards: 1 | -1;
   /**
-   * True on the edge strip, which exists for this gesture and nothing else, so
-   * the first move claims it. False on the panel, where a touch is far more
-   * likely to be a scroll and has to prove otherwise.
+   * True on the edge strip, where the first move claims the drag. False on
+   * the panel, where a touch is likely a scroll and must prove otherwise.
    */
   claimAtOnce: boolean;
   onStart: () => void;

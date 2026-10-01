@@ -1,16 +1,15 @@
 /**
  * The board's demo-card tilt: a perspective lean on the whole canvas, the
- * way a product page shows off a card. Born as the build timelapse's dress
- * (board-timelapse.ts) and grown into its own dev setting: the angles are
- * fully customizable, the tilt can be worn OUTSIDE the timelapse too, and
- * edits apply live - mid-run included (the dev menu opens over a running
- * timelapse without cancelling it; only board presses cancel).
+ * way a product page shows off a card. The build timelapse's dress
+ * (board-timelapse.ts), also wearable outside it as a dev setting; angles
+ * are customizable and edits apply live, mid-run included (the dev menu
+ * opens over a running timelapse without cancelling it; only board presses
+ * cancel).
  *
- * Purely the visual layer: CSS variables on the board container drive a
- * transform on the React Flow root (globals.css), React Flow's own 2D
- * viewport transform is untouched, and the camera math never knows.
- * Pointer positions DO skew while tilted - it is an aesthetic, not a
- * working pose - which is why it lives in the dev menu.
+ * Purely visual: CSS variables on the board container drive a transform on
+ * the React Flow root (globals.css); React Flow's 2D viewport transform and
+ * the camera math are untouched. Pointer positions DO skew while tilted,
+ * which is why it lives in the dev menu.
  */
 
 export interface BoardTilt {
@@ -103,14 +102,13 @@ export function writeBoardTilt(patch: Partial<BoardTilt>): void {
 }
 
 /**
- * The scale that keeps the leaning plane covering the whole frame. A
- * rotated plane's far edge recedes and its projection shrinks toward the
- * centre, which is what let the canvas corners peek out from under the 2D
- * chrome. Worst case is the far corner: the top (or bottom) half-extent
- * pushed back by the pitch plus a side half-extent pushed back by the yaw
- * and the drift's extra sway, all over the CSS perspective distance. The
- * viewport half-extents are taken generously rather than measured - a few
- * spare percent of scale is invisible, a peeking corner is not.
+ * The scale that keeps the leaning plane covering the whole frame (a rotated
+ * plane's projection shrinks toward the centre, exposing the canvas corners
+ * under the 2D chrome). Worst case is the far corner: the top or bottom
+ * half-extent pushed back by the pitch plus a side half-extent pushed back
+ * by the yaw and the drift's sway, over the CSS perspective distance.
+ * Viewport half-extents are taken generously, not measured: spare scale is
+ * invisible, a peeking corner is not.
  */
 export function boardTiltCoverScale(tilt: BoardTilt): number {
   const toRadians = Math.PI / 180;
@@ -124,18 +122,13 @@ export function boardTiltCoverScale(tilt: BoardTilt): number {
 }
 
 /**
- * How much of the flat viewport the timelapse camera may actually PLAN
- * with while the tilt is worn, per axis.
- *
- * The shot planner works in React Flow's 2D space, but the viewer sees
- * that space through the tilt: the cover scale magnifies everything by S
- * (so only 1/S of the plane fits the frame per axis), and the lean
- * keystones the picture - the pitched-away edge is narrower, the turned
- * edge shorter - so the reliable region is the inscribed rectangle, the
- * far edge's extent, not the full frame. Planning against the plain
- * pixel size made the camera frame regions the tilt then pushed half out
- * of view. Approximate on purpose: a shot a little tighter than needed
- * still reads right, one too wide does not.
+ * How much of the flat viewport the timelapse camera may PLAN with while the
+ * tilt is worn, per axis. The shot planner works in React Flow's 2D space,
+ * but the cover scale magnifies everything by S (only 1/S of the plane fits
+ * per axis) and the lean keystones the picture, so the reliable region is
+ * the inscribed rectangle at the far edge's extent, not the full frame.
+ * Approximate on purpose: a shot a little too tight still reads right, one
+ * too wide does not.
  */
 export function boardTiltVisibleFraction(tilt: BoardTilt): { x: number; y: number } {
   const toRadians = Math.PI / 180;
@@ -150,10 +143,9 @@ export function boardTiltVisibleFraction(tilt: BoardTilt): { x: number; y: numbe
   const yawDrop = Math.sin(yawSway * toRadians) * 1100;
   const keystoneX = (TILT_PERSPECTIVE_PX - pitchDrop) / (TILT_PERSPECTIVE_PX + pitchDrop);
   const keystoneY = (TILT_PERSPECTIVE_PX - yawDrop) / (TILT_PERSPECTIVE_PX + yawDrop);
-  // The NEAR edge leans toward the eye and magnifies, pushing content at
-  // that edge clean off screen - the first cut of this function only
-  // charged for the far edge shrinking, and framed shots that lost their
-  // near side. Each axis pays its own near-edge magnification too.
+  // The NEAR edge leans toward the eye and magnifies, pushing content there
+  // off screen, so each axis also pays its own near-edge magnification (the
+  // far edge's shrink alone frames shots that lose their near side).
   const nearPitch =
     TILT_PERSPECTIVE_PX / Math.max(1, TILT_PERSPECTIVE_PX - pitchDrop);
   const nearYaw = TILT_PERSPECTIVE_PX / Math.max(1, TILT_PERSPECTIVE_PX - yawDrop);

@@ -3,31 +3,13 @@
 import { BOARD_MIN_ZOOM, boardMaxZoom } from "@/components/flow/board-camera";
 
 /**
- * Where each design tab was left: the pan and the zoom it last had.
+ * Where each design tab was left: the pan and the zoom it last had, so
+ * switching back returns to the same spot.
  *
- * A tab is a whole factory, and coming back to one belongs with coming back to
- * a file in an editor - at the line you were reading, not at the top. Switching
- * away and back used to reframe the whole plan, so a session spent on one
- * furnace in the corner of a hundred-card build began with the same scroll back
- * to it every time.
- *
- * Kept HERE rather than in the plan, deliberately. A camera is where YOU are
- * standing, not part of the factory: a shared setup carries positions and view
- * settings and nothing about its author's viewport, and it should stay that way,
- * because arriving at someone else's plan wants framing. So this is local, keyed
- * by design id, and never travels.
- *
- * localStorage, not the design record: a pan is not an edit. Writing one into
- * IndexedDB would drag a plan of hundreds of kilobytes through a save every time
- * the board moved, and would mark a design as changed for looking at it.
- *
- * Not remembered, on purpose:
- * - Inside a pocket. Positions there are their own space, and loading a plan
- *   always starts at the top level, so a pocket camera restored onto the board
- *   would land you in whatever happens to sit at those coordinates. Entering and
- *   leaving a pocket frames instead, as it always has.
- * - A design with no camera stored yet. That is what framing is for, and it is
- *   what every tab does on its first visit.
+ * Deliberately NOT part of the plan: a shared setup carries no viewport, so
+ * someone opening one gets it framed. Stored in localStorage keyed by design
+ * id, not in the design record, because a pan is not an edit and must not
+ * push a whole plan through a save. A design with no stored camera is framed.
  */
 
 export interface BoardCamera {
@@ -39,9 +21,8 @@ export interface BoardCamera {
 const CAMERA_STORAGE_KEY = "susy-factory-flow.design-cameras.v1";
 
 /**
- * How many tabs' cameras to keep. Well past the number of tabs anyone has open,
- * small enough that the blob stays a few kilobytes; the oldest go first, and
- * losing one costs a single framing move.
+ * How many tabs' cameras to keep; the oldest go first, and losing one costs a
+ * single framing move.
  */
 const MAX_REMEMBERED = 60;
 
@@ -93,11 +74,9 @@ function writeTable(table: CameraTable): void {
 }
 
 /**
- * A stored entry, or undefined if it is not one.
- *
- * The zoom is clamped to what the board itself allows: a blob written by a build
- * with a different floor must not be able to strand the camera at a zoom no
- * control can get back from.
+ * A stored entry, or undefined if it is not one. The zoom is clamped to the
+ * board's range so a blob from a build with different limits cannot strand
+ * the camera.
  */
 function asStoredCamera(value: unknown): StoredCamera | undefined {
   if (!value || typeof value !== "object") {
@@ -160,11 +139,8 @@ export function forgetDesignCameras(designIds: Iterable<string>): void {
 }
 
 /**
- * Keep only the designs that still exist.
- *
- * Run at startup: designs can also go away without this module hearing about it
- * (another browser tab closing one, a storage wipe), and there is no reason to
- * carry a camera for a plan nothing can open.
+ * Keep only the designs that still exist. Run at startup, since designs can go
+ * away without this module hearing about it (another tab, a storage wipe).
  */
 export function keepDesignCameras(designIds: Iterable<string>): void {
   const alive = new Set(designIds);
@@ -192,16 +168,11 @@ function prune(table: CameraTable): CameraTable {
 /*
  * Handing the board from one design to the next.
  *
- * The board reports every camera move, including the ones it makes itself, and
- * a switch means the store points at the new design a moment before the board
- * has moved to it. Without a latch, the tail of the outgoing tab's camera - a
- * framing move still animating, or the interrupt that stops it - is reported
- * while the new design is already the active one, and gets written down as that
- * design's camera.
- *
- * So a handover starts closed and opens again the moment the board has served
- * the arriving camera. A real gesture opens it too: whatever order things
- * happened in, someone panning by hand is looking at the tab that is up.
+ * On a switch the store points at the new design a moment before the board has
+ * moved to it, so the tail of the outgoing camera (a framing animation, or its
+ * interrupt) would be recorded as the new design's camera. This latch closes
+ * at a handover and opens once the board has served the arriving camera, or
+ * on a real user gesture.
  */
 
 let handovers = 0;

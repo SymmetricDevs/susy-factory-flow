@@ -9,7 +9,7 @@ import { formatPct, formatSlotRate } from "./flow-explainers";
 export type TooltipMode = "build" | "solve" | "pool";
 export type TooltipTone = "neutral" | "good" | "warning";
 export interface TooltipAction {
-  gesture: "left" | "right" | "drag" | "wheel";
+  gesture: "left" | "right" | "drag" | "wheel" | "middle";
   label: string;
 }
 export interface RecipeTooltipView {
@@ -137,7 +137,7 @@ export function buildPortTooltip(
   }
   const ctx = context(project);
   if (mode !== "build" && !ctx.hasTargets) {
-    return { ...view, status: { label: "No target", tone: "neutral" }, requirement: "Set at least one product rate or machine count." };
+    return { ...view, status: { label: "No target", tone: "neutral" }, requirement: "Set an input/output rate or pin a machine count." };
   }
   const nodeResult = result?.nodes[nodeId];
   if (!nodeResult) return { ...view, reason: "Calculation unavailable." };

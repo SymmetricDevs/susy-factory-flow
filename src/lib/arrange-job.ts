@@ -1,10 +1,10 @@
 /**
  * The arrange JOB: what an arrange is when it leaves the main thread, and
- * how it runs. Pure and worker-safe, and deliberately in its own file:
- * this is everything `arrange.worker.ts` needs, and it must not import
- * `arrange-solve.ts`, which is the module that SPAWNS the worker (a worker
- * bundle that reaches back into its spawner referenced itself and hung
- * Turbopack's production build - see grid-route-job.ts).
+ * how it runs. Pure and worker-safe, and in its own file because it is
+ * everything `arrange.worker.ts` needs: it must not import
+ * `arrange-solve.ts`, which SPAWNS the worker (a worker bundle that reaches
+ * back into its spawner references itself and hangs Turbopack's production
+ * build - see grid-route-job.ts).
  *
  * The host cannot hand a worker its judge function, so it hands the
  * judge's INPUTS - the board's route requests, obstacles and tuning - and
@@ -33,10 +33,9 @@ export interface ArrangeJob {
 }
 
 /**
- * THE STEPS of an arrange, in order, as the loader shows them (Jack,
- * 2026-09-08: "one master progress bar with steps and very distinct
- * things"). A progress message names its step; the loader fills one bar
- * across all of them, each step taking an equal share.
+ * The steps of an arrange, in order, as the loader lists them. A progress
+ * message names its step; the loader fills one bar across all of them, each
+ * step taking an equal share.
  */
 export const ARRANGE_STEPS = [
   { key: "layout", label: "Laying the board out" },

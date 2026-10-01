@@ -1,31 +1,24 @@
 /**
  * The grid edge router.
  *
- * Wires live on the same 20px grid the cards are built from (`board-grid.ts`):
- * every straight run of every wire travels along a grid line - horizontal,
- * vertical, or one of the two 45° diagonals through the grid's vertices -
- * and no run ever comes within one cell of a card. The one sanctioned
- * exception is the port stub: the last hop from a card's margin to the port
- * itself, which by definition has to cross the margin.
+ * Wires live on the cards' 20px grid (`board-grid.ts`): every straight run
+ * travels along a grid line (horizontal, vertical, or a 45° diagonal through
+ * the vertices) and stays at least one cell from every card. The only
+ * exception is the port stub, the last hop from the card's margin to the port.
  *
- * A grid line is a LANE with a usable width (16px on the orthogonal lines,
- * 10px on the closer-packed diagonals). Wires are fractions of a lane, and
- * wires whose fractions fit side by side SHARE the lane, packed around the
- * line's centre with a 2px gap. A full lane costs heavily, which pushes
- * latecomers into the next line over - overlap is never chosen while any
- * separated path exists. Only the port stubs may stack, because arbitrarily
- * many wires can meet one port.
+ * A grid line is a LANE with a usable width (16px orthogonal, 10px diagonal).
+ * Wires are fractions of a lane; wires that fit side by side SHARE it, packed
+ * around the centre with a 2px gap. A full lane costs heavily, so overlap is
+ * never chosen while a separated path exists. Only port stubs may stack.
  *
- * THE WIRES PLAN TOGETHER. Each wire is one A* over the grid, but the solve
- * is one thing: docks are planned per card before anything routes
+ * The wires are solved together: docks are planned per card first
  * (`planDocks`), every crossing of an earlier wire costs (`T.crossing`), and
- * wires that still cross are ripped up and routed again against the finished
- * board with the contested spots dearer each round (negotiation). See
- * `solveGridRoutes`.
+ * wires that still cross are ripped up and rerouted with contested spots
+ * dearer each round (negotiation). See `solveGridRoutes`.
  *
  * Everything here is a pure function of its inputs: flow-space geometry in,
  * polylines out. No DOM, no React, no viewport - the same inputs give the
- * same routes at every zoom, which is the routing invariant ARCHITECTURE.md
+ * same routes at every zoom, which is the routing invariant src/components/flow/CLAUDE.md
  * demands. The host feeds it published geometry and caches the result by
  * content fingerprint.
  */
@@ -44,12 +37,10 @@ export const LANE_CAPACITY = 16;
 export const LANE_GAP = 2;
 
 /**
- * The widths wires are allowed to draw at: fractions of a lane, bottoming
- * out at ¼ (4px) - anything thinner read as a scratch, not a wire. Eight
- * steps rather than four: the heat scale already blends rank with log
- * magnitude so 5k vs 10k stays distinguishable even with 100k on the
- * board, and a coarse menu was throwing that resolution away at the last
- * moment.
+ * The widths wires may draw at, as fractions of a lane. The floor is ¼ (4px):
+ * anything thinner reads as a scratch. Eight steps keep the resolution of the
+ * heat scale (rank blended with log magnitude, so 5k vs 10k stays visible
+ * beside 100k).
  */
 export const LANE_FRACTIONS = [
   1 / 4,
@@ -63,10 +54,9 @@ export const LANE_FRACTIONS = [
 ] as const;
 
 /**
- * Normalized flow heat (0..1) → the stroke width for dynamic-width mode.
- * Heat maps onto the menu by INDEX, evenly, so every step gets an equal
- * slice of the scale - thresholding by fraction value clustered most of
- * the range onto the widest steps.
+ * Normalized flow heat (0..1) → stroke width. Heat maps onto the menu by
+ * INDEX, so every step gets an equal slice of the scale; thresholding by
+ * fraction value would cluster most of the range onto the widest steps.
  */
 export function laneWidthForHeat(heat: number): number {
   const clamped = Math.min(Math.max(heat, 0), 1);
@@ -104,13 +94,11 @@ export interface GridEndpoint {
    */
   penalty?: number;
   /**
-   * How much further INTO the card the drawn wire continues past the
-   * routing anchor, along the side's inward normal. The recipe card's
-   * machine tab zone is part of the routed box (wires keep their one-cell
-   * clearance over the tabs) but its top edge is phantom - the painted
-   * window starts lower. Routing math (aprons, lane graph, dock claims)
-   * stays on the anchor; only the final drawn stub crosses the zone and
-   * lands on the card's true edge.
+   * How much further INTO the card the drawn wire continues past the routing
+   * anchor, along the side's inward normal. The recipe card's machine tab zone
+   * is part of the routed box, but its top edge is phantom (the painted window
+   * starts lower). Routing math stays on the anchor; only the drawn stub
+   * crosses the zone to reach the card's true edge.
    */
   stubDepth?: number;
 }
@@ -123,12 +111,10 @@ export interface GridRouteRequest {
   sources: GridEndpoint[];
   targets: GridEndpoint[];
   /**
-   * Which card each end belongs to. With these the router plans DOCKS per
-   * card before routing anything: every wire leaving a card is handed a
-   * preferred spot on the perimeter facing where it is going, siblings
-   * spread around the rim in bearing order so they never have to cross at
-   * the card (`planDocks`). Without them the endpoints' own `penalty` is
-   * all the dock preference there is.
+   * Which card each end belongs to. With these the router plans docks per
+   * card before routing (`planDocks`), so siblings leave in bearing order and
+   * never cross at the card. Without them the endpoints' own `penalty` is the
+   * only dock preference.
    */
   sourceCardId?: string;
   targetCardId?: string;
@@ -209,21 +195,20 @@ let workSearches = 0;
 
 /**
  * Every cost and limit comes from a `RouterTuning` (router-tuning.ts):
- * the shipped numbers are `DEFAULT_ROUTER_TUNING`, the dev menu turns them
- * live, and the worker is handed the same object. Costs are in PIXELS of
- * travel on an empty lane, so "a 90° corner costs 80" means a wire will go
- * 80px out of its way to avoid one. The rules the numbers encode:
+ * `DEFAULT_ROUTER_TUNING` ships, the dev menu edits it live, and the worker
+ * gets the same object. Costs are in PIXELS of travel on an empty lane, so
+ * "a 90° corner costs 80" means a wire will go 80px out of its way to avoid
+ * one. The rules the numbers encode:
  *
- * - Sharing a lane costs a little MORE than an empty one, so wires travel
- *   in ribbons a lane apart rather than on each other's shoulders; a full
- *   lane costs a lot, so overlap is never chosen while a detour exists.
- * - A 45° bend is well under a 90° corner, so corners get cut with a
- *   diagonal whenever there is room; a reversal is dear and only waypoint
- *   excursions ever pay it.
- * - A wire leaves a port straight and lands straight for `cleanCells`
- *   cells; bending inside that run costs `earlyTurn` on top of the turn.
- * - Crossing another wire costs more than a couple of turns, and the
- *   negotiation makes contested spots dearer each round.
+ * - Sharing a lane costs a little MORE than an empty one, so wires form
+ *   ribbons a lane apart; a full lane costs a lot, so overlap is never
+ *   chosen while a detour exists.
+ * - A 45° bend is well under a 90° corner, so corners get cut diagonally
+ *   when there is room; a reversal is dear and only waypoint excursions pay it.
+ * - A wire leaves and lands straight for `cleanCells` cells; bending inside
+ *   that run costs `earlyTurn` on top of the turn.
+ * - A crossing costs more than a couple of turns, and negotiation makes
+ *   contested spots dearer each round.
  * - Docks are planned per card; leaving the plan costs per pixel of rim.
  *
  * Solves are synchronous and never nested, so the active tuning lives in
@@ -966,21 +951,19 @@ interface RouteState {
 }
 
 /**
- * Every wire on the board, as ONE solve.
+ * Every wire on the board, as ONE solve, in three moves:
  *
- * The solve is three moves. DOCKS first: `planDocks` looks at each card's
- * wires together and hands every one a preferred dock facing where it is
- * going, siblings spread around the rim in bearing order - this is the part
- * no per-wire search could see, because a wire on its own has no idea four
- * more are about to leave the same card. Then the FIRST PASS routes every
- * wire, LONGEST first: a long wire takes the open lines and the short ones
- * fit in around it, which is what nests a fan of wires to a row of drawers
- * instead of having the last one climb across all the others. Then
- * NEGOTIATION: any wire that ended up crossing another, or squeezed into a
- * full lane, is ripped up and routed again against the whole finished board -
- * it now sees the wires that came after it - and the spots wires keep
- * fighting over get dearer each round. Unhappy wires only, budgeted at one
- * reroute per wire on the board, so a clean board pays nothing for it.
+ * 1. DOCKS: `planDocks` looks at each card's wires together and gives each
+ *    a preferred dock facing where it is going, siblings in bearing order
+ *    round the rim. A per-wire search cannot see that more wires are about
+ *    to leave the same card.
+ * 2. FIRST PASS: thickest wires first, then (by default) longest, so a long
+ *    wire takes the open lines and the short ones fit around it; a fan to a
+ *    row of drawers nests instead of the last wire climbing over the others.
+ * 3. NEGOTIATION: wires that cross another or overflow a lane are ripped up
+ *    and rerouted against the finished board, contested spots dearer each
+ *    round. Only unhappy wires reroute, within `negotiationBudget` reroutes
+ *    per wire, so a clean board pays nothing for it.
  */
 export function solveGridRoutes(
   obstacles: GridObstacle[],
@@ -1009,9 +992,8 @@ export function solveGridRoutes(
     widePopCap: (NEGOTIATION_POPS_PER_WIRE * requests.length) / 2,
   };
   const planned = planDocks(requests);
-  // BEDROCK FIRST (Jack, 2026-09-08): the thick wires - the ones carrying
-  // the most - take the open lines first, then the long ones, and the
-  // trickles find their way round them. Same width: longest first.
+  // Thickest (highest-flow) wires take the open lines first and the trickles
+  // route round them. At one width, longest first (`T.longestFirst`).
   const sorted = [...planned].sort(
     (left, right) =>
       right.strokeWidth - left.strokeWidth ||
@@ -1101,13 +1083,11 @@ export function solveGridRoutes(
     if (remaining === 0) {
       break;
     }
-    // SWAPS. Two wires leaving one card that still cross may simply have
-    // their docks the wrong way round: a wall beside the card can invert
-    // the bearing order, the outer wire having to take the lower dock and
-    // hug the wall while the inner one runs above it. Neither wire can fix
-    // that alone, so they trade planned docks, both route again, and the
-    // trade stands only if the board's crossings fall. Two reroutes from
-    // the budget per trial, one trial per pair per round.
+    // SWAPS. Two wires leaving one card that still cross may have their docks
+    // the wrong way round (a wall beside the card can invert the bearing
+    // order), which neither can fix alone. They trade planned docks and both
+    // reroute; the trade stands only if the board's crossings fall. Two
+    // reroutes from the budget per trial, one trial per pair per round.
     for (let i = 0; i < states.length && budget >= 2 && workPops < popCap; i += 1) {
       const a = states[i];
       if (!a.found || a.pinned || a.crossings === 0) {
@@ -1362,19 +1342,16 @@ interface DockEnd {
 /**
  * Plans where every wire leaves and arrives, one card at a time.
  *
- * For each end with a card id and a choice of docks, the ideal exit is the
- * rim point nearest the far end (the first waypoint, when there is one).
- * Siblings on one card are sorted by that point around the rim - ties at a
- * corner by the bearing of their destinations - and spread apart by a cell
- * where they collide, so the order they dock in is the order their
- * destinations lie in and no two of them need to cross each other to
- * leave. Two wires between the SAME pair of cards want the same exit at
- * both ends; they are ordered one way at one card and the other way at the
- * other (which card is "first" is decided by id), so they run parallel
- * instead of swapping over. The plan is soft: it becomes each candidate's
- * `penalty`, and docks far from the plan are set aside (kept in
- * `allSources` / `allTargets` for a wire that cannot route from the near
- * ones). Returns copies; the caller's requests stand.
+ * Each end's ideal exit is the rim point nearest the far end (or the first
+ * waypoint). Siblings on one card are sorted round the rim by that point
+ * (corner ties by destination bearing) and matched onto real docks in that
+ * order (`assignDocks`), so none has to cross another to leave. Two wires
+ * between the SAME pair of cards are ordered one way at one card and the
+ * other way at the other (by card id), so they run parallel instead of
+ * swapping over. The plan is soft: it becomes each candidate's `penalty`,
+ * and docks far from it are set aside (kept in `allSources` / `allTargets`
+ * for a wire that cannot route from the near ones). Returns copies; the
+ * caller's requests stand.
  */
 function planDocks(requests: GridRouteRequest[]): PlannedRequest[] {
   const byCard = new Map<string, DockEnd[]>();
@@ -1492,10 +1469,11 @@ function endpointGapCells(sources: GridEndpoint[], targets: GridEndpoint[]): num
 }
 
 /**
- * Move docks apart instead of rewarding loops that merely add wire length.
- * A soft preference keeps connections possible when other cards block the
- * roomier docks. Fixed endpoints and explicitly pinned trips stay put.
- * Actual straight shots are exempted by the caller, even at one cell.
+ * Soft cost for a route whose docks sit fewer than `T.dockTravelCells`
+ * cells apart (horizontal + vertical), so docks move apart and leave room
+ * for visible wire and arrows. Soft, so a wire still connects when other
+ * cards block the roomier docks. Fixed endpoints, waypoint trips and self
+ * loops pay nothing; the caller exempts actual straight shots.
  */
 function crampedDockCost(request: PlannedRequest, source: GridEndpoint, target: GridEndpoint): number {
   if (
@@ -1511,12 +1489,10 @@ function crampedDockCost(request: PlannedRequest, source: GridEndpoint, target: 
 
 /**
  * The rim point nearest `heading`: the side the destination is beyond, at
- * the destination's own coordinate clamped to that side. Not a ray from the
- * centre - on a tall card the centre sits far below a drawer parked over
- * its top-right corner, and the ray leaves by the right side, sending the
- * wire out sideways to climb across everything else leaving that side.
- * Nearest-point sends it out the top, where it belongs. A heading inside
- * the card (overlapping cards) falls back to the ray.
+ * the destination's coordinate clamped to that side. Not a ray from the
+ * centre: on a tall card, the ray to a drawer over its top-right corner
+ * leaves by the right side and climbs across every wire leaving there. A
+ * heading inside the card (overlapping cards) falls back to the ray.
  */
 function exitParam(rect: Rect, heading: GridPoint): number {
   const clampX = Math.min(Math.max(heading.x, rect.left), rect.right);
@@ -1556,13 +1532,12 @@ function exitParam(rect: Rect, heading: GridPoint): number {
 
 /**
  * Hands each of a card's wires (sorted round the rim) its own real dock, in
- * that order, minimising the total distance from their ideals: a monotone
- * matching by dynamic programming over ends x docks. Rim POSITIONS spread a
- * cell apart were not enough - a corner keep-out leaves a stretch of rim
- * with no docks at all, and four wires planned 20px apart round a corner
- * all snapped to the same two docks. Matching onto the docks themselves
- * keeps the bearing order AND gives every wire a different place to leave.
- * More wires than docks: the overflow takes its nearest dock and shares.
+ * that order, minimising total distance from their ideals: a monotone
+ * matching by dynamic programming over ends x docks. Matching onto actual
+ * docks, not rim positions, matters because a corner keep-out leaves
+ * stretches of rim with no docks, where nearby ideals would snap onto the
+ * same dock. More wires than docks: the overflow takes its nearest dock and
+ * shares.
  */
 function assignDocks(ends: DockEnd[], docks: number[]) {
   const n = ends.length;
@@ -1721,18 +1696,11 @@ function findRoute(context: SolveContext, request: PlannedRequest): RouteFound |
         ? { ...endpoint, penalty: (endpoint.penalty ?? 0) + T.dockShare }
         : endpoint,
     );
-  // A route that paid for a crossing is not an answer, it is a reason to
-  // look further: first the whole rim (the way round may be a dock the
-  // plan set aside - a wire trapped under a card's bottom leaves by its
-  // side), then a bigger window (the way round may be over the top of a
-  // tall card, far outside the box the ends span). The cheapest wins; a
-  // clean route ends the search at once, so an ordinary wire pays for
-  // one search.
-  // TOUCHING DOCKS (Jack, 2026-09-08: "if you can one-shot it in one
-  // grid space, that's fine"): two cards a cell apart have no legal
-  // vertex between them - each dock's apron is the other card's edge -
-  // so a source dock whose apron IS a facing target dock, straight
-  // across, connects there and then, no search. Diagonals need two cells.
+  // A route that paid for a crossing is a reason to look further: first the
+  // whole rim (the way round may be a dock the plan set aside), then a bigger
+  // window (the way round may be over the top of a tall card). The cheapest
+  // wins; a clean route ends the search at once, so an ordinary wire pays for
+  // one search. Touching docks connect first, without a search (`directDock`).
   let best: RouteFound | undefined;
   const consider = (found: RouteFound): boolean => {
     if (!best || found.cost < best.cost) {
@@ -1748,9 +1716,8 @@ function findRoute(context: SolveContext, request: PlannedRequest): RouteFound |
     }
   }
   // Two rungs: the planned docks inside the wire's own box, then the whole
-  // rim across the whole board (windows are clamped to the board, so that
-  // is the last rung there can be). A middle rung bought little and was
-  // climbed hundreds of times on a busy board.
+  // rim across the whole board (windows are clamped to the board, so that is
+  // the last rung there can be).
   const rungs: Array<[GridEndpoint[], GridEndpoint[], number, number]> = [
     [request.sources, request.targets, T.windowPad * BOARD_GRID, 1],
   ];
@@ -1793,10 +1760,10 @@ function findRoute(context: SolveContext, request: PlannedRequest): RouteFound |
 
 /**
  * TOUCHING DOCKS: two cards one grid space apart have no vertex between
- * them - each dock's apron is the other card's edge - so a source dock
- * whose apron IS a facing target dock, straight across,
- * connects there and then. The only route the search cannot find by
- * itself; every longer straight shot the scoring finds on its own.
+ * them (each dock's apron is the other card's edge), so a source dock whose
+ * apron IS a facing target dock connects straight across without a search.
+ * The only route the search cannot find by itself. Straight only: diagonals
+ * need two cells.
  */
 function directDock(
   context: SolveContext,
@@ -1857,9 +1824,8 @@ function routeWithinWindow(
   weight: number,
 ): RouteFound | typeof SEALED | undefined {
   const toCell = (value: number) => Math.round(value / BOARD_GRID);
-  // A card wired to itself routes with 90° turns ONLY (Jack, 2026-09-08):
-  // no diagonal exits, landings or runs. A loop that left at 45° and
-  // turned back on itself read as a scribble on the card's own edge.
+  // A card wired to itself routes with 90° turns only (no diagonal exits,
+  // landings or runs): a 45° loop turning back on itself reads as a scribble.
   const straightOnly =
     !T.diagonals || request.distanceCells < T.diagonalDistanceCells ||
     (request.sourceCardId !== undefined && request.sourceCardId === request.targetCardId);
@@ -2000,18 +1966,14 @@ function routeWithinWindow(
     endpointIndex: number;
     apron: number;
     clean: number | undefined;
-    /**
-     * The direction the stub leaves the card in: the port's normal or
-     * either 45° beside it (Jack, 2026-09-08: a wire may come out of a
-     * card already at 45°).
-     */
+    /** The direction the stub leaves the card in: the port's normal or 45° either side of it. */
     outward: number;
     /** Cost of the straight run apron -> clean point. */
     cleanCost: number;
     /**
-     * A diagonal exit is the 45° bend it is, priced at the dock instead
-     * of a cell later; otherwise "out at 45°, one bend, straight in" beat
-     * a plain two-cell jog and every short wire came out sideways.
+     * A diagonal exit is priced as the 45° bend it is, at the dock; otherwise
+     * "out at 45°, one bend, straight in" beats a plain two-cell jog and short
+     * wires come out sideways.
      */
     exitCost: number;
   }
@@ -2154,20 +2116,16 @@ function routeWithinWindow(
     /** A dock of the target card (not a waypoint stop). */
     landing?: boolean;
   }
-  // A card wired to itself (Jack, 2026-09-08: free docks for those too)
-  // must land a cell or more from where it left (one, since 2026-09-08:
-  // "let's make it one"), or the cheapest loop is a
-  // dock next to its own and the wire is a stub nobody can read.
+  // A self loop must land at least SELF_LOOP_CELLS from where it left, or the
+  // cheapest loop is a dock beside its own and the wire is an unreadable stub.
   const selfLoop = request.sourceCardId !== undefined && request.sourceCardId === request.targetCardId;
   const SELF_LOOP_CELLS = 1;
   /**
-   * THE CLEAN RUN, by start: the apron and the cells after it up to the
-   * clean point (T.cleanCells out from the card edge). A turn made ON one
-   * of these, by a wire that left from that start, costs `earlyTurn` on
-   * top of the turn. A wire that never turns there pays nothing - so a
-   * straight shot to a card two cells away is what it looks like, a
-   * straight line, and not (as it was when the surcharge was charged for
-   * STARTING at the apron) dearer than leaving by another side.
+   * THE CLEAN RUN, by start: the apron and the cells after it up to the clean
+   * point (T.cleanCells out from the card edge). A turn made ON one of these,
+   * by a wire that left from that start, costs `earlyTurn` on top of the turn.
+   * A wire that never turns there pays nothing, so a straight shot to a card
+   * two cells away stays a cheap straight line.
    */
   const cleanZone = new Map<number, number[]>();
   const landsTooClose = (startIndex: number, goal: LegGoal): boolean => {

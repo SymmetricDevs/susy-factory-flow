@@ -10,20 +10,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * The card a shared plan link unfurls into: the plan's name and numbers over
- * the plan's own face, drawn server-side from the summary row at Discord's
- * 1200x630. The face is the board photograph the share flow uploaded
- * (plan-previews bucket); posts from before that feature — or shares whose
- * browser could not photograph the board — fall back to the plan's chosen
- * icon LARGE on the icon's own dominant colour, then to any resource the
- * plan makes or needs, so the middle of the card is never empty. The inputs
- * and outputs stay in the embed's text (describePlanRow), not the picture.
+ * The card a shared plan link unfurls into (1200x630): the plan's name and
+ * numbers over its face, drawn server-side from the summary row. The face is
+ * the uploaded board photograph (plan-previews bucket), else the plan's icon
+ * large on its dominant colour, else any resource the plan makes or needs.
+ * Inputs and outputs stay in the embed's text (describePlanRow).
  *
- * Rendered with next/og (satori), which lays out with flexbox only and no
- * cascade: every box says display:flex out loud, and text truncates by
- * clipping. The icon is a rendered standalone PNG read straight from
- * public/datasets and upscaled with image-rendering: pixelated, so 32px of
- * pixel art stays sharp at 256.
+ * Rendered with next/og (satori): flexbox only and no cascade, so every box
+ * says display:flex, and text truncates by clipping. Icons are upscaled with
+ * image-rendering: pixelated to stay sharp.
  */
 
 const PLATE = "#131417";
@@ -56,10 +51,8 @@ async function loadFonts() {
 }
 
 /**
- * The rendered dataset PNGs pad their art with wide transparent margins
- * (an oil berry occupies 112px of a 256px canvas), so drawn as-is a "large"
- * icon reads as a small one. Crop to the opaque pixels, squared and with a
- * little breathing room, and the art fills the space it is given.
+ * The rendered dataset PNGs pad their art with wide transparent margins, so
+ * crop to the opaque pixels, squared with a small margin, to fill the space.
  */
 function cropToArt(data: Buffer): Buffer {
   const png = PNG.sync.read(data);
@@ -125,10 +118,9 @@ async function loadIconDataUri(iconPath: string | undefined): Promise<string | u
 
 /**
  * The uploaded board photograph, contain-fit into the card's hero area by
- * hand: satori is not asked to guess an image's intrinsic size. The bounds
- * assume the worst-case two-line title above; a shorter title just gives the
- * photo more air. Dimensions come straight from the PNG's IHDR — width and
- * height live at fixed offsets — so no pixel decode is paid per unfurl.
+ * hand (satori cannot infer an image's intrinsic size). The bounds assume a
+ * two-line title. Dimensions come from the PNG's IHDR at fixed offsets, so no
+ * pixel decode is paid per unfurl.
  */
 const PREVIEW_BOX_WIDTH = 1084;
 const PREVIEW_BOX_HEIGHT = 330;

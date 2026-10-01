@@ -1287,13 +1287,9 @@ function buildGraphContext(project: FactoryProject): GraphContext {
       continue;
     }
 
-    // A self edge belongs in the adjacency. The SCC pass below already asks
-    // whether a component loops back on itself, and a machine wired into its
-    // own input is exactly that — but stripping the edge here left that check
-    // permanently false, so every cyclic guard downstream stayed switched off
-    // for the one shape that most needs them. A lossy self loop then walks
-    // requireNodeOutput round and round, multiplying its own demand until it
-    // overflows.
+    // A self edge belongs in the adjacency: the SCC pass below must see a
+    // machine wired into its own input as cyclic, or the cyclic guards stay
+    // off and a lossy self loop walks requireNodeOutput until it overflows.
     adjacency.get(sourceEndpoint)?.push(targetEndpoint);
 
     if (!sourceStorageKey && targetStorageKey) {

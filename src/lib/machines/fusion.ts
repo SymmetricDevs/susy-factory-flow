@@ -59,9 +59,10 @@ export function isFusionRecipe(recipe: FusionRecipe): boolean {
   );
 }
 
-/** Exact runtime recipe fingerprints repair old exports/plans without matching
- * by display name (helium and several endgame products have distinct recipes).
- * A fresh exported threshold always wins. Snapshot provenance lives with data.
+/** Exact recipe fingerprints supply the startup threshold to exports/plans
+ * that lack one; display names cannot (helium and several endgame products
+ * have distinct recipes). A threshold exported on the recipe always wins.
+ * Snapshot provenance lives with the data.
  */
 export function fusionRecipeKey(recipe: FusionRecipe): string {
   const slots = (entries: Recipe["inputs"] = []) =>
@@ -149,6 +150,7 @@ export function normalizeFusionHandler(
     kind: "multiblock",
     minimumTier: machine.tier,
     maximumTier: undefined,
+    availableTiers: undefined,
     durationTicks: undefined,
     eut: undefined,
     maxParallel: parallels,

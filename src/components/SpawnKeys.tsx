@@ -5,17 +5,10 @@ import type { ReactNode } from "react";
 import { useFactoryStore } from "@/store/factory-store";
 
 /**
- * The three cards that are not recipes, at the top of the items column:
- * a generator (the power catalog), a custom rate node, a crop farm. They
- * lived on the board's build tray until 2026-09-06, when the tray ran out
- * of room for the mode keys; this column is where you go to add things,
- * so this is where they belong.
- *
- * Quiet on purpose (Jack, 2026-09-06): the column's own key face (the
- * search box's border and ground), no plate behind the row and no colour
- * on the icons, so they read as three things you can put down and not as
- * a section of the column. `leading` is the column's own fold-away key,
- * which sits at the row's start rather than in the search box.
+ * Spawners for the three non-recipe cards, at the top of the items column: a
+ * generator (the power catalog), a custom rate node and a crop farm. Styled
+ * quietly like the column's own keys (no plate, uncoloured icons). `leading`
+ * is the column's fold-away key, placed at the row's start.
  */
 export function SpawnKeys({ leading }: { leading?: ReactNode }) {
   const isReadOnly = useFactoryStore((state) => state.isReadOnly);

@@ -2,21 +2,13 @@
  * Framing the board: where the camera has to sit to put a set of cards on
  * screen.
  *
- * Two things make this more than a bounding box.
- *
- * The first is that the cards a camera move is asked to frame are usually the
- * ones that have only just arrived - a setup opening, a pocket landing - and
- * the board culls everything off screen, so those cards have never been
- * rendered and carry no measured size at all. Framing them by their measured
- * sizes frames their top-left CORNERS: a single card would fill the window at
- * maximum zoom. An unmeasured card therefore falls back to what the grid says
- * a card of its type is. The estimate is deliberately a touch generous, so the
- * error always leans towards showing slightly too much rather than cutting a
- * card off.
- *
- * The second is the zoom cap. Fitting is also what happens when there is ONE
- * small card to look at, and blowing a lone drawer up to fill the window reads
- * as a bug rather than as focus.
+ * Two things make this more than a bounding box. First, the cards to frame
+ * have usually just arrived (a setup opening, a pocket landing) and the board
+ * culls off-screen cards, so they carry no measured size; framing by
+ * measured size would frame only their top-left corners. An unmeasured card
+ * falls back to the grid's size for its type, estimated a touch generously so
+ * the error shows too much rather than cutting a card off. Second, the zoom
+ * cap: a lone small card is not blown up to fill the window.
  */
 
 import {
@@ -33,13 +25,11 @@ import { boardZoomScale } from "@/lib/ui-scale";
  * How far the board may zoom out, and in. The board itself is held to these,
  * so a framing move can never show more than panning could.
  *
- * The floor is low enough that framing actually reaches: a factory some twenty
- * thousand cells wide still fits on one screen. It used to stop at 0.15, which
- * is roughly a forty-card chain - open a bigger setup than that and the camera
- * would land in the middle of it with the whole thing still off the edges,
- * which is the exact complaint framing exists to answer. Cards are already
- * drawn in the cheap glance view below NODE_GLANCE_ENTER_ZOOM (see
- * node-detail.ts), so the extra range costs nothing per card.
+ * The floor is low enough that a factory some twenty thousand cells wide
+ * still fits on one screen; a higher floor lands the camera inside a big
+ * setup with its edges off screen. Below NODE_GLANCE_ENTER_ZOOM cards draw
+ * the cheap glance view (node-detail.ts), so the extra range costs nothing
+ * per card.
  */
 export const BOARD_MIN_ZOOM = 0.05;
 export const BOARD_MAX_ZOOM = 1.8;

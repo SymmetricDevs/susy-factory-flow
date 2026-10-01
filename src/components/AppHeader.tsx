@@ -22,7 +22,7 @@ import { BoardActions } from "./BoardActions";
 import { ExportImageDialog } from "./export/ExportImageDialog";
 import { DevMenu } from "./DevMenu";
 import { SettingsDialog } from "./SettingsDialog";
-import { HeaderLinks, SupportButton } from "./HeaderLinks";
+import { HeaderLinks } from "./HeaderLinks";
 
 /**
  * The pack picker's switch. See the note where it renders; flip this back to
@@ -153,7 +153,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
           >
             <Settings className="h-3.5 w-3.5" />
           </button>
-          <SupportButton />
           <HeaderLinks />
           {/* No What's new button: the version chip opens the notes and wears
               the unread dot. */}

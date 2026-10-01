@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getMachineBehaviour,
+  getMachineTableControls,
   HEAT_OVERCLOCK,
   machineTableNames,
   normalizeMachineName,
@@ -21,6 +22,7 @@ import {
   getRecipeMachineConfigTierControls,
 } from "@/lib/model/recipe-rules";
 import type { MachineConfigControl, Recipe } from "@/lib/model/types";
+import { getHeatOverclockStats } from "@/lib/solver/heat";
 
 interface ReferenceSample {
   voltageTier: number;
@@ -122,6 +124,86 @@ describe("curated machine table", () => {
     expect(getMachineDurationMultiplier(chemPlant, node)).toBeCloseTo(0.5, 10);
     expect(getMachineParallelMultiplier(chemPlant, node)).toBe(6);
     expect(getMachineEutMultiplier(chemPlant, node)).toBe(1);
+  });
+
+  it("limits EBF and Pyrolyse Oven coil choices to the three available tiers", () => {
+    for (const machineType of ["Electric Blast Furnace", "Pyrolyse Oven"]) {
+      expect(getMachineTableControls(machineType).find((control) => control.id === "heatingCoil")?.tiers.map((tier) => tier.key)).toEqual([
+        "cupronickel",
+        "kanthal",
+        "nichrome",
+      ]);
+    }
+  });
+
+  it("applies EBF coil heat to overclocks and EU discount", () => {
+    const ebf = {
+      machineType: "Electric Blast Furnace",
+      minimumTier: "MV",
+      durationTicks: 1000,
+      eut: 120,
+      nei: { additionalInfo: ["Special value: 0"] },
+      machineConfigControls: [],
+    } as unknown as Recipe;
+
+    const outcomes = ["cupronickel", "kanthal", "nichrome"].map((coilTier) =>
+      getHeatOverclockStats(ebf, { coilTier }, "MV", 4),
+    );
+    expect(outcomes.map((stats) => stats.heatOverclockSteps)).toEqual([1, 1, 2]);
+    expect(outcomes.map((stats) => stats.heatDiscountMultiplier)).toEqual([
+      0.95 ** 2,
+      0.95 ** 3,
+      0.95 ** 4,
+    ]);
+  });
+
+  it("gates EBF recipes above the selected coil and voltage heat", () => {
+    const recipe = {
+      machineType: "Electric Blast Furnace",
+      minimumTier: "MV",
+      durationTicks: 1000,
+      eut: 120,
+      nei: { additionalInfo: ["Special value: 3700"] },
+      machineConfigControls: [],
+    } as unknown as Recipe;
+    const behaviour = getMachineBehaviour(recipe.machineType)!;
+
+    expect(
+      behaviour.recipeGate?.(buildMachineContext(recipe, {
+        coilTier: "nichrome",
+        machineConfigTiers: {},
+        overclockTier: "MV",
+      })),
+    ).toContain("requires 3700 K");
+    expect(
+      behaviour.recipeGate?.(buildMachineContext({
+        ...recipe,
+        nei: { additionalInfo: ["Special value: 3500"] },
+      }, {
+        coilTier: "nichrome",
+        machineConfigTiers: {},
+        overclockTier: "MV",
+      })),
+    ).toBeUndefined();
+  });
+
+  it("applies the Pyrolyse Oven coil tier to speed, without changing EU/t", () => {
+    const pyrolyse = {
+      machineType: "Pyrolyse Oven",
+      minimumTier: "MV",
+      eut: 120,
+      machineConfigControls: [],
+    } as unknown as Recipe;
+
+    for (const [coilTier, expectedDuration] of [
+      ["cupronickel", 2],
+      ["kanthal", 1],
+      ["nichrome", 2 / 3],
+    ] as const) {
+      const node = { coilTier, machineConfigTiers: {} };
+      expect(getMachineDurationMultiplier(pyrolyse, node)).toBeCloseTo(expectedDuration, 10);
+      expect(getMachineEutMultiplier(pyrolyse, node)).toBe(1);
+    }
   });
 
   it("reads coil and pipe casing tiers as zero-based indices", () => {

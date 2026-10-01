@@ -508,6 +508,19 @@ const HEATING_COIL_CONTROL: MachineConfigControl = {
   })),
 };
 
+// The current GTNH pack exposes only these three coils on the EBF and
+// Pyrolyse Oven. Keep the full ladder above for machines that support it.
+const EARLY_HEATING_COILS = HEATING_COIL_TIERS.slice(0, 3);
+const EARLY_HEATING_COIL_CONTROL: MachineConfigControl = {
+  ...HEATING_COIL_CONTROL,
+  tiers: HEATING_COIL_CONTROL.tiers.slice(0, EARLY_HEATING_COILS.length),
+};
+const EARLY_EBF_COIL_CONTROL: MachineConfigControl = {
+  ...EARLY_HEATING_COIL_CONTROL,
+  minimumHeatFromSpecialValue: true,
+};
+const EARLY_COIL_HEAT = EARLY_HEATING_COILS.map(([, , heat]) => heat);
+
 /**
  * The Naquadah Fuel Refinery's four field restriction coils
  * (MTENaquadahFuelRefinery / GoodGenerator's FRF_Coil_1..4). Each recipe's
@@ -646,6 +659,15 @@ const MACHINES: Record<string, MachineBehaviour> = {
   "Blast Furnace": {
     overclock: HEAT_OVERCLOCK,
     heat: { voltageBonus: true },
+    controls: [EARLY_EBF_COIL_CONTROL],
+    recipeGate: (c) => {
+      const requiredHeat = c.recipeSpecialValue ?? 0;
+      const coilHeat = EARLY_COIL_HEAT[Math.min(c.tier(COIL), EARLY_COIL_HEAT.length - 1)] ?? 0;
+      const machineHeat = coilHeat + 100 * Math.max(0, c.voltageTier - 2);
+      return machineHeat < requiredHeat
+        ? `This recipe requires ${requiredHeat} K of heat; the selected coil and voltage provide ${machineHeat} K.`
+        : undefined;
+    },
     aliases: ["Electric Blast Furnace"],
   },
   "Mega Blast Furnace": {
@@ -706,7 +728,11 @@ const MACHINES: Record<string, MachineBehaviour> = {
     controls: [FLUID_PIPE_CONTROL],
     normalizeConfig: normalizeFluidPipeSettings,
   },
-  "Pyrolyse Oven": { overclock: OVERCLOCK.normal(), speed: (c) => (c.tier(COIL) + 1) * 0.5 },
+  "Pyrolyse Oven": {
+    overclock: OVERCLOCK.normal(),
+    speed: (c) => (c.tier(COIL) + 1) * 0.5,
+    controls: [EARLY_HEATING_COIL_CONTROL],
+  },
   "Oil Cracker": {
     overclock: OVERCLOCK.normal(),
     aliases: ["Oil Cracking Unit"],

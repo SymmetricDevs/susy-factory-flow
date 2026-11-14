@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import { getCommunityDb, isCommunityConfigured } from "@/lib/server/community";
 
+export const dynamic = "force-static";
+
 /** Re-query the plan list at most hourly, so crawl bursts cost one DB read. */
 export const revalidate = 3600;
 

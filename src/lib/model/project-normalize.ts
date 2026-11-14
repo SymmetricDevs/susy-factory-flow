@@ -11,13 +11,64 @@ import { resynthesizePowerRecipes } from "@/lib/power/power-recipe";
 import { snapPositionToGrid, snapSizeUpToGrid } from "@/lib/board-grid";
 import { sectionNodeView, splitSectionHandleId } from "./shared-machine";
 import { repairWiredInputOverrides } from "./edge-input-overrides";
+import { isPocketNestingValid } from "./board-windows";
 
 /**
  * Everything a project must go through on its way in, whether it arrives from
  * IndexedDB, a JSON import, an embedded plan image or the community hub.
  * One funnel on purpose, so no load path can skip a migration.
  */
+/**
+ * Legacy datasets and plans carried ingredient substitutes as `alternatives`
+ * (a display hint). The new model carries them as `accepted` (real
+ * substitutes, with optional per-unit ratios) plus an optional `groupId` when
+ * the set equals an ore dictionary group. Synthesize `accepted` from
+ * `alternatives` so old data keeps working; `groupId` is only ever set by the
+ * dataset pipeline, never inferred here (inferring it from membership would
+ * invent recipes, see dataset-query.getChoiceAlternativesByKey).
+ */
+export function migrateRecipeIngredientGroups(project: FactoryProject): FactoryProject {
+  let changed = false;
+  const recipes = project.recipes.map((recipe) => {
+    let recipeChanged = false;
+    const inputs = recipe.inputs.map((input) => {
+      if (input.accepted || !input.alternatives?.length) return input;
+      changed = true;
+      recipeChanged = true;
+      return {
+        ...input,
+        accepted: [
+          {
+            kind: input.kind,
+            id: input.id,
+            displayName: input.displayName,
+            iconPath: input.iconPath,
+            iconAtlas: input.iconAtlas,
+            dominantColor: input.dominantColor,
+            modId: input.modId,
+            tooltip: input.tooltip,
+          },
+          ...input.alternatives.map((alternative) => ({
+            kind: alternative.kind,
+            id: alternative.id,
+            displayName: alternative.displayName,
+            iconPath: alternative.iconPath,
+            iconAtlas: alternative.iconAtlas,
+            dominantColor: alternative.dominantColor,
+            modId: alternative.modId,
+            tooltip: alternative.tooltip,
+            perUnit: alternative.amount,
+          })),
+        ],
+      };
+    });
+    return recipeChanged ? { ...recipe, inputs } : recipe;
+  });
+  return changed ? { ...project, recipes } : project;
+}
+
 export function normalizeLoadedProject(project: FactoryProject): FactoryProject {
+  project = migrateRecipeIngredientGroups(project);
   project = normalizeProductionGroups(project);
   project = repairWiredInputOverrides(project);
   return normalizeProjectHatchInputs(
@@ -342,6 +393,9 @@ function repairPocketReferences(project: FactoryProject): FactoryProject {
       }
       seen.add(parentId);
       parentId = pockets.find((entry) => entry.id === parentId)?.parentPocketId;
+    }
+    if (!isPocketNestingValid(pockets, undefined, pocket.parentPocketId)) {
+      return { ...pocket, parentPocketId: undefined };
     }
     return pocket;
   });

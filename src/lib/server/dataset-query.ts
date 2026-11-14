@@ -11,6 +11,7 @@ import type {
   RecipeMapIconEntry,
   RecipeSummary,
 } from "@/lib/datasets/types";
+import { DatasetNotFoundError } from "@/lib/server/dataset-errors";
 import type {
   MachineTier,
   Recipe,
@@ -209,8 +210,8 @@ const pendingPrewarmLoads = new Map<string, Promise<void>>();
 let manifestCache: DatasetManifest | undefined;
 let manifestCacheStamp: string | undefined;
 const gunzipAsync = promisify(gunzip);
-const maxLoadedShardCount = positiveIntEnv("GTNH_MAX_LOADED_RECIPE_SHARDS", 8);
-const maxHydratedRecipeSummaryCount = positiveIntEnv("GTNH_MAX_HYDRATED_RECIPE_SUMMARIES", 8000);
+const maxLoadedShardCount = positiveIntEnv("SUSY_MAX_LOADED_RECIPE_SHARDS", 8);
+const maxHydratedRecipeSummaryCount = positiveIntEnv("SUSY_MAX_HYDRATED_RECIPE_SUMMARIES", 8000);
 
 export async function getDatasetCatalog(versionId: string) {
   const catalog = await loadCatalog(versionId);
@@ -1614,7 +1615,7 @@ export async function prewarmDatasetVersion(
 export async function prewarmLatestDatasetVersions(): Promise<void> {
   const manifest = await loadManifest();
   const versionIds =
-    process.env.GTNH_PREWARM_ALL_DATASETS === "1"
+    process.env.SUSY_PREWARM_ALL_DATASETS === "1"
       ? [
           manifest.latestStableVersion,
           manifest.latestDailyVersion,
@@ -1626,7 +1627,7 @@ export async function prewarmLatestDatasetVersions(): Promise<void> {
           manifest.latestStableVersion ?? manifest.latestDailyVersion ?? manifest.versions[0]?.id,
         ].filter((versionId): versionId is string => Boolean(versionId));
 
-  const includeShards = process.env.GTNH_PREWARM_FULL_DATASETS === "1";
+  const includeShards = process.env.SUSY_PREWARM_FULL_DATASETS === "1";
   for (const versionId of versionIds) {
     await prewarmDatasetVersion(versionId, { includeShards });
   }
@@ -1712,8 +1713,11 @@ async function loadManifest(): Promise<DatasetManifest> {
 async function loadCatalog(versionId: string): Promise<LoadedRecipeIndex> {
   const manifest = await loadManifest();
   const version = manifest.versions.find((entry) => entry.id === versionId);
-  if (!version?.resourceIndexPath) {
-    throw new Error(`Dataset ${versionId} has no server resource index.`);
+  if (!version) {
+    throw new DatasetNotFoundError(`Dataset ${versionId} was not found in the dataset manifest.`);
+  }
+  if (!version.resourceIndexPath) {
+    throw new DatasetNotFoundError(`Dataset ${versionId} has no server resource index.`);
   }
 
   const resourceIndexPath = version.resourceIndexPath;
@@ -1759,7 +1763,7 @@ async function loadRecipeIndex(versionId: string): Promise<LoadedRecipeIndex> {
 
   const promise = (async () => {
     if (!catalog.version.recipeIndexPath) {
-      throw new Error(`Dataset ${versionId} has no recipe index.`);
+      throw new DatasetNotFoundError(`Dataset ${versionId} has no recipe index.`);
     }
     const recipeIndex = await readGzipJson<RecipeIndexFile>(
       publicPathToFile(catalog.version.recipeIndexPath),
@@ -1806,7 +1810,7 @@ async function loadRecipeLookupIndex(version: DatasetVersion): Promise<LoadedRec
 
   const promise = (async () => {
     if (!version.recipeLookupIndexPath) {
-      throw new Error(`Dataset ${version.id} has no recipe lookup index.`);
+      throw new DatasetNotFoundError(`Dataset ${version.id} has no recipe lookup index.`);
     }
     const payload = await readGzipJson<RecipeLookupIndexFile>(
       publicPathToFile(version.recipeLookupIndexPath),
@@ -1956,7 +1960,7 @@ async function getRecipeIndexesByRawRecipeId(
 }
 
 async function prewarmRecipeShards(catalog: LoadedRecipeIndex): Promise<void> {
-  const batchSize = Number.parseInt(process.env.GTNH_PREWARM_SHARD_CONCURRENCY ?? "4", 10);
+  const batchSize = Number.parseInt(process.env.SUSY_PREWARM_SHARD_CONCURRENCY ?? "4", 10);
   const concurrency = Number.isInteger(batchSize) && batchSize > 0 ? batchSize : 4;
 
   for (let index = 0; index < catalog.shards.length; index += concurrency) {

@@ -272,6 +272,7 @@ function convertGtRecipe(mapName, index, rawRecipe) {
 
     const primary = stackToResource(stacks[0]);
     if (!primary) continue;
+    const allResources = stacks.map((stack) => stackToResource(stack)).filter(Boolean);
     const entry = {
       kind: primary.kind,
       id: primary.id,
@@ -285,12 +286,19 @@ function convertGtRecipe(mapName, index, rawRecipe) {
       const configuration = Number(dialled.metadata);
       if (Number.isFinite(configuration)) programmedCircuit = String(configuration);
     }
-    if (stacks.length > 1) {
-      entry.alternatives = stacks
+    if (allResources.length > 1) {
+      // `alternatives` is the legacy display hint; `accepted` is the real
+      // substitute set the planner resolves against. Both carry the same
+      // members so old readers keep working.
+      entry.alternatives = allResources
         .slice(1)
-        .map((stack) => stackToResource(stack))
-        .filter(Boolean)
         .map(({ kind, id, displayName, modId }) => ({ kind, id, displayName, modId }));
+      entry.accepted = allResources.map(({ kind, id, displayName, modId }) => ({
+        kind,
+        id,
+        displayName,
+        modId,
+      }));
     }
     inputs.push(entry);
   }
@@ -439,6 +447,11 @@ function familyHandlers(machines) {
     byFamily.set(familyKey, {
       id: familyKey,
       label: prettyMachineName(familyName),
+      // The dataset contract (machineHandlerSchema -> machineProfileSchema)
+      // requires machineType. Runtime already derives it from the label
+      // (normalizeMachineHandler: handler.machineType || label), so emitting
+      // the label here states the value the planner was using anyway.
+      machineType: prettyMachineName(familyName),
       kind: machine.isController ? "multiblock" : "single",
       // Representative machine item (lowest tier): looked up through
       // machineItemByTranslationKey for category / selector icons.
@@ -556,7 +569,8 @@ for (const entry of Array.isArray(raw.smelting) ? raw.smelting : []) {
   recipes.push(recipe);
 }
 
-// Crafting table: instant manual recipes (the app treats 0-duration as instant).
+// Crafting table: instant manual recipes. The dataset contract requires a
+// positive tick count, so the instant step is expressed at the minimum.
 let craftingCount = 0;
 for (const entry of Array.isArray(raw.crafting) ? raw.crafting : []) {
   const output = entry.output && stackToResource(entry.output);
@@ -572,7 +586,8 @@ for (const entry of Array.isArray(raw.crafting) ? raw.crafting : []) {
     const validInputs = Array.isArray(ingredient?.validInputs) ? ingredient.validInputs : [];
     const stacks = validInputs.filter((stack) => stack && stack.resource);
     if (stacks.length === 0) continue;
-    const primary = stackToResource(stacks[0]);
+    const allResources = stacks.map((stack) => stackToResource(stack)).filter(Boolean);
+    const primary = allResources[0];
     if (!primary) continue;
     const converted = {
       kind: primary.kind,
@@ -581,12 +596,16 @@ for (const entry of Array.isArray(raw.crafting) ? raw.crafting : []) {
       displayName: primary.displayName,
       modId: primary.modId,
     };
-    if (stacks.length > 1) {
-      converted.alternatives = stacks
+    if (allResources.length > 1) {
+      converted.alternatives = allResources
         .slice(1)
-        .map((stack) => stackToResource(stack))
-        .filter(Boolean)
         .map(({ kind, id, displayName, modId }) => ({ kind, id, displayName, modId }));
+      converted.accepted = allResources.map(({ kind, id, displayName, modId }) => ({
+        kind,
+        id,
+        displayName,
+        modId,
+      }));
     }
     inputs.push(converted);
   }
@@ -600,7 +619,7 @@ for (const entry of Array.isArray(raw.crafting) ? raw.crafting : []) {
     name: output.displayName || output.id,
     machineType: "Crafting Table",
     minimumTier: "ULV",
-    durationTicks: 0,
+    durationTicks: Math.max(1, Number(entry.duration) || 1),
     eut: 0,
     inputs,
     outputs: [
@@ -808,6 +827,25 @@ for (const resource of resources.values()) {
     .filter(([, ids]) => ids.includes(resource.id))
     .map(([name]) => name);
   if (membership.length > 0) resource.oreDictionary = membership;
+  if (!resource.displayName) resource.displayName = resource.id;
+}
+
+// Stamp groupId on recipe inputs whose accepted set equals an ore dictionary
+// group exactly. Membership alone is NOT enough (a Vacuum Tube shares
+// circuitPrimitive with the NAND chip but takes only itself), so only an
+// exact set match earns the tag. This is the only place a tag identity is
+// assigned; nothing is inferred downstream.
+const groupByMemberSet = new Map();
+for (const [name, ids] of Object.entries(oreDictionary)) {
+  groupByMemberSet.set([...new Set(ids)].sort().join("\u0001"), name);
+}
+for (const recipe of recipes) {
+  for (const input of recipe.inputs ?? []) {
+    if (!Array.isArray(input.accepted) || input.accepted.length < 2) continue;
+    const key = [...new Set(input.accepted.map((entry) => entry.id))].sort().join("\u0001");
+    const name = groupByMemberSet.get(key);
+    if (name) input.groupId = `oredict:${name}`;
+  }
 }
 
 const dataset = {
